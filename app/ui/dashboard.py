@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 import streamlit as st
 
+from app.core.engine.position_engine import PositionEngine
+
 # Set page config
 st.set_page_config(
     page_title="ChakraOps Dashboard",
@@ -369,6 +371,36 @@ def main() -> None:
                     st.divider()
     else:
         st.info("📭 No CSP candidates found. Run the wheel engine to generate candidates.")
+
+    st.divider()
+
+    # Open Positions Section
+    st.header("📂 Open Positions")
+    try:
+        engine = PositionEngine()
+        open_positions = engine.get_open_positions()
+    except Exception as e:
+        st.warning(f"Unable to load positions: {e}")
+        open_positions = []
+
+    if open_positions:
+        df_positions = pd.DataFrame(
+            [
+                {
+                    "Symbol": p.symbol,
+                    "Type": p.position_type,
+                    "Strike": p.strike,
+                    "Expiry": p.expiry,
+                    "Contracts": p.contracts,
+                    "Status": p.status,
+                    "Entry Date": p.entry_date,
+                }
+                for p in open_positions
+            ]
+        )
+        st.dataframe(df_positions, use_container_width=True, hide_index=True)
+    else:
+        st.info("No open positions.")
 
     st.divider()
 

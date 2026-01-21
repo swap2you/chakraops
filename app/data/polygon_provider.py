@@ -1,7 +1,12 @@
 
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""Polygon price provider implementation."""
+"""Polygon price provider implementation.
+
+DEPRECATED: This provider is deprecated in favor of ThetaDataProvider.
+Use app.core.market_data.factory.get_market_data_provider() instead.
+This file is kept for backward compatibility only.
+"""
 
 from __future__ import annotations
 

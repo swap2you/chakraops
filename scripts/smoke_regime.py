@@ -14,13 +14,13 @@ except ImportError:
     pass  # dotenv is optional
 
 from app.core.regime import build_weekly_from_daily, compute_regime
-from app.data.polygon_provider import PolygonProvider
+from app.core.market_data.factory import get_market_data_provider
 
 
 def main() -> int:
     """Fetch daily prices, build weekly, compute regime, and print results."""
     try:
-        provider = PolygonProvider()
+        provider = get_market_data_provider()
         df_daily = provider.get_daily("SPY", lookback=400)
     except Exception as exc:
         print(f"Failed to fetch daily prices: {exc}", file=sys.stderr)

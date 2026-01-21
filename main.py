@@ -34,24 +34,13 @@ elif example_path.exists():
 
 
 def get_price_provider():
-    """Get configured price provider (Polygon or YFinance fallback)."""
-    # Try Polygon first
-    if os.getenv("POLYGON_API_KEY"):
-        try:
-            from app.data.polygon_provider import PolygonProvider
-            return PolygonProvider()
-        except Exception as e:
-            print(f"Warning: Failed to initialize PolygonProvider: {e}", file=sys.stderr)
-    
-    # Fallback to YFinance
+    """Get configured market data provider (ThetaData primary)."""
     try:
-        from app.data.yfinance_provider import YFinanceProvider
-        return YFinanceProvider()
-    except ImportError:
-        raise ValueError(
-            "No price provider available. Install yfinance (pip install yfinance) "
-            "or set POLYGON_API_KEY environment variable."
-        )
+        from app.core.market_data.factory import get_market_data_provider
+        return get_market_data_provider()
+    except Exception as e:
+        print(f"Error: Failed to initialize market data provider: {e}", file=sys.stderr)
+        raise
 
 
 def load_universe_seed() -> list[str]:

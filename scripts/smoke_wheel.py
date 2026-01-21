@@ -16,7 +16,7 @@ except ImportError:
 
 from app.core.regime import build_weekly_from_daily, compute_regime
 from app.core.wheel import find_csp_candidates
-from app.data.polygon_provider import PolygonProvider
+from app.core.market_data.factory import get_market_data_provider
 
 
 def load_universe_seed() -> list[str]:
@@ -45,7 +45,7 @@ def main() -> int:
         print(f"Loaded {len(symbols)} symbols from universe_seed.txt", file=sys.stderr)
         
         # Fetch daily prices for SPY to compute regime
-        provider = PolygonProvider()
+        provider = get_market_data_provider()
         df_spy_daily = provider.get_daily("SPY", lookback=400)
         
         # Build weekly and compute regime

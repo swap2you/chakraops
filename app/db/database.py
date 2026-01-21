@@ -10,6 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app.core.utils import safe_json
+
 
 def get_db_path() -> Path:
     """Get path to SQLite database."""
@@ -74,13 +76,16 @@ def log_regime_snapshot(regime: str, confidence: int, details: Dict[str, Any]) -
     conn = sqlite3.connect(str(db_path))
     cursor = conn.cursor()
 
+    # Convert numpy/pandas types to native Python types before JSON serialization
+    details_safe = safe_json(details)
+    
     cursor.execute("""
         INSERT INTO regime_snapshots (regime, confidence, details, created_at)
         VALUES (?, ?, ?, ?)
     """, (
         regime,
         confidence,
-        json.dumps(details, default=str),  # Use default=str to handle all non-serializable types
+        json.dumps(details_safe),
         datetime.utcnow().isoformat(),
     ))
 
@@ -100,14 +105,18 @@ def log_csp_candidates(candidates: List[Dict[str, Any]]) -> None:
     # Insert new candidates
     created_at = datetime.utcnow().isoformat()
     for candidate in candidates:
+        # Convert numpy/pandas types to native Python types before JSON serialization
+        reasons_safe = safe_json(candidate.get("reasons", []))
+        key_levels_safe = safe_json(candidate.get("key_levels", {}))
+        
         cursor.execute("""
             INSERT INTO csp_candidates (symbol, score, reasons, key_levels, created_at)
             VALUES (?, ?, ?, ?, ?)
         """, (
             candidate["symbol"],
             candidate["score"],
-            json.dumps(candidate.get("reasons", []), default=str),
-            json.dumps(candidate.get("key_levels", {}), default=str),
+            json.dumps(reasons_safe),
+            json.dumps(key_levels_safe),
             created_at,
         ))
 

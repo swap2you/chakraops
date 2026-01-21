@@ -47,3 +47,32 @@ The application should print "ChakraOps boot OK" and exit successfully.
 - Application code is in the `app/` directory
 - Tests are in the `tests/` directory
 - Scripts are in the `scripts/` directory
+
+### Smoke Tests
+
+Run individual component smoke tests to validate functionality:
+
+```bash
+# Test state machine transitions
+python scripts/smoke_state_machine.py
+
+# Test regime detection
+python scripts/smoke_regime.py
+
+# Test price providers
+python scripts/smoke_prices.py
+
+# Test wheel engine
+python scripts/smoke_wheel.py
+
+# Test Slack notifications
+python scripts/smoke_slack.py
+```
+
+### Running Tests
+
+Run the full test suite with pytest:
+
+```bash
+pytest tests/
+```

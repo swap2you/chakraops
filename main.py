@@ -72,8 +72,25 @@ def load_universe_seed() -> list[str]:
     return symbols
 
 
-def build_daily_plan_message(regime_result: dict, candidates: list[dict]) -> str:
-    """Build daily plan message for Slack."""
+def build_daily_plan_message(
+    regime_result: dict,
+    candidates: list[dict],
+    positions: list = None,
+    position_decisions: list = None,
+) -> str:
+    """Build daily plan message for Slack.
+    
+    Parameters
+    ----------
+    regime_result:
+        Market regime result dictionary.
+    candidates:
+        List of CSP candidate dictionaries.
+    positions:
+        Optional list of Position objects (for reference).
+    position_decisions:
+        Optional list of ActionDecision objects (pre-computed decisions).
+    """
     regime = regime_result["regime"]
     confidence = regime_result["confidence"]
     
@@ -82,8 +99,70 @@ def build_daily_plan_message(regime_result: dict, candidates: list[dict]) -> str
         "",
         f"*Market Regime:* {regime} (Confidence: {confidence}%)",
         "",
-        "*Top CSP Candidates:*",
     ]
+    
+    # Action Alerts section (HIGH urgency decisions)
+    high_urgency_decisions = []
+    if position_decisions:
+        high_urgency_decisions = [
+            (pos, dec) for pos, dec in zip(positions or [], position_decisions)
+            if dec and dec.urgency.value == "HIGH"
+        ]
+    
+    if high_urgency_decisions:
+        lines.append("🔥 *Action Alerts*")
+        lines.append("")
+        for position, decision in high_urgency_decisions:
+            symbol = position.symbol
+            state = position.state or position.status
+            action = decision.action.value
+            urgency = decision.urgency.value
+            key_reason = decision.reasons[0] if decision.reasons else "No reason provided"
+            
+            line = f"*{symbol}* | {state} | {action} | {urgency} | {key_reason}"
+            lines.append(line)
+            
+            # Add roll plan details if action is ROLL
+            if decision.action.value == "ROLL" and decision.roll_plan:
+                roll_plan = decision.roll_plan
+                lines.append(f"   → Roll: {roll_plan.suggested_strike:.0f} @ {roll_plan.suggested_expiry} ({roll_plan.roll_type})")
+        
+        lines.append("")
+    
+    # Open Positions Decisions section
+    lines.append("📌 *Open Positions Decisions*")
+    lines.append("")
+    
+    if position_decisions and positions:
+        has_any_decisions = False
+        for position, decision in zip(positions, position_decisions):
+            if not decision:
+                continue
+            
+            has_any_decisions = True
+            symbol = position.symbol
+            state = position.state or position.status
+            action = decision.action.value
+            urgency = decision.urgency.value
+            key_reason = decision.reasons[0] if decision.reasons else "No reason provided"
+            
+            line = f"{symbol} | {state} | {action} | {urgency} | {key_reason}"
+            lines.append(line)
+            
+            # Add roll plan details if action is ROLL
+            if decision.action.value == "ROLL" and decision.roll_plan:
+                roll_plan = decision.roll_plan
+                lines.append(f"   → Roll: {roll_plan.suggested_strike:.0f} @ {roll_plan.suggested_expiry} ({roll_plan.roll_type})")
+        
+        if not has_any_decisions:
+            lines.append("No open positions.")
+    else:
+        lines.append("No open positions.")
+    
+    lines.append("")
+    
+    # Top CSP Candidates section
+    lines.append("*Top CSP Candidates:*")
     
     # Add top 5 candidates
     for i, candidate in enumerate(candidates[:5], 1):
@@ -306,23 +385,28 @@ def main():
             log_alert(error_msg, level="WATCH")
             # Don't exit - continue with daily plan
         
-        # Step 9: Monitor open positions and send alerts
+        # Step 9: Monitor open positions and evaluate with Action Engine
+        position_decisions = []
+        open_positions = []
         try:
             print("Step 9: Monitoring open positions...", file=sys.stderr)
             from app.core.engine.position_engine import PositionEngine
             from app.core.engine.risk_engine import RiskEngine
+            from app.core.engine.actions import decide_position_action
+            from app.core.engine.alert_dedupe import AlertDedupeEngine
             from app.notify.slack import send_slack
             from app.db.database import log_alert
             
             position_engine = PositionEngine()
             risk_engine = RiskEngine()
+            dedupe_engine = AlertDedupeEngine()
             open_positions = position_engine.get_open_positions()
             
             if open_positions:
-                print(f"  Evaluating {len(open_positions)} open positions...", file=sys.stderr)
+                print(f"  Evaluating {len(open_positions)} open positions with Action Engine...", file=sys.stderr)
                 
                 for position in open_positions:
-                    # Build market context
+                    # Build market context for Action Engine
                     market_context = {"regime": regime_result["regime"]}
                     
                     # Fetch current price and EMA200
@@ -331,17 +415,52 @@ def main():
                         if not df.empty:
                             df = df.sort_values("date", ascending=True).reset_index(drop=True)
                             df["ema200"] = df["close"].ewm(span=200, adjust=False).mean()
+                            df["ema50"] = df["close"].ewm(span=50, adjust=False).mean()
                             latest = df.iloc[-1]
-                            market_context["current_price"] = float(latest["close"])
+                            current_price = float(latest["close"])
+                            market_context["underlying_price"] = current_price
+                            market_context["current_price"] = current_price
                             market_context["ema200"] = float(latest["ema200"])
+                            market_context["ema50"] = float(latest["ema50"])
+                            market_context["price_df"] = df
+                            
+                            # Calculate ATR proxy (3% default)
+                            atr_pct = 0.03
+                            market_context["atr_pct"] = atr_pct
+                            
+                            # Calculate premium collected percentage
+                            if position.strike and position.strike > 0 and position.contracts > 0:
+                                premium_per_contract = position.premium_collected / position.contracts
+                                premium_pct = (premium_per_contract / (position.strike * 100)) * 100
+                                market_context["premium_collected_pct"] = premium_pct
                     except Exception as e:
                         print(f"  ⚠ Could not fetch price data for {position.symbol}: {e}", file=sys.stderr)
                     
-                    # Evaluate position
+                    # Evaluate position with Action Engine
+                    action_decision = None
+                    try:
+                        action_decision = decide_position_action(position, market_context)
+                        position_decisions.append(action_decision)
+                        print(f"  ✓ {position.symbol}: {action_decision.action.value} ({action_decision.urgency.value})", file=sys.stderr)
+                    except Exception as e:
+                        print(f"  ✗ Failed to evaluate {position.symbol} with Action Engine: {e}", file=sys.stderr)
+                        position_decisions.append(None)
+                    
+                    # Also evaluate with Risk Engine for backward compatibility (ACTION_REQUIRED alerts)
                     try:
                         evaluation = risk_engine.evaluate_position(position, market_context)
                         
-                        if evaluation["status"] == "ACTION_REQUIRED":
+                        # Use Action Engine decision for deduplication
+                        # Only send alerts if dedupe engine allows it (or if no action_decision available)
+                        should_send_alert = True  # Default: allow if no Action Engine decision
+                        if action_decision:
+                            should_send_alert = dedupe_engine.should_notify(
+                                position.symbol,
+                                action_decision,
+                                cooldown_minutes=60
+                            )
+                        
+                        if evaluation["status"] == "ACTION_REQUIRED" and should_send_alert:
                             # Check for roll suggestion if CSP position
                             roll_suggestion = None
                             if position.position_type == "CSP":
@@ -421,6 +540,9 @@ def main():
                                 # Send to urgent alerts channel
                                 send_slack(message, level="URGENT")
                                 log_alert(f"Roll suggestion sent for {position.symbol}", level="URGENT")
+                                # Record notification in dedupe engine
+                                if action_decision:
+                                    dedupe_engine.record_notification(position.symbol, action_decision)
                                 print(f"  ✓ Roll suggestion alert sent for {position.symbol}", file=sys.stderr)
                             else:
                                 # No roll suggestion - send standard ACTION_REQUIRED alert
@@ -454,7 +576,13 @@ def main():
                                 # Send to urgent alerts channel
                                 send_slack(message, level="URGENT")
                                 log_alert(f"Position alert sent for {position.symbol}: ACTION_REQUIRED", level="URGENT")
+                                # Record notification in dedupe engine
+                                if action_decision:
+                                    dedupe_engine.record_notification(position.symbol, action_decision)
                                 print(f"  ✓ ACTION_REQUIRED alert sent for {position.symbol}", file=sys.stderr)
+                        elif evaluation["status"] == "ACTION_REQUIRED" and not should_send_alert:
+                            # Alert suppressed by dedupe engine
+                            print(f"  ⊘ Alert suppressed for {position.symbol} (duplicate or cooldown)", file=sys.stderr)
                     except Exception as e:
                         print(f"  ✗ Failed to evaluate position {position.symbol}: {e}", file=sys.stderr)
                         log_alert(f"Failed to evaluate position {position.symbol}: {e}", level="WATCH")
@@ -468,7 +596,12 @@ def main():
             # Don't exit - continue with daily plan
         
         # Step 10: Build daily plan message
-        daily_plan = build_daily_plan_message(regime_result, candidates)
+        daily_plan = build_daily_plan_message(
+            regime_result,
+            candidates,
+            positions=open_positions,
+            position_decisions=position_decisions,
+        )
         
         # Step 11: Send Slack message
         try:

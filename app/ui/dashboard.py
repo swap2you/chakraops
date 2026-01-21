@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from pathlib import Path
@@ -15,7 +16,16 @@ from app.core.engine.csp_trade_engine import CSPTradeEngine
 from app.core.engine.position_engine import PositionEngine
 from app.core.engine.risk_engine import RiskEngine
 from app.core.engine.roll_engine import RollEngine
+from app.core.engine.actions import (
+    ActionType,
+    Urgency,
+    decide_position_action,
+)
 from app.core.portfolio.portfolio_engine import PortfolioEngine
+from app.core.state_machine.position_state_machine import (
+    PositionState,
+    get_allowed_transitions,
+)
 
 # Set page config
 st.set_page_config(
@@ -220,6 +230,25 @@ def main() -> None:
             st.session_state.regime_cache = None
             st.session_state.candidates_cache = None
             st.rerun()
+        
+        st.divider()
+        
+        # Filters
+        st.subheader("🔍 Filters")
+        
+        # Urgency filter
+        urgency_filter = st.selectbox(
+            "Urgency",
+            ["ALL", "HIGH", "MEDIUM", "LOW"],
+            index=0,
+        )
+        
+        # Action filter
+        action_filter = st.selectbox(
+            "Action",
+            ["ALL", "HOLD", "CLOSE", "ROLL", "ALERT"],
+            index=0,
+        )
         
         st.divider()
         
@@ -555,6 +584,59 @@ def main() -> None:
 
     st.divider()
 
+    # Today's Focus Card (HIGH urgency count)
+    try:
+        position_engine = PositionEngine()
+        all_open_positions = position_engine.get_open_positions()
+        
+        # Quick count of HIGH urgency (without full evaluation)
+        high_urgency_count = 0
+        if all_open_positions:
+            regime_snapshot = get_regime_snapshot()
+            regime_value = regime_snapshot.get("regime") if regime_snapshot else "RISK_OFF"
+            
+            try:
+                from app.data.yfinance_provider import YFinanceProvider
+                price_provider = YFinanceProvider()
+            except Exception:
+                price_provider = None
+            
+            for pos in all_open_positions:
+                try:
+                    market_ctx = {"regime": regime_value}
+                    if price_provider:
+                        try:
+                            df = price_provider.get_daily(pos.symbol, lookback=250)
+                            if not df.empty:
+                                df = df.sort_values("date", ascending=True).reset_index(drop=True)
+                                latest = df.iloc[-1]
+                                market_ctx["underlying_price"] = float(latest["close"])
+                        except Exception:
+                            pass
+                    
+                    decision = decide_position_action(pos, market_ctx)
+                    if decision and decision.urgency == Urgency.HIGH:
+                        high_urgency_count += 1
+                except Exception:
+                    pass
+    except Exception:
+        high_urgency_count = 0
+    
+    # Today's Focus Card
+    if high_urgency_count > 0:
+        with st.container():
+            st.markdown(
+                f"""
+                <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+                    <h3 style="margin: 0; color: #856404;">🎯 Today's Focus</h3>
+                    <p style="margin: 5px 0 0 0; color: #856404; font-size: 18px; font-weight: bold;">
+                        {high_urgency_count} HIGH Urgency Alert{'s' if high_urgency_count != 1 else ''}
+                    </p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
     # Open Positions Section
     st.header("📂 Open Positions")
     try:
@@ -576,154 +658,273 @@ def main() -> None:
         except Exception:
             price_provider = None
         
-        risk_engine = RiskEngine()
         position_data = []
         
         for position in open_positions:
-            # Build market context
+            # Build market context for Action Engine
             market_context = {"regime": regime_value}
             
-            # Fetch current price and EMA200 if provider available
+            # Fetch current price, EMA200, EMA50 if provider available
             if price_provider:
                 try:
                     df = price_provider.get_daily(position.symbol, lookback=250)
                     if not df.empty:
                         df = df.sort_values("date", ascending=True).reset_index(drop=True)
                         df["ema200"] = df["close"].ewm(span=200, adjust=False).mean()
+                        df["ema50"] = df["close"].ewm(span=50, adjust=False).mean()
                         latest = df.iloc[-1]
-                        market_context["current_price"] = float(latest["close"])
+                        current_price = float(latest["close"])
+                        market_context["underlying_price"] = current_price
+                        market_context["current_price"] = current_price
                         market_context["ema200"] = float(latest["ema200"])
+                        market_context["ema50"] = float(latest["ema50"])
+                        market_context["price_df"] = df
+                        
+                        # Calculate ATR proxy (3% default)
+                        market_context["atr_pct"] = 0.03
+                        
+                        # Calculate premium collected percentage
+                        if position.strike and position.strike > 0 and position.contracts > 0:
+                            premium_per_contract = position.premium_collected / position.contracts
+                            premium_pct = (premium_per_contract / (position.strike * 100)) * 100
+                            market_context["premium_collected_pct"] = premium_pct
                 except Exception:
                     pass  # Continue without price data
             
-            # Evaluate position risk
+            # Evaluate position with Action Engine
+            action_decision = None
             try:
-                evaluation = risk_engine.evaluate_position(position, market_context)
-                risk_status = evaluation["status"]
-                premium_pct = evaluation["premium_pct"]
-                reasons = evaluation["reasons"]
+                action_decision = decide_position_action(position, market_context)
             except Exception as e:
-                risk_status = "HOLD"
-                premium_pct = 0.0
-                reasons = [f"Evaluation error: {e}"]
+                # Fallback to basic decision if Action Engine fails
+                action_decision = None
             
             position_data.append({
                 "position": position,
-                "risk_status": risk_status,
-                "premium_pct": premium_pct,
-                "reasons": reasons,
+                "action_decision": action_decision,
                 "market_context": market_context,
             })
         
-        # Display positions with risk status
-        for i, data in enumerate(position_data):
-            position = data["position"]
-            risk_status = data["risk_status"]
-            premium_pct = data["premium_pct"]
-            reasons = data["reasons"]
-            market_context = data["market_context"]
-            
-            # Color code status
-            if risk_status == "HOLD":
-                status_color = "🟢"
-                status_style = "color: green; font-weight: bold;"
-            elif risk_status == "PREPARE_ROLL":
-                status_color = "🟡"
-                status_style = "color: orange; font-weight: bold;"
-            else:  # ACTION_REQUIRED
-                status_color = "🔴"
-                status_style = "color: red; font-weight: bold;"
-            
-            with st.container():
-                col1, col2, col3, col4, col5, col6, col7 = st.columns([1, 1, 1, 1, 1, 1, 1])
+        # Apply filters
+        filtered_data = position_data
+        if urgency_filter != "ALL":
+            filtered_data = [
+                d for d in filtered_data
+                if d["action_decision"] and d["action_decision"].urgency.value == urgency_filter
+            ]
+        
+        if action_filter != "ALL":
+            filtered_data = [
+                d for d in filtered_data
+                if d["action_decision"] and d["action_decision"].action.value == action_filter
+            ]
+        
+        # Display filtered positions
+        if not filtered_data:
+            st.info(f"No positions match the selected filters (Urgency: {urgency_filter}, Action: {action_filter})")
+        else:
+            for i, data in enumerate(filtered_data):
+                position = data["position"]
+                action_decision = data["action_decision"]
+                market_context = data["market_context"]
                 
-                with col1:
-                    st.write(f"**{position.symbol}**")
+                # Get action and urgency (with fallbacks)
+                if action_decision:
+                    action = action_decision.action.value
+                    urgency = action_decision.urgency.value
+                    reasons = action_decision.reasons
+                    next_steps = action_decision.next_steps
+                    roll_plan = action_decision.roll_plan
+                else:
+                    action = "HOLD"
+                    urgency = "LOW"
+                    reasons = ["Action Engine evaluation unavailable"]
+                    next_steps = []
+                    roll_plan = None
                 
-                with col2:
-                    st.write(position.position_type)
+                # Calculate premium percentage
+                premium_pct = 0.0
+                if position.strike and position.strike > 0 and position.contracts > 0:
+                    premium_per_contract = position.premium_collected / position.contracts
+                    premium_pct = (premium_per_contract / (position.strike * 100)) * 100
                 
-                with col3:
-                    st.write(f"${position.strike:.2f}" if position.strike else "N/A")
+                # Show position state
+                position_state_str = position.state or (position.status if hasattr(position, 'status') else "OPEN")
+                try:
+                    position_state = PositionState(position_state_str)
+                except (ValueError, AttributeError, TypeError):
+                    position_state = PositionState.OPEN
                 
-                with col4:
-                    st.write(position.expiry or "N/A")
-                
-                with col5:
-                    st.write(position.contracts)
-                
-                with col6:
-                    st.markdown(f'<span style="{status_style}">{status_color} {risk_status}</span>', unsafe_allow_html=True)
-                
-                with col7:
-                    st.write(f"{premium_pct:.1f}%")
-                
-                # Expander for reasons
-                with st.expander("❓ Why?", expanded=False):
-                    if reasons:
-                        for reason in reasons:
-                            st.write(f"• {reason}")
-                    else:
-                        st.write("No reasons available")
-                
-                # Show roll suggestion for ACTION_REQUIRED positions
-                if risk_status == "ACTION_REQUIRED" and position.position_type == "CSP":
-                    st.markdown("---")
-                    st.subheader("🔄 Suggested Roll")
+                with st.container():
+                    # Main row with columns
+                    col1, col2, col3, col4, col5, col6, col7, col8, col9 = st.columns([1.2, 0.8, 1, 1, 0.8, 1, 1, 1, 1])
                     
-                    # Initialize ORATS client if available
-                    orats_client = None
-                    try:
-                        from app.data.orats_client import OratsClient
-                        orats_client = OratsClient()
-                    except Exception:
-                        pass  # ORATS not available
+                    with col1:
+                        st.write(f"**{position.symbol}**")
                     
-                    # Enhance market context with EMA50 and price_df
-                    enhanced_context = market_context.copy()
-                    if price_provider:
-                        try:
-                            df = price_provider.get_daily(position.symbol, lookback=250)
-                            if not df.empty:
-                                df = df.sort_values("date", ascending=True).reset_index(drop=True)
-                                df["ema50"] = df["close"].ewm(span=50, adjust=False).mean()
-                                latest = df.iloc[-1]
-                                enhanced_context["ema50"] = float(latest["ema50"])
-                                enhanced_context["price_df"] = df
-                        except Exception:
-                            pass
+                    with col2:
+                        st.caption(position.position_type)
                     
-                    # Get roll suggestion
-                    roll_suggestion = None
-                    if orats_client:
-                        try:
-                            roll_engine = RollEngine(orats_client=orats_client)
-                            roll_suggestion = roll_engine.suggest_roll(position, enhanced_context)
-                        except Exception as e:
-                            st.warning(f"Could not generate roll suggestion: {e}")
+                    with col3:
+                        st.caption(f"${position.strike:.2f}" if position.strike else "N/A")
                     
-                    if roll_suggestion:
-                        # Display roll suggestion
-                        col1, col2, col3 = st.columns(3)
+                    with col4:
+                        st.caption(position.expiry or "N/A")
+                    
+                    with col5:
+                        st.caption(f"{position.contracts}")
+                    
+                    with col6:
+                        # State badge
+                        if position_state in [PositionState.HOLD, PositionState.OPEN]:
+                            state_color = "🟢"
+                            state_style = "background-color: #d4edda; color: #155724; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;"
+                        elif position_state in [PositionState.ROLL_CANDIDATE, PositionState.ROLLING]:
+                            state_color = "🟡"
+                            state_style = "background-color: #fff3cd; color: #856404; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;"
+                        elif position_state == PositionState.CLOSED:
+                            state_color = "⚫"
+                            state_style = "background-color: #e2e3e5; color: #383d41; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;"
+                        elif position_state == PositionState.ASSIGNED:
+                            state_color = "🟣"
+                            state_style = "background-color: #d1ecf1; color: #0c5460; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;"
+                        else:
+                            state_color = "⚪"
+                            state_style = "background-color: #f8f9fa; color: #6c757d; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;"
                         
-                        with col1:
-                            st.metric("New Strike", f"${roll_suggestion['suggested_strike']:.2f}")
+                        st.markdown(
+                            f'<span style="{state_style}">{state_color} {position_state.value}</span>',
+                            unsafe_allow_html=True
+                        )
+                    
+                    with col7:
+                        # Action badge
+                        if action == "HOLD":
+                            action_color = "⚪"
+                            action_style = "background-color: #e9ecef; color: #495057; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;"
+                        elif action == "CLOSE":
+                            action_color = "🔵"
+                            action_style = "background-color: #cfe2ff; color: #084298; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;"
+                        elif action == "ROLL":
+                            action_color = "🟡"
+                            action_style = "background-color: #fff3cd; color: #856404; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;"
+                        else:  # ALERT
+                            action_color = "🔴"
+                            action_style = "background-color: #f8d7da; color: #721c24; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;"
                         
-                        with col2:
-                            st.metric("New Expiry", roll_suggestion['suggested_expiry'])
+                        st.markdown(
+                            f'<span style="{action_style}">{action_color} {action}</span>',
+                            unsafe_allow_html=True
+                        )
+                    
+                    with col8:
+                        # Urgency badge
+                        if urgency == "HIGH":
+                            urgency_color = "🔴"
+                            urgency_style = "background-color: #f8d7da; color: #721c24; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;"
+                        elif urgency == "MEDIUM":
+                            urgency_color = "🟡"
+                            urgency_style = "background-color: #fff3cd; color: #856404; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;"
+                        else:  # LOW
+                            urgency_color = "🟢"
+                            urgency_style = "background-color: #d4edda; color: #155724; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;"
                         
-                        with col3:
-                            st.metric("Net Credit", f"${roll_suggestion['estimated_net_credit']:.2f}")
+                        st.markdown(
+                            f'<span style="{urgency_style}">{urgency_color} {urgency}</span>',
+                            unsafe_allow_html=True
+                        )
+                    
+                    with col9:
+                        st.caption(f"{premium_pct:.1f}%")
+                    
+                    # Expander for details including Action Engine information
+                    with st.expander("📋 Details", expanded=False):
+                        # Action Decision Section
+                        if action_decision:
+                            st.write("**Action Decision:**")
+                            col_a1, col_a2 = st.columns(2)
+                            with col_a1:
+                                st.metric("Action", action)
+                            with col_a2:
+                                st.metric("Urgency", urgency)
+                            
+                            # Reasons
+                            if reasons:
+                                st.write("**Reasons:**")
+                                for reason in reasons:
+                                    st.caption(f"• {reason}")
+                            
+                            # Next Steps
+                            if next_steps:
+                                st.write("**Next Steps:**")
+                                for step in next_steps:
+                                    st.caption(f"→ {step}")
+                            
+                            # Roll Plan (if available)
+                            if roll_plan:
+                                st.write("**Roll Plan:**")
+                                col_r1, col_r2, col_r3 = st.columns(3)
+                                with col_r1:
+                                    st.metric("Suggested Strike", f"${roll_plan.suggested_strike:.2f}")
+                                with col_r2:
+                                    st.metric("Suggested Expiry", roll_plan.suggested_expiry.isoformat())
+                                with col_r3:
+                                    st.metric("Roll Type", roll_plan.roll_type)
+                                
+                                if roll_plan.notes:
+                                    st.write("**Roll Notes:**")
+                                    for note in roll_plan.notes:
+                                        st.caption(f"• {note}")
+                            
+                            st.divider()
                         
-                        # Rationale expander
-                        with st.expander("📋 Rationale", expanded=False):
-                            for reason in roll_suggestion.get("reasons", []):
-                                st.write(f"• {reason}")
-                    else:
-                        st.info("⚠️ No favorable roll available. Consider assignment.")
-            
-            if i < len(position_data) - 1:
-                st.divider()
+                        # Current State
+                        st.write("**Current State:**")
+                        st.write(f"`{position_state.value}`")
+                        
+                        # Allowed next states
+                        allowed_next = get_allowed_transitions(position_state)
+                        if allowed_next:
+                            st.write("**Allowed Next States:**")
+                            allowed_str = ", ".join([s.value for s in allowed_next])
+                            st.caption(allowed_str)
+                        else:
+                            st.write("**Allowed Next States:**")
+                            st.caption("None (terminal state)")
+                        
+                        # State History
+                        st.write("**State History:**")
+                        state_history = position.state_history or []
+                        if state_history:
+                            history_data = []
+                            for event in state_history:
+                                if isinstance(event, dict):
+                                    history_data.append({
+                                        "From": event.get("from_state", "N/A"),
+                                        "To": event.get("to_state", "N/A"),
+                                        "Reason": event.get("reason", "N/A"),
+                                        "Source": event.get("source", "N/A"),
+                                        "Timestamp": event.get("timestamp_iso", "N/A")[:19] if event.get("timestamp_iso") else "N/A",
+                                    })
+                                else:
+                                    # Handle StateTransitionEvent objects
+                                    history_data.append({
+                                        "From": getattr(event, "from_state", "N/A"),
+                                        "To": getattr(event, "to_state", "N/A"),
+                                        "Reason": getattr(event, "reason", "N/A"),
+                                        "Source": getattr(event, "source", "N/A"),
+                                        "Timestamp": getattr(event, "timestamp_iso", "N/A")[:19] if hasattr(event, "timestamp_iso") else "N/A",
+                                    })
+                            
+                            if history_data:
+                                st.dataframe(pd.DataFrame(history_data), use_container_width=True, hide_index=True)
+                            else:
+                                st.caption("No state transitions recorded")
+                        else:
+                            st.caption("No state history available")
+                
+                if i < len(filtered_data) - 1:
+                    st.divider()
     else:
         st.info("No open positions.")
 

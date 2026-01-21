@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -86,7 +86,7 @@ def log_regime_snapshot(regime: str, confidence: int, details: Dict[str, Any]) -
         regime,
         confidence,
         json.dumps(details_safe),
-        datetime.utcnow().isoformat(),
+        datetime.now(timezone.utc).isoformat(),
     ))
 
     conn.commit()
@@ -136,7 +136,7 @@ def log_alert(message: str, level: str = "INFO") -> None:
     """, (
         message,
         level,
-        datetime.utcnow().isoformat(),
+        datetime.now(timezone.utc).isoformat(),
     ))
 
     conn.commit()

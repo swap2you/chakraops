@@ -15,10 +15,11 @@ All trading and risk logic lives elsewhere.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import asdict
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from app.core.models.position import Position, PositionStatus
 
@@ -69,10 +70,44 @@ class PositionStore:
                     premium_collected REAL NOT NULL,
                     entry_date TEXT NOT NULL,
                     status TEXT NOT NULL,
+                    state TEXT,
+                    state_history TEXT,
                     notes TEXT
                 )
                 """
             )
+            conn.commit()
+            
+            # Migrate existing data: add state and state_history columns if they don't exist
+            try:
+                cursor.execute("ALTER TABLE positions ADD COLUMN state TEXT")
+            except sqlite3.OperationalError:
+                pass  # Column already exists
+            
+            try:
+                cursor.execute("ALTER TABLE positions ADD COLUMN state_history TEXT")
+            except sqlite3.OperationalError:
+                pass  # Column already exists
+            
+            # Migrate existing positions: set state from status if state is NULL
+            cursor.execute("""
+                UPDATE positions
+                SET state = CASE
+                    WHEN status = 'OPEN' THEN 'OPEN'
+                    WHEN status = 'ASSIGNED' THEN 'ASSIGNED'
+                    WHEN status = 'CLOSED' THEN 'CLOSED'
+                    ELSE 'OPEN'
+                END
+                WHERE state IS NULL
+            """)
+            
+            # Initialize empty state_history for positions that don't have it
+            cursor.execute("""
+                UPDATE positions
+                SET state_history = '[]'
+                WHERE state_history IS NULL
+            """)
+            
             conn.commit()
         finally:
             conn.close()
@@ -85,28 +120,56 @@ class PositionStore:
         conn = self._get_connection()
         try:
             cursor = conn.cursor()
-            data = asdict(position)
+            
+            # Get state (default to status if state not set)
+            state = position.state or (position.status if hasattr(position, 'status') else 'OPEN')
+            
+            # Serialize state_history to JSON
+            state_history_json = json.dumps([
+                {
+                    'from_state': event.from_state if hasattr(event, 'from_state') else event.get('from_state'),
+                    'to_state': event.to_state if hasattr(event, 'to_state') else event.get('to_state'),
+                    'reason': event.reason if hasattr(event, 'reason') else event.get('reason'),
+                    'source': event.source if hasattr(event, 'source') else event.get('source'),
+                    'timestamp_iso': event.timestamp_iso if hasattr(event, 'timestamp_iso') else event.get('timestamp_iso'),
+                }
+                for event in (position.state_history or [])
+            ])
+            
             cursor.execute(
                 """
                 INSERT INTO positions (
                     id, symbol, position_type, strike, expiry,
                     contracts, premium_collected, entry_date,
-                    status, notes
+                    status, state, state_history, notes
                 )
                 VALUES (
                     :id, :symbol, :position_type, :strike, :expiry,
                     :contracts, :premium_collected, :entry_date,
-                    :status, :notes
+                    :status, :state, :state_history, :notes
                 )
                 """,
-                data,
+                {
+                    'id': position.id,
+                    'symbol': position.symbol,
+                    'position_type': position.position_type,
+                    'strike': position.strike,
+                    'expiry': position.expiry,
+                    'contracts': position.contracts,
+                    'premium_collected': position.premium_collected,
+                    'entry_date': position.entry_date,
+                    'status': position.status,
+                    'state': state,
+                    'state_history': state_history_json,
+                    'notes': position.notes,
+                },
             )
             conn.commit()
         finally:
             conn.close()
 
     def fetch_all_open_positions(self) -> List[Position]:
-        """Fetch all positions with status ``\"OPEN\"``."""
+        """Fetch all positions with status ``\"OPEN\"`` or state in OPEN/HOLD/ROLL_CANDIDATE/ROLLING."""
         conn = self._get_connection()
         try:
             cursor = conn.cursor()
@@ -115,9 +178,9 @@ class PositionStore:
                 SELECT
                     id, symbol, position_type, strike, expiry,
                     contracts, premium_collected, entry_date,
-                    status, notes
+                    status, state, state_history, notes
                 FROM positions
-                WHERE status = 'OPEN'
+                WHERE status = 'OPEN' OR state IN ('OPEN', 'HOLD', 'ROLL_CANDIDATE', 'ROLLING')
                 ORDER BY entry_date DESC
                 """
             )
@@ -137,7 +200,7 @@ class PositionStore:
                 SELECT
                     id, symbol, position_type, strike, expiry,
                     contracts, premium_collected, entry_date,
-                    status, notes
+                    status, state, state_history, notes
                 FROM positions
                 WHERE symbol = ?
                 ORDER BY entry_date DESC
@@ -173,18 +236,54 @@ class PositionStore:
     @staticmethod
     def _row_to_position(row: tuple) -> Position:
         """Convert a SQLite row into a :class:`Position` instance."""
-        (
-            id_,
-            symbol,
-            position_type,
-            strike,
-            expiry,
-            contracts,
-            premium_collected,
-            entry_date,
-            status,
-            notes,
-        ) = row
+        # Handle both old (10 fields) and new (12 fields) schema
+        if len(row) == 10:
+            (
+                id_,
+                symbol,
+                position_type,
+                strike,
+                expiry,
+                contracts,
+                premium_collected,
+                entry_date,
+                status,
+                notes,
+            ) = row
+            state = None
+            state_history_str = None
+        else:
+            (
+                id_,
+                symbol,
+                position_type,
+                strike,
+                expiry,
+                contracts,
+                premium_collected,
+                entry_date,
+                status,
+                state,
+                state_history_str,
+                notes,
+            ) = row
+        
+        # Parse state_history from JSON
+        state_history = []
+        if state_history_str:
+            try:
+                state_history = json.loads(state_history_str)
+            except (json.JSONDecodeError, TypeError):
+                state_history = []
+        
+        # Migrate: if state is None, derive from status
+        if state is None:
+            status_to_state = {
+                "OPEN": "OPEN",
+                "ASSIGNED": "ASSIGNED",
+                "CLOSED": "CLOSED",
+            }
+            state = status_to_state.get(status, "OPEN")
 
         return Position(
             id=id_,
@@ -196,6 +295,8 @@ class PositionStore:
             premium_collected=premium_collected,
             entry_date=entry_date,
             status=status,  # type: ignore[arg-type]
+            state=state,
+            state_history=state_history,
             notes=notes,
         )
 

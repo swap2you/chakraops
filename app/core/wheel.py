@@ -4,13 +4,24 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+import logging
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 
+logger = logging.getLogger(__name__)
 
-def find_csp_candidates(symbol_to_df: Dict[str, pd.DataFrame], regime: str) -> List[Dict[str, Any]]:
+
+def find_csp_candidates(
+    symbol_to_df: Dict[str, pd.DataFrame],
+    regime: str,
+    orats_client: Optional[Any] = None,
+    dte_min: int = 7,
+    dte_max: int = 45,
+    delta_min: float = -0.30,
+    delta_max: float = -0.15,
+) -> List[Dict[str, Any]]:
     """Find CSP candidates based on regime and technical filters.
 
     Parameters
@@ -20,6 +31,17 @@ def find_csp_candidates(symbol_to_df: Dict[str, pd.DataFrame], regime: str) -> L
         date, open, high, low, close, volume. Must be sorted ascending by date.
     regime:
         Market regime: "RISK_ON" or "RISK_OFF".
+    orats_client:
+        Optional OratsClient instance for fetching options chains.
+        If None, candidates will be stock-only (no contract details).
+    dte_min:
+        Minimum days to expiration for option selection (default: 7).
+    dte_max:
+        Maximum days to expiration for option selection (default: 45).
+    delta_min:
+        Minimum delta for put selection (default: -0.30).
+    delta_max:
+        Maximum delta for put selection (default: -0.15).
 
     Returns
     -------
@@ -29,6 +51,7 @@ def find_csp_candidates(symbol_to_df: Dict[str, pd.DataFrame], regime: str) -> L
         - score: int (0-100)
         - reasons: list[str]
         - key_levels: dict with ema50, ema200, close
+        - contract: dict with expiry, strike, delta, premium_estimate (if available)
     """
     if regime != "RISK_ON":
         return []
@@ -107,7 +130,7 @@ def find_csp_candidates(symbol_to_df: Dict[str, pd.DataFrame], regime: str) -> L
         # Ensure score is within 0-100
         score = min(100, max(0, score_points))
 
-        candidates.append({
+        candidate = {
             "symbol": symbol,
             "score": score,
             "reasons": reasons,
@@ -118,7 +141,53 @@ def find_csp_candidates(symbol_to_df: Dict[str, pd.DataFrame], regime: str) -> L
                 "atr": float(atr) if pd.notna(atr) else None,
                 "rsi": float(rsi) if pd.notna(rsi) else None,
             },
-        })
+        }
+
+        # Try to fetch options chain and select contract
+        contract = None
+        if orats_client is not None:
+            try:
+                from app.core.options_selector import select_short_put
+                
+                chain = orats_client.get_chain(symbol)
+                contract = select_short_put(
+                    chain,
+                    dte_min=dte_min,
+                    dte_max=dte_max,
+                    delta_min=delta_min,
+                    delta_max=delta_max,
+                )
+                
+                if contract:
+                    # Calculate premium estimate (mid price)
+                    bid = contract.get("bid", 0)
+                    ask = contract.get("ask", 0)
+                    premium_estimate = (bid + ask) / 2 if (bid > 0 and ask > 0) else None
+                    
+                    # Convert expiry_date to ISO string for JSON serialization
+                    expiry_date = contract.get("expiry_date")
+                    expiry_str = expiry_date.isoformat() if expiry_date else None
+                    
+                    candidate["contract"] = {
+                        "expiry": expiry_str,
+                        "strike": contract.get("strike"),
+                        "delta": contract.get("delta"),
+                        "premium_estimate": premium_estimate,
+                    }
+                else:
+                    logger.warning(
+                        f"No suitable put contract found for {symbol} "
+                        f"(DTE: {dte_min}-{dte_max}, Delta: {delta_min}-{delta_max})"
+                    )
+            except Exception as e:
+                # Log as WATCH level, not ERROR - this is a fallback scenario
+                logger.warning(
+                    f"Failed to fetch options chain for {symbol}: {e}. "
+                    "Falling back to stock-only signal."
+                )
+                # Continue with stock-only candidate (no contract details)
+
+        candidates.append(candidate)
 
     # Sort by score descending
     candidates.sort(key=lambda x: x["score"], reverse=True)

@@ -87,13 +87,49 @@ class PositionEngine:
 
         Notes
         -----
-        - This method only updates the status to ``\"CLOSED\"`` in the store.
+        - This method enforces state machine transitions.
+        - If position is OPEN, transitions to CLOSING first, then CLOSED.
+        - If position is CLOSING, transitions directly to CLOSED.
         - If the position does not exist, the store's update will be a no-op;
           callers that require strict behavior should verify existence before
           calling this method.
         """
-        # Delegate to the store; enforcement/logging can be layered on top later.
-        self.store.update_position_status(position_id, "CLOSED")
+        # Fetch current position to determine state
+        positions = self.store.fetch_all_open_positions()
+        position = next((p for p in positions if p.id == position_id), None)
+        
+        if not position:
+            # Try to find any position with this ID
+            # For now, just update status (backward compatibility)
+            self.store.update_position_status(position_id, "CLOSED", action="CLOSE")
+            return
+        
+        # Get current state
+        from app.core.state_machine import PositionState, PositionAction, next_state
+        
+        current_state_str = position.state or "OPEN"
+        state_mapping = {
+            "NEW": PositionState.NEW,
+            "ASSIGNED": PositionState.ASSIGNED,
+            "OPEN": PositionState.OPEN,
+            "ROLLING": PositionState.ROLLING,
+            "CLOSING": PositionState.CLOSING,
+            "CLOSED": PositionState.CLOSED,
+        }
+        current_state = state_mapping.get(current_state_str, PositionState.OPEN)
+        
+        # Determine action based on current state
+        if current_state == PositionState.OPEN:
+            # First transition: OPEN -> CLOSING
+            self.store.update_position_status(position_id, "CLOSING", action="CLOSE")
+            # Then transition: CLOSING -> CLOSED
+            self.store.update_position_status(position_id, "CLOSED", action="CLOSE")
+        elif current_state == PositionState.CLOSING:
+            # Direct transition: CLOSING -> CLOSED
+            self.store.update_position_status(position_id, "CLOSED", action="CLOSE")
+        else:
+            # For other states, just update status (may fail validation)
+            self.store.update_position_status(position_id, "CLOSED", action="CLOSE")
 
 
 __all__ = ["PositionEngine", "PositionRuleError"]

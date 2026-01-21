@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List, Optional
 
@@ -213,19 +214,120 @@ class PositionStore:
 
         return [self._row_to_position(row) for row in rows]
 
-    def update_position_status(self, position_id: str, status: PositionStatus) -> None:
-        """Update the status of an existing position."""
+    def update_position_status(
+        self,
+        position_id: str,
+        status: PositionStatus,
+        action: str | None = None,
+    ) -> None:
+        """Update the status of an existing position.
+        
+        Parameters
+        ----------
+        position_id:
+            ID of the position to update.
+        status:
+            New status value (for backward compatibility).
+        action:
+            Optional action being performed (for state machine validation).
+            If provided, state machine validation will be enforced.
+        """
         conn = self._get_connection()
         try:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                UPDATE positions
-                SET status = ?
-                WHERE id = ?
-                """,
-                (status, position_id),
-            )
+            # If action is provided, enforce state machine
+            if action:
+                # Fetch current position to get current state
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT state, symbol FROM positions WHERE id = ?
+                    """,
+                    (position_id,),
+                )
+                row = cursor.fetchone()
+                
+                if row:
+                    current_state_str, symbol = row[0], row[1]
+                    
+                    # Convert to PositionState enum
+                    from app.core.state_machine import PositionState, PositionAction, validate_transition, next_state
+                    
+                    # Map string to PositionState
+                    state_mapping = {
+                        "NEW": PositionState.NEW,
+                        "ASSIGNED": PositionState.ASSIGNED,
+                        "OPEN": PositionState.OPEN,
+                        "ROLLING": PositionState.ROLLING,
+                        "CLOSING": PositionState.CLOSING,
+                        "CLOSED": PositionState.CLOSED,
+                    }
+                    current_state = state_mapping.get(current_state_str or "OPEN", PositionState.OPEN)
+                    
+                    # Map action string to PositionAction
+                    action_mapping = {
+                        "ASSIGN": PositionAction.ASSIGN,
+                        "OPEN": PositionAction.OPEN,
+                        "HOLD": PositionAction.HOLD,
+                        "ROLL": PositionAction.ROLL,
+                        "CLOSE": PositionAction.CLOSE,
+                    }
+                    position_action = action_mapping.get(action.upper())
+                    
+                    if position_action:
+                        # Get next state from state machine
+                        next_state_value = next_state(current_state, position_action)
+                        
+                        # Validate transition
+                        correlation_id = f"update-{position_id}-{datetime.now(timezone.utc).isoformat()}"
+                        validate_transition(
+                            symbol or position_id,
+                            current_state,
+                            position_action,
+                            next_state_value,
+                            correlation_id=correlation_id,
+                        )
+                        
+                        # Update state in database
+                        cursor.execute(
+                            """
+                            UPDATE positions
+                            SET state = ?, status = ?
+                            WHERE id = ?
+                            """,
+                            (next_state_value.value, status, position_id),
+                        )
+                    else:
+                        # Unknown action, just update status (backward compatibility)
+                        cursor.execute(
+                            """
+                            UPDATE positions
+                            SET status = ?
+                            WHERE id = ?
+                            """,
+                            (status, position_id),
+                        )
+                else:
+                    # Position not found, just update status
+                    cursor.execute(
+                        """
+                        UPDATE positions
+                        SET status = ?
+                        WHERE id = ?
+                        """,
+                        (status, position_id),
+                    )
+            else:
+                # No action provided, just update status (backward compatibility)
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    UPDATE positions
+                    SET status = ?
+                    WHERE id = ?
+                    """,
+                    (status, position_id),
+                )
+            
             conn.commit()
         finally:
             conn.close()

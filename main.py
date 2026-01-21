@@ -342,37 +342,119 @@ def main():
                         evaluation = risk_engine.evaluate_position(position, market_context)
                         
                         if evaluation["status"] == "ACTION_REQUIRED":
-                            # Format position description
-                            position_desc = f"{position.position_type}"
-                            if position.strike:
-                                position_desc += f" {position.strike:.0f}"
-                            if position.expiry:
-                                position_desc += f" exp {position.expiry}"
+                            # Check for roll suggestion if CSP position
+                            roll_suggestion = None
+                            if position.position_type == "CSP":
+                                try:
+                                    from app.core.engine.roll_engine import RollEngine
+                                    from app.data.orats_client import OratsClient
+                                    
+                                    # Initialize ORATS client
+                                    orats_client = None
+                                    try:
+                                        orats_client = OratsClient()
+                                    except Exception:
+                                        pass  # ORATS not available
+                                    
+                                    if orats_client:
+                                        # Enhance market context with EMA50 and price_df
+                                        enhanced_context = market_context.copy()
+                                        try:
+                                            df = provider.get_daily(position.symbol, lookback=250)
+                                            if not df.empty:
+                                                df = df.sort_values("date", ascending=True).reset_index(drop=True)
+                                                df["ema50"] = df["close"].ewm(span=50, adjust=False).mean()
+                                                latest = df.iloc[-1]
+                                                enhanced_context["ema50"] = float(latest["ema50"])
+                                                enhanced_context["price_df"] = df
+                                        except Exception:
+                                            pass
+                                        
+                                        # Get roll suggestion
+                                        roll_engine = RollEngine(orats_client=orats_client)
+                                        roll_suggestion = roll_engine.suggest_roll(position, enhanced_context)
+                                except Exception as e:
+                                    print(f"  ⚠ Could not generate roll suggestion for {position.symbol}: {e}", file=sys.stderr)
                             
-                            # Format message
-                            message_lines = [
-                                "[ACTION REQUIRED]",
-                                f"Symbol: {position.symbol}",
-                                f"Position: {position_desc}",
-                                f"Status: {evaluation['status']}",
-                                "Reasons:",
-                            ]
-                            
-                            # Add reasons
-                            for reason in evaluation.get("reasons", []):
-                                message_lines.append(f"- {reason}")
-                            
-                            # Add suggested next step
-                            message_lines.append("")
-                            message_lines.append("Suggested next step:")
-                            message_lines.append("- Roll forward or accept assignment")
-                            
-                            message = "\n".join(message_lines)
-                            
-                            # Send to urgent alerts channel
-                            send_slack(message, level="URGENT")
-                            log_alert(f"Position alert sent for {position.symbol}: ACTION_REQUIRED", level="URGENT")
-                            print(f"  ✓ ACTION_REQUIRED alert sent for {position.symbol}", file=sys.stderr)
+                            # If roll suggestion exists, send roll alert
+                            if roll_suggestion:
+                                # Format current position description
+                                current_desc = f"{position.position_type}"
+                                if position.strike:
+                                    current_desc += f" {position.strike:.0f}"
+                                if position.expiry:
+                                    current_desc += f" exp {position.expiry}"
+                                
+                                # Format suggested position description
+                                suggested_desc = f"{position.position_type}"
+                                suggested_desc += f" {roll_suggestion['suggested_strike']:.0f}"
+                                suggested_desc += f" exp {roll_suggestion['suggested_expiry']}"
+                                
+                                # Format net credit with + sign
+                                net_credit = roll_suggestion['estimated_net_credit']
+                                net_credit_str = f"+${net_credit:.2f}" if net_credit >= 0 else f"${net_credit:.2f}"
+                                
+                                # Format message
+                                message_lines = [
+                                    "[ROLL SUGGESTION]",
+                                    f"Symbol: {position.symbol}",
+                                    f"Current: {current_desc}",
+                                    f"Suggested: {suggested_desc}",
+                                    f"Net Credit: {net_credit_str}",
+                                    "Reasons:",
+                                ]
+                                
+                                # Add reasons from roll suggestion
+                                for reason in roll_suggestion.get("reasons", []):
+                                    message_lines.append(f"- {reason}")
+                                
+                                # Add regime if available
+                                if market_context.get("regime"):
+                                    regime = market_context["regime"]
+                                    if regime == "RISK_ON":
+                                        message_lines.append("- Regime RISK_ON")
+                                    elif regime == "RISK_OFF":
+                                        message_lines.append("- Regime RISK_OFF")
+                                
+                                message = "\n".join(message_lines)
+                                
+                                # Send to urgent alerts channel
+                                send_slack(message, level="URGENT")
+                                log_alert(f"Roll suggestion sent for {position.symbol}", level="URGENT")
+                                print(f"  ✓ Roll suggestion alert sent for {position.symbol}", file=sys.stderr)
+                            else:
+                                # No roll suggestion - send standard ACTION_REQUIRED alert
+                                # Format position description
+                                position_desc = f"{position.position_type}"
+                                if position.strike:
+                                    position_desc += f" {position.strike:.0f}"
+                                if position.expiry:
+                                    position_desc += f" exp {position.expiry}"
+                                
+                                # Format message
+                                message_lines = [
+                                    "[ACTION REQUIRED]",
+                                    f"Symbol: {position.symbol}",
+                                    f"Position: {position_desc}",
+                                    f"Status: {evaluation['status']}",
+                                    "Reasons:",
+                                ]
+                                
+                                # Add reasons
+                                for reason in evaluation.get("reasons", []):
+                                    message_lines.append(f"- {reason}")
+                                
+                                # Add suggested next step
+                                message_lines.append("")
+                                message_lines.append("Suggested next step:")
+                                message_lines.append("- Roll forward or accept assignment")
+                                
+                                message = "\n".join(message_lines)
+                                
+                                # Send to urgent alerts channel
+                                send_slack(message, level="URGENT")
+                                log_alert(f"Position alert sent for {position.symbol}: ACTION_REQUIRED", level="URGENT")
+                                print(f"  ✓ ACTION_REQUIRED alert sent for {position.symbol}", file=sys.stderr)
                     except Exception as e:
                         print(f"  ✗ Failed to evaluate position {position.symbol}: {e}", file=sys.stderr)
                         log_alert(f"Failed to evaluate position {position.symbol}: {e}", level="WATCH")

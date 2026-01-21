@@ -14,6 +14,7 @@ import streamlit as st
 from app.core.engine.csp_trade_engine import CSPTradeEngine
 from app.core.engine.position_engine import PositionEngine
 from app.core.engine.risk_engine import RiskEngine
+from app.core.engine.roll_engine import RollEngine
 
 # Set page config
 st.set_page_config(
@@ -494,6 +495,7 @@ def main() -> None:
                 "risk_status": risk_status,
                 "premium_pct": premium_pct,
                 "reasons": reasons,
+                "market_context": market_context,
             })
         
         # Display positions with risk status
@@ -502,6 +504,7 @@ def main() -> None:
             risk_status = data["risk_status"]
             premium_pct = data["premium_pct"]
             reasons = data["reasons"]
+            market_context = data["market_context"]
             
             # Color code status
             if risk_status == "HOLD":
@@ -545,6 +548,62 @@ def main() -> None:
                             st.write(f"• {reason}")
                     else:
                         st.write("No reasons available")
+                
+                # Show roll suggestion for ACTION_REQUIRED positions
+                if risk_status == "ACTION_REQUIRED" and position.position_type == "CSP":
+                    st.markdown("---")
+                    st.subheader("🔄 Suggested Roll")
+                    
+                    # Initialize ORATS client if available
+                    orats_client = None
+                    try:
+                        from app.data.orats_client import OratsClient
+                        orats_client = OratsClient()
+                    except Exception:
+                        pass  # ORATS not available
+                    
+                    # Enhance market context with EMA50 and price_df
+                    enhanced_context = market_context.copy()
+                    if price_provider:
+                        try:
+                            df = price_provider.get_daily(position.symbol, lookback=250)
+                            if not df.empty:
+                                df = df.sort_values("date", ascending=True).reset_index(drop=True)
+                                df["ema50"] = df["close"].ewm(span=50, adjust=False).mean()
+                                latest = df.iloc[-1]
+                                enhanced_context["ema50"] = float(latest["ema50"])
+                                enhanced_context["price_df"] = df
+                        except Exception:
+                            pass
+                    
+                    # Get roll suggestion
+                    roll_suggestion = None
+                    if orats_client:
+                        try:
+                            roll_engine = RollEngine(orats_client=orats_client)
+                            roll_suggestion = roll_engine.suggest_roll(position, enhanced_context)
+                        except Exception as e:
+                            st.warning(f"Could not generate roll suggestion: {e}")
+                    
+                    if roll_suggestion:
+                        # Display roll suggestion
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.metric("New Strike", f"${roll_suggestion['suggested_strike']:.2f}")
+                        
+                        with col2:
+                            st.metric("New Expiry", roll_suggestion['suggested_expiry'])
+                        
+                        with col3:
+                            st.metric("Net Credit", f"${roll_suggestion['estimated_net_credit']:.2f}")
+                        
+                        # Rationale expander
+                        with st.expander("📋 Rationale", expanded=False):
+                            for reason in roll_suggestion.get("reasons", []):
+                                st.write(f"• {reason}")
+                    else:
+                        st.info("⚠️ No favorable roll available. Consider assignment.")
             
             if i < len(position_data) - 1:
                 st.divider()

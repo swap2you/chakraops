@@ -16,6 +16,7 @@ st.set_page_config(
     page_title="ChakraOps Dashboard",
     page_icon="📊",
     layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 # Initialize session state
@@ -155,57 +156,135 @@ def get_alerts(limit: int = 20) -> List[Dict[str, Any]]:
         return []
 
 
+def get_last_update_time() -> Optional[str]:
+    """Get the most recent update time from any table."""
+    db_path = get_db_path()
+    if not db_path.exists():
+        return None
+
+    try:
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+
+        # Get latest from regime_snapshots
+        cursor.execute("""
+            SELECT MAX(created_at) FROM regime_snapshots
+        """)
+        regime_time = cursor.fetchone()[0]
+
+        # Get latest from csp_candidates
+        cursor.execute("""
+            SELECT MAX(created_at) FROM csp_candidates
+        """)
+        candidates_time = cursor.fetchone()[0]
+
+        conn.close()
+
+        # Return the most recent
+        times = [t for t in [regime_time, candidates_time] if t]
+        if times:
+            return max(times)
+        return None
+    except Exception:
+        return None
+
+
+def get_level_color(level: str) -> str:
+    """Get color for alert level."""
+    level_upper = level.upper()
+    if level_upper == "URGENT":
+        return "🔴"
+    elif level_upper == "WATCH":
+        return "🟡"
+    else:  # INFO
+        return "🔵"
+
+
 def main() -> None:
     """Main dashboard function."""
     # Header
     st.title("📊 ChakraOps Dashboard")
+    st.caption("Real-time market regime and CSP candidate analysis")
+
+    # Sidebar
+    with st.sidebar:
+        st.header("⚙️ Controls")
+        
+        if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
+            st.session_state.regime_cache = None
+            st.session_state.candidates_cache = None
+            st.rerun()
+        
+        st.divider()
+        
+        # Last update time
+        last_update = get_last_update_time()
+        if last_update:
+            st.metric("Last Update", last_update[:16] if len(last_update) > 16 else last_update)
+        else:
+            st.info("No data available")
+        
+        st.divider()
+        st.caption("ChakraOps v1.0")
 
     # Check if database exists
     if not db_exists():
         st.error("⚠️ Database not found")
-        st.info(
-            """
-            **Setup Instructions:**
-            
-            1. Make sure you have created the database by running the main application.
-            2. The database should be located at: `data/chakraops.db`
-            3. Run `python main.py` first to initialize the database and collect data.
-            
-            Once the database is created, refresh this page to see the dashboard.
-            """
-        )
+        with st.container():
+            st.info(
+                """
+                **Setup Instructions:**
+                
+                1. Make sure you have created the database by running the main application.
+                2. The database should be located at: `data/chakraops.db`
+                3. Run `python main.py` first to initialize the database and collect data.
+                
+                Once the database is created, refresh this page to see the dashboard.
+                """
+            )
         return
 
-    # Sidebar for refresh
-    with st.sidebar:
-        st.header("Controls")
-        if st.button("🔄 Refresh Data"):
-            st.session_state.regime_cache = None
-            st.session_state.candidates_cache = None
-            st.rerun()
-
-    # Regime Section
+    # Market Regime Section - Large Status Card
     st.header("📈 Market Regime")
     regime = get_regime_snapshot()
+    
     if regime:
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            regime_color = "🟢" if regime["regime"] == "RISK_ON" else "🔴"
-            st.metric("Regime", f"{regime_color} {regime['regime']}")
-
-        with col2:
-            st.metric("Confidence", f"{regime['confidence']}%")
-
-        with col3:
-            if regime.get("created_at"):
-                st.metric("Last Updated", regime["created_at"][:16] if len(regime["created_at"]) > 16 else regime["created_at"])
-
-        # Details
-        with st.expander("View Details"):
+        # Large status card
+        is_risk_on = regime["regime"] == "RISK_ON"
+        status_color = "🟢" if is_risk_on else "🔴"
+        status_bg = "background-color: #d4edda; padding: 20px; border-radius: 10px;" if is_risk_on else "background-color: #f8d7da; padding: 20px; border-radius: 10px;"
+        
+        with st.container():
+            col1, col2, col3 = st.columns([2, 1, 1])
+            
+            with col1:
+                st.markdown(
+                    f"""
+                    <div style="{status_bg}">
+                        <h2 style="margin: 0; color: {'#155724' if is_risk_on else '#721c24'};">
+                            {status_color} {regime['regime']}
+                        </h2>
+                        <p style="margin: 5px 0 0 0; color: {'#155724' if is_risk_on else '#721c24'};">
+                            Confidence: {regime['confidence']}%
+                        </p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            
+            with col2:
+                st.metric("Confidence", f"{regime['confidence']}%")
+            
+            with col3:
+                if regime.get("created_at"):
+                    update_time = regime["created_at"][:16] if len(regime["created_at"]) > 16 else regime["created_at"]
+                    st.metric("Updated", update_time)
+        
+        # Details expander
+        with st.expander("📋 View Detailed Metrics", expanded=False):
             st.json(regime.get("details", {}))
     else:
-        st.info("No regime data available. Run the main application to collect regime snapshots.")
+        st.warning("⚠️ No regime data available. Run the main application to collect regime snapshots.")
 
     st.divider()
 
@@ -214,27 +293,82 @@ def main() -> None:
     candidates = get_csp_candidates()
 
     if candidates:
-        # Create DataFrame for display
-        df_candidates = pd.DataFrame([
-            {
-                "Symbol": c["symbol"],
-                "Score": c["score"],
-                "Reasons": " | ".join(c.get("reasons", [])),
-                "Close": c.get("key_levels", {}).get("close", "N/A"),
-                "EMA50": c.get("key_levels", {}).get("ema50", "N/A"),
-                "EMA200": c.get("key_levels", {}).get("ema200", "N/A"),
-            }
-            for c in candidates
-        ])
-
-        st.dataframe(df_candidates, use_container_width=True, hide_index=True)
-
-        # Show top candidates
+        # Top candidate highlight
         if len(candidates) > 0:
             top_candidate = candidates[0]
-            st.success(f"🏆 Top Candidate: **{top_candidate['symbol']}** (Score: {top_candidate['score']}/100)")
+            with st.container():
+                st.success(
+                    f"🏆 **Top Candidate: {top_candidate['symbol']}** "
+                    f"| Score: **{top_candidate['score']}/100**"
+                )
+        
+        st.write("")  # Spacing
+        
+        # Candidate cards
+        for i, candidate in enumerate(candidates, 1):
+            with st.container():
+                # Score badge color
+                score = candidate.get("score", 0)
+                if score >= 80:
+                    badge_color = "🟢"
+                elif score >= 60:
+                    badge_color = "🟡"
+                else:
+                    badge_color = "🟠"
+                
+                # Main candidate card
+                col1, col2, col3 = st.columns([1, 2, 1])
+                
+                with col1:
+                    st.markdown(f"### {badge_color} {candidate['symbol']}")
+                    st.metric("Score", f"{score}/100")
+                
+                with col2:
+                    key_levels = candidate.get("key_levels", {})
+                    st.write("**Key Levels:**")
+                    cols = st.columns(3)
+                    with cols[0]:
+                        st.caption(f"Close: ${key_levels.get('close', 'N/A'):.2f}" if isinstance(key_levels.get('close'), (int, float)) else f"Close: {key_levels.get('close', 'N/A')}")
+                    with cols[1]:
+                        st.caption(f"EMA50: ${key_levels.get('ema50', 'N/A'):.2f}" if isinstance(key_levels.get('ema50'), (int, float)) else f"EMA50: {key_levels.get('ema50', 'N/A')}")
+                    with cols[2]:
+                        st.caption(f"EMA200: ${key_levels.get('ema200', 'N/A'):.2f}" if isinstance(key_levels.get('ema200'), (int, float)) else f"EMA200: {key_levels.get('ema200', 'N/A')}")
+                    
+                    # Contract details if available
+                    contract = candidate.get("contract")
+                    if contract:
+                        st.write("**Contract:**")
+                        contract_cols = st.columns(4)
+                        with contract_cols[0]:
+                            st.caption(f"Expiry: {contract.get('expiry', 'N/A')}")
+                        with contract_cols[1]:
+                            st.caption(f"Strike: ${contract.get('strike', 'N/A'):.2f}" if isinstance(contract.get('strike'), (int, float)) else f"Strike: {contract.get('strike', 'N/A')}")
+                        with contract_cols[2]:
+                            st.caption(f"Delta: {contract.get('delta', 'N/A'):.3f}" if isinstance(contract.get('delta'), (int, float)) else f"Delta: {contract.get('delta', 'N/A')}")
+                        with contract_cols[3]:
+                            premium = contract.get('premium_estimate')
+                            if isinstance(premium, (int, float)):
+                                st.caption(f"Premium: ${premium:.2f}")
+                            else:
+                                st.caption(f"Premium: {premium or 'N/A'}")
+                
+                with col3:
+                    with st.expander("📊 Details", expanded=False):
+                        st.write("**Reasons:**")
+                        reasons = candidate.get("reasons", [])
+                        if reasons:
+                            for reason in reasons:
+                                st.write(f"• {reason}")
+                        else:
+                            st.write("No reasons provided")
+                        
+                        st.write("**Full Data:**")
+                        st.json(candidate)
+                
+                if i < len(candidates):
+                    st.divider()
     else:
-        st.info("No CSP candidates found. Run the wheel engine to generate candidates.")
+        st.info("📭 No CSP candidates found. Run the wheel engine to generate candidates.")
 
     st.divider()
 
@@ -243,11 +377,22 @@ def main() -> None:
     alerts = get_alerts(limit=20)
 
     if alerts:
-        df_alerts = pd.DataFrame(alerts)
-        df_alerts.columns = ["Message", "Level", "Timestamp"]
-        st.dataframe(df_alerts, use_container_width=True, hide_index=True)
+        # Color-coded alerts
+        for alert in alerts:
+            level = alert.get("level", "INFO")
+            color_icon = get_level_color(level)
+            message = alert.get("message", "")
+            timestamp = alert.get("created_at", "")
+            
+            # Create colored container based on level
+            if level.upper() == "URGENT":
+                st.error(f"{color_icon} **{level}** | {message} | *{timestamp}*")
+            elif level.upper() == "WATCH":
+                st.warning(f"{color_icon} **{level}** | {message} | *{timestamp}*")
+            else:
+                st.info(f"{color_icon} **{level}** | {message} | *{timestamp}*")
     else:
-        st.info("No alerts found in database.")
+        st.info("✅ No alerts found in database.")
 
 
 if __name__ == "__main__":

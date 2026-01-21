@@ -26,6 +26,7 @@ from app.core.state_machine import (
     next_state,
     validate_transition,
 )
+from app.core.system_health import SystemHealthSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,7 @@ def evaluate_execution(
     position: Position,
     market_regime: str,
     ttl_minutes: int = DEFAULT_TTL_MINUTES,
+    system_health: Optional[SystemHealthSnapshot] = None,
 ) -> ExecutionIntent:
     """Evaluate whether an action decision can be executed.
     
@@ -90,6 +92,9 @@ def evaluate_execution(
         Market regime: "RISK_ON" | "RISK_OFF".
     ttl_minutes:
         Time-to-live for the execution intent in minutes (default: 15).
+    system_health:
+        Optional SystemHealthSnapshot. If provided and status == "HALT",
+        execution will be blocked regardless of other rules.
     
     Returns
     -------
@@ -98,6 +103,8 @@ def evaluate_execution(
     
     Guard Rules (evaluated in order):
     ---------------------------------
+    0. System Health HALT: Block ALL actions if system_health.status == "HALT"
+    0.5. System Health DEGRADED: Add flag but allow execution
     1. Invalid inputs: Block with ERROR log
     2. State machine validation: Block if transition not allowed
     3. Regime blocking: Block OPEN/ROLL when regime == RISK_OFF
@@ -145,6 +152,37 @@ def evaluate_execution(
     blocked_reason: Optional[str] = None
     approved = True
     confidence = "HIGH"
+    
+    # Rule 0: Global Kill Switch (System Health HALT)
+    # This rule takes precedence over all other rules
+    if system_health and system_health.status == "HALT":
+        approved = False
+        blocked_reason = "SYSTEM_HALTED: System health status is HALT"
+        risk_flags.append("SYSTEM_HALTED")
+        confidence = "HIGH"
+        logger.warning(
+            f"ExecutionGuard: {symbol} | {action} BLOCKED | {blocked_reason}"
+        )
+        # Build execution intent immediately (skip other rules)
+        intent = ExecutionIntent(
+            symbol=symbol,
+            action=action,
+            approved=approved,
+            blocked_reason=blocked_reason,
+            risk_flags=risk_flags,
+            confidence=confidence,
+            computed_at=computed_at.isoformat(),
+            expires_at=expires_at.isoformat(),
+        )
+        logger.warning(
+            f"ExecutionGuard: {symbol} | {action} BLOCKED | reason={blocked_reason} | flags={risk_flags}"
+        )
+        return intent
+    
+    # Rule 0.5: System Degraded (allow execution but flag it)
+    if system_health and system_health.status == "DEGRADED":
+        risk_flags.append("SYSTEM_DEGRADED")
+        # Continue with normal evaluation
     
     # Rule 1: State machine validation
     # Only validate transitions for actions that change state (not HOLD or ALERT)

@@ -11,6 +11,9 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 import streamlit as st
 
+from app.core.engine.csp_trade_engine import CSPTradeEngine
+
+from app.core.engine.csp_trade_engine import CSPTradeEngine
 from app.core.engine.position_engine import PositionEngine
 
 # Set page config
@@ -290,9 +293,70 @@ def main() -> None:
 
     st.divider()
 
+    # Proposed CSP Trades Section
+    st.header("💼 Proposed CSP Trades")
+    
+    # Get regime for trade planning
+    regime_snapshot = get_regime_snapshot()
+    regime_value = regime_snapshot.get("regime") if regime_snapshot else None
+    
+    # Get candidates
+    candidates = get_csp_candidates()
+    
+    # Generate trade plans
+    trade_engine = CSPTradeEngine()
+    trade_plans = []
+    
+    # Default portfolio value (can be made configurable later)
+    portfolio_value = 100000.0  # $100k default
+    
+    if regime_value and candidates:
+        for candidate in candidates:
+            # Only process candidates with contract details
+            if candidate.get("contract"):
+                trade_plan = trade_engine.generate_trade_plan(
+                    candidate,
+                    portfolio_value,
+                    regime_value
+                )
+                if trade_plan:
+                    trade_plans.append(trade_plan)
+    
+    if trade_plans:
+        for i, plan in enumerate(trade_plans, 1):
+            with st.container():
+                col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
+                
+                with col1:
+                    st.markdown(f"### {plan['symbol']}")
+                    st.metric("Strike", f"${plan['strike']:.2f}")
+                
+                with col2:
+                    st.write("**Expiry:**")
+                    st.write(plan['expiry'])
+                    st.write("**Contracts:**")
+                    st.write(plan['contracts'])
+                
+                with col3:
+                    st.write("**Capital Required:**")
+                    st.metric("", f"${plan['capital_required']:,.2f}")
+                    st.write("**Est. Premium:**")
+                    st.write(f"${plan['estimated_premium']:,.2f}")
+                
+                with col4:
+                    with st.expander("📋 Rationale", expanded=False):
+                        for reason in plan.get('rationale', []):
+                            st.write(f"• {reason}")
+                
+                if i < len(trade_plans):
+                    st.divider()
+    else:
+        st.info("No actionable CSP trades today.")
+    
+    st.divider()
+
     # CSP Candidates Section
     st.header("🎯 CSP Candidates")
-    candidates = get_csp_candidates()
 
     if candidates:
         # Top candidate highlight

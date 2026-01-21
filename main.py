@@ -217,12 +217,101 @@ def main():
                 pass
             sys.exit(1)
         
-        # Step 8: Build daily plan message
+        # Step 8: Generate trade plans and send alerts
+        try:
+            print("Step 8: Generating trade plans...", file=sys.stderr)
+            from app.core.engine.csp_trade_engine import CSPTradeEngine
+            from app.notify.slack import send_slack
+            from app.db.database import log_alert
+            from datetime import datetime, date
+            
+            trade_engine = CSPTradeEngine()
+            portfolio_value = float(os.getenv("PORTFOLIO_VALUE", "100000"))  # Default $100k
+            
+            trade_plans = []
+            for candidate in candidates:
+                # Only process candidates with contract details
+                if candidate.get("contract"):
+                    trade_plan = trade_engine.generate_trade_plan(
+                        candidate,
+                        portfolio_value,
+                        regime_result["regime"]
+                    )
+                    if trade_plan:
+                        trade_plans.append(trade_plan)
+            
+            # Send Slack alerts for each trade plan
+            for plan in trade_plans:
+                try:
+                    # Calculate DTE
+                    expiry_date = datetime.fromisoformat(plan["expiry"]).date()
+                    dte = (expiry_date - date.today()).days
+                    
+                    # Format message
+                    message_lines = [
+                        "[ACTION REQUIRED] SELL CSP",
+                        f"Symbol: {plan['symbol']}",
+                        f"Strike: {plan['strike']:.0f}",
+                        f"Expiry: {plan['expiry']} ({dte} DTE)",
+                        f"Contracts: {plan['contracts']}",
+                        f"Capital Required: ${plan['capital_required']:,.0f}",
+                        "Rationale:",
+                    ]
+                    
+                    # Add rationale items - extract key points
+                    rationale_added = set()
+                    for reason in plan.get("rationale", []):
+                        reason_lower = reason.lower()
+                        # Extract delta
+                        if "delta:" in reason_lower and "delta" not in rationale_added:
+                            try:
+                                delta_part = reason.split("Delta:")[1].strip().split()[0]
+                                delta_val = float(delta_part)
+                                message_lines.append(f"- Delta ~{delta_val:.2f}")
+                                rationale_added.add("delta")
+                            except (ValueError, IndexError):
+                                pass
+                        # Extract uptrend
+                        elif ("uptrend" in reason_lower or "ema200" in reason_lower) and "uptrend" not in rationale_added:
+                            message_lines.append("- Uptrend above EMA200")
+                            rationale_added.add("uptrend")
+                        # Extract pullback
+                        elif ("pullback" in reason_lower or "ema50" in reason_lower) and "pullback" not in rationale_added:
+                            message_lines.append("- Pullback near EMA50")
+                            rationale_added.add("pullback")
+                        # Extract RSI if oversold
+                        elif "rsi" in reason_lower and "oversold" in reason_lower and "rsi" not in rationale_added:
+                            rsi_part = reason.split("RSI:")[1].strip().split()[0] if "RSI:" in reason else ""
+                            if rsi_part:
+                                message_lines.append(f"- RSI {rsi_part} (oversold)")
+                            else:
+                                message_lines.append("- RSI oversold")
+                            rationale_added.add("rsi")
+                    
+                    message = "\n".join(message_lines)
+                    
+                    send_slack(message, level="URGENT")
+                    log_alert(f"Trade plan alert sent for {plan['symbol']}", level="INFO")
+                    print(f"  ✓ Trade plan alert sent for {plan['symbol']}", file=sys.stderr)
+                except Exception as e:
+                    print(f"  ✗ Failed to send trade plan alert for {plan['symbol']}: {e}", file=sys.stderr)
+                    log_alert(f"Failed to send trade plan alert: {e}", level="WATCH")
+            
+            if trade_plans:
+                print(f"  Sent {len(trade_plans)} trade plan alerts", file=sys.stderr)
+        except Exception as e:
+            error_msg = f"Failed to generate trade plans: {e}"
+            print(f"WARNING: {error_msg}", file=sys.stderr)
+            from app.db.database import log_alert
+            log_alert(error_msg, level="WATCH")
+            # Don't exit - continue with daily plan
+        
+        # Step 9: Build daily plan message
         daily_plan = build_daily_plan_message(regime_result, candidates)
         
-        # Step 9: Send Slack message
+        # Step 10: Send Slack message
         try:
-            print("Step 9: Sending Slack message...", file=sys.stderr)
+            print("Step 10: Sending Slack message...", file=sys.stderr)
             from app.notify.slack import send_slack
             from app.db.database import log_alert
             

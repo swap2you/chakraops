@@ -21,6 +21,7 @@ from app.core.engine.actions import (
     Urgency,
     decide_position_action,
 )
+from app.core.action_engine import evaluate_position_action
 from app.core.portfolio.portfolio_engine import PortfolioEngine
 from app.core.state_machine.position_state_machine import (
     PositionState,
@@ -614,8 +615,9 @@ def main() -> None:
                         except Exception:
                             pass
                     
-                    decision = decide_position_action(pos, market_ctx)
-                    if decision and decision.urgency == Urgency.HIGH:
+                    # Use new action engine
+                    decision = evaluate_position_action(pos, market_ctx)
+                    if decision and decision.urgency == "HIGH":
                         high_urgency_count += 1
                 except Exception:
                     pass
@@ -676,12 +678,13 @@ def main() -> None:
                         current_price = float(latest["close"])
                         market_context["underlying_price"] = current_price
                         market_context["current_price"] = current_price
-                        market_context["ema200"] = float(latest["ema200"])
-                        market_context["ema50"] = float(latest["ema50"])
+                        market_context["EMA200"] = float(latest["ema200"])
+                        market_context["EMA50"] = float(latest["ema50"])
+                        market_context["price"] = current_price
                         market_context["price_df"] = df
                         
                         # Calculate ATR proxy (3% default)
-                        market_context["atr_pct"] = 0.03
+                        market_context["ATR_pct"] = 0.03
                         
                         # Calculate premium collected percentage
                         if position.strike and position.strike > 0 and position.contracts > 0:
@@ -691,10 +694,10 @@ def main() -> None:
                 except Exception:
                     pass  # Continue without price data
             
-            # Evaluate position with Action Engine
+            # Evaluate position with Action Engine (new Week 4 Day 2 engine)
             action_decision = None
             try:
-                action_decision = decide_position_action(position, market_context)
+                action_decision = evaluate_position_action(position, market_context)
             except Exception as e:
                 # Fallback to basic decision if Action Engine fails
                 action_decision = None
@@ -710,13 +713,13 @@ def main() -> None:
         if urgency_filter != "ALL":
             filtered_data = [
                 d for d in filtered_data
-                if d["action_decision"] and d["action_decision"].urgency.value == urgency_filter
+                if d["action_decision"] and d["action_decision"].urgency == urgency_filter
             ]
         
         if action_filter != "ALL":
             filtered_data = [
                 d for d in filtered_data
-                if d["action_decision"] and d["action_decision"].action.value == action_filter
+                if d["action_decision"] and d["action_decision"].action == action_filter
             ]
         
         # Display filtered positions
@@ -730,17 +733,17 @@ def main() -> None:
                 
                 # Get action and urgency (with fallbacks)
                 if action_decision:
-                    action = action_decision.action.value
-                    urgency = action_decision.urgency.value
-                    reasons = action_decision.reasons
-                    next_steps = action_decision.next_steps
-                    roll_plan = action_decision.roll_plan
+                    action = action_decision.action
+                    urgency = action_decision.urgency
+                    reason_codes = action_decision.reason_codes
+                    explanation = action_decision.explanation
+                    allowed_next_states = action_decision.allowed_next_states
                 else:
                     action = "HOLD"
                     urgency = "LOW"
-                    reasons = ["Action Engine evaluation unavailable"]
-                    next_steps = []
-                    roll_plan = None
+                    reason_codes = ["Action Engine evaluation unavailable"]
+                    explanation = "Unable to evaluate position"
+                    allowed_next_states = []
                 
                 # Calculate premium percentage
                 premium_pct = 0.0
@@ -839,7 +842,7 @@ def main() -> None:
                     
                     # Expander for details including Action Engine information
                     with st.expander("📋 Details", expanded=False):
-                        # Action Decision Section
+                        # Action Decision Section (Week 4 Day 2 Action Engine)
                         if action_decision:
                             st.write("**Action Decision:**")
                             col_a1, col_a2 = st.columns(2)
@@ -848,33 +851,22 @@ def main() -> None:
                             with col_a2:
                                 st.metric("Urgency", urgency)
                             
-                            # Reasons
-                            if reasons:
-                                st.write("**Reasons:**")
-                                for reason in reasons:
-                                    st.caption(f"• {reason}")
+                            # Explanation
+                            if explanation:
+                                st.write("**Explanation:**")
+                                st.info(explanation)
                             
-                            # Next Steps
-                            if next_steps:
-                                st.write("**Next Steps:**")
-                                for step in next_steps:
-                                    st.caption(f"→ {step}")
+                            # Reason Codes
+                            if reason_codes:
+                                st.write("**Reason Codes:**")
+                                for code in reason_codes:
+                                    st.caption(f"• {code}")
                             
-                            # Roll Plan (if available)
-                            if roll_plan:
-                                st.write("**Roll Plan:**")
-                                col_r1, col_r2, col_r3 = st.columns(3)
-                                with col_r1:
-                                    st.metric("Suggested Strike", f"${roll_plan.suggested_strike:.2f}")
-                                with col_r2:
-                                    st.metric("Suggested Expiry", roll_plan.suggested_expiry.isoformat())
-                                with col_r3:
-                                    st.metric("Roll Type", roll_plan.roll_type)
-                                
-                                if roll_plan.notes:
-                                    st.write("**Roll Notes:**")
-                                    for note in roll_plan.notes:
-                                        st.caption(f"• {note}")
+                            # Allowed Next States
+                            if allowed_next_states:
+                                st.write("**Allowed Next States:**")
+                                states_str = ", ".join(allowed_next_states)
+                                st.caption(states_str)
                             
                             st.divider()
                         

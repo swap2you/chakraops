@@ -1,0 +1,17 @@
+# ChakraOps Configuration
+# Copy this file to config.yaml and customize as needed
+
+app:
+  name: ChakraOps
+  env: development
+  debug: true
+
+# Example sections for future use
+# database:
+#   host: localhost
+#   port: 5432
+#   name: chakraops
+
+# logging:
+#   level: INFO
+#   file: logs/app.log

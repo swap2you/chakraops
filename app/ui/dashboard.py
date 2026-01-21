@@ -12,9 +12,8 @@ import pandas as pd
 import streamlit as st
 
 from app.core.engine.csp_trade_engine import CSPTradeEngine
-
-from app.core.engine.csp_trade_engine import CSPTradeEngine
 from app.core.engine.position_engine import PositionEngine
+from app.core.engine.risk_engine import RiskEngine
 
 # Set page config
 st.set_page_config(
@@ -441,28 +440,114 @@ def main() -> None:
     # Open Positions Section
     st.header("📂 Open Positions")
     try:
-        engine = PositionEngine()
-        open_positions = engine.get_open_positions()
+        position_engine = PositionEngine()
+        open_positions = position_engine.get_open_positions()
     except Exception as e:
         st.warning(f"Unable to load positions: {e}")
         open_positions = []
 
     if open_positions:
-        df_positions = pd.DataFrame(
-            [
-                {
-                    "Symbol": p.symbol,
-                    "Type": p.position_type,
-                    "Strike": p.strike,
-                    "Expiry": p.expiry,
-                    "Contracts": p.contracts,
-                    "Status": p.status,
-                    "Entry Date": p.entry_date,
-                }
-                for p in open_positions
-            ]
-        )
-        st.dataframe(df_positions, use_container_width=True, hide_index=True)
+        # Get regime for market context
+        regime_snapshot = get_regime_snapshot()
+        regime_value = regime_snapshot.get("regime") if regime_snapshot else "RISK_OFF"
+        
+        # Get price provider for fetching current prices
+        try:
+            from app.data.yfinance_provider import YFinanceProvider
+            price_provider = YFinanceProvider()
+        except Exception:
+            price_provider = None
+        
+        risk_engine = RiskEngine()
+        position_data = []
+        
+        for position in open_positions:
+            # Build market context
+            market_context = {"regime": regime_value}
+            
+            # Fetch current price and EMA200 if provider available
+            if price_provider:
+                try:
+                    df = price_provider.get_daily(position.symbol, lookback=250)
+                    if not df.empty:
+                        df = df.sort_values("date", ascending=True).reset_index(drop=True)
+                        df["ema200"] = df["close"].ewm(span=200, adjust=False).mean()
+                        latest = df.iloc[-1]
+                        market_context["current_price"] = float(latest["close"])
+                        market_context["ema200"] = float(latest["ema200"])
+                except Exception:
+                    pass  # Continue without price data
+            
+            # Evaluate position risk
+            try:
+                evaluation = risk_engine.evaluate_position(position, market_context)
+                risk_status = evaluation["status"]
+                premium_pct = evaluation["premium_pct"]
+                reasons = evaluation["reasons"]
+            except Exception as e:
+                risk_status = "HOLD"
+                premium_pct = 0.0
+                reasons = [f"Evaluation error: {e}"]
+            
+            position_data.append({
+                "position": position,
+                "risk_status": risk_status,
+                "premium_pct": premium_pct,
+                "reasons": reasons,
+            })
+        
+        # Display positions with risk status
+        for i, data in enumerate(position_data):
+            position = data["position"]
+            risk_status = data["risk_status"]
+            premium_pct = data["premium_pct"]
+            reasons = data["reasons"]
+            
+            # Color code status
+            if risk_status == "HOLD":
+                status_color = "🟢"
+                status_style = "color: green; font-weight: bold;"
+            elif risk_status == "PREPARE_ROLL":
+                status_color = "🟡"
+                status_style = "color: orange; font-weight: bold;"
+            else:  # ACTION_REQUIRED
+                status_color = "🔴"
+                status_style = "color: red; font-weight: bold;"
+            
+            with st.container():
+                col1, col2, col3, col4, col5, col6, col7 = st.columns([1, 1, 1, 1, 1, 1, 1])
+                
+                with col1:
+                    st.write(f"**{position.symbol}**")
+                
+                with col2:
+                    st.write(position.position_type)
+                
+                with col3:
+                    st.write(f"${position.strike:.2f}" if position.strike else "N/A")
+                
+                with col4:
+                    st.write(position.expiry or "N/A")
+                
+                with col5:
+                    st.write(position.contracts)
+                
+                with col6:
+                    st.markdown(f'<span style="{status_style}">{status_color} {risk_status}</span>', unsafe_allow_html=True)
+                
+                with col7:
+                    st.write(f"{premium_pct:.1f}%")
+                
+                # Expander for reasons
+                with st.expander("❓ Why?", expanded=False):
+                    if reasons:
+                        for reason in reasons:
+                            st.write(f"• {reason}")
+                    else:
+                        st.write("No reasons available")
+            
+            if i < len(position_data) - 1:
+                st.divider()
     else:
         st.info("No open positions.")
 

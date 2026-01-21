@@ -306,12 +306,91 @@ def main():
             log_alert(error_msg, level="WATCH")
             # Don't exit - continue with daily plan
         
-        # Step 9: Build daily plan message
+        # Step 9: Monitor open positions and send alerts
+        try:
+            print("Step 9: Monitoring open positions...", file=sys.stderr)
+            from app.core.engine.position_engine import PositionEngine
+            from app.core.engine.risk_engine import RiskEngine
+            from app.notify.slack import send_slack
+            from app.db.database import log_alert
+            
+            position_engine = PositionEngine()
+            risk_engine = RiskEngine()
+            open_positions = position_engine.get_open_positions()
+            
+            if open_positions:
+                print(f"  Evaluating {len(open_positions)} open positions...", file=sys.stderr)
+                
+                for position in open_positions:
+                    # Build market context
+                    market_context = {"regime": regime_result["regime"]}
+                    
+                    # Fetch current price and EMA200
+                    try:
+                        df = provider.get_daily(position.symbol, lookback=250)
+                        if not df.empty:
+                            df = df.sort_values("date", ascending=True).reset_index(drop=True)
+                            df["ema200"] = df["close"].ewm(span=200, adjust=False).mean()
+                            latest = df.iloc[-1]
+                            market_context["current_price"] = float(latest["close"])
+                            market_context["ema200"] = float(latest["ema200"])
+                    except Exception as e:
+                        print(f"  ⚠ Could not fetch price data for {position.symbol}: {e}", file=sys.stderr)
+                    
+                    # Evaluate position
+                    try:
+                        evaluation = risk_engine.evaluate_position(position, market_context)
+                        
+                        if evaluation["status"] == "ACTION_REQUIRED":
+                            # Format position description
+                            position_desc = f"{position.position_type}"
+                            if position.strike:
+                                position_desc += f" {position.strike:.0f}"
+                            if position.expiry:
+                                position_desc += f" exp {position.expiry}"
+                            
+                            # Format message
+                            message_lines = [
+                                "[ACTION REQUIRED]",
+                                f"Symbol: {position.symbol}",
+                                f"Position: {position_desc}",
+                                f"Status: {evaluation['status']}",
+                                "Reasons:",
+                            ]
+                            
+                            # Add reasons
+                            for reason in evaluation.get("reasons", []):
+                                message_lines.append(f"- {reason}")
+                            
+                            # Add suggested next step
+                            message_lines.append("")
+                            message_lines.append("Suggested next step:")
+                            message_lines.append("- Roll forward or accept assignment")
+                            
+                            message = "\n".join(message_lines)
+                            
+                            # Send to urgent alerts channel
+                            send_slack(message, level="URGENT")
+                            log_alert(f"Position alert sent for {position.symbol}: ACTION_REQUIRED", level="URGENT")
+                            print(f"  ✓ ACTION_REQUIRED alert sent for {position.symbol}", file=sys.stderr)
+                    except Exception as e:
+                        print(f"  ✗ Failed to evaluate position {position.symbol}: {e}", file=sys.stderr)
+                        log_alert(f"Failed to evaluate position {position.symbol}: {e}", level="WATCH")
+            else:
+                print("  No open positions to monitor", file=sys.stderr)
+        except Exception as e:
+            error_msg = f"Failed to monitor positions: {e}"
+            print(f"WARNING: {error_msg}", file=sys.stderr)
+            from app.db.database import log_alert
+            log_alert(error_msg, level="WATCH")
+            # Don't exit - continue with daily plan
+        
+        # Step 10: Build daily plan message
         daily_plan = build_daily_plan_message(regime_result, candidates)
         
-        # Step 10: Send Slack message
+        # Step 11: Send Slack message
         try:
-            print("Step 10: Sending Slack message...", file=sys.stderr)
+            print("Step 11: Sending Slack message...", file=sys.stderr)
             from app.notify.slack import send_slack
             from app.db.database import log_alert
             

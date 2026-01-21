@@ -15,6 +15,7 @@ from app.core.engine.csp_trade_engine import CSPTradeEngine
 from app.core.engine.position_engine import PositionEngine
 from app.core.engine.risk_engine import RiskEngine
 from app.core.engine.roll_engine import RollEngine
+from app.core.portfolio.portfolio_engine import PortfolioEngine
 
 # Set page config
 st.set_page_config(
@@ -248,6 +249,122 @@ def main() -> None:
                 """
             )
         return
+
+    # Portfolio Overview Section
+    st.header("💼 Portfolio Overview")
+    try:
+        from app.core.storage.position_store import PositionStore
+        from pathlib import Path
+        import sqlite3
+        from app.core.models.position import Position
+        
+        # Get all positions (for MTD calculation) - query directly from database
+        all_positions = []
+        try:
+            db_path = Path("data/chakra_ops.db")
+            if db_path.exists():
+                conn = sqlite3.connect(str(db_path))
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT
+                        id, symbol, position_type, strike, expiry,
+                        contracts, premium_collected, entry_date,
+                        status, notes
+                    FROM positions
+                    ORDER BY entry_date DESC
+                """)
+                rows = cursor.fetchall()
+                conn.close()
+                
+                # Convert rows to Position objects
+                for row in rows:
+                    (
+                        id_, symbol, position_type, strike, expiry,
+                        contracts, premium_collected, entry_date,
+                        status, notes,
+                    ) = row
+                    all_positions.append(Position(
+                        id=id_,
+                        symbol=symbol,
+                        position_type=position_type,  # type: ignore
+                        strike=strike,
+                        expiry=expiry,
+                        contracts=contracts,
+                        premium_collected=premium_collected,
+                        entry_date=entry_date,
+                        status=status,  # type: ignore
+                        notes=notes,
+                    ))
+        except Exception:
+            # Fallback to open positions only
+            position_engine = PositionEngine()
+            all_positions = position_engine.get_open_positions()
+        
+        # Get config (try to load from config.yaml or use defaults)
+        config = {}
+        try:
+            import yaml
+            config_path = Path("config.yaml")
+            if config_path.exists():
+                with open(config_path, 'r') as f:
+                    config = yaml.safe_load(f) or {}
+        except Exception:
+            pass
+        
+        # Extract portfolio config
+        portfolio_config = config.get("portfolio", {})
+        target_monthly_income = portfolio_config.get("target_monthly_income", 0.0)
+        
+        # Compute portfolio summary
+        portfolio_engine = PortfolioEngine()
+        summary = portfolio_engine.compute_summary(all_positions, {"target_monthly_income": target_monthly_income})
+        
+        # Display portfolio overview card
+        with st.container():
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Open Positions", f"{summary['open_positions']}")
+            
+            with col2:
+                st.metric("Capital at Risk", f"${summary['capital_at_risk']:,.0f}")
+            
+            with col3:
+                # Monthly income: actual + projected
+                mtd_actual = summary['premium_collected_mtd']
+                projected = summary['estimated_monthly_income']
+                st.metric(
+                    "Monthly Income",
+                    f"${projected:,.0f}",
+                    delta=f"${mtd_actual:,.0f} MTD"
+                )
+            
+            with col4:
+                # Progress badge
+                progress = summary['progress_status']
+                if progress == "AHEAD":
+                    badge_color = "🟢"
+                    badge_style = "background-color: #d4edda; color: #155724; padding: 8px 16px; border-radius: 6px; font-weight: bold;"
+                elif progress == "ON_TRACK":
+                    badge_color = "🟡"
+                    badge_style = "background-color: #fff3cd; color: #856404; padding: 8px 16px; border-radius: 6px; font-weight: bold;"
+                else:  # BEHIND
+                    badge_color = "🔴"
+                    badge_style = "background-color: #f8d7da; color: #721c24; padding: 8px 16px; border-radius: 6px; font-weight: bold;"
+                
+                st.markdown(
+                    f'<div style="{badge_style}">{badge_color} {progress}</div>',
+                    unsafe_allow_html=True
+                )
+        
+        # Show target if set
+        if summary['target_monthly_income'] > 0:
+            st.caption(f"Target: ${summary['target_monthly_income']:,.0f}/month | Progress: {summary['progress_status']}")
+    
+    except Exception as e:
+        st.warning(f"Unable to load portfolio overview: {e}")
+
+    st.divider()
 
     # Market Regime Section - Large Status Card
     st.header("📈 Market Regime")

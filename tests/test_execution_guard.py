@@ -12,6 +12,7 @@ from app.core.execution_guard import (
 )
 from app.core.action_engine import ActionDecision
 from app.core.models.position import Position
+from app.core.system_health import SystemHealthSnapshot
 
 
 class TestApproval:

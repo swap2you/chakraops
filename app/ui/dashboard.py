@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -56,6 +56,7 @@ from app.core.symbol_cache import (
     search_symbols,
     get_cached_symbol_count,
 )
+from app.core.market_time import get_market_state, is_market_open
 
 # Set page config
 st.set_page_config(
@@ -294,6 +295,108 @@ def _render_alert(alert: Dict[str, Any]) -> None:
                 if st.button("📦 Archive", key=f"arch_{alert_id}", use_container_width=True):
                     archive_alert(alert_id)
                     st.rerun()
+
+
+def _get_consecutive_zero_candidate_days() -> int:
+    """Get consecutive days with 0 actionable candidates (Phase 1C).
+    
+    Returns
+    -------
+    int
+        Number of consecutive days with 0 candidates.
+    """
+    db_path = get_db_path()
+    if not db_path.exists():
+        return 0
+    
+    try:
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+        
+        # Check if tracking table exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS candidate_daily_tracking (
+                date TEXT PRIMARY KEY,
+                candidate_count INTEGER NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+        
+        # Get today's date (YYYY-MM-DD)
+        today = datetime.now(timezone.utc).date().isoformat()
+        
+        # Check today's count
+        cursor.execute("""
+            SELECT candidate_count FROM candidate_daily_tracking
+            WHERE date = ?
+        """, (today,))
+        
+        row = cursor.fetchone()
+        if row and row[0] == 0:
+            # Count consecutive days with 0 candidates
+            cursor.execute("""
+                SELECT date, candidate_count
+                FROM candidate_daily_tracking
+                WHERE candidate_count = 0
+                ORDER BY date DESC
+            """)
+            rows = cursor.fetchall()
+            
+            # Count consecutive days from today backwards
+            consecutive = 0
+            expected_date = datetime.now(timezone.utc).date()
+            
+            for row in rows:
+                row_date = datetime.fromisoformat(row[0]).date()
+                if row_date == expected_date:
+                    consecutive += 1
+                    expected_date = expected_date - timedelta(days=1)
+                else:
+                    break
+            
+            conn.close()
+            return consecutive
+        
+        conn.close()
+        return 0
+    except Exception:
+        return 0
+
+
+def _update_candidate_daily_tracking(count: int) -> None:
+    """Update daily candidate count tracking (Phase 1C).
+    
+    Parameters
+    ----------
+    count:
+        Number of actionable candidates today.
+    """
+    db_path = get_db_path()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    
+    try:
+        # Ensure table exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS candidate_daily_tracking (
+                date TEXT PRIMARY KEY,
+                candidate_count INTEGER NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+        
+        today = datetime.now(timezone.utc).date().isoformat()
+        created_at = datetime.now(timezone.utc).isoformat()
+        
+        cursor.execute("""
+            INSERT OR REPLACE INTO candidate_daily_tracking (date, candidate_count, created_at)
+            VALUES (?, ?, ?)
+        """, (today, count, created_at))
+        
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def main() -> None:
@@ -561,6 +664,72 @@ def main() -> None:
 
     st.divider()
 
+    # Daily Trading Plan Card (Phase 1C)
+    st.header("📋 Daily Trading Plan")
+    
+    # Get actionable candidates (not blocked, not executed)
+    actionable_candidates = []
+    has_error = False
+    error_message = ""
+    
+    try:
+        all_candidates = get_csp_candidates()
+        actionable_candidates = [
+            c for c in all_candidates
+            if not c.get("blocked", False) or c.get("operator_override", False)
+        ]
+    except Exception as e:
+        has_error = True
+        error_message = str(e)
+        actionable_candidates = []
+    
+    # Determine plan status
+    if has_error:
+        plan_status = "HALT"
+        plan_message = f"System halted — data unavailable: {error_message}"
+        plan_color = "#721c24"
+        plan_bg = "#f8d7da"
+        plan_icon = "🛑"
+    elif len(actionable_candidates) > 0:
+        plan_status = "ACTIONABLE"
+        plan_message = f"{len(actionable_candidates)} CSP opportunity{'ies' if len(actionable_candidates) != 1 else 'y'} available"
+        plan_color = "#155724"
+        plan_bg = "#d4edda"
+        plan_icon = "✅"
+    else:
+        plan_status = "INFO"
+        plan_message = "No trades today — conditions not favorable"
+        plan_color = "#856404"
+        plan_bg = "#fff3cd"
+        plan_icon = "ℹ️"
+    
+    # Display plan card
+    st.markdown(
+        f"""
+        <div style="background-color: {plan_bg}; color: {plan_color}; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+            <h2 style="margin: 0; color: {plan_color};">
+                {plan_icon} {plan_status}
+            </h2>
+            <p style="margin: 10px 0 0 0; color: {plan_color}; font-size: 16px;">
+                {plan_message}
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    # Universe Guidance (Phase 1C) - Track consecutive days with 0 candidates
+    if len(actionable_candidates) == 0 and not has_error:
+        # Check consecutive days with 0 candidates
+        consecutive_days = _get_consecutive_zero_candidate_days()
+        if consecutive_days >= 2:
+            st.info(
+                f"📊 No opportunities found for {consecutive_days} consecutive days. "
+                "Consider expanding your symbol universe. See Universe Manager section below."
+            )
+    
+    st.divider()
+
     # Market Regime Section - Large Status Card
     st.header("📈 Market Regime")
     regime = get_regime_snapshot()
@@ -610,6 +779,10 @@ def main() -> None:
     
     # Get candidates with assignment profiles
     candidates = get_csp_candidates()
+    
+    # Update daily tracking (Phase 1C)
+    actionable_count = len([c for c in candidates if not c.get("blocked", False) or c.get("operator_override", False)])
+    _update_candidate_daily_tracking(actionable_count)
 
     if candidates:
         # Top candidate highlight
@@ -766,34 +939,83 @@ def main() -> None:
                                     except Exception as e:
                                         st.error(f"❌ Error: {e}")
                     
-                    # Record Execution button (only if not blocked or overridden)
+                    # Record Execution button (only if not blocked or overridden) - with market-time awareness (Phase 1C)
                     contract = candidate.get("contract")
+                    market_state = get_market_state()
+                    market_is_open = is_market_open()
+                    
                     if contract and (not blocked or operator_override):
                         button_key = f"record_exec_{symbol}_{i}"
-                        if st.button("📝 Record Execution", key=button_key, use_container_width=True):
+                        button_disabled = not market_is_open
+                        button_tooltip = ""
+                        
+                        if not market_is_open:
+                            if market_state == "WEEKEND":
+                                button_tooltip = "Market is closed (Weekend)"
+                            elif market_state == "PRE_MARKET":
+                                button_tooltip = "Market opens at 9:30 AM ET"
+                            else:
+                                button_tooltip = "Market is closed"
+                        
+                        if st.button(
+                            "📝 Record Execution",
+                            key=button_key,
+                            use_container_width=True,
+                            disabled=button_disabled,
+                            help=button_tooltip if button_tooltip else None
+                        ):
                             st.session_state.record_execution_modal = symbol
                             st.rerun()
+                        
+                        if button_disabled:
+                            st.caption(f"⏸️ {button_tooltip}")
                     elif blocked and not operator_override:
                         st.caption("⚠️ Blocked - Override required")
                     
-                    with st.expander("📊 Details", expanded=False):
-                        st.write("**CSP Reasons:**")
+                    # Candidate Explainability (Phase 1C) - "Why?" expander
+                    with st.expander("❓ Why?", expanded=False):
+                        # CSP Score Components
+                        st.write("**CSP Score Components:**")
+                        st.metric("CSP Score", f"{score}/100")
                         reasons = candidate.get("reasons", [])
                         if reasons:
                             for reason in reasons:
                                 st.write(f"• {reason}")
                         else:
-                            st.write("No reasons provided")
+                            st.write("No CSP reasons provided")
                         
-                        # Assignment reasons (Phase 1B)
+                        st.divider()
+                        
+                        # Assignment Score + Label
+                        st.write("**Assignment-Worthiness:**")
+                        st.metric("Assignment Score", f"{assignment_score}/100")
+                        st.write(f"**Label:** {assignment_label}")
+                        
                         assignment_reasons = candidate.get("assignment_reasons", [])
                         if assignment_reasons:
-                            st.write("**Assignment Reasons:**")
                             for reason in assignment_reasons:
                                 st.write(f"• {reason}")
                         
-                        st.write("**Full Data:**")
-                        st.json(candidate)
+                        # Blocking reason if RENT_ONLY
+                        if blocked and not operator_override:
+                            st.divider()
+                            st.warning(f"**Blocked:** {symbol} is marked as RENT_ONLY. Override required to allow CSP.")
+                        elif operator_override:
+                            st.info(f"**Override Active:** Operator has overridden RENT_ONLY blocking for {symbol}.")
+                        
+                        # Key Levels
+                        key_levels = candidate.get("key_levels", {})
+                        if key_levels:
+                            st.divider()
+                            st.write("**Key Levels:**")
+                            if key_levels.get("close"):
+                                st.write(f"• Close: ${key_levels['close']:.2f}")
+                            if key_levels.get("ema50"):
+                                st.write(f"• EMA50: ${key_levels['ema50']:.2f}")
+                            if key_levels.get("ema200"):
+                                st.write(f"• EMA200: ${key_levels['ema200']:.2f}")
+                            if key_levels.get("rsi") is not None:
+                                st.write(f"• RSI: {key_levels['rsi']:.1f}")
                 
                 if i < len(candidates):
                     st.divider()
@@ -831,13 +1053,68 @@ def main() -> None:
                         timestamp = st.text_input("Timestamp (ISO)", value=datetime.now(timezone.utc).isoformat())
                         notes = st.text_area("Notes (optional)", value="")
                     
+                    # Capital Impact Preview (Phase 1C)
+                    if strike > 0 and contracts > 0:
+                        required_cash = strike * contracts * 100
+                        
+                        # Get available cash from latest snapshot
+                        latest_snapshot = get_latest_portfolio_snapshot(brokerage=st.session_state.selected_brokerage)
+                        available_cash = latest_snapshot.get('cash', 0.0) if latest_snapshot else 0.0
+                        
+                        cash_percentage = (required_cash / available_cash * 100) if available_cash > 0 else 0
+                        
+                        st.divider()
+                        st.write("**💰 Capital Impact Preview:**")
+                        col_cash1, col_cash2 = st.columns(2)
+                        with col_cash1:
+                            st.metric("Required Cash", f"${required_cash:,.2f}")
+                        with col_cash2:
+                            st.metric("Available Cash", f"${available_cash:,.2f}")
+                        
+                        # Warnings
+                        if available_cash > 0:
+                            if required_cash > available_cash:
+                                st.error(f"❌ **Insufficient Cash:** Required ${required_cash:,.2f} exceeds available ${available_cash:,.2f}")
+                                execution_disabled = True
+                            elif cash_percentage > 25:
+                                st.warning(f"⚠️ **High Cash Usage:** {cash_percentage:.1f}% of available cash")
+                                execution_disabled = False
+                            else:
+                                st.success(f"✅ **Cash Available:** {cash_percentage:.1f}% of available cash")
+                                execution_disabled = False
+                        else:
+                            st.warning("⚠️ **No Cash Data:** Update portfolio snapshot to see cash impact")
+                            execution_disabled = False
+                        
+                        st.divider()
+                    else:
+                        execution_disabled = False
+                    
+                    # Market-time awareness (Phase 1C)
+                    market_state = get_market_state()
+                    market_is_open = is_market_open()
+                    
+                    if not market_is_open:
+                        if market_state == "WEEKEND":
+                            st.info("⏸️ **Market Closed:** Weekend. Execution disabled.")
+                        elif market_state == "PRE_MARKET":
+                            st.info("⏸️ **Market Closed:** Pre-market. Market opens at 9:30 AM ET.")
+                        else:
+                            st.info("⏸️ **Market Closed:** After hours. Execution disabled.")
+                        execution_disabled = True
+                    
                     col_submit, col_cancel = st.columns(2)
                     with col_submit:
-                        submit = st.form_submit_button("💾 Save Trade", use_container_width=True, type="primary")
+                        submit = st.form_submit_button(
+                            "💾 Save Trade",
+                            use_container_width=True,
+                            type="primary",
+                            disabled=execution_disabled
+                        )
                     with col_cancel:
                         cancel = st.form_submit_button("❌ Cancel", use_container_width=True)
                     
-                    if submit:
+                    if submit and not execution_disabled:
                         try:
                             # Record trade
                             trade_id = record_trade(
@@ -1360,7 +1637,7 @@ def main() -> None:
     st.divider()
     
     # Universe Manager Section (Phase 1B.2 - with symbol search)
-    st.header("🌐 Symbol Universe Manager")
+    st.header("🌐 Symbol Universe Manager", anchor="symbol-universe-manager")
     
     try:
         universe_symbols = list_universe_symbols()

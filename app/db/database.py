@@ -68,6 +68,10 @@ def init_db() -> None:
 
     conn.commit()
     conn.close()
+    
+    # Initialize Phase 1A persistence tables
+    from app.core.persistence import init_persistence_db
+    init_persistence_db()
 
 
 def log_regime_snapshot(regime: str, confidence: int, details: Dict[str, Any]) -> None:

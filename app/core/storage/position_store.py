@@ -35,11 +35,11 @@ class PositionStore:
         ----------
         db_path:
             Path to the SQLite database file. If omitted, defaults to
-            ``data/chakra_ops.db`` at the repository root.
+            ``data/chakraops.db`` at the repository root.
         """
         if db_path is None:
             repo_root = Path(__file__).parent.parent.parent
-            db_path = repo_root / "data" / "chakra_ops.db"
+            db_path = repo_root / "data" / "chakraops.db"
 
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)

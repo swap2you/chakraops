@@ -227,10 +227,23 @@ def main():
                 pass
             sys.exit(1)
         
-        # Step 5: Load universe
+        # Step 5: Load universe (filter by enabled symbols)
         try:
-            symbols = load_universe_seed()
-            print(f"Step 5: Loaded {len(symbols)} symbols from universe", file=sys.stderr)
+            # Try to get enabled symbols from database first
+            from app.core.persistence import get_enabled_symbols
+            try:
+                enabled_symbols = get_enabled_symbols()
+                if enabled_symbols:
+                    symbols = enabled_symbols
+                    print(f"Step 5: Loaded {len(symbols)} enabled symbols from universe database", file=sys.stderr)
+                else:
+                    # Fallback to universe_seed.txt if database is empty
+                    symbols = load_universe_seed()
+                    print(f"Step 5: Loaded {len(symbols)} symbols from universe_seed.txt (fallback)", file=sys.stderr)
+            except Exception:
+                # Fallback to universe_seed.txt if database not available
+                symbols = load_universe_seed()
+                print(f"Step 5: Loaded {len(symbols)} symbols from universe_seed.txt (fallback)", file=sys.stderr)
         except Exception as e:
             error_msg = f"Failed to load universe: {e}"
             print(f"ERROR: {error_msg}", file=sys.stderr)

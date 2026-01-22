@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -27,6 +28,26 @@ from app.core.state_machine.position_state_machine import (
     PositionState,
     get_allowed_transitions,
 )
+from app.core.persistence import (
+    record_trade,
+    upsert_position_from_trade,
+    list_open_positions as persistence_list_open_positions,
+    mark_candidate_executed,
+    list_candidates as persistence_list_candidates,
+    list_alerts,
+    ack_alert,
+    archive_alert,
+    bulk_ack_alerts,
+    bulk_archive_non_action_alerts,
+    save_portfolio_snapshot,
+    get_latest_portfolio_snapshot,
+    get_enabled_symbols,
+    list_universe_symbols,
+    add_universe_symbol,
+    toggle_universe_symbol,
+    delete_universe_symbol,
+    reset_local_trading_state,
+)
 
 # Set page config
 st.set_page_config(
@@ -41,6 +62,12 @@ if "regime_cache" not in st.session_state:
     st.session_state.regime_cache = None
 if "candidates_cache" not in st.session_state:
     st.session_state.candidates_cache = None
+if "record_execution_modal" not in st.session_state:
+    st.session_state.record_execution_modal = None
+if "show_reset_confirm" not in st.session_state:
+    st.session_state.show_reset_confirm = False
+if "selected_brokerage" not in st.session_state:
+    st.session_state.selected_brokerage = "Robinhood"
 
 
 def get_db_path() -> Path:
@@ -94,81 +121,36 @@ def get_regime_snapshot() -> Optional[Dict[str, Any]]:
 
 
 def get_csp_candidates() -> List[Dict[str, Any]]:
-    """Get CSP candidates - re-run wheel engine or read from cache."""
+    """Get CSP candidates - filtered by enabled symbols only."""
     # Check cache first
     if st.session_state.candidates_cache is not None:
-        return st.session_state.candidates_cache
-
-    # Try to get from database
-    db_path = get_db_path()
-    if db_path.exists():
+        # Filter by enabled symbols
         try:
-            conn = sqlite3.connect(str(db_path))
-            cursor = conn.cursor()
-
-            cursor.execute("""
-                SELECT symbol, score, reasons, key_levels, created_at
-                FROM csp_candidates
-                ORDER BY score DESC, created_at DESC
-                LIMIT 50
-            """)
-
-            rows = cursor.fetchall()
-            conn.close()
-
-            if rows:
-                import json
-                candidates = []
-                for row in rows:
-                    candidates.append({
-                        "symbol": row[0],
-                        "score": row[1],
-                        "reasons": json.loads(row[2]) if row[2] else [],
-                        "key_levels": json.loads(row[3]) if row[3] else {},
-                        "created_at": row[4],
-                    })
-                st.session_state.candidates_cache = candidates
-                return candidates
-        except sqlite3.OperationalError:
-            pass
+            enabled_symbols = set(get_enabled_symbols())
+            return [c for c in st.session_state.candidates_cache if c.get("symbol") in enabled_symbols]
         except Exception:
-            pass
+            return st.session_state.candidates_cache
+
+    # Use persistence module to get candidates (excludes executed by default)
+    try:
+        candidates = persistence_list_candidates(include_executed=False)
+        # Filter by enabled symbols
+        enabled_symbols = set(get_enabled_symbols())
+        candidates = [c for c in candidates if c.get("symbol") in enabled_symbols]
+        st.session_state.candidates_cache = candidates
+        return candidates
+    except Exception:
+        pass
 
     # If no DB or empty, return empty list
     return []
 
 
-def get_alerts(limit: int = 20) -> List[Dict[str, Any]]:
+def get_alerts(limit: int = 20, status: Optional[str] = None) -> List[Dict[str, Any]]:
     """Get latest alerts from database."""
-    db_path = get_db_path()
-    if not db_path.exists():
-        return []
-
     try:
-        conn = sqlite3.connect(str(db_path))
-        cursor = conn.cursor()
-
-        cursor.execute("""
-            SELECT message, level, created_at
-            FROM alerts
-            ORDER BY created_at DESC
-            LIMIT ?
-        """, (limit,))
-
-        rows = cursor.fetchall()
-        conn.close()
-
-        alerts = []
-        for row in rows:
-            alerts.append({
-                "message": row[0],
-                "level": row[1],
-                "created_at": row[2],
-            })
-        return alerts
-    except sqlite3.OperationalError:
-        # Table doesn't exist
-        return []
+        alerts = list_alerts(status=status)
+        return alerts[:limit]
     except Exception:
         return []
 
@@ -209,12 +191,56 @@ def get_last_update_time() -> Optional[str]:
 def get_level_color(level: str) -> str:
     """Get color for alert level."""
     level_upper = level.upper()
-    if level_upper == "URGENT":
+    if level_upper == "HALT":
         return "🔴"
+    elif level_upper == "ACTION":
+        return "🟠"
     elif level_upper == "WATCH":
         return "🟡"
     else:  # INFO
         return "🔵"
+
+
+def _render_alert(alert: Dict[str, Any]) -> None:
+    """Helper function to render a single alert."""
+    alert_id = alert.get("id")
+    level = alert.get("level", "INFO")
+    status = alert.get("status", "OPEN")
+    color_icon = get_level_color(level)
+    message = alert.get("message", "")
+    timestamp = alert.get("created_at", "")
+    
+    # Status badge
+    status_badge = {
+        "OPEN": "🟢",
+        "ACKED": "🟡",
+        "ARCHIVED": "⚫",
+    }.get(status, "⚪")
+    
+    col1, col2 = st.columns([4, 1])
+    
+    with col1:
+        # Create colored container based on level
+        if level.upper() == "HALT":
+            st.error(f"{color_icon} **{level}** | {status_badge} {status} | {message} | *{timestamp}*")
+        elif level.upper() == "ACTION":
+            st.error(f"{color_icon} **{level}** | {status_badge} {status} | {message} | *{timestamp}*")
+        elif level.upper() == "WATCH":
+            st.warning(f"{color_icon} **{level}** | {status_badge} {status} | {message} | *{timestamp}*")
+        else:  # INFO
+            st.info(f"{color_icon} **{level}** | {status_badge} {status} | {message} | *{timestamp}*")
+    
+    with col2:
+        if status == "OPEN" and alert_id:
+            col_ack, col_arch = st.columns(2)
+            with col_ack:
+                if st.button("✓ Ack", key=f"ack_{alert_id}", use_container_width=True):
+                    ack_alert(alert_id)
+                    st.rerun()
+            with col_arch:
+                if st.button("📦 Archive", key=f"arch_{alert_id}", use_container_width=True):
+                    archive_alert(alert_id)
+                    st.rerun()
 
 
 def main() -> None:
@@ -259,6 +285,30 @@ def main() -> None:
             st.metric("Last Update", last_update[:16] if len(last_update) > 16 else last_update)
         else:
             st.info("No data available")
+        
+        st.divider()
+        
+        # DEV ONLY: Reset Local Trading State
+        st.subheader("⚠️ DEV Controls")
+        if st.button("🗑️ Reset Local Trading State (DEV ONLY)", use_container_width=True, type="secondary"):
+            st.session_state.show_reset_confirm = True
+        
+        if st.session_state.get("show_reset_confirm", False):
+            st.warning("⚠️ This will delete all local trading data!")
+            col_yes, col_no = st.columns(2)
+            with col_yes:
+                if st.button("✅ Confirm Reset", use_container_width=True, type="primary"):
+                    try:
+                        reset_local_trading_state()
+                        st.success("✅ Local trading state reset successfully!")
+                        st.session_state.show_reset_confirm = False
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error resetting: {e}")
+            with col_no:
+                if st.button("❌ Cancel", use_container_width=True):
+                    st.session_state.show_reset_confirm = False
+                    st.rerun()
         
         st.divider()
         st.caption("ChakraOps v1.0")
@@ -393,6 +443,68 @@ def main() -> None:
     
     except Exception as e:
         st.warning(f"Unable to load portfolio overview: {e}")
+
+    st.divider()
+    
+    # Portfolio Snapshot Section (Phase 1A.1 - moved here, with brokerage selector)
+    st.header("💰 Portfolio Snapshot")
+    
+    # Brokerage selector
+    brokerage_options = ["Robinhood", "Fidelity", "Charles Schwab"]
+    selected_brokerage = st.selectbox(
+        "Brokerage",
+        brokerage_options,
+        index=brokerage_options.index(st.session_state.selected_brokerage) if st.session_state.selected_brokerage in brokerage_options else 0,
+        key="brokerage_selector"
+    )
+    st.session_state.selected_brokerage = selected_brokerage
+    
+    # Show latest snapshot for selected brokerage
+    latest_snapshot = get_latest_portfolio_snapshot(brokerage=selected_brokerage)
+    if latest_snapshot:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Account Value", f"${latest_snapshot['account_value']:,.2f}")
+        with col2:
+            st.metric("Cash", f"${latest_snapshot['cash']:,.2f}")
+        with col3:
+            invested = latest_snapshot['account_value'] - latest_snapshot['cash']
+            st.metric("Invested", f"${invested:,.2f}")
+        
+        st.caption(f"Last updated: {latest_snapshot['timestamp'][:19] if latest_snapshot.get('timestamp') else 'N/A'}")
+        if latest_snapshot.get('notes'):
+            st.info(f"Notes: {latest_snapshot['notes']}")
+    else:
+        st.info(f"No snapshot found for {selected_brokerage}. Create one below.")
+    
+    # Snapshot input form
+    with st.expander("📝 Update Portfolio Snapshot", expanded=False):
+        with st.form("portfolio_snapshot_form"):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                account_value = st.number_input("Account Value ($)", value=latest_snapshot['account_value'] if latest_snapshot else 0.0, step=100.0)
+                cash = st.number_input("Cash ($)", value=latest_snapshot['cash'] if latest_snapshot else 0.0, step=100.0)
+            
+            with col2:
+                timestamp = st.text_input("Timestamp (ISO)", value=datetime.now(timezone.utc).isoformat())
+                notes = st.text_area("Notes (optional)", value="")
+            
+            submit_snapshot = st.form_submit_button("💾 Save Snapshot", use_container_width=True, type="primary")
+            
+            if submit_snapshot:
+                try:
+                    snapshot_id = save_portfolio_snapshot(
+                        account_value=account_value,
+                        cash=cash,
+                        brokerage=selected_brokerage,
+                        timestamp=timestamp if timestamp else None,
+                        notes=notes if notes else None,
+                    )
+                    st.success(f"✅ Snapshot saved! ID: {snapshot_id}")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error saving snapshot: {e}")
 
     st.divider()
 
@@ -566,6 +678,14 @@ def main() -> None:
                                 st.caption(f"Premium: {premium or 'N/A'}")
                 
                 with col3:
+                    # Record Execution button
+                    contract = candidate.get("contract")
+                    if contract:
+                        button_key = f"record_exec_{candidate['symbol']}_{i}"
+                        if st.button("📝 Record Execution", key=button_key, use_container_width=True):
+                            st.session_state.record_execution_modal = candidate['symbol']
+                            st.rerun()
+                    
                     with st.expander("📊 Details", expanded=False):
                         st.write("**Reasons:**")
                         reasons = candidate.get("reasons", [])
@@ -582,6 +702,123 @@ def main() -> None:
                     st.divider()
     else:
         st.info("📭 No CSP candidates found. Run the wheel engine to generate candidates.")
+
+    st.divider()
+    
+    # Record Execution Modal
+    if st.session_state.record_execution_modal:
+        candidate_symbol = st.session_state.record_execution_modal
+        # Find candidate details
+        candidate_details = None
+        for c in candidates:
+            if c['symbol'] == candidate_symbol:
+                candidate_details = c
+                break
+        
+        if candidate_details:
+            contract = candidate_details.get("contract", {})
+            with st.container():
+                st.header("📝 Record Trade Execution")
+                
+                with st.form(f"record_trade_form_{candidate_symbol}"):
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        symbol = st.text_input("Symbol", value=candidate_symbol, disabled=True)
+                        strike = st.number_input("Strike", value=float(contract.get('strike', 0)) if contract.get('strike') else 0.0, step=0.5)
+                        expiry = st.text_input("Expiry (YYYY-MM-DD)", value=contract.get('expiry', ''))
+                        contracts = st.number_input("Contracts", value=1, min_value=1, step=1)
+                    
+                    with col2:
+                        premium = st.number_input("Premium Collected ($)", value=float(contract.get('premium_estimate', 0)) if contract.get('premium_estimate') else 0.0, step=0.01)
+                        timestamp = st.text_input("Timestamp (ISO)", value=datetime.now(timezone.utc).isoformat())
+                        notes = st.text_area("Notes (optional)", value="")
+                    
+                    col_submit, col_cancel = st.columns(2)
+                    with col_submit:
+                        submit = st.form_submit_button("💾 Save Trade", use_container_width=True, type="primary")
+                    with col_cancel:
+                        cancel = st.form_submit_button("❌ Cancel", use_container_width=True)
+                    
+                    if submit:
+                        try:
+                            # Record trade
+                            trade_id = record_trade(
+                                symbol=symbol,
+                                action="SELL_TO_OPEN",
+                                strike=strike if strike > 0 else None,
+                                expiry=expiry if expiry else None,
+                                contracts=contracts,
+                                premium=premium,
+                                timestamp=timestamp if timestamp else None,
+                                notes=notes if notes else None,
+                            )
+                            
+                            # Create position from trade
+                            position = upsert_position_from_trade(trade_id)
+                            
+                            # Mark candidate as executed
+                            mark_candidate_executed(symbol, executed=True)
+                            
+                            # Clear cache and modal
+                            st.session_state.candidates_cache = None
+                            st.session_state.record_execution_modal = None
+                            
+                            st.success(f"✅ Trade recorded! Position created: {position.id if position else 'N/A'}")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Error recording trade: {e}")
+                    
+                    if cancel:
+                        st.session_state.record_execution_modal = None
+                        st.rerun()
+    
+    st.divider()
+    
+    # Active Positions Section (Phase 1A)
+    st.header("📊 Active Positions")
+    try:
+        open_positions = persistence_list_open_positions()
+        
+        if open_positions:
+            # Summary metrics
+            col1, col2, col3, col4 = st.columns(4)
+            total_contracts = sum(p.contracts for p in open_positions)
+            total_premium = sum(p.premium_collected for p in open_positions)
+            unique_symbols = len(set(p.symbol for p in open_positions))
+            
+            with col1:
+                st.metric("Open Positions", len(open_positions))
+            with col2:
+                st.metric("Total Contracts", total_contracts)
+            with col3:
+                st.metric("Total Premium", f"${total_premium:,.2f}")
+            with col4:
+                st.metric("Unique Symbols", unique_symbols)
+            
+            st.write("")  # Spacing
+            
+            # Positions table
+            positions_data = []
+            for pos in open_positions:
+                avg_credit = pos.premium_collected / pos.contracts if pos.contracts > 0 else 0
+                positions_data.append({
+                    "Symbol": pos.symbol,
+                    "Strike": f"${pos.strike:.2f}" if pos.strike else "N/A",
+                    "Expiry": pos.expiry or "N/A",
+                    "Contracts": pos.contracts,
+                    "Avg Credit": f"${avg_credit:.2f}",
+                    "Total Premium": f"${pos.premium_collected:.2f}",
+                    "Status": pos.state or pos.status,
+                    "Entry Date": pos.entry_date[:10] if pos.entry_date else "N/A",
+                })
+            
+            df_positions = pd.DataFrame(positions_data)
+            st.dataframe(df_positions, use_container_width=True, hide_index=True)
+        else:
+            st.info("No open positions.")
+    except Exception as e:
+        st.warning(f"Unable to load positions: {e}")
 
     st.divider()
 
@@ -922,27 +1159,166 @@ def main() -> None:
 
     st.divider()
 
-    # Alerts Section
-    st.header("🔔 Recent Alerts")
-    alerts = get_alerts(limit=20)
-
-    if alerts:
-        # Color-coded alerts
-        for alert in alerts:
-            level = alert.get("level", "INFO")
-            color_icon = get_level_color(level)
-            message = alert.get("message", "")
-            timestamp = alert.get("created_at", "")
+    # Alerts Section (Phase 1A.1 - with grouping, scroll, bulk actions)
+    st.header("🔔 Alerts")
+    
+    # Alert status filter
+    alert_status_filter = st.selectbox(
+        "Filter by Status",
+        ["OPEN", "ACKED", "ARCHIVED", "ALL"],
+        index=0,
+        key="alert_status_filter"
+    )
+    
+    status_filter = None if alert_status_filter == "ALL" else alert_status_filter
+    all_alerts = get_alerts(limit=200, status=status_filter)
+    
+    # Filter out system/internal errors (only show operator alerts)
+    operator_alerts = [
+        a for a in all_alerts
+        if a.get("level", "").upper() in ["INFO", "WATCH", "ACTION", "HALT"]
+    ]
+    
+    if operator_alerts:
+        # Bulk actions
+        col_bulk1, col_bulk2 = st.columns(2)
+        with col_bulk1:
+            if st.button("✓ Ack All (Visible)", use_container_width=True, key="bulk_ack"):
+                visible_ids = [a["id"] for a in operator_alerts if a.get("status") == "OPEN"]
+                if visible_ids:
+                    bulk_ack_alerts(visible_ids)
+                    st.success(f"✅ Acknowledged {len(visible_ids)} alert(s)")
+                    st.rerun()
+        with col_bulk2:
+            if st.button("📦 Archive All (Non-Action)", use_container_width=True, key="bulk_archive"):
+                non_action_ids = [a["id"] for a in operator_alerts if a.get("level") != "ACTION" and a.get("status") != "ARCHIVED"]
+                if non_action_ids:
+                    bulk_archive_non_action_alerts(non_action_ids)
+                    st.success(f"✅ Archived {len(non_action_ids)} alert(s)")
+                    st.rerun()
+        
+        # Group alerts by date
+        from datetime import date as date_type
+        today = date_type.today()
+        yesterday = date_type.fromordinal(today.toordinal() - 1)
+        
+        alerts_today = []
+        alerts_yesterday = []
+        alerts_older = []
+        
+        for alert in operator_alerts:
+            try:
+                alert_date_str = alert.get("created_at", "")[:10]  # YYYY-MM-DD
+                if alert_date_str:
+                    alert_date = date_type.fromisoformat(alert_date_str)
+                    if alert_date == today:
+                        alerts_today.append(alert)
+                    elif alert_date == yesterday:
+                        alerts_yesterday.append(alert)
+                    else:
+                        alerts_older.append(alert)
+                else:
+                    alerts_older.append(alert)
+            except Exception:
+                alerts_older.append(alert)
+        
+        # Scrollable container with fixed max height
+        alerts_container = st.container()
+        with alerts_container:
+            # Use custom CSS for scroll containment
+            st.markdown("""
+                <style>
+                .alerts-scroll-container {
+                    max-height: 400px;
+                    overflow-y: auto;
+                    border: 1px solid #e0e0e0;
+                    border-radius: 5px;
+                    padding: 10px;
+                }
+                </style>
+            """, unsafe_allow_html=True)
             
-            # Create colored container based on level
-            if level.upper() == "URGENT":
-                st.error(f"{color_icon} **{level}** | {message} | *{timestamp}*")
-            elif level.upper() == "WATCH":
-                st.warning(f"{color_icon} **{level}** | {message} | *{timestamp}*")
-            else:
-                st.info(f"{color_icon} **{level}** | {message} | *{timestamp}*")
+            alerts_html = '<div class="alerts-scroll-container">'
+            
+            # Today (expanded by default)
+            if alerts_today:
+                with st.expander(f"📅 Today ({len(alerts_today)})", expanded=True):
+                    for alert in alerts_today:
+                        _render_alert(alert)
+            
+            # Yesterday (collapsed by default)
+            if alerts_yesterday:
+                with st.expander(f"📅 Yesterday ({len(alerts_yesterday)})", expanded=False):
+                    for alert in alerts_yesterday:
+                        _render_alert(alert)
+            
+            # Older (collapsed by default)
+            if alerts_older:
+                with st.expander(f"📅 Older ({len(alerts_older)})", expanded=False):
+                    for alert in alerts_older:
+                        _render_alert(alert)
     else:
-        st.info("✅ No alerts found in database.")
+        st.info("✅ No alerts found.")
+    
+    st.divider()
+    
+    # Universe Manager Section (Phase 1A.1)
+    st.header("🌐 Symbol Universe Manager")
+    
+    try:
+        universe_symbols = list_universe_symbols()
+        
+        if universe_symbols:
+            # Editable table
+            df_universe = pd.DataFrame([
+                {
+                    "Symbol": s["symbol"],
+                    "Enabled": "✓" if s["enabled"] else "✗",
+                    "Notes": s.get("notes", ""),
+                }
+                for s in universe_symbols
+            ])
+            
+            st.dataframe(df_universe, use_container_width=True, hide_index=True)
+            
+            # Add/Edit controls
+            with st.expander("➕ Add/Edit Symbol", expanded=False):
+                col1, col2 = st.columns(2)
+                with col1:
+                    new_symbol = st.text_input("Symbol", value="", key="new_symbol_input").upper()
+                    enabled = st.checkbox("Enabled", value=True, key="new_symbol_enabled")
+                with col2:
+                    notes = st.text_area("Notes", value="", key="new_symbol_notes")
+                
+                col_add, col_space = st.columns([1, 3])
+                with col_add:
+                    if st.button("➕ Add/Update Symbol", use_container_width=True, key="add_symbol_btn"):
+                        if new_symbol:
+                            try:
+                                add_universe_symbol(new_symbol, enabled=enabled, notes=notes if notes else None)
+                                st.success(f"✅ Symbol {new_symbol} {'enabled' if enabled else 'disabled'}")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Error: {e}")
+                        else:
+                            st.warning("Please enter a symbol")
+            
+            # Quick toggle controls
+            st.subheader("Quick Toggle")
+            toggle_cols = st.columns(min(5, len(universe_symbols)))
+            for i, symbol_data in enumerate(universe_symbols):
+                col_idx = i % len(toggle_cols)
+                with toggle_cols[col_idx]:
+                    symbol = symbol_data["symbol"]
+                    current_enabled = symbol_data["enabled"]
+                    button_label = f"Disable {symbol}" if current_enabled else f"Enable {symbol}"
+                    if st.button(button_label, key=f"toggle_{symbol}", use_container_width=True):
+                        toggle_universe_symbol(symbol, not current_enabled)
+                        st.rerun()
+        else:
+            st.info("No symbols in universe. Add symbols using the form above.")
+    except Exception as e:
+        st.warning(f"Unable to load universe: {e}")
 
 
 if __name__ == "__main__":

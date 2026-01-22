@@ -51,6 +51,11 @@ from app.core.persistence import (
     set_assignment_override,
     is_assignment_blocked,
 )
+from app.core.symbol_cache import (
+    fetch_and_cache_theta_symbols,
+    search_symbols,
+    get_cached_symbol_count,
+)
 
 # Set page config
 st.set_page_config(
@@ -1354,11 +1359,78 @@ def main() -> None:
     
     st.divider()
     
-    # Universe Manager Section (Phase 1A.1)
+    # Universe Manager Section (Phase 1B.2 - with symbol search)
     st.header("🌐 Symbol Universe Manager")
     
     try:
         universe_symbols = list_universe_symbols()
+        
+        # Symbol Search and Cache Management (Phase 1B.2)
+        col_cache1, col_cache2 = st.columns([2, 1])
+        with col_cache1:
+            search_query = st.text_input(
+                "🔍 Search Symbols (Type to search cached symbols)",
+                value="",
+                key="symbol_search",
+                placeholder="Type 1-2 characters to search...",
+                help="Searches cached ThetaData symbols. Cache symbols first if needed."
+            )
+        with col_cache2:
+            cached_count = get_cached_symbol_count()
+            if cached_count == 0:
+                if st.button("📥 Fetch & Cache Symbols", use_container_width=True, key="fetch_symbols"):
+                    with st.spinner("Fetching symbols from ThetaData..."):
+                        try:
+                            count = fetch_and_cache_theta_symbols()
+                            st.success(f"✅ Cached {count} symbols")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Failed to fetch symbols: {e}")
+            else:
+                st.caption(f"📊 {cached_count} symbols cached")
+                if st.button("🔄 Refresh Cache", use_container_width=True, key="refresh_cache"):
+                    with st.spinner("Refreshing symbol cache..."):
+                        try:
+                            count = fetch_and_cache_theta_symbols()
+                            st.success(f"✅ Refreshed {count} symbols")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Failed to refresh: {e}")
+        
+        # Show search results if query entered
+        search_results = []
+        if search_query and len(search_query) >= 1:
+            search_results = search_symbols(search_query, limit=20)
+            if search_results:
+                st.subheader(f"Search Results ({len(search_results)} found)")
+                # Display search results in a selectable format
+                for result in search_results:
+                    symbol = result["symbol"]
+                    name = result.get("name", "")
+                    exchange = result.get("exchange", "")
+                    
+                    col_sym, col_name, col_action = st.columns([1, 3, 1])
+                    with col_sym:
+                        st.write(f"**{symbol}**")
+                    with col_name:
+                        if name:
+                            st.caption(f"{name} ({exchange})" if exchange else name)
+                        else:
+                            st.caption(exchange if exchange else "")
+                    with col_action:
+                        # Check if already in universe
+                        in_universe = any(s["symbol"] == symbol for s in universe_symbols)
+                        if in_universe:
+                            st.caption("✓ In universe")
+                        else:
+                            if st.button("➕ Add", key=f"add_search_{symbol}", use_container_width=True):
+                                try:
+                                    add_universe_symbol(symbol, enabled=True, notes=f"Added from search")
+                                    st.success(f"✅ Added {symbol}")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"❌ Error: {e}")
+                st.divider()
         
         if universe_symbols:
             # Editable table

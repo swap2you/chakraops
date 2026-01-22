@@ -23,6 +23,47 @@ from app.core.storage.position_store import PositionStore
 from app.db.database import get_db_path
 
 
+def _load_baseline_universe() -> list[str]:
+    """Load baseline universe from document.txt (Phase 1B.2).
+    
+    Returns
+    -------
+    list[str]
+        List of symbols, or empty list if file not found.
+    """
+    from pathlib import Path
+    
+    # Look for document.txt in project root
+    repo_root = Path(__file__).parent.parent.parent
+    doc_file = repo_root / "document.txt"
+    
+    if not doc_file.exists():
+        # Also check in app/data/
+        doc_file = repo_root / "app" / "data" / "document.txt"
+    
+    if not doc_file.exists():
+        return []
+    
+    symbols = []
+    try:
+        with open(doc_file, "r", encoding="utf-8") as f:
+            for line in f:
+                symbol = line.strip()
+                # Skip empty lines and comments
+                if symbol and not symbol.startswith("#"):
+                    # Handle various formats: "AAPL", "AAPL - Apple Inc.", etc.
+                    symbol = symbol.split()[0].upper() if symbol.split() else symbol.upper()
+                    if symbol:
+                        symbols.append(symbol)
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to load baseline universe from document.txt: {e}")
+        return []
+    
+    return symbols
+
+
 # Trade action types
 TradeAction = str  # "SELL_TO_OPEN", "BUY_TO_CLOSE", "ASSIGN", etc.
 
@@ -163,9 +204,20 @@ def init_persistence_db() -> None:
             )
         """)
         
-        # Create indexes for assignment_profile (after table creation)
+        # Create symbol_cache table (Phase 1B.2) - for ThetaData symbol search
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS symbol_cache (
+                symbol TEXT PRIMARY KEY,
+                name TEXT,
+                exchange TEXT,
+                cached_at TEXT NOT NULL
+            )
+        """)
+        
+        # Create indexes for assignment_profile and symbol_cache (after table creation)
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_assignment_label ON assignment_profile(assignment_label)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_assignment_override ON assignment_profile(operator_override)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_symbol_cache_symbol ON symbol_cache(symbol)")
         
         conn.commit()
     except Exception as e:

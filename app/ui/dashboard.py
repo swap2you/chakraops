@@ -3,6 +3,9 @@
 
 from __future__ import annotations
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import json
 import os
 import sqlite3
@@ -57,6 +60,7 @@ from app.core.symbol_cache import (
     get_cached_symbol_count,
 )
 from app.core.market_time import get_market_state, is_market_open
+from app.core.heartbeat import HeartbeatManager, REGIME_STALE_THRESHOLD_MINUTES
 
 # Set page config
 st.set_page_config(
@@ -77,6 +81,8 @@ if "show_reset_confirm" not in st.session_state:
     st.session_state.show_reset_confirm = False
 if "selected_brokerage" not in st.session_state:
     st.session_state.selected_brokerage = "Robinhood"
+if "heartbeat_started" not in st.session_state:
+    st.session_state.heartbeat_started = False
 
 # Defensive check: ensure all required tables exist on startup (Phase 1B fix)
 try:
@@ -300,6 +306,8 @@ def _render_alert(alert: Dict[str, Any]) -> None:
 def _get_consecutive_zero_candidate_days() -> int:
     """Get consecutive days with 0 actionable candidates (Phase 1C).
     
+    Uses ET date for consistency with heartbeat tracking.
+    
     Returns
     -------
     int
@@ -310,6 +318,12 @@ def _get_consecutive_zero_candidate_days() -> int:
         return 0
     
     try:
+        import pytz
+        
+        # Get ET date (not UTC) for consistency
+        et_tz = pytz.timezone("America/New_York")
+        et_today = datetime.now(et_tz).date()
+        
         conn = sqlite3.connect(str(db_path))
         cursor = conn.cursor()
         
@@ -318,18 +332,17 @@ def _get_consecutive_zero_candidate_days() -> int:
             CREATE TABLE IF NOT EXISTS candidate_daily_tracking (
                 date TEXT PRIMARY KEY,
                 candidate_count INTEGER NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
             )
         """)
         
-        # Get today's date (YYYY-MM-DD)
-        today = datetime.now(timezone.utc).date().isoformat()
-        
-        # Check today's count
+        # Check today's count (ET date)
+        today_str = et_today.isoformat()
         cursor.execute("""
             SELECT candidate_count FROM candidate_daily_tracking
             WHERE date = ?
-        """, (today,))
+        """, (today_str,))
         
         row = cursor.fetchone()
         if row and row[0] == 0:
@@ -342,9 +355,9 @@ def _get_consecutive_zero_candidate_days() -> int:
             """)
             rows = cursor.fetchall()
             
-            # Count consecutive days from today backwards
+            # Count consecutive days from today backwards (ET dates)
             consecutive = 0
-            expected_date = datetime.now(timezone.utc).date()
+            expected_date = et_today
             
             for row in rows:
                 row_date = datetime.fromisoformat(row[0]).date()
@@ -364,13 +377,24 @@ def _get_consecutive_zero_candidate_days() -> int:
 
 
 def _update_candidate_daily_tracking(count: int) -> None:
-    """Update daily candidate count tracking (Phase 1C).
+    """Update daily candidate count tracking (Phase 1C - ET date, upsert per day).
     
     Parameters
     ----------
     count:
         Number of actionable candidates today.
     """
+    try:
+        import pytz
+        
+        # Get ET date (not UTC) for consistency with heartbeat
+        et_tz = pytz.timezone("America/New_York")
+        et_now = datetime.now(et_tz)
+        et_date = et_now.date().isoformat()
+    except Exception:
+        # Fallback to UTC if pytz not available
+        et_date = datetime.now(timezone.utc).date().isoformat()
+    
     db_path = get_db_path()
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path))
@@ -382,17 +406,20 @@ def _update_candidate_daily_tracking(count: int) -> None:
             CREATE TABLE IF NOT EXISTS candidate_daily_tracking (
                 date TEXT PRIMARY KEY,
                 candidate_count INTEGER NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
             )
         """)
         
-        today = datetime.now(timezone.utc).date().isoformat()
         created_at = datetime.now(timezone.utc).isoformat()
         
+        # Upsert (insert or replace, preserve original created_at)
         cursor.execute("""
-            INSERT OR REPLACE INTO candidate_daily_tracking (date, candidate_count, created_at)
-            VALUES (?, ?, ?)
-        """, (today, count, created_at))
+            INSERT OR REPLACE INTO candidate_daily_tracking (date, candidate_count, created_at, updated_at)
+            VALUES (?, ?, 
+                COALESCE((SELECT created_at FROM candidate_daily_tracking WHERE date = ?), ?),
+                ?)
+        """, (et_date, count, et_date, created_at, created_at))
         
         conn.commit()
     finally:
@@ -401,6 +428,18 @@ def _update_candidate_daily_tracking(count: int) -> None:
 
 def main() -> None:
     """Main dashboard function."""
+    # Start background heartbeat (once per session)
+    if not st.session_state.heartbeat_started:
+        try:
+            heartbeat = HeartbeatManager.get_instance()
+            heartbeat.start()
+            st.session_state.heartbeat_started = True
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to start heartbeat: {e}")
+            # Don't fail dashboard load if heartbeat fails
+    
     # Header
     st.title("📊 ChakraOps Dashboard")
     st.caption("Real-time market regime and CSP candidate analysis")
@@ -664,6 +703,114 @@ def main() -> None:
 
     st.divider()
 
+    # Heartbeat Health Panel (Phase 1D - Hardened)
+    heartbeat = HeartbeatManager.get_instance()
+    health = heartbeat.get_health()
+    
+    with st.expander("💓 Heartbeat Health", expanded=False):
+        col_h1, col_h2, col_h3, col_h4 = st.columns(4)
+        
+        with col_h1:
+            if health["last_cycle_time"]:
+                last_cycle = datetime.fromisoformat(health["last_cycle_time"])
+                age_seconds = (datetime.now(timezone.utc) - last_cycle).total_seconds()
+                if age_seconds < 120:
+                    st.metric("Status", "🟢 Running", delta=f"{int(age_seconds)}s ago")
+                else:
+                    st.metric("Status", "🟡 Stale", delta=f"{int(age_seconds/60)}m ago")
+            else:
+                st.metric("Status", "⚪ Unknown", delta="No cycles")
+        
+        with col_h2:
+            status = health["status"]
+            status_icon = {
+                "SUCCESS": "✅",
+                "ERROR": "❌",
+                "NO_REGIME": "⚠️",
+                "NO_DATA": "⚠️",
+                "REGIME_STALE": "🟡",
+            }.get(status, "⚪")
+            st.metric("Last Cycle", f"{status_icon} {status}")
+        
+        with col_h3:
+            if health["data_timestamp"]:
+                data_time = datetime.fromisoformat(health["data_timestamp"])
+                data_age_minutes = (datetime.now(timezone.utc) - data_time).total_seconds() / 60.0
+                if data_age_minutes < 5:
+                    st.metric("Data Age", f"{data_age_minutes:.1f}m", delta="Fresh")
+                elif data_age_minutes < 15:
+                    st.metric("Data Age", f"{data_age_minutes:.1f}m", delta="Stale", delta_color="off")
+                else:
+                    st.metric("Data Age", f"{data_age_minutes:.1f}m", delta="Very Stale", delta_color="inverse")
+            else:
+                st.metric("Data Age", "N/A")
+        
+        with col_h4:
+            if health["last_error"]:
+                st.error(f"❌ {health['last_error'][:50]}")
+            else:
+                st.success("✅ No errors")
+        
+        if health["is_running"]:
+            st.caption("🟢 Heartbeat thread is running")
+        else:
+            st.warning("⚠️ Heartbeat thread is not running")
+    
+    # Heartbeat Evaluation Debug Panel
+    eval_details = heartbeat.get_cycle_eval_details()
+    
+    with st.expander("🔍 Heartbeat Evaluation Debug", expanded=False):
+        if health["last_cycle_time"]:
+            last_cycle = datetime.fromisoformat(health["last_cycle_time"])
+            # Convert to ET for display
+            try:
+                import pytz
+                et_tz = pytz.timezone("America/New_York")
+                if last_cycle.tzinfo is None:
+                    last_cycle = pytz.UTC.localize(last_cycle)
+                last_cycle_et = last_cycle.astimezone(et_tz)
+                cycle_time_str = last_cycle_et.strftime("%Y-%m-%d %H:%M:%S %Z")
+            except Exception:
+                cycle_time_str = last_cycle.strftime("%Y-%m-%d %H:%M:%S UTC")
+            
+            col_e1, col_e2, col_e3 = st.columns(3)
+            
+            with col_e1:
+                st.metric("Last Cycle Time (ET)", cycle_time_str)
+                st.metric("Symbols Evaluated", eval_details.get("symbols_evaluated", 0))
+                st.metric("Enabled Universe Size", eval_details.get("enabled_universe_size", 0))
+            
+            with col_e2:
+                st.metric("CSP Candidates Found", eval_details.get("csp_candidates_count", 0))
+                st.metric("Rejected Symbols", eval_details.get("rejected_symbols_count", 0))
+                market_age = eval_details.get("market_data_age_minutes", 0.0)
+                if market_age < 5:
+                    st.metric("Market Data Age", f"{market_age:.1f}m", delta="Fresh")
+                elif market_age < 15:
+                    st.metric("Market Data Age", f"{market_age:.1f}m", delta="Stale", delta_color="off")
+                else:
+                    st.metric("Market Data Age", f"{market_age:.1f}m", delta="Very Stale", delta_color="inverse")
+            
+            with col_e3:
+                rejection_reasons = eval_details.get("rejection_reasons", {})
+                if rejection_reasons:
+                    st.write("**Top Rejection Reasons:**")
+                    # Sort by count, get top 3
+                    sorted_reasons = sorted(
+                        rejection_reasons.items(),
+                        key=lambda x: x[1],
+                        reverse=True
+                    )[:3]
+                    for reason, count in sorted_reasons:
+                        st.write(f"- {reason}: {count}")
+                else:
+                    st.write("**Top Rejection Reasons:**")
+                    st.caption("No rejections recorded")
+        else:
+            st.info("No cycle evaluation data available yet. Heartbeat may not have completed a cycle.")
+    
+    st.divider()
+
     # Daily Trading Plan Card (Phase 1C)
     st.header("📋 Daily Trading Plan")
     
@@ -734,6 +881,19 @@ def main() -> None:
     st.header("📈 Market Regime")
     regime = get_regime_snapshot()
     
+    # Check regime freshness (Phase 1D)
+    regime_stale_warning = None
+    if regime:
+        try:
+            created_at_str = regime.get("created_at")
+            if created_at_str:
+                created_at = datetime.fromisoformat(created_at_str)
+                age_minutes = (datetime.now(timezone.utc) - created_at).total_seconds() / 60.0
+                if age_minutes > REGIME_STALE_THRESHOLD_MINUTES:
+                    regime_stale_warning = f"⚠️ Regime data is {age_minutes:.1f} minutes old (stale threshold: {REGIME_STALE_THRESHOLD_MINUTES} min)"
+        except Exception:
+            pass
+    
     if regime:
         # Large status card
         is_risk_on = regime["regime"] == "RISK_ON"
@@ -765,6 +925,10 @@ def main() -> None:
                 if regime.get("created_at"):
                     update_time = regime["created_at"][:16] if len(regime["created_at"]) > 16 else regime["created_at"]
                     st.metric("Updated", update_time)
+        
+        # Regime freshness warning (Phase 1D)
+        if regime_stale_warning:
+            st.warning(regime_stale_warning)
         
         # Details expander
         with st.expander("📋 View Detailed Metrics", expanded=False):

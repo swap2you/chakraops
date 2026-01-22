@@ -68,6 +68,65 @@ def _load_baseline_universe() -> list[str]:
 TradeAction = str  # "SELL_TO_OPEN", "BUY_TO_CLOSE", "ASSIGN", etc.
 
 
+def _ensure_candidate_daily_tracking_schema(cursor: sqlite3.Cursor) -> None:
+    """Ensure candidate_daily_tracking table has correct schema (idempotent migration).
+    
+    Creates table if missing, adds updated_at column if missing, backfills data.
+    
+    Parameters
+    ----------
+    cursor:
+        SQLite cursor for database operations.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Create table if it doesn't exist (with both columns)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS candidate_daily_tracking (
+            date TEXT PRIMARY KEY,
+            candidate_count INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+    
+    # Check if updated_at column exists
+    cursor.execute("PRAGMA table_info(candidate_daily_tracking)")
+    columns = [row[1] for row in cursor.fetchall()]
+    
+    has_updated_at = "updated_at" in columns
+    has_created_at = "created_at" in columns
+    
+    if not has_updated_at:
+        # Add updated_at column
+        try:
+            cursor.execute("ALTER TABLE candidate_daily_tracking ADD COLUMN updated_at TEXT")
+            logger.info("[MIGRATION] Added updated_at column to candidate_daily_tracking")
+            
+            # Backfill updated_at = created_at where NULL
+            if has_created_at:
+                cursor.execute("""
+                    UPDATE candidate_daily_tracking 
+                    SET updated_at = created_at 
+                    WHERE updated_at IS NULL
+                """)
+                logger.info("[MIGRATION] Backfilled updated_at from created_at")
+        except sqlite3.OperationalError as e:
+            # Column might have been added by another process, or table doesn't exist
+            logger.debug(f"[MIGRATION] Could not add updated_at (may already exist): {e}")
+    else:
+        logger.debug("[MIGRATION] candidate_daily_tracking schema already correct (updated_at exists)")
+    
+    # Ensure created_at exists (should always exist, but defensive)
+    if not has_created_at:
+        try:
+            cursor.execute("ALTER TABLE candidate_daily_tracking ADD COLUMN created_at TEXT NOT NULL DEFAULT ''")
+            logger.info("[MIGRATION] Added created_at column to candidate_daily_tracking")
+        except sqlite3.OperationalError as e:
+            logger.debug(f"[MIGRATION] Could not add created_at: {e}")
+
+
 def init_persistence_db() -> None:
     """Initialize database schema for Phase 1A persistence.
     
@@ -218,6 +277,9 @@ def init_persistence_db() -> None:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_assignment_label ON assignment_profile(assignment_label)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_assignment_override ON assignment_profile(operator_override)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_symbol_cache_symbol ON symbol_cache(symbol)")
+        
+        # Ensure candidate_daily_tracking schema is correct (migration)
+        _ensure_candidate_daily_tracking_schema(cursor)
         
         conn.commit()
     except Exception as e:

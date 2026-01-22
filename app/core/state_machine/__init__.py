@@ -9,6 +9,9 @@ the validation functions in this module.
 
 from __future__ import annotations
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import logging
 from datetime import datetime, timezone
 from enum import Enum

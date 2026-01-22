@@ -2,11 +2,22 @@
 # SPDX-License-Identifier: MIT
 """Unit tests for ThetaData market data provider.
 
-IMPORTANT: These tests use mocked ThetaClient responses.
-DO NOT make real API calls in tests.
+IMPORTANT: These tests are currently DISABLED.
 
-TODO: Re-enable after verifying real ThetaData API responses.
-Current tests are disabled because they make incorrect assumptions about the ThetaData API structure.
+TODO: Re-enable after:
+1. Running smoke_thetadata_v3.py successfully with real ThetaTerminal v3
+2. Verifying actual HTTP v3 API response schemas
+3. Updating mocks to match real response structures
+4. Confirming all endpoint paths and parameter formats
+
+Current status:
+- ThetaData does NOT provide a pip-installable Python SDK
+- We use HTTP v3 endpoints directly via httpx
+- Tests need to be rewritten to mock httpx responses, not ThetaClient
+- Response schemas need to be verified against real API responses
+
+These tests are temporarily disabled due to incorrect API assumptions.
+They will be re-enabled once the HTTP v3 integration is fully verified.
 """
 
 import pytest
@@ -16,9 +27,12 @@ from unittest.mock import MagicMock, patch
 from app.core.market_data.thetadata_provider import ThetaDataProvider
 from app.core.market_data.provider import OptionContract
 
-# TODO: Re-enable after verifying real ThetaData API responses
-# These tests are temporarily disabled due to incorrect API assumptions
-pytestmark = pytest.mark.skip(reason="Disabled until real ThetaData API structure is verified")
+# TODO: Re-enable after verifying real ThetaData HTTP v3 API responses
+# These tests are temporarily disabled because:
+# 1. They mock ThetaClient (which doesn't exist - we use HTTP directly)
+# 2. Response schemas are assumed, not verified
+# 3. Need to be rewritten to mock httpx.Client responses instead
+pytestmark = pytest.mark.skip(reason="Disabled until real ThetaData HTTP v3 API structure is verified")
 
 
 class TestThetaDataProviderInitialization:

@@ -2,28 +2,29 @@
 # SPDX-License-Identifier: MIT
 """ThetaData market data provider implementation.
 
-This module provides a ThetaData implementation of the MarketDataProvider interface.
-It uses the official thetadata Python client library for authentication and data fetching.
+This module provides a ThetaData implementation using HTTP v3 endpoints directly.
+ThetaData does NOT provide a pip-installable Python SDK.
 
-IMPORTANT: Credentials must be provided via environment variables:
-- THETADATA_USERNAME
-- THETADATA_PASSWORD
+IMPORTANT: ThetaData Terminal v3 must be running locally on port 25503.
+We use httpx to make HTTP requests to the REST API.
 
-Do NOT hardcode credentials in this file.
+Reference: https://docs.thetadata.us/
+API Base URL: http://127.0.0.1:25503/v3
 """
 
 from __future__ import annotations
 
 import logging
-import os
-from datetime import date, datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
-import pandas as pd
+import httpx
 
-from app.core.market_data.provider import MarketDataProvider, OptionContract
+from app.core.market_data.provider import MarketDataProvider
 
 logger = logging.getLogger(__name__)
+
+# ThetaData Terminal v3 base URL
+THETADATA_BASE_URL = "http://127.0.0.1:25503/v3"
 
 
 class ProviderDataError(RuntimeError):
@@ -36,311 +37,351 @@ class ProviderDataError(RuntimeError):
         message = f"ProviderDataError: {method}({symbol}) - {reason}"
         super().__init__(message)
 
-# In-memory cache with TTL
-_CACHE_TTL_SECONDS = 60
-_cache: Dict[str, Tuple[any, datetime]] = {}
-
-
-def _get_cache_key(prefix: str, *args) -> str:
-    """Generate cache key from prefix and arguments."""
-    return f"{prefix}:{':'.join(str(arg) for arg in args)}"
-
-
-def _is_cache_valid(cached_time: datetime) -> bool:
-    """Check if cached entry is still valid."""
-    age = datetime.now(timezone.utc) - cached_time
-    return age.total_seconds() < _CACHE_TTL_SECONDS
-
-
-def _get_from_cache(key: str) -> Optional[any]:
-    """Get value from cache if valid."""
-    if key in _cache:
-        value, cached_time = _cache[key]
-        if _is_cache_valid(cached_time):
-            return value
-        # Expired, remove from cache
-        del _cache[key]
-    return None
-
-
-def _set_cache(key: str, value: any) -> None:
-    """Set value in cache with current timestamp."""
-    _cache[key] = (value, datetime.now(timezone.utc))
-
 
 class ThetaDataProvider(MarketDataProvider):
-    """ThetaData market data provider.
+    """ThetaData market data provider using HTTP v3 endpoints.
     
-    This provider uses the official thetadata Python client library to fetch
-    real-time and historical market data. All responses are cached in-memory
-    with a 60-second TTL to avoid overuse of API calls.
+    This provider uses HTTP requests to the local ThetaData Terminal v3 REST API.
+    The terminal must be running locally on port 25503.
+    
+    No Python SDK is used - all communication is via HTTP.
     """
     
     def __init__(
         self,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
+        base_url: Optional[str] = None,
+        timeout: float = 30.0,
     ) -> None:
         """Initialize ThetaData provider.
         
         Parameters
         ----------
-        username:
-            ThetaData username. If not provided, uses THETADATA_USERNAME from environment.
-        password:
-            ThetaData password. If not provided, uses THETADATA_PASSWORD from environment.
+        base_url:
+            ThetaData Terminal base URL (default: http://127.0.0.1:25503/v3).
+        timeout:
+            HTTP request timeout in seconds (default: 30.0).
         
         Raises
         ------
         ValueError
-            If credentials are missing or invalid.
-        ImportError
-            If thetadata package is not installed.
+            If terminal is not accessible.
         """
-        self.username = username or os.getenv("THETADATA_USERNAME")
-        self.password = password or os.getenv("THETADATA_PASSWORD")
+        self.base_url = base_url or THETADATA_BASE_URL
+        self.timeout = timeout
         
-        if not self.username or not self.password:
-            raise ValueError(
-                "ThetaData credentials not provided. "
-                "Set THETADATA_USERNAME and THETADATA_PASSWORD environment variables."
-            )
+        # Initialize HTTP client
+        self.client = httpx.Client(
+            base_url=self.base_url,
+            timeout=self.timeout,
+        )
         
-        # Import thetadata client
+        # Verify terminal is accessible
         try:
-            from thetadata import ThetaClient
-        except ImportError:
-            raise ImportError(
-                "thetadata package is not installed. "
-                "Install it with: pip install thetadata"
-            )
+            response = self.client.get("/stock/list/symbols", params={"format": "json"})
+            response.raise_for_status()
+            logger.info(f"ThetaDataProvider: Successfully connected to {self.base_url}")
+        except httpx.RequestError as e:
+            error_msg = f"Cannot connect to ThetaData Terminal at {self.base_url}. Is the terminal running?"
+            logger.error(f"ThetaDataProvider: {error_msg}: {e}")
+            raise ValueError(error_msg) from e
+        except httpx.HTTPStatusError as e:
+            error_msg = f"ThetaData Terminal returned error {e.response.status_code}"
+            logger.error(f"ThetaDataProvider: {error_msg}")
+            raise ValueError(error_msg) from e
+    
+    def _make_request(
+        self,
+        endpoint: str,
+        params: Optional[Dict[str, any]] = None,
+        format: str = "json",
+    ) -> any:
+        """Make HTTP request to ThetaData API.
         
-        # Initialize client
+        Parameters
+        ----------
+        endpoint:
+            API endpoint path (e.g., "/stock/list/symbols").
+        params:
+            Optional query parameters.
+        format:
+            Response format: "json" or "csv" (default: "json").
+        
+        Returns
+        -------
+        any
+            Parsed response (list for JSON).
+        
+        Raises
+        ------
+        ProviderDataError
+            If HTTP status != 200 or response is empty.
+        RuntimeError
+            If request fails.
+        """
+        if params is None:
+            params = {}
+        params["format"] = format
+        
         try:
-            self.client = ThetaClient(username=self.username, password=self.password)
-            logger.info("ThetaDataProvider: Successfully authenticated")
+            response = self.client.get(endpoint, params=params)
+            
+            # Error handling: If HTTP status != 200 → raise ProviderDataError
+            if response.status_code != 200:
+                error_msg = f"HTTP {response.status_code} from {endpoint}"
+                logger.error(f"ThetaDataProvider: {error_msg} for symbol={params.get('symbol', 'N/A')}")
+                raise ProviderDataError(
+                    params.get("symbol", ""),
+                    endpoint,
+                    f"HTTP {response.status_code}: {response.text[:200]}"
+                )
+            
+            response.raise_for_status()
+            
+            if format == "json":
+                data = response.json()
+                # ThetaData wraps responses in "response" key
+                if isinstance(data, dict) and "response" in data:
+                    data = data["response"]
+                
+                # Error handling: If response is empty → raise ProviderDataError
+                if not data:
+                    error_msg = f"Empty response from {endpoint}"
+                    logger.error(f"ThetaDataProvider: {error_msg} for symbol={params.get('symbol', 'N/A')}")
+                    raise ProviderDataError(
+                        params.get("symbol", ""),
+                        endpoint,
+                        "Empty response"
+                    )
+                
+                return data
+            else:
+                return response.text
+        
+        except ProviderDataError:
+            raise
+        except httpx.RequestError as e:
+            error_msg = f"HTTP request failed: {e}"
+            logger.error(f"ThetaDataProvider: {error_msg} for endpoint={endpoint}, symbol={params.get('symbol', 'N/A')}")
+            raise RuntimeError(error_msg) from e
+        except httpx.HTTPStatusError as e:
+            error_msg = f"HTTP error {e.response.status_code}: {e.response.text[:200]}"
+            logger.error(f"ThetaDataProvider: {error_msg} for endpoint={endpoint}, symbol={params.get('symbol', 'N/A')}")
+            raise ProviderDataError(
+                params.get("symbol", ""),
+                endpoint,
+                error_msg
+            ) from e
         except Exception as e:
-            logger.error(f"ThetaDataProvider: Authentication failed: {e}")
-            raise ValueError(f"ThetaData authentication failed: {e}") from e
+            error_msg = f"Failed to parse response: {e}"
+            logger.error(f"ThetaDataProvider: {error_msg} for endpoint={endpoint}, symbol={params.get('symbol', 'N/A')}")
+            raise RuntimeError(error_msg) from e
+    
+    def get_available_symbols(self) -> List[str]:
+        """Get list of available stock symbols.
+        
+        Calls: GET /v3/stock/list/symbols?format=json
+        
+        Returns
+        -------
+        list[str]
+            List of stock symbols (e.g., ["AAPL", "MSFT", "SPY"]).
+        
+        Raises
+        ------
+        ProviderDataError
+            If request fails or response is empty.
+        RuntimeError
+            If HTTP request fails.
+        """
+        try:
+            data = self._make_request("/stock/list/symbols", format="json")
+            
+            # Extract symbols from response
+            symbols = []
+            for item in data:
+                if isinstance(item, dict) and "symbol" in item:
+                    symbols.append(item["symbol"])
+                elif isinstance(item, str):
+                    symbols.append(item)
+            
+            if not symbols:
+                raise ProviderDataError("", "get_available_symbols", "No symbols in response")
+            
+            logger.info(f"ThetaDataProvider: Fetched {len(symbols)} available symbols")
+            return symbols
+        
+        except ProviderDataError:
+            raise
+        except Exception as e:
+            error_msg = f"get_available_symbols() failed: {e}"
+            logger.error(f"ThetaDataProvider: {error_msg}")
+            raise RuntimeError(error_msg) from e
+    
+    def get_available_dates(self, symbol: str, request_type: str = "trade") -> List[str]:
+        """Get list of available dates for a symbol.
+        
+        Calls: GET /v3/stock/list/dates/{request_type}?symbol=XYZ&format=json
+        
+        Parameters
+        ----------
+        symbol:
+            Stock symbol (e.g., "AAPL").
+        request_type:
+            Request type: "trade" or "quote" (default: "trade").
+        
+        Returns
+        -------
+        list[str]
+            List of available dates in YYYY-MM-DD format.
+        
+        Raises
+        ------
+        ProviderDataError
+            If request fails or response is empty.
+        RuntimeError
+            If HTTP request fails.
+        """
+        if request_type not in ["trade", "quote"]:
+            raise ValueError(f"request_type must be 'trade' or 'quote', got: {request_type}")
+        
+        try:
+            endpoint = f"/stock/list/dates/{request_type}"
+            data = self._make_request(
+                endpoint,
+                params={"symbol": symbol},
+                format="json"
+            )
+            
+            # Extract dates from response
+            dates = []
+            for item in data:
+                if isinstance(item, dict) and "date" in item:
+                    dates.append(item["date"])
+                elif isinstance(item, str):
+                    dates.append(item)
+            
+            if not dates:
+                raise ProviderDataError(symbol, "get_available_dates", "No dates in response")
+            
+            logger.info(f"ThetaDataProvider: Fetched {len(dates)} available dates for {symbol}")
+            return dates
+        
+        except ProviderDataError:
+            raise
+        except Exception as e:
+            error_msg = f"get_available_dates({symbol}, {request_type}) failed: {e}"
+            logger.error(f"ThetaDataProvider: {error_msg}")
+            raise RuntimeError(error_msg) from e
+    
+    def get_stock_last_price(self, symbol: str) -> Tuple[float, str]:
+        """Get last price and timestamp for a stock.
+        
+        Uses: GET /v3/stock/snapshot/quote?symbol=XYZ&format=json
+        
+        Parameters
+        ----------
+        symbol:
+            Stock symbol (e.g., "AAPL").
+        
+        Returns
+        -------
+        tuple[float, str]
+            (price: float, timestamp: str)
+            Price is the last quote price (mid of bid/ask if available).
+            Timestamp is in ISO format.
+        
+        Raises
+        ------
+        ProviderDataError
+            If request fails or response is empty.
+        RuntimeError
+            If HTTP request fails.
+        """
+        try:
+            data = self._make_request(
+                "/stock/snapshot/quote",
+                params={"symbol": symbol},
+                format="json"
+            )
+            
+            # Get first result (should be only one for single symbol)
+            result = data[0] if isinstance(data, list) and len(data) > 0 else data
+            
+            if not isinstance(result, dict):
+                raise ProviderDataError(symbol, "get_stock_last_price", f"Invalid response format: {type(result)}")
+            
+            # Extract price - prefer mid price, fallback to bid/ask/close
+            price = None
+            if "bid" in result and "ask" in result:
+                bid = float(result.get("bid", 0) or 0)
+                ask = float(result.get("ask", 0) or 0)
+                if bid > 0 and ask > 0:
+                    price = (bid + ask) / 2.0
+                elif bid > 0:
+                    price = bid
+                elif ask > 0:
+                    price = ask
+            
+            if price is None or price <= 0:
+                # Fallback to other price fields
+                for field in ["close", "last", "price"]:
+                    if field in result and result[field]:
+                        try:
+                            price = float(result[field])
+                            if price > 0:
+                                break
+                        except (ValueError, TypeError):
+                            continue
+            
+            if price is None or price <= 0:
+                raise ProviderDataError(
+                    symbol,
+                    "get_stock_last_price",
+                    f"No valid price found in response. Fields: {list(result.keys())}"
+                )
+            
+            # Extract timestamp
+            timestamp = result.get("timestamp", "")
+            if not timestamp:
+                # Try other timestamp fields
+                for field in ["last_trade", "created", "time"]:
+                    if field in result and result[field]:
+                        timestamp = str(result[field])
+                        break
+            
+            if not timestamp:
+                from datetime import datetime, timezone
+                timestamp = datetime.now(timezone.utc).isoformat()
+            
+            logger.info(f"ThetaDataProvider: Fetched last price for {symbol}: ${price:.2f} at {timestamp}")
+            return (float(price), timestamp)
+        
+        except ProviderDataError:
+            raise
+        except Exception as e:
+            error_msg = f"get_stock_last_price({symbol}) failed: {e}"
+            logger.error(f"ThetaDataProvider: {error_msg}")
+            raise RuntimeError(error_msg) from e
+    
+    # Required abstract methods from MarketDataProvider
+    # These are stubs for now - will be implemented later
     
     def get_stock_price(self, symbol: str) -> float:
-        """Get current stock price.
-        
-        Parameters
-        ----------
-        symbol:
-            Stock symbol (e.g., "AAPL").
-        
-        Returns
-        -------
-        float
-            Current stock price.
-        
-        Raises
-        ------
-        ValueError
-            If symbol is invalid or data unavailable.
-        """
-        cache_key = _get_cache_key("price", symbol)
-        cached = _get_from_cache(cache_key)
-        if cached is not None:
-            logger.debug(f"ThetaDataProvider: Using cached price for {symbol}")
-            return cached
-        
-        try:
-            # Fetch last trade price
-            # NOTE: Actual ThetaData API method names may differ - adjust after smoke test
-            price = self.client.get_last_price(symbol)
-            
-            if price is None:
-                error_msg = f"get_stock_price({symbol}) returned None"
-                logger.error(f"ThetaDataProvider: {error_msg}")
-                raise ProviderDataError(symbol, "get_stock_price", "Price is None")
-            
-            try:
-                price_float = float(price)
-            except (ValueError, TypeError) as e:
-                error_msg = f"get_stock_price({symbol}) returned non-numeric value: {price}"
-                logger.error(f"ThetaDataProvider: {error_msg}")
-                raise ProviderDataError(symbol, "get_stock_price", f"Invalid price type: {type(price)}") from e
-            
-            if price_float <= 0:
-                error_msg = f"get_stock_price({symbol}) returned invalid price: {price_float}"
-                logger.error(f"ThetaDataProvider: {error_msg}")
-                raise ProviderDataError(symbol, "get_stock_price", f"Price <= 0: {price_float}")
-            
-            _set_cache(cache_key, price_float)
-            logger.info(f"ThetaDataProvider: Fetched price for {symbol}: ${price_float:.2f}")
-            return price_float
-        
-        except ProviderDataError:
-            raise
-        except Exception as e:
-            error_msg = f"get_stock_price({symbol}) failed: {e}"
-            logger.error(f"ThetaDataProvider: {error_msg}")
-            raise RuntimeError(error_msg) from e
+        """Get current stock price (stub - uses get_stock_last_price)."""
+        price, _ = self.get_stock_last_price(symbol)
+        return price
     
     def get_ema(self, symbol: str, period: int) -> float:
-        """Get current EMA value.
-        
-        Parameters
-        ----------
-        symbol:
-            Stock symbol (e.g., "AAPL").
-        period:
-            EMA period (e.g., 50, 200).
-        
-        Returns
-        -------
-        float
-            Current EMA value.
-        
-        Raises
-        ------
-        ValueError
-            If symbol is invalid or insufficient data.
-        """
-        cache_key = _get_cache_key("ema", symbol, period)
-        cached = _get_from_cache(cache_key)
-        if cached is not None:
-            logger.debug(f"ThetaDataProvider: Using cached EMA{period} for {symbol}")
-            return cached
-        
-        try:
-            # Fetch historical data to calculate EMA
-            # NOTE: Actual ThetaData API method names may differ - adjust after smoke test
-            bars = self.client.get_historical_bars(
-                symbol=symbol,
-                start_date=date.today() - timedelta(days=period * 2),
-                end_date=date.today(),
-                interval="1D",
-            )
-            
-            if bars is None:
-                error_msg = f"get_ema({symbol}, {period}) returned None for bars"
-                logger.error(f"ThetaDataProvider: {error_msg}")
-                raise ProviderDataError(symbol, "get_ema", "Historical bars is None")
-            
-            if not bars:
-                error_msg = f"get_ema({symbol}, {period}) returned empty bars list"
-                logger.error(f"ThetaDataProvider: {error_msg}")
-                raise ProviderDataError(symbol, "get_ema", "Empty historical bars")
-            
-            if len(bars) < period:
-                error_msg = f"get_ema({symbol}, {period}) insufficient data: need {period}, got {len(bars)}"
-                logger.error(f"ThetaDataProvider: {error_msg}")
-                raise ProviderDataError(symbol, "get_ema", f"Insufficient bars: {len(bars)} < {period}")
-            
-            # Calculate EMA from close prices
-            df = pd.DataFrame(bars)
-            df = df.sort_values("date" if "date" in df.columns else df.columns[0])
-            closes = df["close"].values if "close" in df.columns else df.iloc[:, -1].values
-            
-            # Calculate EMA
-            ema = closes[-1]  # Start with first close
-            multiplier = 2.0 / (period + 1)
-            for close in closes[1:]:
-                ema = (close - ema) * multiplier + ema
-            
-            _set_cache(cache_key, ema)
-            logger.info(f"ThetaDataProvider: Calculated EMA{period} for {symbol}: ${ema:.2f}")
-            return float(ema)
-        
-        except ProviderDataError:
-            raise
-        except Exception as e:
-            error_msg = f"get_ema({symbol}, {period}) failed: {e}"
-            logger.error(f"ThetaDataProvider: {error_msg}")
-            raise RuntimeError(error_msg) from e
+        """Get current EMA value (stub - not implemented yet)."""
+        raise NotImplementedError("get_ema() not yet implemented")
     
     def get_options_chain(
         self,
         symbol: str,
         expiry: Optional[str] = None,
-    ) -> List[OptionContract]:
-        """Get options chain for a symbol.
-        
-        Parameters
-        ----------
-        symbol:
-            Stock symbol (e.g., "AAPL").
-        expiry:
-            Optional expiry date (YYYY-MM-DD). If None, returns all expiries.
-        
-        Returns
-        -------
-        list[OptionContract]
-            List of option contracts.
-        
-        Raises
-        ------
-        ValueError
-            If symbol is invalid or data unavailable.
-        """
-        cache_key = _get_cache_key("chain", symbol, expiry or "all")
-        cached = _get_from_cache(cache_key)
-        if cached is not None:
-            logger.debug(f"ThetaDataProvider: Using cached chain for {symbol}")
-            return cached
-        
-        try:
-            # Fetch options chain from ThetaData
-            # NOTE: Actual ThetaData API method names may differ - adjust after smoke test
-            chain_data = self.client.get_options_chain(
-                symbol=symbol,
-                expiry=expiry,
-            )
-            
-            if chain_data is None:
-                error_msg = f"get_options_chain({symbol}, {expiry}) returned None"
-                logger.error(f"ThetaDataProvider: {error_msg}")
-                raise ProviderDataError(symbol, "get_options_chain", "Chain data is None")
-            
-            if not chain_data:
-                error_msg = f"get_options_chain({symbol}, {expiry}) returned empty chain"
-                logger.warning(f"ThetaDataProvider: {error_msg}")
-                # Empty chain is acceptable (no options available), return empty list
-                return []
-            
-            # Convert to OptionContract objects
-            contracts: List[OptionContract] = []
-            for contract_data in chain_data:
-                try:
-                    bid = float(contract_data.get("bid", 0) or 0)
-                    ask = float(contract_data.get("ask", 0) or 0)
-                    mid = (bid + ask) / 2.0 if (bid > 0 and ask > 0) else 0.0
-                    
-                    contract = OptionContract(
-                        symbol=symbol,
-                        strike=float(contract_data.get("strike", 0)),
-                        expiry=contract_data.get("expiry", ""),
-                        option_type=contract_data.get("type", "PUT").upper(),
-                        bid=bid,
-                        ask=ask,
-                        mid=mid,
-                        delta=float(contract_data.get("delta", 0) or 0),
-                        gamma=float(contract_data.get("gamma", 0) or 0) if contract_data.get("gamma") else None,
-                        theta=float(contract_data.get("theta", 0) or 0) if contract_data.get("theta") else None,
-                        vega=float(contract_data.get("vega", 0) or 0) if contract_data.get("vega") else None,
-                        iv=float(contract_data.get("iv", 0) or 0) if contract_data.get("iv") else None,
-                        open_interest=int(contract_data.get("open_interest", 0) or 0) if contract_data.get("open_interest") else None,
-                        volume=int(contract_data.get("volume", 0) or 0) if contract_data.get("volume") else None,
-                    )
-                    contracts.append(contract)
-                except Exception as e:
-                    logger.warning(f"ThetaDataProvider: Failed to parse contract: {e}")
-                    continue
-            
-            _set_cache(cache_key, contracts)
-            logger.info(f"ThetaDataProvider: Fetched {len(contracts)} contracts for {symbol}")
-            return contracts
-        
-        except ProviderDataError:
-            raise
-        except Exception as e:
-            error_msg = f"get_options_chain({symbol}, {expiry}) failed: {e}"
-            logger.error(f"ThetaDataProvider: {error_msg}")
-            raise RuntimeError(error_msg) from e
+    ) -> List:
+        """Get options chain (stub - not implemented yet)."""
+        raise NotImplementedError("get_options_chain() not yet implemented")
     
     def get_option_mid_price(
         self,
@@ -349,207 +390,31 @@ class ThetaDataProvider(MarketDataProvider):
         expiry: str,
         option_type: str,
     ) -> float:
-        """Get mid price for a specific option contract.
-        
-        Parameters
-        ----------
-        symbol:
-            Stock symbol (e.g., "AAPL").
-        strike:
-            Strike price.
-        expiry:
-            Expiry date (YYYY-MM-DD).
-        option_type:
-            "CALL" or "PUT".
-        
-        Returns
-        -------
-        float
-            Mid price ((bid + ask) / 2).
-        
-        Raises
-        ------
-        ValueError
-            If contract not found or data unavailable.
-        """
-        cache_key = _get_cache_key("mid", symbol, strike, expiry, option_type)
-        cached = _get_from_cache(cache_key)
-        if cached is not None:
-            logger.debug(f"ThetaDataProvider: Using cached mid price for {symbol} {strike} {expiry} {option_type}")
-            return cached
-        
-        try:
-            # Fetch options chain and find matching contract
-            chain = self.get_options_chain(symbol, expiry=expiry)
-            
-            option_type_upper = option_type.upper()
-            matching_contracts = [
-                c for c in chain
-                if c.strike == strike and c.option_type == option_type_upper
-            ]
-            
-            if not matching_contracts:
-                raise ValueError(
-                    f"Option contract not found: {symbol} {strike} {expiry} {option_type}"
-                )
-            
-            contract = matching_contracts[0]
-            mid_price = contract.mid
-            
-            if mid_price <= 0:
-                raise ValueError(
-                    f"Invalid mid price for {symbol} {strike} {expiry} {option_type}: {mid_price}"
-                )
-            
-            _set_cache(cache_key, mid_price)
-            logger.info(
-                f"ThetaDataProvider: Fetched mid price for {symbol} {strike} {expiry} {option_type}: ${mid_price:.2f}"
-            )
-            return mid_price
-        
-        except Exception as e:
-            logger.error(
-                f"ThetaDataProvider: Failed to fetch mid price for {symbol} {strike} {expiry} {option_type}: {e}"
-            )
-            raise ValueError(
-                f"Failed to fetch mid price for {symbol} {strike} {expiry} {option_type}: {e}"
-            ) from e
+        """Get option mid price (stub - not implemented yet)."""
+        raise NotImplementedError("get_option_mid_price() not yet implemented")
     
     def get_dte(self, expiry: str) -> int:
-        """Calculate days to expiration.
-        
-        Parameters
-        ----------
-        expiry:
-            Expiry date (YYYY-MM-DD).
-        
-        Returns
-        -------
-        int
-            Days to expiration (0 if expired).
-        """
+        """Calculate days to expiration (stub - basic implementation)."""
+        from datetime import date, datetime
         try:
             expiry_date = datetime.strptime(expiry, "%Y-%m-%d").date()
             today = date.today()
             dte = (expiry_date - today).days
             return max(0, dte)
         except ValueError as e:
-            logger.error(f"ThetaDataProvider: Invalid expiry format '{expiry}': {e}")
             raise ValueError(f"Invalid expiry format '{expiry}'. Expected YYYY-MM-DD.") from e
     
-    def get_daily(self, symbol: str, lookback: int = 400) -> pd.DataFrame:
-        """Get daily OHLCV bars for a symbol.
-        
-        This method provides backward compatibility with the PriceProvider interface.
-        
-        Parameters
-        ----------
-        symbol:
-            Stock symbol (e.g., "AAPL").
-        lookback:
-            Maximum number of most-recent daily bars to return.
-        
-        Returns
-        -------
-        pandas.DataFrame
-            Columns: date (datetime), open, high, low, close, volume.
-            Rows sorted ascending by date (newest last).
-        
-        Raises
-        ------
-        ValueError
-            If symbol is invalid or data unavailable.
-        """
-        cache_key = _get_cache_key("daily", symbol, lookback)
-        cached = _get_from_cache(cache_key)
-        if cached is not None:
-            logger.debug(f"ThetaDataProvider: Using cached daily bars for {symbol}")
-            return cached
-        
-        try:
-            # Fetch historical daily bars
-            # NOTE: Actual ThetaData API method names may differ - adjust after smoke test
-            start_date = date.today() - timedelta(days=lookback * 2)
-            bars = self.client.get_historical_bars(
-                symbol=symbol,
-                start_date=start_date,
-                end_date=date.today(),
-                interval="1D",
-            )
-            
-            if bars is None:
-                error_msg = f"get_daily({symbol}, {lookback}) returned None for bars"
-                logger.error(f"ThetaDataProvider: {error_msg}")
-                raise ProviderDataError(symbol, "get_daily", "Historical bars is None")
-            
-            if not bars:
-                error_msg = f"get_daily({symbol}, {lookback}) returned empty bars list"
-                logger.error(f"ThetaDataProvider: {error_msg}")
-                raise ProviderDataError(symbol, "get_daily", "Empty historical bars")
-            
-            # Convert to DataFrame
-            df = pd.DataFrame(bars)
-            
-            # Normalize column names
-            column_mapping = {
-                "date": "date",
-                "open": "open",
-                "high": "high",
-                "low": "low",
-                "close": "close",
-                "volume": "volume",
-            }
-            
-            # Map columns (handle different possible column names)
-            for old_col, new_col in column_mapping.items():
-                if old_col not in df.columns:
-                    # Try alternative names
-                    alternatives = {
-                        "date": ["timestamp", "time", "datetime"],
-                        "open": ["o"],
-                        "high": ["h"],
-                        "low": ["l"],
-                        "close": ["c"],
-                        "volume": ["v", "vol"],
-                    }
-                    for alt in alternatives.get(old_col, []):
-                        if alt in df.columns:
-                            df = df.rename(columns={alt: new_col})
-                            break
-            
-            # Ensure required columns exist
-            required_cols = ["date", "open", "high", "low", "close", "volume"]
-            missing = [col for col in required_cols if col not in df.columns]
-            if missing:
-                raise ValueError(
-                    f"ThetaData response missing required columns: {missing}. "
-                    f"Available columns: {list(df.columns)}"
-                )
-            
-            # Convert date column to datetime
-            if df["date"].dtype != "datetime64[ns]":
-                df["date"] = pd.to_datetime(df["date"])
-            
-            # Sort by date ascending (newest last)
-            df = df.sort_values("date", ascending=True).reset_index(drop=True)
-            
-            # Trim to requested lookback
-            if len(df) > lookback:
-                df = df.tail(lookback).reset_index(drop=True)
-            
-            # Select only required columns
-            df = df[required_cols].copy()
-            
-            _set_cache(cache_key, df)
-            logger.info(f"ThetaDataProvider: Fetched {len(df)} daily bars for {symbol}")
-            return df
-        
-        except ProviderDataError:
-            raise
-        except Exception as e:
-            error_msg = f"get_daily({symbol}, {lookback}) failed: {e}"
-            logger.error(f"ThetaDataProvider: {error_msg}")
-            raise RuntimeError(error_msg) from e
+    def get_daily(self, symbol: str, lookback: int = 400):
+        """Get daily OHLCV bars (stub - not implemented yet)."""
+        raise NotImplementedError("get_daily() not yet implemented")
+    
+    def __del__(self):
+        """Close HTTP client on cleanup."""
+        if hasattr(self, "client"):
+            try:
+                self.client.close()
+            except Exception:
+                pass
 
 
 __all__ = ["ThetaDataProvider", "ProviderDataError"]

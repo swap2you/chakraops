@@ -6,18 +6,22 @@ IMPORTANT: These tests are currently DISABLED.
 
 TODO: Re-enable after:
 1. Running smoke_thetadata_v3.py successfully with real ThetaTerminal v3
-2. Verifying actual HTTP v3 API response schemas
+2. Verifying actual HTTP v3 API response schemas for:
+   - /stock/trade endpoint (price field names)
+   - /stock/daily endpoint (close field names)
+   - Response structure and field mappings
 3. Updating mocks to match real response structures
 4. Confirming all endpoint paths and parameter formats
 
 Current status:
 - ThetaData does NOT provide a pip-installable Python SDK
 - We use HTTP v3 endpoints directly via httpx
-- Tests need to be rewritten to mock httpx responses, not ThetaClient
+- get_underlying_price() uses /stock/trade and /stock/daily (no snapshot quotes)
+- Tests need to be rewritten to mock httpx.Client responses
 - Response schemas need to be verified against real API responses
 
 These tests are temporarily disabled due to incorrect API assumptions.
-They will be re-enabled once the HTTP v3 integration is fully verified.
+They will be re-enabled once the HTTP v3 integration is fully verified and schemas are finalized.
 """
 
 import pytest

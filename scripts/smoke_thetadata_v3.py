@@ -4,7 +4,7 @@
 This script tests the basic ThetaData v3 HTTP API integration:
 1. Fetch available symbols
 2. Fetch available trade dates for AAPL
-3. Fetch last price for AAPL
+3. Fetch underlying price for AAPL (trade or daily fallback)
 
 IMPORTANT: This script requires ThetaData Terminal v3 to be running locally
 on port 25503 (http://127.0.0.1:25503).
@@ -90,24 +90,108 @@ def main() -> int:
         return 1
     
     try:
-        # Test 3: Get last price
-        print(f"Step 4: Fetching last price for {test_symbol}...")
-        price, timestamp = provider.get_stock_last_price(test_symbol)
-        print(f"  [OK] Last price: ${price:.2f}")
-        print(f"  [OK] Timestamp: {timestamp}")
+        # Test 3: Get underlying price (will try trade, then daily fallback)
+        print(f"Step 4: Fetching underlying price for {test_symbol}...")
+        print("  Attempting trade endpoint first...")
+        
+        # We'll manually test both endpoints to show which one was used
+        price_source = None
+        price = None
+        
+        # Try snapshot trade endpoint
+        try:
+            data = provider._make_request(
+                "/stock/snapshot/trade",
+                params={"symbol": test_symbol},
+                format="json"
+            )
+            
+            if isinstance(data, list) and len(data) > 0:
+                result = data[0]
+            elif isinstance(data, dict):
+                result = data
+            else:
+                result = None
+            
+            if result:
+                # Look for price field
+                for field in ["price", "last", "trade_price", "close"]:
+                    if field in result and result[field] is not None:
+                        try:
+                            price = float(result[field])
+                            if price > 0:
+                                price_source = "trade"
+                                print(f"  [OK] Trade endpoint returned price: ${price:.2f}")
+                                print(f"  Source: /stock/trade (latest trade)")
+                                break
+                        except (ValueError, TypeError):
+                            continue
+        except Exception as e:
+            print(f"  [INFO] Trade endpoint failed: {e}")
+            print("  Falling back to daily endpoint...")
+        
+        # Try EOD endpoint if trade didn't work
+        if price_source is None:
+            try:
+                from datetime import date
+                today = date.today()
+                today_str = today.strftime("%Y%m%d")
+                
+                data = provider._make_request(
+                    "/stock/history/eod",
+                    params={
+                        "symbol": test_symbol,
+                        "start_date": today_str,
+                        "end_date": today_str
+                    },
+                    format="json"
+                )
+                
+                if isinstance(data, list) and len(data) > 0:
+                    result = data[0]
+                elif isinstance(data, dict):
+                    result = data
+                else:
+                    result = None
+                
+                if result:
+                    # Look for close price
+                    for field in ["close", "price", "last"]:
+                        if field in result and result[field] is not None:
+                            try:
+                                price = float(result[field])
+                                if price > 0:
+                                    price_source = "daily"
+                                    print(f"  [OK] Daily endpoint returned price: ${price:.2f}")
+                                    print(f"  Source: /stock/history/eod (latest close)")
+                                    break
+                            except (ValueError, TypeError):
+                                continue
+            except Exception as e:
+                print(f"  [FAIL] EOD endpoint also failed: {e}", file=sys.stderr)
+        
+        # Now test the actual get_underlying_price method
+        if price_source:
+            print()
+            print(f"  Testing get_underlying_price() method...")
+            method_price = provider.get_underlying_price(test_symbol)
+            print(f"  [OK] get_underlying_price() returned: ${method_price:.2f}")
+            print(f"  [OK] Price source: {price_source}")
+        else:
+            print()
+            print(f"  Testing get_underlying_price() method...")
+            try:
+                method_price = provider.get_underlying_price(test_symbol)
+                print(f"  [OK] get_underlying_price() returned: ${method_price:.2f}")
+            except ProviderDataError as e:
+                print(f"  [FAIL] ProviderDataError: {e}", file=sys.stderr)
+                return 1
         print()
     except ProviderDataError as e:
-        # Check if it's a subscription issue
-        if "403" in str(e) or "subscription" in str(e).lower():
-            print(f"  [SKIP] Price endpoint requires subscription: {e}")
-            print("  Note: /stock/snapshot/quote requires 'value' subscription or higher")
-            print("  This is expected with a FREE subscription")
-            print()
-        else:
-            print(f"  [FAIL] ProviderDataError: {e}", file=sys.stderr)
-            return 1
+        print(f"  [FAIL] ProviderDataError: {e}", file=sys.stderr)
+        return 1
     except Exception as e:
-        print(f"  [FAIL] Failed to fetch last price: {e}", file=sys.stderr)
+        print(f"  [FAIL] Failed to fetch underlying price: {e}", file=sys.stderr)
         import traceback
         traceback.print_exc()
         return 1

@@ -273,10 +273,12 @@ class ThetaDataProvider(MarketDataProvider):
             logger.error(f"ThetaDataProvider: {error_msg}")
             raise RuntimeError(error_msg) from e
     
-    def get_stock_last_price(self, symbol: str) -> Tuple[float, str]:
-        """Get last price and timestamp for a stock.
+    def get_underlying_price(self, symbol: str) -> float:
+        """Get underlying stock price using trade or daily endpoints.
         
-        Uses: GET /v3/stock/snapshot/quote?symbol=XYZ&format=json
+        This is the canonical method for getting stock prices. It tries:
+        1. GET /v3/stock/snapshot/trade?symbol=XYZ&format=json (latest trade price)
+        2. Fallback: GET /v3/stock/history/eod?symbol=XYZ&start_date=YYYYMMDD&end_date=YYYYMMDD&format=json (latest close)
         
         Parameters
         ----------
@@ -285,91 +287,119 @@ class ThetaDataProvider(MarketDataProvider):
         
         Returns
         -------
-        tuple[float, str]
-            (price: float, timestamp: str)
-            Price is the last quote price (mid of bid/ask if available).
-            Timestamp is in ISO format.
+        float
+            Stock price from trade endpoint or daily close fallback.
         
         Raises
         ------
         ProviderDataError
-            If request fails or response is empty.
+            If both endpoints fail or return empty data.
         RuntimeError
             If HTTP request fails.
         """
+        # Try snapshot trade endpoint first
         try:
             data = self._make_request(
-                "/stock/snapshot/quote",
+                "/stock/snapshot/trade",
                 params={"symbol": symbol},
                 format="json"
             )
             
-            # Get first result (should be only one for single symbol)
-            result = data[0] if isinstance(data, list) and len(data) > 0 else data
+            # Extract price from trade data
+            if isinstance(data, list) and len(data) > 0:
+                result = data[0]
+            elif isinstance(data, dict):
+                result = data
+            else:
+                raise ProviderDataError(symbol, "get_underlying_price", "Invalid trade response format")
             
-            if not isinstance(result, dict):
-                raise ProviderDataError(symbol, "get_stock_last_price", f"Invalid response format: {type(result)}")
-            
-            # Extract price - prefer mid price, fallback to bid/ask/close
+            # Look for price field (could be "price", "last", "trade_price", etc.)
             price = None
-            if "bid" in result and "ask" in result:
-                bid = float(result.get("bid", 0) or 0)
-                ask = float(result.get("ask", 0) or 0)
-                if bid > 0 and ask > 0:
-                    price = (bid + ask) / 2.0
-                elif bid > 0:
-                    price = bid
-                elif ask > 0:
-                    price = ask
+            for field in ["price", "last", "trade_price", "close"]:
+                if field in result and result[field] is not None:
+                    try:
+                        price = float(result[field])
+                        if price > 0:
+                            logger.info(f"ThetaDataProvider: Fetched {symbol} price from trade endpoint: ${price:.2f}")
+                            return price
+                    except (ValueError, TypeError):
+                        continue
             
-            if price is None or price <= 0:
-                # Fallback to other price fields
-                for field in ["close", "last", "price"]:
-                    if field in result and result[field]:
-                        try:
-                            price = float(result[field])
-                            if price > 0:
-                                break
-                        except (ValueError, TypeError):
-                            continue
+            # If no valid price found in trade, try daily fallback
+            logger.debug(f"ThetaDataProvider: No valid price in trade response for {symbol}, trying daily fallback")
+        
+        except (ProviderDataError, RuntimeError) as e:
+            # Trade endpoint failed, try daily fallback
+            logger.debug(f"ThetaDataProvider: Trade endpoint failed for {symbol}: {e}, trying daily fallback")
+        
+        # Fallback to history EOD endpoint (use today's date)
+        try:
+            from datetime import date
+            today = date.today()
+            today_str = today.strftime("%Y%m%d")
             
-            if price is None or price <= 0:
-                raise ProviderDataError(
-                    symbol,
-                    "get_stock_last_price",
-                    f"No valid price found in response. Fields: {list(result.keys())}"
-                )
+            data = self._make_request(
+                "/stock/history/eod",
+                params={
+                    "symbol": symbol,
+                    "start_date": today_str,
+                    "end_date": today_str
+                },
+                format="json"
+            )
             
-            # Extract timestamp
-            timestamp = result.get("timestamp", "")
-            if not timestamp:
-                # Try other timestamp fields
-                for field in ["last_trade", "created", "time"]:
-                    if field in result and result[field]:
-                        timestamp = str(result[field])
-                        break
+            # Extract close price from daily data
+            if isinstance(data, list) and len(data) > 0:
+                result = data[0]
+            elif isinstance(data, dict):
+                result = data
+            else:
+                raise ProviderDataError(symbol, "get_underlying_price", "Invalid daily response format")
             
-            if not timestamp:
-                from datetime import datetime, timezone
-                timestamp = datetime.now(timezone.utc).isoformat()
+            # Look for close price
+            price = None
+            for field in ["close", "price", "last"]:
+                if field in result and result[field] is not None:
+                    try:
+                        price = float(result[field])
+                        if price > 0:
+                            logger.info(f"ThetaDataProvider: Fetched {symbol} price from EOD endpoint (fallback): ${price:.2f}")
+                            return price
+                    except (ValueError, TypeError):
+                        continue
             
-            logger.info(f"ThetaDataProvider: Fetched last price for {symbol}: ${price:.2f} at {timestamp}")
-            return (float(price), timestamp)
+            raise ProviderDataError(
+                symbol,
+                "get_underlying_price",
+                f"No valid price found in daily response. Fields: {list(result.keys())}"
+            )
         
         except ProviderDataError:
             raise
         except Exception as e:
-            error_msg = f"get_stock_last_price({symbol}) failed: {e}"
+            error_msg = f"get_underlying_price({symbol}) failed: Both trade and daily endpoints failed. Last error: {e}"
             logger.error(f"ThetaDataProvider: {error_msg}")
-            raise RuntimeError(error_msg) from e
+            raise ProviderDataError(symbol, "get_underlying_price", f"Both endpoints failed: {e}") from e
     
     # Required abstract methods from MarketDataProvider
-    # These are stubs for now - will be implemented later
+    # All use get_underlying_price() as the canonical source
     
     def get_stock_price(self, symbol: str) -> float:
-        """Get current stock price (stub - uses get_stock_last_price)."""
-        price, _ = self.get_stock_last_price(symbol)
-        return price
+        """Get current stock price.
+        
+        Uses get_underlying_price() as the canonical source.
+        
+        Parameters
+        ----------
+        symbol:
+            Stock symbol (e.g., "AAPL").
+        
+        Returns
+        -------
+        float
+            Current stock price.
+        """
+        return self.get_underlying_price(symbol)
     
     def get_ema(self, symbol: str, period: int) -> float:
         """Get current EMA value (stub - not implemented yet)."""

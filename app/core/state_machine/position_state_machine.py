@@ -127,15 +127,8 @@ def transition_position(
         error = InvalidTransitionError(current_state, new_state, position.id)
         logger.error(f"Invalid transition: {error}")
         
-        # Log alert (if database is available)
-        try:
-            from app.db.database import log_alert
-            log_alert(
-                f"Invalid state transition for {position.symbol}: {current_state.value} -> {new_state.value}",
-                level="WATCH"
-            )
-        except Exception:
-            pass  # Don't fail if logging fails
+        # State machine errors are internal - log only, don't create alerts (Phase 1B)
+        # These should not appear in operator alerts UI
         
         raise error
     

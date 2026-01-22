@@ -153,8 +153,8 @@ def validate_transition(
         
         # Log to alert pipeline (if available)
         try:
-            from app.db.database import log_alert
-            log_alert(error_msg, level="ERROR")
+            # State machine errors are internal - log only, don't create alerts (Phase 1B)
+            logger.error(error_msg)
         except Exception:
             pass  # Don't fail if logging fails
         

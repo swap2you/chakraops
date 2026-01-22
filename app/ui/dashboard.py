@@ -47,6 +47,9 @@ from app.core.persistence import (
     toggle_universe_symbol,
     delete_universe_symbol,
     reset_local_trading_state,
+    get_assignment_profile,
+    set_assignment_override,
+    is_assignment_blocked,
 )
 
 # Set page config
@@ -68,6 +71,16 @@ if "show_reset_confirm" not in st.session_state:
     st.session_state.show_reset_confirm = False
 if "selected_brokerage" not in st.session_state:
     st.session_state.selected_brokerage = "Robinhood"
+
+# Defensive check: ensure all required tables exist on startup (Phase 1B fix)
+try:
+    from app.core.persistence import init_persistence_db
+    init_persistence_db()
+except Exception as e:
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.error(f"Failed to initialize persistence database on dashboard startup: {e}")
+    # Don't fail dashboard load, but log the error
 
 
 def get_db_path() -> Path:
@@ -121,13 +134,30 @@ def get_regime_snapshot() -> Optional[Dict[str, Any]]:
 
 
 def get_csp_candidates() -> List[Dict[str, Any]]:
-    """Get CSP candidates - filtered by enabled symbols only."""
+    """Get CSP candidates - filtered by enabled symbols only, with assignment profiles (Phase 1B)."""
     # Check cache first
     if st.session_state.candidates_cache is not None:
-        # Filter by enabled symbols
+        # Filter by enabled symbols and enrich with assignment profiles
         try:
             enabled_symbols = set(get_enabled_symbols())
-            return [c for c in st.session_state.candidates_cache if c.get("symbol") in enabled_symbols]
+            filtered = [c for c in st.session_state.candidates_cache if c.get("symbol") in enabled_symbols]
+            # Enrich with assignment profiles
+            for candidate in filtered:
+                symbol = candidate.get("symbol")
+                if symbol:
+                    profile = get_assignment_profile(symbol)
+                    if profile:
+                        candidate["assignment_score"] = profile.get("assignment_score", 0)
+                        candidate["assignment_label"] = profile.get("assignment_label", "NEUTRAL")
+                        candidate["operator_override"] = profile.get("operator_override", False)
+                        candidate["blocked"] = is_assignment_blocked(symbol)
+                    else:
+                        # No profile yet - not blocked
+                        candidate["assignment_score"] = 0
+                        candidate["assignment_label"] = "NEUTRAL"
+                        candidate["operator_override"] = False
+                        candidate["blocked"] = False
+            return filtered
         except Exception:
             return st.session_state.candidates_cache
 
@@ -137,6 +167,24 @@ def get_csp_candidates() -> List[Dict[str, Any]]:
         # Filter by enabled symbols
         enabled_symbols = set(get_enabled_symbols())
         candidates = [c for c in candidates if c.get("symbol") in enabled_symbols]
+        
+        # Enrich with assignment profiles (Phase 1B)
+        for candidate in candidates:
+            symbol = candidate.get("symbol")
+            if symbol:
+                profile = get_assignment_profile(symbol)
+                if profile:
+                    candidate["assignment_score"] = profile.get("assignment_score", 0)
+                    candidate["assignment_label"] = profile.get("assignment_label", "NEUTRAL")
+                    candidate["operator_override"] = profile.get("operator_override", False)
+                    candidate["blocked"] = is_assignment_blocked(symbol)
+                else:
+                    # No profile yet - not blocked
+                    candidate["assignment_score"] = 0
+                    candidate["assignment_label"] = "NEUTRAL"
+                    candidate["operator_override"] = False
+                    candidate["blocked"] = False
+        
         st.session_state.candidates_cache = candidates
         return candidates
     except Exception:
@@ -552,70 +600,11 @@ def main() -> None:
 
     st.divider()
 
-    # Proposed CSP Trades Section
-    st.header("💼 Proposed CSP Trades")
-    
-    # Get regime for trade planning
-    regime_snapshot = get_regime_snapshot()
-    regime_value = regime_snapshot.get("regime") if regime_snapshot else None
-    
-    # Get candidates
-    candidates = get_csp_candidates()
-    
-    # Generate trade plans
-    trade_engine = CSPTradeEngine()
-    trade_plans = []
-    
-    # Default portfolio value (can be made configurable later)
-    portfolio_value = 100000.0  # $100k default
-    
-    if regime_value and candidates:
-        for candidate in candidates:
-            # Only process candidates with contract details
-            if candidate.get("contract"):
-                trade_plan = trade_engine.generate_trade_plan(
-                    candidate,
-                    portfolio_value,
-                    regime_value
-                )
-                if trade_plan:
-                    trade_plans.append(trade_plan)
-    
-    if trade_plans:
-        for i, plan in enumerate(trade_plans, 1):
-            with st.container():
-                col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
-                
-                with col1:
-                    st.markdown(f"### {plan['symbol']}")
-                    st.metric("Strike", f"${plan['strike']:.2f}")
-                
-                with col2:
-                    st.write("**Expiry:**")
-                    st.write(plan['expiry'])
-                    st.write("**Contracts:**")
-                    st.write(plan['contracts'])
-                
-                with col3:
-                    st.write("**Capital Required:**")
-                    st.metric("", f"${plan['capital_required']:,.2f}")
-                    st.write("**Est. Premium:**")
-                    st.write(f"${plan['estimated_premium']:,.2f}")
-                
-                with col4:
-                    with st.expander("📋 Rationale", expanded=False):
-                        for reason in plan.get('rationale', []):
-                            st.write(f"• {reason}")
-                
-                if i < len(trade_plans):
-                    st.divider()
-    else:
-        st.info("No actionable CSP trades today.")
-    
-    st.divider()
-
-    # CSP Candidates Section
+    # CSP Candidates Section (Phase 1B - with Assignment-Worthy scoring)
     st.header("🎯 CSP Candidates")
+    
+    # Get candidates with assignment profiles
+    candidates = get_csp_candidates()
 
     if candidates:
         # Top candidate highlight
@@ -631,9 +620,15 @@ def main() -> None:
         
         # Candidate cards
         for i, candidate in enumerate(candidates, 1):
+            symbol = candidate.get("symbol", "")
+            score = candidate.get("score", 0)
+            assignment_score = candidate.get("assignment_score", 0)
+            assignment_label = candidate.get("assignment_label", "NEUTRAL")
+            blocked = candidate.get("blocked", False)
+            operator_override = candidate.get("operator_override", False)
+            
             with st.container():
                 # Score badge color
-                score = candidate.get("score", 0)
                 if score >= 80:
                     badge_color = "🟢"
                 elif score >= 60:
@@ -641,12 +636,36 @@ def main() -> None:
                 else:
                     badge_color = "🟠"
                 
+                # Assignment badge (Phase 1B)
+                if assignment_label == "OK_TO_OWN":
+                    aw_badge = "✅ OK_TO_OWN"
+                    aw_color = "🟢"
+                    aw_style = "background-color: #d4edda; color: #155724; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;"
+                elif assignment_label == "NEUTRAL":
+                    aw_badge = "⚪ NEUTRAL"
+                    aw_color = "⚪"
+                    aw_style = "background-color: #e9ecef; color: #495057; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;"
+                else:  # RENT_ONLY
+                    aw_badge = "🚫 RENT_ONLY"
+                    aw_color = "🔴"
+                    aw_style = "background-color: #f8d7da; color: #721c24; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;"
+                
+                # Blocked status
+                if blocked and not operator_override:
+                    blocked_banner = st.error(f"🚫 **Blocked: Not Assignment-Worthy** - {symbol} is marked as RENT_ONLY. Override required to allow CSP.")
+                elif blocked and operator_override:
+                    blocked_banner = st.warning(f"⚠️ **Overridden** - {symbol} is RENT_ONLY but operator override is active.")
+                else:
+                    blocked_banner = None
+                
                 # Main candidate card
                 col1, col2, col3 = st.columns([1, 2, 1])
                 
                 with col1:
-                    st.markdown(f"### {badge_color} {candidate['symbol']}")
-                    st.metric("Score", f"{score}/100")
+                    st.markdown(f"### {badge_color} {symbol}")
+                    st.metric("CSP Score", f"{score}/100")
+                    st.markdown(f'<span style="{aw_style}">{aw_color} {aw_badge}</span>', unsafe_allow_html=True)
+                    st.metric("Assignment Score", f"{assignment_score}/100")
                 
                 with col2:
                     key_levels = candidate.get("key_levels", {})
@@ -678,22 +697,95 @@ def main() -> None:
                                 st.caption(f"Premium: {premium or 'N/A'}")
                 
                 with col3:
-                    # Record Execution button
+                    # Assignment Override Control (Phase 1B)
+                    if assignment_label == "RENT_ONLY":
+                        st.write("**Assignment Override:**")
+                        current_override = operator_override
+                        override_key = f"override_{symbol}_{i}"
+                        override_reason_key = f"override_reason_{symbol}_{i}"
+                        
+                        # Use form for override to handle state properly
+                        with st.form(f"override_form_{symbol}_{i}"):
+                            override_enabled = st.checkbox(
+                                "Allow CSP (Override)",
+                                value=current_override,
+                                key=override_key
+                            )
+                            
+                            if override_enabled and not current_override:
+                                # Show reason input when enabling override
+                                override_reason = st.text_input(
+                                    "Override Reason (optional)",
+                                    key=override_reason_key,
+                                    placeholder="e.g., Temporary trade, monitoring closely"
+                                )
+                            elif current_override:
+                                # Show current override reason if exists
+                                profile = get_assignment_profile(symbol)
+                                if profile and profile.get("override_reason"):
+                                    st.caption(f"Reason: {profile.get('override_reason')}")
+                            
+                            col_save, col_remove = st.columns(2)
+                            with col_save:
+                                if st.form_submit_button("💾 Save", use_container_width=True):
+                                    try:
+                                        reason = None
+                                        if override_enabled:
+                                            # Get reason from session state if available
+                                            reason_key = f"override_reason_{symbol}_{i}"
+                                            if reason_key in st.session_state:
+                                                reason = st.session_state[reason_key]
+                                        
+                                        set_assignment_override(
+                                            symbol=symbol,
+                                            override=override_enabled,
+                                            reason=reason
+                                        )
+                                        st.session_state.candidates_cache = None
+                                        st.success(f"✅ Override {'enabled' if override_enabled else 'disabled'} for {symbol}")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"❌ Error: {e}")
+                            
+                            with col_remove:
+                                if current_override and st.form_submit_button("Remove", use_container_width=True):
+                                    try:
+                                        set_assignment_override(
+                                            symbol=symbol,
+                                            override=False,
+                                            reason=None
+                                        )
+                                        st.session_state.candidates_cache = None
+                                        st.success(f"✅ Override removed for {symbol}")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"❌ Error: {e}")
+                    
+                    # Record Execution button (only if not blocked or overridden)
                     contract = candidate.get("contract")
-                    if contract:
-                        button_key = f"record_exec_{candidate['symbol']}_{i}"
+                    if contract and (not blocked or operator_override):
+                        button_key = f"record_exec_{symbol}_{i}"
                         if st.button("📝 Record Execution", key=button_key, use_container_width=True):
-                            st.session_state.record_execution_modal = candidate['symbol']
+                            st.session_state.record_execution_modal = symbol
                             st.rerun()
+                    elif blocked and not operator_override:
+                        st.caption("⚠️ Blocked - Override required")
                     
                     with st.expander("📊 Details", expanded=False):
-                        st.write("**Reasons:**")
+                        st.write("**CSP Reasons:**")
                         reasons = candidate.get("reasons", [])
                         if reasons:
                             for reason in reasons:
                                 st.write(f"• {reason}")
                         else:
                             st.write("No reasons provided")
+                        
+                        # Assignment reasons (Phase 1B)
+                        assignment_reasons = candidate.get("assignment_reasons", [])
+                        if assignment_reasons:
+                            st.write("**Assignment Reasons:**")
+                            for reason in assignment_reasons:
+                                st.write(f"• {reason}")
                         
                         st.write("**Full Data:**")
                         st.json(candidate)

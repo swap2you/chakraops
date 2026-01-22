@@ -129,6 +129,18 @@ def init_persistence_db() -> None:
         except sqlite3.OperationalError:
             pass  # Column already exists
         
+        # Create assignment_profile table (Phase 1B)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS assignment_profile (
+                symbol TEXT PRIMARY KEY,
+                assignment_score INTEGER NOT NULL,
+                assignment_label TEXT NOT NULL,
+                operator_override INTEGER DEFAULT 0,
+                override_reason TEXT,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        
         # Create indexes
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_timestamp ON trades(timestamp DESC)")
@@ -139,7 +151,29 @@ def init_persistence_db() -> None:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_brokerage ON portfolio_snapshots(brokerage)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_universe_enabled ON symbol_universe(enabled)")
         
+        # Create assignment_profile table (Phase 1B) - must be before indexes
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS assignment_profile (
+                symbol TEXT PRIMARY KEY,
+                assignment_score INTEGER NOT NULL,
+                assignment_label TEXT NOT NULL,
+                operator_override INTEGER DEFAULT 0,
+                override_reason TEXT,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        
+        # Create indexes for assignment_profile (after table creation)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_assignment_label ON assignment_profile(assignment_label)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_assignment_override ON assignment_profile(operator_override)")
+        
         conn.commit()
+    except Exception as e:
+        # Log clear error if schema init fails
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to initialize persistence database: {e}")
+        raise
     finally:
         conn.close()
 
@@ -752,6 +786,16 @@ def list_universe_symbols() -> List[Dict[str, Any]]:
     cursor = conn.cursor()
     
     try:
+        # Defensive check: ensure symbol_universe table exists (Universe Manager must work independently)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS symbol_universe (
+                symbol TEXT PRIMARY KEY,
+                enabled INTEGER DEFAULT 1,
+                notes TEXT,
+                created_at TEXT NOT NULL
+            )
+        """)
+        
         cursor.execute("""
             SELECT symbol, enabled, notes, created_at
             FROM symbol_universe
@@ -880,6 +924,211 @@ def reset_local_trading_state() -> None:
     create_alert("Local trading state reset (DEV)", level="INFO")
 
 
+# Assignment profile management functions (Phase 1B)
+
+def save_assignment_profile(
+    symbol: str,
+    assignment_score: int,
+    assignment_label: str,
+    operator_override: bool = False,
+    override_reason: Optional[str] = None,
+) -> None:
+    """Save or update assignment profile for a symbol.
+    
+    Parameters
+    ----------
+    symbol:
+        Stock symbol.
+    assignment_score:
+        Assignment score (0-100).
+    assignment_label:
+        Assignment label: "OK_TO_OWN", "NEUTRAL", or "RENT_ONLY".
+    operator_override:
+        Whether operator has overridden the assignment blocking.
+    override_reason:
+        Optional reason for override.
+    """
+    init_persistence_db()
+    db_path = get_db_path()
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    
+    try:
+        # Defensive check: ensure assignment_profile table exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS assignment_profile (
+                symbol TEXT PRIMARY KEY,
+                assignment_score INTEGER NOT NULL,
+                assignment_label TEXT NOT NULL,
+                operator_override INTEGER DEFAULT 0,
+                override_reason TEXT,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        
+        updated_at = datetime.now(timezone.utc).isoformat()
+        cursor.execute("""
+            INSERT OR REPLACE INTO assignment_profile (
+                symbol, assignment_score, assignment_label,
+                operator_override, override_reason, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            symbol.upper(),
+            assignment_score,
+            assignment_label,
+            1 if operator_override else 0,
+            override_reason,
+            updated_at,
+        ))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_assignment_profile(symbol: str) -> Optional[Dict[str, Any]]:
+    """Get assignment profile for a symbol.
+    
+    Parameters
+    ----------
+    symbol:
+        Stock symbol.
+    
+    Returns
+    -------
+    Optional[Dict[str, Any]]
+        Assignment profile dictionary, or None if not found.
+    """
+    init_persistence_db()
+    db_path = get_db_path()
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    
+    try:
+        # Defensive check: ensure assignment_profile table exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS assignment_profile (
+                symbol TEXT PRIMARY KEY,
+                assignment_score INTEGER NOT NULL,
+                assignment_label TEXT NOT NULL,
+                operator_override INTEGER DEFAULT 0,
+                override_reason TEXT,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        
+        cursor.execute("""
+            SELECT symbol, assignment_score, assignment_label,
+                   operator_override, override_reason, updated_at
+            FROM assignment_profile
+            WHERE symbol = ?
+        """, (symbol.upper(),))
+        
+        row = cursor.fetchone()
+        if not row:
+            return None
+        
+        return {
+            "symbol": row[0],
+            "assignment_score": row[1],
+            "assignment_label": row[2],
+            "operator_override": bool(row[3]),
+            "override_reason": row[4],
+            "updated_at": row[5],
+        }
+    finally:
+        conn.close()
+
+
+def set_assignment_override(
+    symbol: str,
+    override: bool,
+    reason: Optional[str] = None,
+) -> None:
+    """Set operator override for assignment blocking.
+    
+    Parameters
+    ----------
+    symbol:
+        Stock symbol.
+    override:
+        True to enable override, False to disable.
+    reason:
+        Optional reason for override.
+    """
+    init_persistence_db()
+    db_path = get_db_path()
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    
+    try:
+        # Defensive check: ensure assignment_profile table exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS assignment_profile (
+                symbol TEXT PRIMARY KEY,
+                assignment_score INTEGER NOT NULL,
+                assignment_label TEXT NOT NULL,
+                operator_override INTEGER DEFAULT 0,
+                override_reason TEXT,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        
+        updated_at = datetime.now(timezone.utc).isoformat()
+        
+        # Check if profile exists
+        cursor.execute("SELECT symbol FROM assignment_profile WHERE symbol = ?", (symbol.upper(),))
+        exists = cursor.fetchone() is not None
+        
+        if exists:
+            # Update existing profile
+            cursor.execute("""
+                UPDATE assignment_profile
+                SET operator_override = ?, override_reason = ?, updated_at = ?
+                WHERE symbol = ?
+            """, (1 if override else 0, reason, updated_at, symbol.upper()))
+        else:
+            # Create new profile with default values (will be updated by scoring)
+            cursor.execute("""
+                INSERT INTO assignment_profile (
+                    symbol, assignment_score, assignment_label,
+                    operator_override, override_reason, updated_at
+                )
+                VALUES (?, 0, 'RENT_ONLY', ?, ?, ?)
+            """, (symbol.upper(), 1 if override else 0, reason, updated_at))
+        
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def is_assignment_blocked(symbol: str) -> bool:
+    """Check if CSP is blocked for a symbol due to assignment-worthiness.
+    
+    Returns True if:
+    - Assignment label is RENT_ONLY AND
+    - Operator override is False
+    
+    Parameters
+    ----------
+    symbol:
+        Stock symbol.
+    
+    Returns
+    -------
+    bool
+        True if blocked, False if allowed.
+    """
+    profile = get_assignment_profile(symbol)
+    if not profile:
+        return False  # No profile = not blocked (will be scored on first evaluation)
+    
+    if profile["assignment_label"] == "RENT_ONLY" and not profile["operator_override"]:
+        return True
+    
+    return False
+
+
 __all__ = [
     "init_persistence_db",
     "record_trade",
@@ -902,4 +1151,8 @@ __all__ = [
     "toggle_universe_symbol",
     "delete_universe_symbol",
     "reset_local_trading_state",
+    "save_assignment_profile",
+    "get_assignment_profile",
+    "set_assignment_override",
+    "is_assignment_blocked",
 ]

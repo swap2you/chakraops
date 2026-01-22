@@ -276,16 +276,68 @@ def main():
             from app.db.database import log_alert
             log_alert(warning_msg, level="WATCH")
         
-        # Step 7: Find CSP candidates
+        # Step 7: Find CSP candidates and score assignment-worthiness (Phase 1B)
         try:
             print("Step 7: Finding CSP candidates...", file=sys.stderr)
             from app.core.wheel import find_csp_candidates
+            from app.core.assignment_scoring import score_assignment_worthiness
+            from app.core.persistence import save_assignment_profile, is_assignment_blocked, create_alert
             from app.db.database import log_csp_candidates
             
             candidates = find_csp_candidates(symbol_to_df, regime_result["regime"])
+            
+            # Score assignment-worthiness for each candidate (Phase 1B)
+            actionable_candidates = []
+            blocked_count = 0
+            
+            for candidate in candidates:
+                try:
+                    # Score assignment-worthiness
+                    assignment_result = score_assignment_worthiness(
+                        candidate,
+                        regime_result["regime"]
+                    )
+                    
+                    # Add assignment data to candidate
+                    candidate["assignment_score"] = assignment_result["assignment_score"]
+                    candidate["assignment_label"] = assignment_result["assignment_label"]
+                    candidate["assignment_reasons"] = assignment_result["assignment_reasons"]
+                    
+                    # Save assignment profile
+                    save_assignment_profile(
+                        symbol=candidate["symbol"],
+                        assignment_score=assignment_result["assignment_score"],
+                        assignment_label=assignment_result["assignment_label"],
+                        operator_override=False,  # Will be set by operator in UI
+                        override_reason=None,
+                    )
+                    
+                    # Check if blocked (RENT_ONLY without override)
+                    if is_assignment_blocked(candidate["symbol"]):
+                        blocked_count += 1
+                        # Don't add to actionable candidates, but still log for UI display
+                        candidate["blocked"] = True
+                        candidate["blocked_reason"] = "Not Assignment-Worthy (RENT_ONLY)"
+                    else:
+                        candidate["blocked"] = False
+                        actionable_candidates.append(candidate)
+                
+                except RuntimeError as e:
+                    # Assignment scoring failed - block CSP and emit HALT alert
+                    error_msg = f"Assignment scoring failed for {candidate.get('symbol', 'UNKNOWN')}: {e}"
+                    print(f"ERROR: {error_msg}", file=sys.stderr)
+                    create_alert(
+                        f"Assignment scoring failed for {candidate.get('symbol', 'UNKNOWN')}. CSP blocked.",
+                        level="HALT"
+                    )
+                    candidate["blocked"] = True
+                    candidate["blocked_reason"] = "Assignment scoring error"
+                    blocked_count += 1
+            
+            # Log all candidates (including blocked ones) for UI display
             log_csp_candidates(candidates)
             
-            print(f"  Found {len(candidates)} candidates", file=sys.stderr)
+            print(f"  Found {len(candidates)} candidates ({len(actionable_candidates)} actionable, {blocked_count} blocked)", file=sys.stderr)
         except Exception as e:
             error_msg = f"Failed to find CSP candidates: {e}"
             print(f"ERROR: {error_msg}", file=sys.stderr)

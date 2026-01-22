@@ -291,7 +291,7 @@ def main() -> None:
         # Get all positions (for MTD calculation) - query directly from database
         all_positions = []
         try:
-            db_path = Path("data/chakra_ops.db")
+            db_path = get_db_path()
             if db_path.exists():
                 conn = sqlite3.connect(str(db_path))
                 cursor = conn.cursor()

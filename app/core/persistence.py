@@ -285,6 +285,21 @@ def init_persistence_db() -> None:
         from app.core.market_snapshot import init_snapshot_schema
         init_snapshot_schema()
         
+        # Create market_regimes table (Phase 2B)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS market_regimes (
+                snapshot_id TEXT PRIMARY KEY,
+                regime TEXT NOT NULL,
+                benchmark_symbol TEXT,
+                benchmark_return REAL,
+                computed_at TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+        
+        # Create index for regime lookups
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_regimes_computed_at ON market_regimes(computed_at DESC)")
+        
         conn.commit()
     except Exception as e:
         # Log clear error if schema init fails
@@ -1250,6 +1265,94 @@ def is_assignment_blocked(symbol: str) -> bool:
     return False
 
 
+def upsert_regime(
+    snapshot_id: str,
+    regime: str,
+    benchmark_symbol: Optional[str] = None,
+    benchmark_return: Optional[float] = None,
+    computed_at: Optional[str] = None,
+) -> None:
+    """Upsert market regime for a snapshot (Phase 2B).
+    
+    Parameters
+    ----------
+    snapshot_id:
+        Snapshot ID this regime is computed for.
+    regime:
+        Regime value: "BULL", "BEAR", "NEUTRAL", or "UNKNOWN".
+    benchmark_symbol:
+        Optional benchmark symbol used (e.g., "SPY", "SPX", "QQQ").
+    benchmark_return:
+        Optional return value computed (p2 - p1) / p1.
+    computed_at:
+        Optional ISO timestamp when regime was computed (defaults to now).
+    """
+    if computed_at is None:
+        computed_at = datetime.now(timezone.utc).isoformat()
+    
+    created_at = datetime.now(timezone.utc).isoformat()
+    
+    db_path = get_db_path()
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            INSERT OR REPLACE INTO market_regimes (
+                snapshot_id, regime, benchmark_symbol, benchmark_return,
+                computed_at, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (snapshot_id, regime, benchmark_symbol, benchmark_return, computed_at, created_at))
+        
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_latest_regime() -> Optional[Dict[str, Any]]:
+    """Get the latest market regime from database (Phase 2B).
+    
+    Returns
+    -------
+    Optional[Dict[str, Any]]
+        Dictionary with:
+        - snapshot_id: str
+        - regime: str ("BULL", "BEAR", "NEUTRAL", "UNKNOWN")
+        - benchmark_symbol: Optional[str]
+        - benchmark_return: Optional[float]
+        - computed_at: str
+        Or None if no regime exists.
+    """
+    db_path = get_db_path()
+    if not db_path.exists():
+        return None
+    
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            SELECT snapshot_id, regime, benchmark_symbol, benchmark_return, computed_at
+            FROM market_regimes
+            ORDER BY computed_at DESC
+            LIMIT 1
+        """)
+        
+        row = cursor.fetchone()
+        if row:
+            return {
+                "snapshot_id": row[0],
+                "regime": row[1],
+                "benchmark_symbol": row[2],
+                "benchmark_return": row[3],
+                "computed_at": row[4],
+            }
+        return None
+    finally:
+        conn.close()
+
+
 __all__ = [
     "init_persistence_db",
     "record_trade",
@@ -1276,4 +1379,6 @@ __all__ = [
     "get_assignment_profile",
     "set_assignment_override",
     "is_assignment_blocked",
+    "upsert_regime",
+    "get_latest_regime",
 ]

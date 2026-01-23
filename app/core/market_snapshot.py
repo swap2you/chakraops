@@ -882,6 +882,92 @@ def load_snapshot_data(snapshot_id: str) -> Dict[str, Any]:
         conn.close()
 
 
+def get_latest_snapshot_id() -> Optional[str]:
+    """Get the latest active snapshot ID.
+    
+    Returns
+    -------
+    Optional[str]
+        Latest snapshot ID, or None if no snapshot exists.
+    """
+    snapshot = get_active_snapshot()
+    if snapshot:
+        return snapshot["snapshot_id"]
+    return None
+
+
+def get_previous_snapshot_id(latest_id: str) -> Optional[str]:
+    """Get the previous snapshot ID (before latest).
+    
+    Parameters
+    ----------
+    latest_id:
+        Latest snapshot ID to exclude.
+    
+    Returns
+    -------
+    Optional[str]
+        Previous snapshot ID, or None if no previous snapshot exists.
+    """
+    db_path = get_db_path()
+    if not db_path.exists():
+        return None
+    
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            SELECT snapshot_id
+            FROM market_snapshots
+            WHERE snapshot_id != ?
+            ORDER BY snapshot_timestamp_et DESC
+            LIMIT 1
+        """, (latest_id,))
+        
+        row = cursor.fetchone()
+        if row:
+            return row[0]
+        return None
+    finally:
+        conn.close()
+
+
+def get_snapshot_prices(snapshot_id: str) -> Dict[str, float]:
+    """Get symbol -> price mapping from snapshot (normalized symbols).
+    
+    Parameters
+    ----------
+    snapshot_id:
+        Snapshot ID to load prices from.
+    
+    Returns
+    -------
+    Dict[str, float]
+        Dictionary mapping normalized symbol to latest close price.
+        Returns empty dict if snapshot not found or no data.
+    """
+    import pandas as pd
+    
+    symbol_to_df = load_snapshot_data(snapshot_id)
+    prices: Dict[str, float] = {}
+    
+    for symbol, df in symbol_to_df.items():
+        if df is not None and not df.empty:
+            # Get latest close price (last row)
+            if 'close' in df.columns:
+                latest_close = df['close'].iloc[-1]
+                if pd.notna(latest_close):
+                    prices[symbol] = float(latest_close)
+            elif 'price' in df.columns:
+                # Fallback to 'price' column if 'close' not available
+                latest_price = df['price'].iloc[-1]
+                if pd.notna(latest_price):
+                    prices[symbol] = float(latest_price)
+    
+    return prices
+
+
 __all__ = [
     "build_market_snapshot",
     "get_active_snapshot",
@@ -890,4 +976,7 @@ __all__ = [
     "parse_snapshot_timestamp",
     "ensure_et_aware",
     "normalize_symbol",
+    "get_latest_snapshot_id",
+    "get_previous_snapshot_id",
+    "get_snapshot_prices",
 ]

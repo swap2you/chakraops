@@ -317,10 +317,14 @@ class HeartbeatManager:
                     }
                 return 0, 0
             
-            # Step 2: Get enabled symbols
+            # Step 2: Load latest active snapshot and enabled symbols (Phase 2B)
             from app.core.persistence import get_enabled_symbols
-            symbols = get_enabled_symbols()
-            if not symbols:
+            from app.core.market_snapshot import get_active_snapshot, load_snapshot_data, normalize_symbol
+            
+            enabled_symbols = get_enabled_symbols()
+            enabled_universe_size = len(enabled_symbols) if enabled_symbols else 0
+            
+            if enabled_universe_size == 0:
                 logger.warning("[HEARTBEAT] No enabled symbols, skipping cycle")
                 with self._health_lock:
                     self._last_cycle_eval = {
@@ -333,9 +337,9 @@ class HeartbeatManager:
                     }
                 return 0, 0
             
-            # Step 3: Get market data from frozen snapshot (Phase 2A)
-            symbol_to_df, data_timestamp, data_stale_minutes = self._get_snapshot_data()
-            if not symbol_to_df:
+            # Load latest active snapshot
+            snapshot = get_active_snapshot()
+            if not snapshot:
                 # Log once per session if snapshot missing
                 if not hasattr(self, '_snapshot_missing_logged'):
                     logger.warning("[HEARTBEAT] No active snapshot available, skipping cycle")
@@ -343,14 +347,63 @@ class HeartbeatManager:
                 self._update_health("NO_SNAPSHOT")
                 with self._health_lock:
                     self._last_cycle_eval = {
-                        "symbols_evaluated": len(symbols),
+                        "symbols_evaluated": 0,
                         "csp_candidates_count": 0,
-                        "rejected_symbols_count": len(symbols),
-                        "rejection_reasons": {"No snapshot available": len(symbols)},
+                        "rejected_symbols_count": enabled_universe_size,
+                        "rejection_reasons": {"No snapshot available": enabled_universe_size},
                         "market_data_age_minutes": 0.0,
-                        "enabled_universe_size": len(symbols),
+                        "enabled_universe_size": enabled_universe_size,
                     }
                 return 0, 0
+            
+            # Step 3: Compute intersection: enabled symbols ∩ snapshot symbols
+            snapshot_id = snapshot["snapshot_id"]
+            snapshot_data = load_snapshot_data(snapshot_id)
+            snapshot_symbols = set(snapshot_data.keys())  # Already normalized
+            
+            # Normalize enabled symbols for intersection
+            enabled_symbols_normalized = {normalize_symbol(s) for s in enabled_symbols}
+            symbols_to_eval = enabled_symbols_normalized & snapshot_symbols
+            rejected_symbols = enabled_symbols_normalized - snapshot_symbols
+            
+            # Log counts and first 5 symbols
+            logger.info(f"[HEARTBEAT] Enabled universe: {enabled_universe_size} symbols")
+            logger.info(f"[HEARTBEAT] Snapshot symbols: {len(snapshot_symbols)} symbols")
+            logger.info(f"[HEARTBEAT] Intersection (to evaluate): {len(symbols_to_eval)} symbols")
+            logger.info(f"[HEARTBEAT] Rejected (missing from snapshot): {len(rejected_symbols)} symbols")
+            if enabled_symbols_normalized:
+                logger.info(f"[HEARTBEAT] First 5 enabled: {sorted(list(enabled_symbols_normalized))[:5]}")
+            if snapshot_symbols:
+                logger.info(f"[HEARTBEAT] First 5 snapshot: {sorted(list(snapshot_symbols))[:5]}")
+            if symbols_to_eval:
+                logger.info(f"[HEARTBEAT] First 5 intersection: {sorted(list(symbols_to_eval))[:5]}")
+            
+            if not symbols_to_eval:
+                logger.warning("[HEARTBEAT] No symbols to evaluate (empty intersection)")
+                with self._health_lock:
+                    self._last_cycle_eval = {
+                        "symbols_evaluated": 0,
+                        "csp_candidates_count": 0,
+                        "rejected_symbols_count": len(rejected_symbols),
+                        "rejection_reasons": {"Symbol missing from snapshot": len(rejected_symbols)},
+                        "market_data_age_minutes": snapshot.get("data_age_minutes", 0.0),
+                        "enabled_universe_size": enabled_universe_size,
+                    }
+                return 0, 0
+            
+            # Filter snapshot data to only symbols we can evaluate
+            symbol_to_df = {s: snapshot_data[s] for s in symbols_to_eval if s in snapshot_data}
+            
+            # Get snapshot timestamp for data age
+            snapshot_timestamp_et = snapshot.get("snapshot_timestamp_et")
+            data_timestamp = None
+            data_stale_minutes = snapshot.get("data_age_minutes", 0.0)
+            if snapshot_timestamp_et:
+                try:
+                    data_timestamp = datetime.fromisoformat(snapshot_timestamp_et)
+                    data_timestamp = ensure_et_aware(data_timestamp)
+                except Exception:
+                    pass
             
             # Step 4: Find CSP candidates
             from app.core.wheel import find_csp_candidates
@@ -371,7 +424,6 @@ class HeartbeatManager:
             
             # Track symbols that produced candidates vs those that didn't
             symbols_with_candidates = set()
-            symbols_evaluated = len(symbols)
             
             for candidate in candidates:
                 symbols_with_candidates.add(candidate.get("symbol", ""))
@@ -443,12 +495,12 @@ class HeartbeatManager:
             # Step 10: Update cycle evaluation details
             with self._health_lock:
                 self._last_cycle_eval = {
-                    "symbols_evaluated": symbols_evaluated,
+                    "symbols_evaluated": len(symbols_to_eval),
                     "csp_candidates_count": len(candidates),
-                    "rejected_symbols_count": symbols_without_candidates + blocked_count,
+                    "rejected_symbols_count": len(rejected_symbols) + symbols_without_candidates + blocked_count,
                     "rejection_reasons": rejection_reasons,
                     "market_data_age_minutes": data_stale_minutes,
-                    "enabled_universe_size": symbols_evaluated,
+                    "enabled_universe_size": enabled_universe_size,
                 }
             
             # Update health with data timestamp
@@ -463,7 +515,7 @@ class HeartbeatManager:
             return 0, 0
     
     def _get_regime_with_age(self) -> tuple[Optional[Dict[str, Any]], float]:
-        """Get regime snapshot with age in minutes (from database).
+        """Get regime snapshot with age in minutes (from market_regimes table, Phase 2B).
         
         Returns
         -------
@@ -471,108 +523,194 @@ class HeartbeatManager:
             (Regime result dict, age in minutes) or (None, 0.0) if not available.
         """
         try:
-            from app.db.database import get_db_path
-            import sqlite3
+            from app.core.persistence import get_latest_regime
             
-            db_path = get_db_path()
-            if not db_path.exists():
+            regime_data = get_latest_regime()
+            if not regime_data:
                 return None, 0.0
             
-            conn = sqlite3.connect(str(db_path))
-            cursor = conn.cursor()
+            # Convert market_regimes format to expected format
+            regime = regime_data["regime"]
+            computed_at_str = regime_data.get("computed_at")
             
-            cursor.execute("""
-                SELECT regime, confidence, details, created_at
-                FROM regime_snapshots
-                ORDER BY created_at DESC
-                LIMIT 1
-            """)
+            # Map regime values: BULL/BEAR/NEUTRAL -> RISK_ON/RISK_OFF
+            # For Phase 2B, we use BULL/BEAR/NEUTRAL/UNKNOWN
+            # But existing code expects RISK_ON/RISK_OFF
+            if regime == "BULL":
+                regime_mapped = "RISK_ON"
+            elif regime == "BEAR":
+                regime_mapped = "RISK_OFF"
+            elif regime == "NEUTRAL":
+                # Neutral is treated as RISK_ON for CSP evaluation
+                regime_mapped = "RISK_ON"
+            else:  # UNKNOWN
+                regime_mapped = "RISK_OFF"  # Unknown = conservative
             
-            row = cursor.fetchone()
-            conn.close()
-            
-            if row:
-                import json
-                created_at_str = row[3]
-                
-                if created_at_str is None:
-                    logger.warning("[HEARTBEAT] Regime created_at is None, cannot compute age")
-                    return {
-                        "regime": row[0],
-                        "confidence": row[1],
-                        "details": json.loads(row[2]) if row[2] else {},
-                        "created_at": created_at_str,
-                    }, 0.0
-                
-                # Parse and normalize to ET
-                try:
-                    created_at = datetime.fromisoformat(created_at_str)
-                    created_at_et = ensure_et_aware(created_at)
-                    
-                    # Get current time in ET
-                    if _ET_TZ:
-                        now_et = datetime.now(_ET_TZ)
-                    else:
-                        now_et = ensure_et_aware(datetime.now(timezone.utc))
-                    
-                    if created_at_et is None or now_et is None:
-                        logger.warning("[HEARTBEAT] Failed to normalize timestamps for regime age calculation")
-                        return {
-                            "regime": row[0],
-                            "confidence": row[1],
-                            "details": json.loads(row[2]) if row[2] else {},
-                            "created_at": created_at_str,
-                        }, 0.0
-                    
-                    age_minutes = (now_et - created_at_et).total_seconds() / 60.0
-                except (ValueError, TypeError) as e:
-                    logger.warning(f"[HEARTBEAT] Failed to parse regime created_at '{created_at_str}': {e}")
-                    return {
-                        "regime": row[0],
-                        "confidence": row[1],
-                        "details": json.loads(row[2]) if row[2] else {},
-                        "created_at": created_at_str,
-                    }, 0.0
-                
+            if computed_at_str is None:
+                logger.warning("[HEARTBEAT] Regime computed_at is None, cannot compute age")
                 return {
-                    "regime": row[0],
-                    "confidence": row[1],
-                    "details": json.loads(row[2]) if row[2] else {},
-                    "created_at": created_at_str,
-                }, age_minutes
+                    "regime": regime_mapped,
+                    "confidence": 100 if regime != "UNKNOWN" else 0,
+                    "details": {
+                        "original_regime": regime,
+                        "benchmark_symbol": regime_data.get("benchmark_symbol"),
+                        "benchmark_return": regime_data.get("benchmark_return"),
+                    },
+                    "created_at": computed_at_str,
+                }, 0.0
             
-            return None, 0.0
+            # Parse and normalize to ET
+            try:
+                computed_at = datetime.fromisoformat(computed_at_str)
+                computed_at_et = ensure_et_aware(computed_at)
+                
+                # Get current time in ET
+                if _ET_TZ:
+                    now_et = datetime.now(_ET_TZ)
+                else:
+                    now_et = ensure_et_aware(datetime.now(timezone.utc))
+                
+                if computed_at_et is None or now_et is None:
+                    logger.warning("[HEARTBEAT] Failed to normalize timestamps for regime age calculation")
+                    return {
+                        "regime": regime_mapped,
+                        "confidence": 100 if regime != "UNKNOWN" else 0,
+                        "details": {
+                            "original_regime": regime,
+                            "benchmark_symbol": regime_data.get("benchmark_symbol"),
+                            "benchmark_return": regime_data.get("benchmark_return"),
+                        },
+                        "created_at": computed_at_str,
+                    }, 0.0
+                
+                age_minutes = (now_et - computed_at_et).total_seconds() / 60.0
+            except (ValueError, TypeError) as e:
+                logger.warning(f"[HEARTBEAT] Failed to parse regime computed_at '{computed_at_str}': {e}")
+                return {
+                    "regime": regime_mapped,
+                    "confidence": 100 if regime != "UNKNOWN" else 0,
+                    "details": {
+                        "original_regime": regime,
+                        "benchmark_symbol": regime_data.get("benchmark_symbol"),
+                        "benchmark_return": regime_data.get("benchmark_return"),
+                    },
+                    "created_at": computed_at_str,
+                }, 0.0
+            
+            return {
+                "regime": regime_mapped,
+                "confidence": 100 if regime != "UNKNOWN" else 0,
+                "details": {
+                    "original_regime": regime,
+                    "benchmark_symbol": regime_data.get("benchmark_symbol"),
+                    "benchmark_return": regime_data.get("benchmark_return"),
+                },
+                "created_at": computed_at_str,
+            }, age_minutes
         except Exception as e:
             logger.error(f"[HEARTBEAT] Failed to get regime: {e}")
             return None, 0.0
     
     def _recompute_regime(self) -> Optional[Dict[str, Any]]:
-        """Recompute regime (NO Streamlit calls).
+        """Recompute regime using snapshot-based price-only logic (Phase 2B).
+        
+        Uses ONLY the last two snapshots (price-only). Returns UNKNOWN if data missing.
+        NO live provider calls.
         
         Returns
         -------
         Optional[Dict[str, Any]]
-            Regime result dict, or None if recomputation fails.
+            Regime result dict with:
+            - regime: "BULL", "BEAR", "NEUTRAL", or "UNKNOWN"
+            - confidence: 100 (for price-only)
+            - details: dict with benchmark info
+            - created_at: ISO timestamp
+            Or None if computation fails (should not happen - returns UNKNOWN instead).
         """
         try:
-            from app.core.market_data.factory import get_market_data_provider
-            from app.core.regime import build_weekly_from_daily, compute_regime
-            from app.db.database import log_regime_snapshot, get_db_path
-            import sqlite3
-            
-            provider = get_market_data_provider()
-            df_spy_daily = provider.get_daily("SPY", lookback=400)
-            df_spy_weekly = build_weekly_from_daily(df_spy_daily)
-            regime_result = compute_regime(df_spy_daily, df_spy_weekly, require_weekly_confirm=True)
-            
-            # Log regime snapshot
-            log_regime_snapshot(
-                regime_result["regime"],
-                regime_result["confidence"],
-                regime_result["details"]
+            from app.core.market_snapshot import (
+                get_latest_snapshot_id,
+                get_previous_snapshot_id,
+                get_snapshot_prices,
+                normalize_symbol,
             )
+            from app.core.persistence import upsert_regime
             
-            logger.info(f"[HEARTBEAT] Recomputed regime: {regime_result['regime']} (confidence: {regime_result['confidence']}%)")
+            # Get latest snapshot (S2) and previous snapshot (S1)
+            latest_id = get_latest_snapshot_id()
+            if not latest_id:
+                logger.warning("[HEARTBEAT] No latest snapshot available for regime computation")
+                return {
+                    "regime": "UNKNOWN",
+                    "confidence": 0,
+                    "details": {"error": "No latest snapshot"},
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+            
+            previous_id = get_previous_snapshot_id(latest_id)
+            if not previous_id:
+                logger.warning("[HEARTBEAT] No previous snapshot available for regime computation")
+                # Return UNKNOWN instead of failing
+                return {
+                    "regime": "UNKNOWN",
+                    "confidence": 0,
+                    "details": {"error": "No previous snapshot"},
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+            
+            # Get prices from both snapshots
+            prices_s2 = get_snapshot_prices(latest_id)
+            prices_s1 = get_snapshot_prices(previous_id)
+            
+            # Pick benchmark symbol in priority order: SPX, SPY, QQQ
+            # Use first found in BOTH snapshots
+            benchmark_candidates = ["SPX", "SPY", "QQQ"]
+            benchmark_symbol = None
+            
+            for candidate in benchmark_candidates:
+                normalized_candidate = normalize_symbol(candidate)
+                if normalized_candidate in prices_s2 and normalized_candidate in prices_s1:
+                    benchmark_symbol = normalized_candidate
+                    break
+            
+            if not benchmark_symbol:
+                logger.warning("[HEARTBEAT] No benchmark symbol (SPX/SPY/QQQ) found in both snapshots")
+                return {
+                    "regime": "UNKNOWN",
+                    "confidence": 0,
+                    "details": {"error": "Benchmark symbol missing"},
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+            
+            # Get prices
+            p2 = prices_s2[benchmark_symbol]
+            p1 = prices_s1[benchmark_symbol]
+            
+            if p1 is None or p2 is None or p1 <= 0:
+                logger.warning(f"[HEARTBEAT] Invalid prices for {benchmark_symbol}: p1={p1}, p2={p2}")
+                return {
+                    "regime": "UNKNOWN",
+                    "confidence": 0,
+                    "details": {"error": f"Invalid prices for {benchmark_symbol}"},
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+            
+            # Compute return = (p2 - p1) / p1
+            benchmark_return = (p2 - p1) / p1
+            
+            # Determine regime based on thresholds
+            if benchmark_return >= 0.0015:  # >= +0.15%
+                regime = "BULL"
+            elif benchmark_return <= -0.0015:  # <= -0.15%
+                regime = "BEAR"
+            else:
+                regime = "NEUTRAL"
+            
+            # Log regime inputs and result
+            logger.info(
+                f"[HEARTBEAT] Regime computation: benchmark={benchmark_symbol}, "
+                f"p1={p1:.2f}, p2={p2:.2f}, return={benchmark_return:.4f}, regime={regime}"
+            )
             
             # Use ET timezone for created_at
             if _ET_TZ:
@@ -580,15 +718,38 @@ class HeartbeatManager:
             else:
                 created_at = datetime.now(timezone.utc)
             
+            computed_at = created_at.isoformat()
+            
+            # Persist regime for snapshot_id S2
+            upsert_regime(
+                snapshot_id=latest_id,
+                regime=regime,
+                benchmark_symbol=benchmark_symbol,
+                benchmark_return=benchmark_return,
+                computed_at=computed_at,
+            )
+            
             return {
-                "regime": regime_result["regime"],
-                "confidence": regime_result["confidence"],
-                "details": regime_result["details"],
-                "created_at": created_at.isoformat(),
+                "regime": regime,
+                "confidence": 100,  # Price-only is deterministic
+                "details": {
+                    "benchmark_symbol": benchmark_symbol,
+                    "benchmark_return": benchmark_return,
+                    "p1": p1,
+                    "p2": p2,
+                    "method": "snapshot_price_only",
+                },
+                "created_at": computed_at,
             }
         except Exception as e:
-            logger.error(f"[HEARTBEAT] Failed to recompute regime: {e}")
-            return None
+            logger.error(f"[HEARTBEAT] Failed to recompute regime: {e}", exc_info=True)
+            # Return UNKNOWN instead of None to avoid breaking the cycle
+            return {
+                "regime": "UNKNOWN",
+                "confidence": 0,
+                "details": {"error": str(e)},
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
     
     def _get_snapshot_data(self) -> tuple[Dict[str, Any], Optional[datetime], float]:
         """Get market data from active frozen snapshot (Phase 2A).

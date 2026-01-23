@@ -28,6 +28,9 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Import persistence early to trigger schema initialization
+from app.core.persistence import initialize_schema  # noqa: F401
+
 # ET timezone (US/Eastern)
 _ET_TZ = pytz.timezone("America/New_York") if pytz else None
 
@@ -71,6 +74,10 @@ REGIME_STALE_THRESHOLD_MINUTES = 5
 DATA_STALE_HALT_THRESHOLD_MINUTES = 15
 CANDIDATE_REMOVAL_ALERT_COOLDOWN_HOURS = 6
 
+# CSP Scoring Configuration (Phase 2B Step 2)
+# Imported from app.core.config.trade_rules
+from app.core.config.trade_rules import MIN_PRICE, MAX_PRICE, TARGET_LOW, TARGET_HIGH
+
 # Process-level singleton (module global)
 _process_instance: Optional[HeartbeatManager] = None
 _process_lock = threading.Lock()
@@ -84,6 +91,9 @@ class HeartbeatManager:
     """
     
     def __init__(self):
+        # Log DB path at heartbeat startup (DB Path Unification Fix)
+        from app.core.config.paths import DB_PATH
+        logger.info(f"[HEARTBEAT] DB_PATH={DB_PATH.absolute()}")
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._running = False
@@ -321,11 +331,21 @@ class HeartbeatManager:
             from app.core.persistence import get_enabled_symbols
             from app.core.market_snapshot import get_active_snapshot, load_snapshot_data, normalize_symbol
             
+            # Diagnostic logging (Heartbeat Diagnostic Verification)
+            logger.info("[HEARTBEAT][DIAG] Starting symbol loading diagnostics")
+            
             enabled_symbols = get_enabled_symbols()
             enabled_universe_size = len(enabled_symbols) if enabled_symbols else 0
             
+            logger.info(f"[HEARTBEAT][DIAG] enabled_symbols length={enabled_universe_size}")
+            if enabled_symbols:
+                logger.info(f"[HEARTBEAT][DIAG] enabled_symbols sample={enabled_symbols[:10]}")
+            else:
+                logger.warning("[HEARTBEAT][DIAG] enabled_symbols is empty or None")
+            
             if enabled_universe_size == 0:
                 logger.warning("[HEARTBEAT] No enabled symbols, skipping cycle")
+                logger.warning("[HEARTBEAT][DIAG] GUARD: enabled_symbols is empty - skipping evaluation")
                 with self._health_lock:
                     self._last_cycle_eval = {
                         "symbols_evaluated": 0,
@@ -361,10 +381,25 @@ class HeartbeatManager:
             snapshot_data = load_snapshot_data(snapshot_id)
             snapshot_symbols = set(snapshot_data.keys())  # Already normalized
             
+            # Diagnostic logging (Heartbeat Diagnostic Verification)
+            logger.info(f"[HEARTBEAT][DIAG] snapshot_symbols length={len(snapshot_symbols)}")
+            if snapshot_symbols:
+                logger.info(f"[HEARTBEAT][DIAG] snapshot_symbols sample={sorted(list(snapshot_symbols))[:10]}")
+            
             # Normalize enabled symbols for intersection
             enabled_symbols_normalized = {normalize_symbol(s) for s in enabled_symbols}
             symbols_to_eval = enabled_symbols_normalized & snapshot_symbols
             rejected_symbols = enabled_symbols_normalized - snapshot_symbols
+            
+            # Diagnostic logging
+            logger.info(f"[HEARTBEAT][DIAG] enabled_symbols_normalized length={len(enabled_symbols_normalized)}")
+            logger.info(f"[HEARTBEAT][DIAG] intersection length={len(symbols_to_eval)}")
+            if enabled_symbols_normalized:
+                logger.info(f"[HEARTBEAT][DIAG] enabled_symbols_normalized sample={sorted(list(enabled_symbols_normalized))[:10]}")
+            if symbols_to_eval:
+                logger.info(f"[HEARTBEAT][DIAG] intersection sample={sorted(list(symbols_to_eval))[:10]}")
+            if rejected_symbols:
+                logger.info(f"[HEARTBEAT][DIAG] rejected_symbols sample={sorted(list(rejected_symbols))[:10]}")
             
             # Log counts and first 5 symbols
             logger.info(f"[HEARTBEAT] Enabled universe: {enabled_universe_size} symbols")
@@ -391,9 +426,6 @@ class HeartbeatManager:
                     }
                 return 0, 0
             
-            # Filter snapshot data to only symbols we can evaluate
-            symbol_to_df = {s: snapshot_data[s] for s in symbols_to_eval if s in snapshot_data}
-            
             # Get snapshot timestamp for data age
             snapshot_timestamp_et = snapshot.get("snapshot_timestamp_et")
             data_timestamp = None
@@ -405,7 +437,91 @@ class HeartbeatManager:
                 except Exception:
                     pass
             
-            # Step 4: Find CSP candidates
+            # Step 4: Evaluate each symbol using deterministic CSP scoring (Phase 2B Step 2/3)
+            from app.core.market_snapshot import get_snapshot_prices
+            from app.core.persistence import upsert_csp_evaluations, list_universe_symbols
+            
+            # Get price/volume/iv_rank data from snapshot (Phase 2B Step 3)
+            snapshot_data_map = get_snapshot_prices(snapshot_id)
+            
+            # Get universe metadata (for priority/tier if available)
+            universe_rows = list_universe_symbols()
+            universe_metadata_map: Dict[str, Dict[str, Any]] = {}
+            for row in universe_rows:
+                symbol_norm = normalize_symbol(row["symbol"])
+                universe_metadata_map[symbol_norm] = {
+                    "enabled": bool(row.get("enabled")),
+                    "notes": row.get("notes"),
+                }
+            
+            # Evaluate each symbol
+            evaluations: List[Dict[str, Any]] = []
+            eligible_count = 0
+            rejected_count = 0
+            low_liquidity_count = 0
+            iv_too_low_count = 0
+            
+            for symbol in symbols_to_eval:
+                symbol_data = snapshot_data_map.get(symbol, {})
+                price = symbol_data.get("price")
+                volume = symbol_data.get("volume")
+                iv_rank = symbol_data.get("iv_rank")
+                universe_metadata = universe_metadata_map.get(symbol)
+                
+                eval_result = self.evaluate_csp_symbol(
+                    symbol=symbol,
+                    price=price,
+                    volume=volume,
+                    iv_rank=iv_rank,
+                    regime=regime,
+                    snapshot_age_minutes=data_stale_minutes,
+                    universe_metadata=universe_metadata,
+                )
+                
+                # Track rejection reason counts
+                if not eval_result["eligible"]:
+                    if "low_liquidity" in eval_result["rejection_reasons"]:
+                        low_liquidity_count += 1
+                    if "iv_too_low" in eval_result["rejection_reasons"]:
+                        iv_too_low_count += 1
+                
+                evaluations.append(eval_result)
+                
+                if eval_result["eligible"]:
+                    eligible_count += 1
+                else:
+                    rejected_count += 1
+            
+            # Persist evaluations to database
+            upsert_csp_evaluations(snapshot_id, evaluations)
+            
+            # Compute top rejection reasons
+            rejection_reason_counts: Dict[str, int] = {}
+            for eval_result in evaluations:
+                if not eval_result["eligible"]:
+                    for reason in eval_result["rejection_reasons"]:
+                        rejection_reason_counts[reason] = rejection_reason_counts.get(reason, 0) + 1
+            
+            # Log evaluation summary (Phase 2B Step 3)
+            logger.info(
+                f"[HEARTBEAT] Evaluation summary: snapshot_id={snapshot_id[:8]}..., "
+                f"enabled={enabled_universe_size}, snapshot={len(snapshot_symbols)}, "
+                f"intersection={len(symbols_to_eval)}, eligible={eligible_count}, "
+                f"rejected={rejected_count}"
+            )
+            logger.info(
+                f"[HEARTBEAT] Rejection breakdown: low_liquidity={low_liquidity_count}, "
+                f"iv_too_low={iv_too_low_count}"
+            )
+            
+            if rejection_reason_counts:
+                top_reasons = sorted(rejection_reason_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+                logger.info(f"[HEARTBEAT] Top 3 rejection reasons: {top_reasons}")
+            
+            # Step 5: Legacy CSP candidate finding (for backward compatibility)
+            # Filter snapshot data to only symbols we can evaluate
+            symbol_to_df = {s: snapshot_data[s] for s in symbols_to_eval if s in snapshot_data}
+            
             from app.core.wheel import find_csp_candidates
             candidates = find_csp_candidates(symbol_to_df, regime)
             
@@ -492,13 +608,13 @@ class HeartbeatManager:
             }
             self._previous_regime = regime
             
-            # Step 10: Update cycle evaluation details
+            # Step 10: Update cycle evaluation details (Phase 2B Step 2)
             with self._health_lock:
                 self._last_cycle_eval = {
                     "symbols_evaluated": len(symbols_to_eval),
-                    "csp_candidates_count": len(candidates),
-                    "rejected_symbols_count": len(rejected_symbols) + symbols_without_candidates + blocked_count,
-                    "rejection_reasons": rejection_reasons,
+                    "csp_candidates_count": eligible_count,  # Use new evaluation count
+                    "rejected_symbols_count": len(rejected_symbols) + rejected_count,
+                    "rejection_reasons": rejection_reason_counts,  # Use new rejection reasons
                     "market_data_age_minutes": data_stale_minutes,
                     "enabled_universe_size": enabled_universe_size,
                 }
@@ -610,6 +726,216 @@ class HeartbeatManager:
         except Exception as e:
             logger.error(f"[HEARTBEAT] Failed to get regime: {e}")
             return None, 0.0
+    
+    def evaluate_csp_symbol(
+        self,
+        symbol: str,
+        price: Optional[float],
+        volume: Optional[float],
+        iv_rank: Optional[float],
+        regime: str,
+        snapshot_age_minutes: float,
+        universe_metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Evaluate a single symbol for CSP eligibility and score (Phase 2B Step 2/3).
+        
+        Deterministic scoring using only snapshot data and regime.
+        No live providers, no options chain assumptions.
+        
+        Parameters
+        ----------
+        symbol:
+            Symbol to evaluate (normalized).
+        price:
+            Latest price from snapshot.
+        volume:
+            Latest volume from snapshot (optional).
+        iv_rank:
+            Latest IV rank from snapshot (optional, 0-100).
+        regime:
+            Market regime: "RISK_ON", "RISK_OFF", or "UNKNOWN".
+        snapshot_age_minutes:
+            Age of snapshot data in minutes.
+        universe_metadata:
+            Optional metadata from symbol_universe (for priority/tier).
+        
+        Returns
+        -------
+        Dict[str, Any]
+            Evaluation result with:
+            - symbol: str
+            - eligible: bool
+            - score: int (0-100)
+            - rejection_reasons: List[str]
+            - features: Dict[str, Any]
+            - regime_context: Dict[str, Any]
+        """
+        rejection_reasons: List[str] = []
+        features: Dict[str, Any] = {
+            "price": price,
+            "volume": volume,
+            "iv_rank": iv_rank,
+            "snapshot_age_minutes": snapshot_age_minutes,
+            "regime": regime,
+        }
+        regime_context: Dict[str, Any] = {
+            "regime": regime,
+        }
+        
+        # Gates (hard reject)
+        if price is None or price <= 0:
+            rejection_reasons.append("missing_or_invalid_price")
+            return {
+                "symbol": symbol,
+                "eligible": False,
+                "score": 0,
+                "rejection_reasons": rejection_reasons,
+                "features": features,
+                "regime_context": regime_context,
+            }
+        
+        if price < MIN_PRICE or price > MAX_PRICE:
+            rejection_reasons.append("price_out_of_range")
+            return {
+                "symbol": symbol,
+                "eligible": False,
+                "score": 0,
+                "rejection_reasons": rejection_reasons,
+                "features": features,
+                "regime_context": regime_context,
+            }
+        
+        if regime in ("RISK_OFF", "UNKNOWN"):
+            rejection_reasons.append("regime_not_risk_on")
+            return {
+                "symbol": symbol,
+                "eligible": False,
+                "score": 0,
+                "rejection_reasons": rejection_reasons,
+                "features": features,
+                "regime_context": regime_context,
+            }
+        
+        # Phase 2B Step 3: Liquidity and IV gates
+        if volume is not None and volume < 1_000_000:
+            rejection_reasons.append("low_liquidity")
+            return {
+                "symbol": symbol,
+                "eligible": False,
+                "score": 0,
+                "rejection_reasons": rejection_reasons,
+                "features": features,
+                "regime_context": regime_context,
+            }
+        
+        if iv_rank is not None and iv_rank < 20:
+            rejection_reasons.append("iv_too_low")
+            return {
+                "symbol": symbol,
+                "eligible": False,
+                "score": 0,
+                "rejection_reasons": rejection_reasons,
+                "features": features,
+                "regime_context": regime_context,
+            }
+        
+        # Scoring (only if not rejected)
+        score_components: Dict[str, float] = {}
+        
+        # 1. Price suitability (0..30)
+        # Highest in [TARGET_LOW..TARGET_HIGH], linear falloff to 0 at bounds [MIN_PRICE..MAX_PRICE]
+        if TARGET_LOW <= price <= TARGET_HIGH:
+            price_suitability = 30.0
+        elif price < TARGET_LOW:
+            # Linear from MIN_PRICE to TARGET_LOW
+            if price <= MIN_PRICE:
+                price_suitability = 0.0
+            else:
+                price_suitability = 30.0 * (price - MIN_PRICE) / (TARGET_LOW - MIN_PRICE)
+        else:  # price > TARGET_HIGH
+            # Linear from TARGET_HIGH to MAX_PRICE
+            if price >= MAX_PRICE:
+                price_suitability = 0.0
+            else:
+                price_suitability = 30.0 * (MAX_PRICE - price) / (MAX_PRICE - TARGET_HIGH)
+        
+        score_components["price_suitability"] = price_suitability
+        
+        # 2. Regime score (0..30)
+        if regime == "RISK_ON":
+            regime_score = 30.0
+        elif regime == "NEUTRAL":
+            regime_score = 15.0
+        else:
+            regime_score = 0.0
+        score_components["regime_score"] = regime_score
+        
+        # 3. Universe priority (0..20)
+        # If symbol_universe has priority/tier field use it; else constant 10
+        universe_priority = 10.0  # Default constant
+        if universe_metadata:
+            # Check for priority or tier field (future enhancement)
+            if "priority" in universe_metadata:
+                # Map priority to score (0-20)
+                priority_val = universe_metadata.get("priority", 0)
+                universe_priority = min(20.0, max(0.0, float(priority_val) * 2.0))
+            elif "tier" in universe_metadata:
+                # Map tier to score (tier 1 = 20, tier 2 = 15, tier 3 = 10, etc.)
+                tier = universe_metadata.get("tier", 3)
+                if tier == 1:
+                    universe_priority = 20.0
+                elif tier == 2:
+                    universe_priority = 15.0
+                else:
+                    universe_priority = 10.0
+        score_components["universe_priority"] = universe_priority
+        
+        # 4. Freshness (0..20)
+        # snapshot_age_minutes: <=60 => 20, <=360 => 10, else 0
+        if snapshot_age_minutes <= 60:
+            freshness = 20.0
+        elif snapshot_age_minutes <= 360:
+            freshness = 10.0
+        else:
+            freshness = 0.0
+        score_components["freshness"] = freshness
+        
+        # 5. IV Rank Score (0..20) - Phase 2B Step 3
+        iv_rank_score = 0.0
+        if iv_rank is not None:
+            if iv_rank >= 50:
+                iv_rank_score = 20.0
+            elif iv_rank >= 30:
+                iv_rank_score = 10.0
+            else:
+                iv_rank_score = 0.0
+        score_components["iv_rank_score"] = iv_rank_score
+        
+        # 6. Liquidity Bonus (0..10) - Phase 2B Step 3
+        liquidity_bonus = 0.0
+        if volume is not None:
+            if volume >= 10_000_000:
+                liquidity_bonus = 10.0
+            elif volume >= 3_000_000:
+                liquidity_bonus = 5.0
+            else:
+                liquidity_bonus = 0.0
+        score_components["liquidity_bonus"] = liquidity_bonus
+        
+        # Total score (clamp to [0, 100])
+        total_score = sum(score_components.values())
+        score = max(0, min(100, int(round(total_score))))
+        
+        features["score_components"] = score_components
+        
+        return {
+            "symbol": symbol,
+            "eligible": True,
+            "score": score,
+            "rejection_reasons": rejection_reasons,
+            "features": features,
+            "regime_context": regime_context,
+        }
     
     def _recompute_regime(self) -> Optional[Dict[str, Any]]:
         """Recompute regime using snapshot-based price-only logic (Phase 2B).

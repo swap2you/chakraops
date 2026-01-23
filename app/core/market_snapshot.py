@@ -248,8 +248,15 @@ def _load_snapshot_from_csv(csv_path: Path) -> Dict[str, Optional[pd.DataFrame]]
             symbol_rows['low'] = symbol_rows.get('low', symbol_rows['close'])
             symbol_rows['volume'] = symbol_rows.get('volume', 0)
             
-            # Select and order columns
-            df = symbol_rows[['date', 'open', 'high', 'low', 'close', 'volume']].copy()
+            # Phase 2B Step 3: Handle IV rank if present in CSV
+            if 'iv_rank' in symbol_rows.columns:
+                symbol_rows['iv_rank'] = pd.to_numeric(symbol_rows['iv_rank'], errors='coerce')
+            
+            # Select and order columns (include iv_rank if present)
+            base_cols = ['date', 'open', 'high', 'low', 'close', 'volume']
+            if 'iv_rank' in symbol_rows.columns:
+                base_cols.append('iv_rank')
+            df = symbol_rows[base_cols].copy()
             df = df.sort_values('date', ascending=True).reset_index(drop=True)
             
             # Ensure date is datetime
@@ -291,6 +298,13 @@ def _load_snapshot_from_cache() -> Dict[str, Optional[pd.DataFrame]]:
 
 
 def build_market_snapshot(mode: str = "AUTO") -> Dict[str, Any]:
+    """Build a new market snapshot from CSV or CACHE (Phase 2A).
+    
+    DB Path Unification Fix: Log DB path at snapshot build start.
+    """
+    # Log DB path at snapshot builder startup
+    from app.core.config.paths import DB_PATH
+    logger.info(f"[SNAPSHOT] DB_PATH={DB_PATH.absolute()}")
     """Build a frozen market snapshot from enabled universe symbols.
     
     Supports multiple build modes:
@@ -933,39 +947,69 @@ def get_previous_snapshot_id(latest_id: str) -> Optional[str]:
         conn.close()
 
 
-def get_snapshot_prices(snapshot_id: str) -> Dict[str, float]:
-    """Get symbol -> price mapping from snapshot (normalized symbols).
+def get_snapshot_prices(snapshot_id: str) -> Dict[str, Dict[str, Optional[float]]]:
+    """Get symbol -> price/volume/iv_rank mapping from snapshot (normalized symbols, Phase 2B Step 3).
     
     Parameters
     ----------
     snapshot_id:
-        Snapshot ID to load prices from.
+        Snapshot ID to load data from.
     
     Returns
     -------
-    Dict[str, float]
-        Dictionary mapping normalized symbol to latest close price.
+    Dict[str, Dict[str, Optional[float]]]
+        Dictionary mapping normalized symbol to dict with:
+        - price: float | None
+        - volume: float | None
+        - iv_rank: float | None
         Returns empty dict if snapshot not found or no data.
     """
     import pandas as pd
     
     symbol_to_df = load_snapshot_data(snapshot_id)
-    prices: Dict[str, float] = {}
+    symbol_data: Dict[str, Dict[str, Optional[float]]] = {}
     
     for symbol, df in symbol_to_df.items():
         if df is not None and not df.empty:
+            data: Dict[str, Optional[float]] = {
+                "price": None,
+                "volume": None,
+                "iv_rank": None,
+            }
+            
             # Get latest close price (last row)
             if 'close' in df.columns:
                 latest_close = df['close'].iloc[-1]
                 if pd.notna(latest_close):
-                    prices[symbol] = float(latest_close)
+                    data["price"] = float(latest_close)
             elif 'price' in df.columns:
                 # Fallback to 'price' column if 'close' not available
                 latest_price = df['price'].iloc[-1]
                 if pd.notna(latest_price):
-                    prices[symbol] = float(latest_price)
+                    data["price"] = float(latest_price)
+            
+            # Get volume (if available)
+            if 'volume' in df.columns:
+                latest_volume = df['volume'].iloc[-1]
+                if pd.notna(latest_volume):
+                    data["volume"] = float(latest_volume)
+            
+            # Get IV rank (if available)
+            if 'iv_rank' in df.columns:
+                latest_iv_rank = df['iv_rank'].iloc[-1]
+                if pd.notna(latest_iv_rank):
+                    data["iv_rank"] = float(latest_iv_rank)
+            elif 'iv' in df.columns:
+                # Fallback: try 'iv' column (will be None if not found)
+                latest_iv = df['iv'].iloc[-1]
+                if pd.notna(latest_iv):
+                    # If IV is provided but not IV rank, we can't compute IV rank
+                    # Leave it as None
+                    pass
+            
+            symbol_data[symbol] = data
     
-    return prices
+    return symbol_data
 
 
 __all__ = [

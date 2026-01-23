@@ -21,6 +21,10 @@ from uuid import uuid4
 from app.core.models.position import Position
 from app.core.storage.position_store import PositionStore
 from app.db.database import get_db_path
+from app.core.config.paths import DB_PATH
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 def _load_baseline_universe() -> list[str]:
@@ -134,7 +138,7 @@ def init_persistence_db() -> None:
     - trades: Immutable trade ledger
     - portfolio_snapshots: Manual account value snapshots
     - Updates alerts table with status column
-    - Updates csp_candidates with executed flag
+    - Initializes all required tables
     """
     db_path = get_db_path()
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -223,11 +227,7 @@ def init_persistence_db() -> None:
             UPDATE alerts SET status = 'OPEN' WHERE status IS NULL
         """)
         
-        # Update csp_candidates table: add executed flag if it doesn't exist
-        try:
-            cursor.execute("ALTER TABLE csp_candidates ADD COLUMN executed INTEGER DEFAULT 0")
-        except sqlite3.OperationalError:
-            pass  # Column already exists
+        # Legacy csp_candidates table removed - using csp_evaluations instead (Phase 2B)
         
         # Create assignment_profile table (Phase 1B)
         cursor.execute("""
@@ -246,7 +246,7 @@ def init_persistence_db() -> None:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_timestamp ON trades(timestamp DESC)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_action ON trades(action)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_candidates_executed ON csp_candidates(executed)")
+        # Legacy csp_candidates index removed - using csp_evaluations instead
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_timestamp ON portfolio_snapshots(timestamp DESC)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_brokerage ON portfolio_snapshots(brokerage)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_universe_enabled ON symbol_universe(enabled)")
@@ -299,6 +299,25 @@ def init_persistence_db() -> None:
         
         # Create index for regime lookups
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_regimes_computed_at ON market_regimes(computed_at DESC)")
+        
+        # Create csp_evaluations table (Phase 2B Step 2)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS csp_evaluations (
+                snapshot_id TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                eligible INTEGER NOT NULL,
+                score INTEGER NOT NULL,
+                reasons_json TEXT,
+                features_json TEXT,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (snapshot_id, symbol)
+            )
+        """)
+        
+        # Create indexes for csp_evaluations
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_csp_eval_snapshot ON csp_evaluations(snapshot_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_csp_eval_eligible ON csp_evaluations(eligible, score DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_csp_eval_symbol ON csp_evaluations(symbol)")
         
         conn.commit()
     except Exception as e:
@@ -545,80 +564,27 @@ def list_open_positions() -> List[Position]:
 
 
 def mark_candidate_executed(symbol: str, executed: bool = True) -> None:
-    """Mark a CSP candidate as executed.
+    """Legacy function - DEPRECATED.
     
-    Parameters
-    ----------
-    symbol:
-        Stock symbol to mark.
-    executed:
-        True to mark as executed, False to unmark.
+    CSP candidates are now stored in csp_evaluations table.
+    Execution tracking should be done via trades table using record_trade().
     """
-    init_persistence_db()
-    db_path = get_db_path()
-    conn = sqlite3.connect(str(db_path))
-    cursor = conn.cursor()
-    
-    try:
-        cursor.execute("""
-            UPDATE csp_candidates
-            SET executed = ?
-            WHERE symbol = ?
-        """, (1 if executed else 0, symbol.upper()))
-        conn.commit()
-    finally:
-        conn.close()
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning(f"[DEPRECATED] mark_candidate_executed() is deprecated. Use record_trade() instead.")
+    # No-op: csp_candidates table no longer exists
 
 
 def list_candidates(include_executed: bool = False) -> List[Dict[str, Any]]:
-    """List CSP candidates, optionally filtering executed ones.
+    """Legacy function - DEPRECATED.
     
-    Parameters
-    ----------
-    include_executed:
-        If False, exclude executed candidates.
-    
-    Returns
-    -------
-    List[Dict[str, Any]]
-        List of candidate dictionaries.
+    Returns empty list. CSP candidates are now stored in csp_evaluations table.
+    Use get_csp_evaluations(snapshot_id) instead.
     """
-    db_path = get_db_path()
-    if not db_path.exists():
-        return []
-    
-    conn = sqlite3.connect(str(db_path))
-    cursor = conn.cursor()
-    
-    try:
-        if include_executed:
-            cursor.execute("""
-                SELECT symbol, score, reasons, key_levels, created_at, executed
-                FROM csp_candidates
-                ORDER BY score DESC, created_at DESC
-            """)
-        else:
-            cursor.execute("""
-                SELECT symbol, score, reasons, key_levels, created_at, executed
-                FROM csp_candidates
-                WHERE executed = 0 OR executed IS NULL
-                ORDER BY score DESC, created_at DESC
-            """)
-        
-        rows = cursor.fetchall()
-        candidates = []
-        for row in rows:
-            candidates.append({
-                "symbol": row[0],
-                "score": row[1],
-                "reasons": json.loads(row[2]) if row[2] else [],
-                "key_levels": json.loads(row[3]) if row[3] else {},
-                "created_at": row[4],
-                "executed": bool(row[5]) if len(row) > 5 else False,
-            })
-        return candidates
-    finally:
-        conn.close()
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning("[DEPRECATED] list_candidates() is deprecated. Use get_csp_evaluations() instead.")
+    return []
 
 
 def create_alert(message: str, level: str = "INFO") -> int:
@@ -902,10 +868,115 @@ def get_enabled_symbols() -> list[str]:
     This is the canonical universe filter used by the system.
     Symbols are normalized (UPPER, TRIM) for consistency.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     from app.core.market_snapshot import normalize_symbol
+    from app.db.database import get_db_path
+    
+    # Diagnostic logging (Heartbeat Diagnostic Verification)
+    db_path = get_db_path()
+    logger.info(f"[HEARTBEAT][DB] path={db_path.absolute()}")
+    
+    # Direct query to verify universe state
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    
+    try:
+        # Check if table exists
+        cursor.execute("""
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name='symbol_universe'
+        """)
+        table_exists = cursor.fetchone() is not None
+        
+        if not table_exists:
+            logger.warning("[HEARTBEAT][UNIVERSE] Table symbol_universe does not exist")
+            return []
+        
+        # Get total row count
+        cursor.execute("SELECT COUNT(*) FROM symbol_universe")
+        total_rows = cursor.fetchone()[0]
+        logger.info(f"[HEARTBEAT][UNIVERSE] total_rows={total_rows}")
+        
+        # Get enabled row count
+        cursor.execute("SELECT COUNT(*) FROM symbol_universe WHERE enabled=1")
+        enabled_rows = cursor.fetchone()[0]
+        logger.info(f"[HEARTBEAT][UNIVERSE] enabled_rows={enabled_rows}")
+        
+        # Get sample rows (first 10)
+        cursor.execute("""
+            SELECT symbol, enabled, notes 
+            FROM symbol_universe 
+            ORDER BY symbol 
+            LIMIT 10
+        """)
+        sample_rows = cursor.fetchall()
+        logger.info(f"[HEARTBEAT][UNIVERSE] sample={sample_rows}")
+        
+        # Get all enabled symbols (direct query - no additional filters)
+        cursor.execute("""
+            SELECT symbol, enabled, notes 
+            FROM symbol_universe 
+            WHERE enabled=1
+            ORDER BY symbol
+        """)
+        enabled_raw = cursor.fetchall()
+        logger.info(f"[HEARTBEAT][UNIVERSE] enabled_raw_count={len(enabled_raw)}")
+        if enabled_raw:
+            logger.info(f"[HEARTBEAT][UNIVERSE] enabled_raw_sample={enabled_raw[:10]}")
+        
+    finally:
+        conn.close()
+    
+    # Use existing list_universe_symbols() for consistency
     symbols = list_universe_symbols()
-    # Normalize symbols from DB
-    return [normalize_symbol(row["symbol"]) for row in symbols if row.get("enabled")]
+    
+    # Filter and normalize
+    enabled_list = []
+    for row in symbols:
+        if row.get("enabled"):
+            normalized = normalize_symbol(row["symbol"])
+            if normalized:
+                enabled_list.append(normalized)
+    
+    logger.info(f"[HEARTBEAT][UNIVERSE] final_enabled_count={len(enabled_list)}")
+    if enabled_list:
+        logger.info(f"[HEARTBEAT][UNIVERSE] final_enabled_sample={enabled_list[:10]}")
+    
+    return enabled_list
+
+
+def get_all_symbols() -> List[Dict[str, Any]]:
+    """Get all symbols from universe (Phase 2B Step 4).
+    
+    Returns
+    -------
+    List[Dict[str, Any]]
+        List of symbol dictionaries with symbol, enabled, notes.
+    """
+    init_persistence_db()
+    db_path = get_db_path()
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            SELECT symbol, enabled, notes
+            FROM symbol_universe
+            ORDER BY symbol
+        """)
+        rows = cursor.fetchall()
+        return [
+            {
+                "symbol": row[0],
+                "enabled": bool(row[1]),
+                "notes": row[2] or "",
+            }
+            for row in rows
+        ]
+    finally:
+        conn.close()
 
 
 def list_universe_symbols() -> List[Dict[str, Any]]:
@@ -951,8 +1022,50 @@ def list_universe_symbols() -> List[Dict[str, Any]]:
         conn.close()
 
 
+def add_symbol(symbol: str, notes: str = "") -> None:
+    """Add a symbol to the universe (Phase 2B Step 4).
+    
+    Parameters
+    ----------
+    symbol:
+        Stock symbol (e.g., "AAPL").
+    notes:
+        Optional notes about the symbol.
+    """
+    from app.core.market_snapshot import normalize_symbol
+    
+    normalized = normalize_symbol(symbol)
+    if not normalized:
+        logger.warning(f"[UNIVERSE] Invalid symbol: {symbol}")
+        return
+    
+    init_persistence_db()
+    db_path = get_db_path()
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    
+    try:
+        # Check if already exists
+        cursor.execute("SELECT COUNT(*) FROM symbol_universe WHERE symbol = ?", (normalized,))
+        exists = cursor.fetchone()[0] > 0
+        
+        if exists:
+            logger.warning(f"[UNIVERSE] Symbol {normalized} already exists, ignoring add")
+            return
+        
+        created_at = datetime.now(timezone.utc).isoformat()
+        cursor.execute("""
+            INSERT INTO symbol_universe (symbol, enabled, notes, created_at)
+            VALUES (?, 1, ?, ?)
+        """, (normalized, notes, created_at))
+        conn.commit()
+        logger.info(f"[UNIVERSE] Added symbol: {normalized}")
+    finally:
+        conn.close()
+
+
 def add_universe_symbol(symbol: str, enabled: bool = True, notes: Optional[str] = None) -> None:
-    """Add or update a symbol in the universe.
+    """Add or update a symbol in the universe (legacy function).
     
     Parameters
     ----------
@@ -979,8 +1092,40 @@ def add_universe_symbol(symbol: str, enabled: bool = True, notes: Optional[str] 
         conn.close()
 
 
+def toggle_symbol(symbol: str, enabled: bool) -> None:
+    """Toggle enabled status of a symbol (Phase 2B Step 4).
+    
+    Parameters
+    ----------
+    symbol:
+        Stock symbol to toggle.
+    enabled:
+        New enabled status.
+    """
+    from app.core.market_snapshot import normalize_symbol
+    
+    normalized = normalize_symbol(symbol)
+    if not normalized:
+        logger.warning(f"[UNIVERSE] Invalid symbol: {symbol}")
+        return
+    
+    init_persistence_db()
+    db_path = get_db_path()
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            UPDATE symbol_universe SET enabled = ? WHERE symbol = ?
+        """, (1 if enabled else 0, normalized))
+        conn.commit()
+        logger.info(f"[UNIVERSE] Toggled {normalized} to enabled={enabled}")
+    finally:
+        conn.close()
+
+
 def toggle_universe_symbol(symbol: str, enabled: bool) -> None:
-    """Toggle enabled status of a symbol.
+    """Toggle enabled status of a symbol (legacy function).
     
     Parameters
     ----------
@@ -1003,8 +1148,72 @@ def toggle_universe_symbol(symbol: str, enabled: bool) -> None:
         conn.close()
 
 
+def update_symbol(symbol: str, enabled: bool, notes: str) -> None:
+    """Update a symbol's enabled status and notes (Phase 2B Step 4).
+    
+    Parameters
+    ----------
+    symbol:
+        Stock symbol to update.
+    enabled:
+        New enabled status.
+    notes:
+        New notes.
+    """
+    from app.core.market_snapshot import normalize_symbol
+    
+    normalized = normalize_symbol(symbol)
+    if not normalized:
+        logger.warning(f"[UNIVERSE] Invalid symbol: {symbol}")
+        return
+    
+    init_persistence_db()
+    db_path = get_db_path()
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            UPDATE symbol_universe SET enabled = ?, notes = ? WHERE symbol = ?
+        """, (1 if enabled else 0, notes, normalized))
+        conn.commit()
+        logger.info(f"[UNIVERSE] Updated {normalized}: enabled={enabled}")
+    finally:
+        conn.close()
+
+
+def delete_symbol(symbol: str) -> None:
+    """Delete a symbol from the universe (Phase 2B Step 4).
+    
+    Parameters
+    ----------
+    symbol:
+        Stock symbol to delete.
+    """
+    from app.core.market_snapshot import normalize_symbol
+    
+    normalized = normalize_symbol(symbol)
+    if not normalized:
+        logger.warning(f"[UNIVERSE] Invalid symbol: {symbol}")
+        return
+    
+    init_persistence_db()
+    db_path = get_db_path()
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            DELETE FROM symbol_universe WHERE symbol = ?
+        """, (normalized,))
+        conn.commit()
+        logger.info(f"[UNIVERSE] Deleted symbol: {normalized}")
+    finally:
+        conn.close()
+
+
 def delete_universe_symbol(symbol: str) -> None:
-    """Delete a symbol from the universe.
+    """Delete a symbol from the universe (legacy function).
     
     Parameters
     ----------
@@ -1353,8 +1562,285 @@ def get_latest_regime() -> Optional[Dict[str, Any]]:
         conn.close()
 
 
+def upsert_csp_evaluations(snapshot_id: str, rows: List[Dict[str, Any]]) -> None:
+    """Upsert CSP evaluation results for a snapshot (Phase 2B Step 2).
+    
+    Parameters
+    ----------
+    snapshot_id:
+        Snapshot ID these evaluations belong to.
+    rows:
+        List of evaluation dictionaries, each with:
+        - symbol: str
+        - eligible: bool
+        - score: int (0-100)
+        - rejection_reasons: List[str]
+        - features: Dict[str, Any]
+        - regime_context: Dict[str, Any]
+    """
+    if not rows:
+        return
+    
+    db_path = get_db_path()
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    
+    try:
+        created_at = datetime.now(timezone.utc).isoformat()
+        
+        for row in rows:
+            symbol = row["symbol"]
+            eligible = 1 if row.get("eligible", False) else 0
+            score = row.get("score", 0)
+            rejection_reasons = row.get("rejection_reasons", [])
+            features = row.get("features", {})
+            regime_context = row.get("regime_context", {})
+            
+            # Combine features and regime_context into features_json
+            combined_features = {**features, "regime_context": regime_context}
+            
+            reasons_json = json.dumps(rejection_reasons)
+            features_json = json.dumps(combined_features)
+            
+            cursor.execute("""
+                INSERT OR REPLACE INTO csp_evaluations (
+                    snapshot_id, symbol, eligible, score,
+                    reasons_json, features_json, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (snapshot_id, symbol, eligible, score, reasons_json, features_json, created_at))
+        
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_csp_evaluations(snapshot_id: str) -> List[Dict[str, Any]]:
+    """Get CSP evaluation results for a snapshot (Phase 2B Step 2).
+    
+    Parameters
+    ----------
+    snapshot_id:
+        Snapshot ID to load evaluations for.
+    
+    Returns
+    -------
+    List[Dict[str, Any]]
+        List of evaluation dictionaries with:
+        - symbol: str
+        - eligible: bool
+        - score: int
+        - rejection_reasons: List[str]
+        - features: Dict[str, Any]
+        - regime_context: Dict[str, Any]
+    """
+    db_path = get_db_path()
+    if not db_path.exists():
+        return []
+    
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("""
+            SELECT symbol, eligible, score, reasons_json, features_json
+            FROM csp_evaluations
+            WHERE snapshot_id = ?
+            ORDER BY score DESC
+        """, (snapshot_id,))
+        
+        results = []
+        for row in cursor.fetchall():
+            symbol = row[0]
+            eligible = bool(row[1])
+            score = row[2]
+            reasons_json = row[3]
+            features_json = row[4]
+            
+            rejection_reasons = json.loads(reasons_json) if reasons_json else []
+            combined_features = json.loads(features_json) if features_json else {}
+            
+            # Split features and regime_context
+            regime_context = combined_features.pop("regime_context", {})
+            features = combined_features
+            
+            results.append({
+                "symbol": symbol,
+                "eligible": eligible,
+                "score": score,
+                "rejection_reasons": rejection_reasons,
+                "features": features,
+                "regime_context": regime_context,
+            })
+        
+        return results
+    finally:
+        conn.close()
+
+
+def get_rejection_reason_counts(snapshot_id: str) -> List[tuple[str, int]]:
+    """Get rejection reason counts for a snapshot (Phase 2B Step 2).
+    
+    Parameters
+    ----------
+    snapshot_id:
+        Snapshot ID to analyze.
+    
+    Returns
+    -------
+    List[tuple[str, int]]
+        List of (reason, count) tuples, sorted by count descending.
+    """
+    evaluations = get_csp_evaluations(snapshot_id)
+    
+    reason_counts: Dict[str, int] = {}
+    for eval_result in evaluations:
+        if not eval_result["eligible"]:
+            for reason in eval_result["rejection_reasons"]:
+                reason_counts[reason] = reason_counts.get(reason, 0) + 1
+    
+    # Sort by count descending
+    return sorted(reason_counts.items(), key=lambda x: x[1], reverse=True)
+
+
+def initialize_schema() -> None:
+    """Initialize all required SQLite tables on startup.
+    
+    This function ensures all tables exist with correct schema before any
+    SELECT/INSERT operations. Called automatically on module import.
+    
+    Creates tables:
+    - market_snapshots: Snapshot metadata
+    - market_snapshot_data: Per-symbol snapshot data
+    - symbol_universe: Enabled/disabled symbols
+    - market_regimes: Market regime tracking
+    - csp_evaluations: CSP candidate evaluation results
+    - alerts: Alert lifecycle management
+    """
+    db_path = DB_PATH
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db_path))
+    cursor = conn.cursor()
+    
+    try:
+        # market_snapshots (Phase 2A)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS market_snapshots (
+                snapshot_id TEXT PRIMARY KEY,
+                snapshot_timestamp_et TEXT NOT NULL,
+                provider TEXT NOT NULL DEFAULT 'snapshot',
+                symbol_count INTEGER NOT NULL,
+                data_age_minutes REAL NOT NULL,
+                is_frozen INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            )
+        """)
+        
+        # market_snapshot_data (Phase 2A)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS market_snapshot_data (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                snapshot_id TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                data_json TEXT,
+                has_data INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                UNIQUE(snapshot_id, symbol)
+            )
+        """)
+        
+        # symbol_universe (Phase 1A.1)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS symbol_universe (
+                symbol TEXT PRIMARY KEY,
+                enabled INTEGER DEFAULT 1,
+                notes TEXT,
+                created_at TEXT NOT NULL
+            )
+        """)
+        
+        # market_regimes (Phase 2B Step 1)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS market_regimes (
+                snapshot_id TEXT PRIMARY KEY,
+                regime TEXT NOT NULL,
+                benchmark_symbol TEXT,
+                benchmark_return REAL,
+                computed_at TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+        
+        # csp_evaluations (Phase 2B Step 2)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS csp_evaluations (
+                snapshot_id TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                eligible INTEGER NOT NULL,
+                score INTEGER NOT NULL,
+                reasons_json TEXT,
+                features_json TEXT,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (snapshot_id, symbol)
+            )
+        """)
+        
+        # alerts (Phase 1A.1) - ensure it has status column
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message TEXT NOT NULL,
+                level TEXT NOT NULL,
+                status TEXT DEFAULT 'OPEN',
+                created_at TEXT NOT NULL
+            )
+        """)
+        
+        # Add status column if it doesn't exist (migration)
+        try:
+            cursor.execute("ALTER TABLE alerts ADD COLUMN status TEXT DEFAULT 'OPEN'")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
+        # Migrate existing alerts to OPEN status
+        cursor.execute("""
+            UPDATE alerts SET status = 'OPEN' WHERE status IS NULL
+        """)
+        
+        # Create indexes
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_snapshot_timestamp ON market_snapshots(snapshot_timestamp_et DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_snapshot_data_symbol ON market_snapshot_data(symbol)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_snapshot_data_snapshot ON market_snapshot_data(snapshot_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_universe_enabled ON symbol_universe(enabled)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_regimes_computed_at ON market_regimes(computed_at DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_csp_eval_snapshot ON csp_evaluations(snapshot_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_csp_eval_eligible ON csp_evaluations(eligible, score DESC)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_csp_eval_symbol ON csp_evaluations(symbol)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status)")
+        
+        conn.commit()
+        logger.info("[DB INIT] Schema initialization complete")
+        logger.info("[DB INIT] csp_evaluations schema verified")
+    except Exception as e:
+        logger.error(f"[DB INIT] Failed to initialize schema: {e}")
+        raise
+    finally:
+        conn.close()
+
+
+# Initialize schema on module import (guarded to run once)
+_schema_initialized = False
+if not _schema_initialized:
+    try:
+        initialize_schema()
+        _schema_initialized = True
+    except Exception as e:
+        logger.warning(f"[DB INIT] Schema initialization failed on import: {e}")
+
+
 __all__ = [
     "init_persistence_db",
+    "initialize_schema",
     "record_trade",
     "upsert_position_from_trade",
     "recompute_positions",
@@ -1370,7 +1856,12 @@ __all__ = [
     "save_portfolio_snapshot",
     "get_latest_portfolio_snapshot",
     "get_enabled_symbols",
+    "get_all_symbols",
     "list_universe_symbols",
+    "add_symbol",
+    "update_symbol",
+    "toggle_symbol",
+    "delete_symbol",
     "add_universe_symbol",
     "toggle_universe_symbol",
     "delete_universe_symbol",
@@ -1381,4 +1872,7 @@ __all__ = [
     "is_assignment_blocked",
     "upsert_regime",
     "get_latest_regime",
+    "upsert_csp_evaluations",
+    "get_csp_evaluations",
+    "get_rejection_reason_counts",
 ]

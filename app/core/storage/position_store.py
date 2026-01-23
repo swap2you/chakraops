@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 from app.core.models.position import Position, PositionStatus
+from app.core.config.paths import DB_PATH
 
 
 class PositionStore:
@@ -34,12 +35,11 @@ class PositionStore:
         Parameters
         ----------
         db_path:
-            Path to the SQLite database file. If omitted, defaults to
-            ``data/chakraops.db`` at the repository root.
+            Path to the SQLite database file. If omitted, uses the canonical
+            DB_PATH from app.core.config (app/data/chakraops.db).
         """
         if db_path is None:
-            repo_root = Path(__file__).parent.parent.parent
-            db_path = repo_root / "data" / "chakraops.db"
+            db_path = DB_PATH
 
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)

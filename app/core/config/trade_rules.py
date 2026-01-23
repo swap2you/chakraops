@@ -51,6 +51,31 @@ This enforces position sizing discipline by limiting exposure to any
 single underlying. Expressed as a decimal (0.15 = 15%).
 """
 
+# CSP Scoring price constraints (Phase 2B Step 2)
+MIN_PRICE: float = 20.0
+"""Minimum stock price for CSP candidate eligibility.
+
+Stocks priced below this threshold are excluded from CSP consideration.
+"""
+
+MAX_PRICE: float = 500.0
+"""Maximum stock price for CSP candidate eligibility.
+
+Stocks priced above this threshold are excluded from CSP consideration.
+"""
+
+TARGET_LOW: float = 50.0
+"""Lower bound of optimal price range for CSP candidates.
+
+Stocks in the range [TARGET_LOW, TARGET_HIGH] receive maximum price suitability score.
+"""
+
+TARGET_HIGH: float = 250.0
+"""Upper bound of optimal price range for CSP candidates.
+
+Stocks in the range [TARGET_LOW, TARGET_HIGH] receive maximum price suitability score.
+"""
+
 
 __all__ = [
     "CSP_MIN_DTE",
@@ -58,4 +83,8 @@ __all__ = [
     "CSP_TARGET_DELTA_LOW",
     "CSP_TARGET_DELTA_HIGH",
     "MAX_CAPITAL_PER_SYMBOL_PCT",
+    "MIN_PRICE",
+    "MAX_PRICE",
+    "TARGET_LOW",
+    "TARGET_HIGH",
 ]

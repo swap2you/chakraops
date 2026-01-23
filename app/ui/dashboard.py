@@ -45,6 +45,11 @@ from app.core.persistence import (
     save_portfolio_snapshot,
     get_latest_portfolio_snapshot,
     get_enabled_symbols,
+    get_all_symbols,
+    add_symbol,
+    update_symbol,
+    toggle_symbol,
+    delete_symbol,
     list_universe_symbols,
     add_universe_symbol,
     toggle_universe_symbol,
@@ -83,6 +88,8 @@ if "selected_brokerage" not in st.session_state:
     st.session_state.selected_brokerage = "Robinhood"
 if "heartbeat_started" not in st.session_state:
     st.session_state.heartbeat_started = False
+if "show_add_symbol_modal" not in st.session_state:
+    st.session_state.show_add_symbol_modal = False
 
 # Defensive check: ensure all required tables exist on startup (Phase 1B fix)
 try:
@@ -96,10 +103,13 @@ except Exception as e:
 
 
 def get_db_path() -> Path:
-    """Get path to SQLite database."""
-    repo_root = Path(__file__).parent.parent.parent
-    db_path = repo_root / "data" / "chakraops.db"
-    return db_path
+    """Get path to SQLite database.
+    
+    Returns the canonical DB_PATH from app.core.config.paths.
+    This ensures all modules use the same database file.
+    """
+    from app.core.config.paths import DB_PATH
+    return DB_PATH
 
 
 def db_exists() -> bool:
@@ -146,63 +156,11 @@ def get_regime_snapshot() -> Optional[Dict[str, Any]]:
 
 
 def get_csp_candidates() -> List[Dict[str, Any]]:
-    """Get CSP candidates - filtered by enabled symbols only, with assignment profiles (Phase 1B)."""
-    # Check cache first
-    if st.session_state.candidates_cache is not None:
-        # Filter by enabled symbols and enrich with assignment profiles
-        try:
-            enabled_symbols = set(get_enabled_symbols())
-            filtered = [c for c in st.session_state.candidates_cache if c.get("symbol") in enabled_symbols]
-            # Enrich with assignment profiles
-            for candidate in filtered:
-                symbol = candidate.get("symbol")
-                if symbol:
-                    profile = get_assignment_profile(symbol)
-                    if profile:
-                        candidate["assignment_score"] = profile.get("assignment_score", 0)
-                        candidate["assignment_label"] = profile.get("assignment_label", "NEUTRAL")
-                        candidate["operator_override"] = profile.get("operator_override", False)
-                        candidate["blocked"] = is_assignment_blocked(symbol)
-                    else:
-                        # No profile yet - not blocked
-                        candidate["assignment_score"] = 0
-                        candidate["assignment_label"] = "NEUTRAL"
-                        candidate["operator_override"] = False
-                        candidate["blocked"] = False
-            return filtered
-        except Exception:
-            return st.session_state.candidates_cache
-
-    # Use persistence module to get candidates (excludes executed by default)
-    try:
-        candidates = persistence_list_candidates(include_executed=False)
-        # Filter by enabled symbols
-        enabled_symbols = set(get_enabled_symbols())
-        candidates = [c for c in candidates if c.get("symbol") in enabled_symbols]
-        
-        # Enrich with assignment profiles (Phase 1B)
-        for candidate in candidates:
-            symbol = candidate.get("symbol")
-            if symbol:
-                profile = get_assignment_profile(symbol)
-                if profile:
-                    candidate["assignment_score"] = profile.get("assignment_score", 0)
-                    candidate["assignment_label"] = profile.get("assignment_label", "NEUTRAL")
-                    candidate["operator_override"] = profile.get("operator_override", False)
-                    candidate["blocked"] = is_assignment_blocked(symbol)
-                else:
-                    # No profile yet - not blocked
-                    candidate["assignment_score"] = 0
-                    candidate["assignment_label"] = "NEUTRAL"
-                    candidate["operator_override"] = False
-                    candidate["blocked"] = False
-        
-        st.session_state.candidates_cache = candidates
-        return candidates
-    except Exception:
-        pass
-
-    # If no DB or empty, return empty list
+    """Legacy function - DEPRECATED.
+    
+    Returns empty list. CSP candidates are now stored in csp_evaluations table.
+    Use get_csp_evaluations(snapshot_id) instead.
+    """
     return []
 
 
@@ -231,9 +189,9 @@ def get_last_update_time() -> Optional[str]:
         """)
         regime_time = cursor.fetchone()[0]
 
-        # Get latest from csp_candidates
+        # Get latest from csp_evaluations
         cursor.execute("""
-            SELECT MAX(created_at) FROM csp_candidates
+            SELECT MAX(created_at) FROM csp_evaluations
         """)
         candidates_time = cursor.fetchone()[0]
 
@@ -428,6 +386,13 @@ def _update_candidate_daily_tracking(count: int) -> None:
 
 def main() -> None:
     """Main dashboard function."""
+    # DB Path Unification Fix - log DB path at startup
+    from app.core.config.paths import DB_PATH
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"[DASHBOARD] DB_PATH={DB_PATH.absolute()}")
+    
     # Start background heartbeat (once per session)
     if not st.session_state.heartbeat_started:
         try:
@@ -904,7 +869,15 @@ def main() -> None:
     error_message = ""
     
     try:
-        all_candidates = get_csp_candidates()
+        # Use csp_evaluations instead of legacy csp_candidates
+        from app.core.market_snapshot import get_active_snapshot
+        from app.core.persistence import get_csp_evaluations
+        snapshot = get_active_snapshot()
+        if snapshot:
+            evaluations = get_csp_evaluations(snapshot["snapshot_id"])
+            all_candidates = [e for e in evaluations if e.get("eligible", False)]
+        else:
+            all_candidates = []
         actionable_candidates = [
             c for c in all_candidates
             if not c.get("blocked", False) or c.get("operator_override", False)
@@ -1022,265 +995,184 @@ def main() -> None:
 
     st.divider()
 
-    # CSP Candidates Section (Phase 1B - with Assignment-Worthy scoring)
+    # CSP Candidates Section (Phase 2B Step 2 - Deterministic Evaluation)
     st.header("🎯 CSP Candidates")
     
-    # Get candidates with assignment profiles
-    candidates = get_csp_candidates()
+    # Load evaluations from latest active snapshot
+    from app.core.market_snapshot import get_active_snapshot
+    from app.core.persistence import get_csp_evaluations, get_rejection_reason_counts
     
-    # Update daily tracking (Phase 1C)
-    actionable_count = len([c for c in candidates if not c.get("blocked", False) or c.get("operator_override", False)])
-    _update_candidate_daily_tracking(actionable_count)
-
-    if candidates:
-        # Top candidate highlight
-        if len(candidates) > 0:
-            top_candidate = candidates[0]
-            with st.container():
-                st.success(
-                    f"🏆 **Top Candidate: {top_candidate['symbol']}** "
-                    f"| Score: **{top_candidate['score']}/100**"
-                )
+    snapshot = get_active_snapshot()
+    if snapshot:
+        snapshot_id = snapshot["snapshot_id"]
+        evaluations = get_csp_evaluations(snapshot_id)
+        rejection_reasons = get_rejection_reason_counts(snapshot_id)
         
-        st.write("")  # Spacing
+        # Filter to eligible only and sort by score desc
+        eligible_evaluations = [e for e in evaluations if e["eligible"]]
+        eligible_evaluations.sort(key=lambda x: x["score"], reverse=True)
         
-        # Candidate cards
-        for i, candidate in enumerate(candidates, 1):
-            symbol = candidate.get("symbol", "")
-            score = candidate.get("score", 0)
-            assignment_score = candidate.get("assignment_score", 0)
-            assignment_label = candidate.get("assignment_label", "NEUTRAL")
-            blocked = candidate.get("blocked", False)
-            operator_override = candidate.get("operator_override", False)
+        # Show summary metrics
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("CSP Candidates Found", len(eligible_evaluations))
+        with col2:
+            rejected_count = len([e for e in evaluations if not e["eligible"]])
+            st.metric("Rejected Symbols", rejected_count)
+        with col3:
+            if rejection_reasons:
+                top_reason = rejection_reasons[0][0]
+                top_count = rejection_reasons[0][1]
+                st.metric("Top Rejection Reason", f"{top_reason} ({top_count})")
+        
+        # Show top rejection reasons
+        if rejection_reasons:
+            with st.expander("📊 Top Rejection Reasons", expanded=False):
+                for reason, count in rejection_reasons[:5]:
+                    st.write(f"- **{reason}**: {count} symbols")
+        
+        # Update daily tracking (Phase 1C)
+        _update_candidate_daily_tracking(len(eligible_evaluations))
+        
+        # Display eligible candidates
+        if eligible_evaluations:
+            # Top candidate highlight
+            if len(eligible_evaluations) > 0:
+                top_eval = eligible_evaluations[0]
+                with st.container():
+                    st.success(
+                        f"🏆 **Top Candidate: {top_eval['symbol']}** "
+                        f"| Score: **{top_eval['score']}/100**"
+                    )
             
-            with st.container():
-                # Score badge color
-                if score >= 80:
-                    badge_color = "🟢"
-                elif score >= 60:
-                    badge_color = "🟡"
-                else:
-                    badge_color = "🟠"
+            st.write("")  # Spacing
+            
+            # Candidate cards with "Why?" expanders
+            for i, eval_result in enumerate(eligible_evaluations, 1):
+                symbol = eval_result["symbol"]
+                score = eval_result["score"]
+                features = eval_result.get("features", {})
+                regime_context = eval_result.get("regime_context", {})
+                rejection_reasons = eval_result.get("rejection_reasons", [])
                 
-                # Assignment badge (Phase 1B)
-                if assignment_label == "OK_TO_OWN":
-                    aw_badge = "✅ OK_TO_OWN"
-                    aw_color = "🟢"
-                    aw_style = "background-color: #d4edda; color: #155724; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;"
-                elif assignment_label == "NEUTRAL":
-                    aw_badge = "⚪ NEUTRAL"
-                    aw_color = "⚪"
-                    aw_style = "background-color: #e9ecef; color: #495057; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;"
-                else:  # RENT_ONLY
-                    aw_badge = "🚫 RENT_ONLY"
-                    aw_color = "🔴"
-                    aw_style = "background-color: #f8d7da; color: #721c24; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;"
-                
-                # Blocked status
-                if blocked and not operator_override:
-                    blocked_banner = st.error(f"🚫 **Blocked: Not Assignment-Worthy** - {symbol} is marked as RENT_ONLY. Override required to allow CSP.")
-                elif blocked and operator_override:
-                    blocked_banner = st.warning(f"⚠️ **Overridden** - {symbol} is RENT_ONLY but operator override is active.")
-                else:
-                    blocked_banner = None
-                
-                # Main candidate card
-                col1, col2, col3 = st.columns([1, 2, 1])
-                
-                with col1:
-                    st.markdown(f"### {badge_color} {symbol}")
-                    st.metric("CSP Score", f"{score}/100")
-                    st.markdown(f'<span style="{aw_style}">{aw_color} {aw_badge}</span>', unsafe_allow_html=True)
-                    st.metric("Assignment Score", f"{assignment_score}/100")
-                
-                with col2:
-                    key_levels = candidate.get("key_levels", {})
-                    st.write("**Key Levels:**")
-                    cols = st.columns(3)
-                    with cols[0]:
-                        st.caption(f"Close: ${key_levels.get('close', 'N/A'):.2f}" if isinstance(key_levels.get('close'), (int, float)) else f"Close: {key_levels.get('close', 'N/A')}")
-                    with cols[1]:
-                        st.caption(f"EMA50: ${key_levels.get('ema50', 'N/A'):.2f}" if isinstance(key_levels.get('ema50'), (int, float)) else f"EMA50: {key_levels.get('ema50', 'N/A')}")
-                    with cols[2]:
-                        st.caption(f"EMA200: ${key_levels.get('ema200', 'N/A'):.2f}" if isinstance(key_levels.get('ema200'), (int, float)) else f"EMA200: {key_levels.get('ema200', 'N/A')}")
+                with st.container():
+                    # Score badge color
+                    if score >= 80:
+                        badge_color = "🟢"
+                    elif score >= 60:
+                        badge_color = "🟡"
+                    else:
+                        badge_color = "🟠"
                     
-                    # Contract details if available
-                    contract = candidate.get("contract")
-                    if contract:
-                        st.write("**Contract:**")
-                        contract_cols = st.columns(4)
-                        with contract_cols[0]:
-                            st.caption(f"Expiry: {contract.get('expiry', 'N/A')}")
-                        with contract_cols[1]:
-                            st.caption(f"Strike: ${contract.get('strike', 'N/A'):.2f}" if isinstance(contract.get('strike'), (int, float)) else f"Strike: {contract.get('strike', 'N/A')}")
-                        with contract_cols[2]:
-                            st.caption(f"Delta: {contract.get('delta', 'N/A'):.3f}" if isinstance(contract.get('delta'), (int, float)) else f"Delta: {contract.get('delta', 'N/A')}")
-                        with contract_cols[3]:
-                            premium = contract.get('premium_estimate')
-                            if isinstance(premium, (int, float)):
-                                st.caption(f"Premium: ${premium:.2f}")
-                            else:
-                                st.caption(f"Premium: {premium or 'N/A'}")
-                
-                with col3:
-                    # Assignment Override Control (Phase 1B)
-                    if assignment_label == "RENT_ONLY":
-                        st.write("**Assignment Override:**")
-                        current_override = operator_override
-                        override_key = f"override_{symbol}_{i}"
-                        override_reason_key = f"override_reason_{symbol}_{i}"
-                        
-                        # Use form for override to handle state properly
-                        with st.form(f"override_form_{symbol}_{i}"):
-                            override_enabled = st.checkbox(
-                                "Allow CSP (Override)",
-                                value=current_override,
-                                key=override_key
-                            )
-                            
-                            if override_enabled and not current_override:
-                                # Show reason input when enabling override
-                                override_reason = st.text_input(
-                                    "Override Reason (optional)",
-                                    key=override_reason_key,
-                                    placeholder="e.g., Temporary trade, monitoring closely"
-                                )
-                            elif current_override:
-                                # Show current override reason if exists
-                                profile = get_assignment_profile(symbol)
-                                if profile and profile.get("override_reason"):
-                                    st.caption(f"Reason: {profile.get('override_reason')}")
-                            
-                            col_save, col_remove = st.columns(2)
-                            with col_save:
-                                if st.form_submit_button("💾 Save", use_container_width=True):
-                                    try:
-                                        reason = None
-                                        if override_enabled:
-                                            # Get reason from session state if available
-                                            reason_key = f"override_reason_{symbol}_{i}"
-                                            if reason_key in st.session_state:
-                                                reason = st.session_state[reason_key]
-                                        
-                                        set_assignment_override(
-                                            symbol=symbol,
-                                            override=override_enabled,
-                                            reason=reason
-                                        )
-                                        st.session_state.candidates_cache = None
-                                        st.success(f"✅ Override {'enabled' if override_enabled else 'disabled'} for {symbol}")
-                                        st.rerun()
-                                    except Exception as e:
-                                        st.error(f"❌ Error: {e}")
-                            
-                            with col_remove:
-                                if current_override and st.form_submit_button("Remove", use_container_width=True):
-                                    try:
-                                        set_assignment_override(
-                                            symbol=symbol,
-                                            override=False,
-                                            reason=None
-                                        )
-                                        st.session_state.candidates_cache = None
-                                        st.success(f"✅ Override removed for {symbol}")
-                                        st.rerun()
-                                    except Exception as e:
-                                        st.error(f"❌ Error: {e}")
+                    # Main candidate card
+                    col1, col2, col3 = st.columns([1, 2, 1])
                     
-                    # Record Execution button (only if not blocked or overridden) - with market-time awareness (Phase 1C)
-                    contract = candidate.get("contract")
-                    market_state = get_market_state()
-                    market_is_open = is_market_open()
-                    
-                    if contract and (not blocked or operator_override):
-                        button_key = f"record_exec_{symbol}_{i}"
-                        button_disabled = not market_is_open
-                        button_tooltip = ""
-                        
-                        if not market_is_open:
-                            if market_state == "WEEKEND":
-                                button_tooltip = "Market is closed (Weekend)"
-                            elif market_state == "PRE_MARKET":
-                                button_tooltip = "Market opens at 9:30 AM ET"
-                            else:
-                                button_tooltip = "Market is closed"
-                        
-                        if st.button(
-                            "📝 Record Execution",
-                            key=button_key,
-                            use_container_width=True,
-                            disabled=button_disabled,
-                            help=button_tooltip if button_tooltip else None
-                        ):
-                            st.session_state.record_execution_modal = symbol
-                            st.rerun()
-                        
-                        if button_disabled:
-                            st.caption(f"⏸️ {button_tooltip}")
-                    elif blocked and not operator_override:
-                        st.caption("⚠️ Blocked - Override required")
-                    
-                    # Candidate Explainability (Phase 1C) - "Why?" expander
-                    with st.expander("❓ Why?", expanded=False):
-                        # CSP Score Components
-                        st.write("**CSP Score Components:**")
+                    with col1:
+                        st.markdown(f"### {badge_color} {symbol}")
                         st.metric("CSP Score", f"{score}/100")
-                        reasons = candidate.get("reasons", [])
-                        if reasons:
-                            for reason in reasons:
-                                st.write(f"• {reason}")
-                        else:
-                            st.write("No CSP reasons provided")
+                    
+                    with col2:
+                        price = features.get("price", "N/A")
+                        volume = features.get("volume")
+                        iv_rank = features.get("iv_rank")
+                        snapshot_age = features.get("snapshot_age_minutes", 0)
+                        regime = regime_context.get("regime", "UNKNOWN")
                         
-                        st.divider()
-                        
-                        # Assignment Score + Label
-                        st.write("**Assignment-Worthiness:**")
-                        st.metric("Assignment Score", f"{assignment_score}/100")
-                        st.write(f"**Label:** {assignment_label}")
-                        
-                        assignment_reasons = candidate.get("assignment_reasons", [])
-                        if assignment_reasons:
-                            for reason in assignment_reasons:
-                                st.write(f"• {reason}")
-                        
-                        # Blocking reason if RENT_ONLY
-                        if blocked and not operator_override:
+                        st.write("**Details:**")
+                        cols = st.columns(5)
+                        with cols[0]:
+                            st.metric("Price", f"${price:.2f}" if isinstance(price, (int, float)) else str(price))
+                        with cols[1]:
+                            st.metric("Regime", regime)
+                        with cols[2]:
+                            age_str = f"{snapshot_age:.1f}m" if snapshot_age < 60 else f"{snapshot_age/60:.1f}h"
+                            st.metric("Data Age", age_str)
+                        with cols[3]:
+                            if volume is not None:
+                                vol_str = f"{volume/1_000_000:.1f}M" if volume >= 1_000_000 else f"{volume/1_000:.1f}K"
+                                st.metric("Volume", vol_str)
+                            else:
+                                st.metric("Volume", "N/A")
+                        with cols[4]:
+                            if iv_rank is not None:
+                                st.metric("IV Rank", f"{iv_rank:.1f}")
+                            else:
+                                st.metric("IV Rank", "N/A")
+                    
+                    with col3:
+                        # "Why?" expander (Phase 2B Step 3)
+                        with st.expander("❓ Why?", expanded=False):
+                            st.write("**Score Breakdown:**")
+                            score_components = features.get("score_components", {})
+                            if score_components:
+                                for component, value in score_components.items():
+                                    st.write(f"- {component.replace('_', ' ').title()}: {value:.1f}")
+                            else:
+                                st.write("No score components available")
+                            
                             st.divider()
-                            st.warning(f"**Blocked:** {symbol} is marked as RENT_ONLY. Override required to allow CSP.")
-                        elif operator_override:
-                            st.info(f"**Override Active:** Operator has overridden RENT_ONLY blocking for {symbol}.")
-                        
-                        # Key Levels
-                        key_levels = candidate.get("key_levels", {})
-                        if key_levels:
+                            
+                            # Display volume and IV rank explicitly (Phase 2B Step 3)
+                            st.write("**Market Data:**")
+                            col_data1, col_data2 = st.columns(2)
+                            with col_data1:
+                                vol = features.get("volume")
+                                if vol is not None:
+                                    vol_str = f"{vol/1_000_000:.2f}M" if vol >= 1_000_000 else f"{vol/1_000:.2f}K"
+                                    st.write(f"Volume: {vol_str}")
+                                else:
+                                    st.write("Volume: N/A")
+                            with col_data2:
+                                iv = features.get("iv_rank")
+                                if iv is not None:
+                                    st.write(f"IV Rank: {iv:.1f}")
+                                else:
+                                    st.write("IV Rank: N/A")
+                            
+                            # Show which gate failed (if rejected)
+                            if rejection_reasons:
+                                st.divider()
+                                st.write("**Rejection Reasons:**")
+                                for reason in rejection_reasons:
+                                    if reason == "low_liquidity":
+                                        st.error(f"❌ {reason}: Volume < 1M (current: {vol/1_000_000:.2f}M)" if vol is not None else f"❌ {reason}: Volume < 1M")
+                                    elif reason == "iv_too_low":
+                                        st.error(f"❌ {reason}: IV Rank < 20 (current: {iv:.1f})" if iv is not None else f"❌ {reason}: IV Rank < 20")
+                                    else:
+                                        st.write(f"- {reason}")
+                            
                             st.divider()
-                            st.write("**Key Levels:**")
-                            if key_levels.get("close"):
-                                st.write(f"• Close: ${key_levels['close']:.2f}")
-                            if key_levels.get("ema50"):
-                                st.write(f"• EMA50: ${key_levels['ema50']:.2f}")
-                            if key_levels.get("ema200"):
-                                st.write(f"• EMA200: ${key_levels['ema200']:.2f}")
-                            if key_levels.get("rsi") is not None:
-                                st.write(f"• RSI: {key_levels['rsi']:.1f}")
-                
-                if i < len(candidates):
+                            st.write("**All Features:**")
+                            st.json(features)
+                            
+                            st.write("**Regime Context:**")
+                            st.json(regime_context)
+                    
                     st.divider()
+        else:
+            st.info("📭 No eligible CSP candidates found. Check rejection reasons above.")
     else:
-        st.info("📭 No CSP candidates found. Run the wheel engine to generate candidates.")
+        st.warning("⚠️ No active snapshot available. Build a snapshot to enable evaluation.")
+        
+        # No fallback - csp_candidates table removed, only csp_evaluations exists
+        st.info("📭 No CSP candidates found. Build a snapshot and wait for heartbeat evaluation.")
 
     st.divider()
     
     # Record Execution Modal
     if st.session_state.record_execution_modal:
         candidate_symbol = st.session_state.record_execution_modal
-        # Find candidate details
+        # Find candidate details (from evaluations or legacy candidates)
         candidate_details = None
-        for c in candidates:
-            if c['symbol'] == candidate_symbol:
-                candidate_details = c
-                break
+        if snapshot:
+            evaluations = get_csp_evaluations(snapshot["snapshot_id"])
+            for e in evaluations:
+                if e['symbol'] == candidate_symbol:
+                    candidate_details = e
+                    break
+        if not candidate_details:
+            # No fallback - csp_candidates table removed
+            candidate_details = None
         
         if candidate_details:
             contract = candidate_details.get("contract", {})
@@ -1884,128 +1776,112 @@ def main() -> None:
     
     st.divider()
     
-    # Universe Manager Section (Phase 1B.2 - with symbol search)
-    st.header("🌐 Symbol Universe Manager", anchor="symbol-universe-manager")
-    
+    # Symbol Universe Manager Section (Phase 2B Step 4)
+    st.header("Symbol Universe Manager", anchor="symbol-universe-manager")
+
     try:
-        universe_symbols = list_universe_symbols()
-        
-        # Symbol Search and Cache Management (Phase 1B.2)
-        col_cache1, col_cache2 = st.columns([2, 1])
-        with col_cache1:
-            search_query = st.text_input(
-                "🔍 Search Symbols (Type to search cached symbols)",
-                value="",
-                key="symbol_search",
-                placeholder="Type 1-2 characters to search...",
-                help="Searches cached ThetaData symbols. Cache symbols first if needed."
-            )
-        with col_cache2:
-            cached_count = get_cached_symbol_count()
-            if cached_count == 0:
-                if st.button("📥 Fetch & Cache Symbols", use_container_width=True, key="fetch_symbols"):
-                    with st.spinner("Fetching symbols from ThetaData..."):
+        symbols = get_all_symbols()
+
+        # Add Symbol (no modals - Streamlit compatibility)
+        with st.expander("➕ Add Symbol", expanded=False):
+            new_symbol = st.text_input("Symbol", key="universe_add_symbol", placeholder="AAPL")
+            new_notes = st.text_area("Notes", key="universe_add_notes", placeholder="Optional notes")
+            if st.button("Save Symbol", key="universe_add_save", use_container_width=True):
+                if not new_symbol.strip():
+                    st.warning("Please enter a symbol")
+                else:
+                    try:
+                        add_symbol(new_symbol, new_notes)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+
+        # Table header
+        if symbols:
+            if "universe_delete_confirm" not in st.session_state:
+                st.session_state.universe_delete_confirm = None
+
+            col_sym_h, col_enabled_h, col_notes_h, col_actions_h = st.columns([2, 1, 4, 2])
+            with col_sym_h:
+                st.write("**Symbol**")
+            with col_enabled_h:
+                st.write("**Enabled**")
+            with col_notes_h:
+                st.write("**Notes**")
+            with col_actions_h:
+                st.write("**Actions**")
+            st.divider()
+
+            # Rows
+            for i, symbol_data in enumerate(symbols):
+                symbol = symbol_data["symbol"]
+                enabled = bool(symbol_data["enabled"])
+                notes = symbol_data.get("notes", "") or ""
+
+                col_sym, col_enabled, col_notes, col_actions = st.columns([2, 1, 4, 2])
+                with col_sym:
+                    st.write(symbol)
+
+                with col_enabled:
+                    new_enabled = st.toggle(
+                        "Enabled",
+                        value=enabled,
+                        key=f"toggle_{symbol}",
+                        label_visibility="collapsed",
+                    )
+                    if new_enabled != enabled:
+                        toggle_symbol(symbol, new_enabled)
+                        st.rerun()
+
+                with col_notes:
+                    st.caption(notes if notes else "(no notes)")
+
+                with col_actions:
+                    # Delete is button + inline confirmation (no modals)
+                    if st.button("Delete", key=f"delete_{symbol}", use_container_width=True):
+                        st.session_state.universe_delete_confirm = symbol
+                        st.rerun()
+
+                # Inline edit expander per row (no modals)
+                with st.expander(f"Edit {symbol}", expanded=False):
+                    edit_enabled = st.checkbox(
+                        "Enabled",
+                        value=enabled,
+                        key=f"edit_enabled_{symbol}",
+                    )
+                    edit_notes = st.text_area(
+                        "Notes",
+                        value=notes,
+                        key=f"edit_notes_{symbol}",
+                    )
+                    if st.button("Save Changes", key=f"edit_save_{symbol}", use_container_width=True):
                         try:
-                            count = fetch_and_cache_theta_symbols()
-                            st.success(f"✅ Cached {count} symbols")
+                            update_symbol(symbol, edit_enabled, edit_notes)
                             st.rerun()
                         except Exception as e:
-                            st.error(f"❌ Failed to fetch symbols: {e}")
-            else:
-                st.caption(f"📊 {cached_count} symbols cached")
-                if st.button("🔄 Refresh Cache", use_container_width=True, key="refresh_cache"):
-                    with st.spinner("Refreshing symbol cache..."):
-                        try:
-                            count = fetch_and_cache_theta_symbols()
-                            st.success(f"✅ Refreshed {count} symbols")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ Failed to refresh: {e}")
-        
-        # Show search results if query entered
-        search_results = []
-        if search_query and len(search_query) >= 1:
-            search_results = search_symbols(search_query, limit=20)
-            if search_results:
-                st.subheader(f"Search Results ({len(search_results)} found)")
-                # Display search results in a selectable format
-                for result in search_results:
-                    symbol = result["symbol"]
-                    name = result.get("name", "")
-                    exchange = result.get("exchange", "")
-                    
-                    col_sym, col_name, col_action = st.columns([1, 3, 1])
-                    with col_sym:
-                        st.write(f"**{symbol}**")
-                    with col_name:
-                        if name:
-                            st.caption(f"{name} ({exchange})" if exchange else name)
-                        else:
-                            st.caption(exchange if exchange else "")
-                    with col_action:
-                        # Check if already in universe
-                        in_universe = any(s["symbol"] == symbol for s in universe_symbols)
-                        if in_universe:
-                            st.caption("✓ In universe")
-                        else:
-                            if st.button("➕ Add", key=f"add_search_{symbol}", use_container_width=True):
-                                try:
-                                    add_universe_symbol(symbol, enabled=True, notes=f"Added from search")
-                                    st.success(f"✅ Added {symbol}")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"❌ Error: {e}")
-                st.divider()
-        
-        if universe_symbols:
-            # Editable table
-            df_universe = pd.DataFrame([
-                {
-                    "Symbol": s["symbol"],
-                    "Enabled": "✓" if s["enabled"] else "✗",
-                    "Notes": s.get("notes", ""),
-                }
-                for s in universe_symbols
-            ])
-            
-            st.dataframe(df_universe, use_container_width=True, hide_index=True)
-            
-            # Add/Edit controls
-            with st.expander("➕ Add/Edit Symbol", expanded=False):
-                col1, col2 = st.columns(2)
-                with col1:
-                    new_symbol = st.text_input("Symbol", value="", key="new_symbol_input").upper()
-                    enabled = st.checkbox("Enabled", value=True, key="new_symbol_enabled")
-                with col2:
-                    notes = st.text_area("Notes", value="", key="new_symbol_notes")
-                
-                col_add, col_space = st.columns([1, 3])
-                with col_add:
-                    if st.button("➕ Add/Update Symbol", use_container_width=True, key="add_symbol_btn"):
-                        if new_symbol:
+                            st.error(f"Error: {e}")
+
+                # Inline delete confirmation row
+                if st.session_state.universe_delete_confirm == symbol:
+                    st.warning(f"Confirm delete: {symbol}")
+                    col_yes, col_no = st.columns([1, 1])
+                    with col_yes:
+                        if st.button("Yes, delete", key=f"delete_yes_{symbol}", use_container_width=True):
                             try:
-                                add_universe_symbol(new_symbol, enabled=enabled, notes=notes if notes else None)
-                                st.success(f"✅ Symbol {new_symbol} {'enabled' if enabled else 'disabled'}")
+                                delete_symbol(symbol)
+                                st.session_state.universe_delete_confirm = None
                                 st.rerun()
                             except Exception as e:
-                                st.error(f"❌ Error: {e}")
-                        else:
-                            st.warning("Please enter a symbol")
-            
-            # Quick toggle controls
-            st.subheader("Quick Toggle")
-            toggle_cols = st.columns(min(5, len(universe_symbols)))
-            for i, symbol_data in enumerate(universe_symbols):
-                col_idx = i % len(toggle_cols)
-                with toggle_cols[col_idx]:
-                    symbol = symbol_data["symbol"]
-                    current_enabled = symbol_data["enabled"]
-                    button_label = f"Disable {symbol}" if current_enabled else f"Enable {symbol}"
-                    if st.button(button_label, key=f"toggle_{symbol}", use_container_width=True):
-                        toggle_universe_symbol(symbol, not current_enabled)
-                        st.rerun()
+                                st.error(f"Error: {e}")
+                    with col_no:
+                        if st.button("Cancel", key=f"delete_no_{symbol}", use_container_width=True):
+                            st.session_state.universe_delete_confirm = None
+                            st.rerun()
+
+                if i < len(symbols) - 1:
+                    st.divider()
         else:
-            st.info("No symbols in universe. Add symbols using the form above.")
+            st.info("No symbols in universe. Add symbols using the expander above.")
     except Exception as e:
         st.warning(f"Unable to load universe: {e}")
 

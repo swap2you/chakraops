@@ -728,6 +728,7 @@ def main() -> None:
                 "ERROR": "❌",
                 "NO_REGIME": "⚠️",
                 "NO_DATA": "⚠️",
+                "NO_SNAPSHOT": "⚠️",
                 "REGIME_STALE": "🟡",
             }.get(status, "⚪")
             st.metric("Last Cycle", f"{status_icon} {status}")
@@ -808,6 +809,89 @@ def main() -> None:
                     st.caption("No rejections recorded")
         else:
             st.info("No cycle evaluation data available yet. Heartbeat may not have completed a cycle.")
+    
+    # Market Snapshot Panel (Phase 2A)
+    from app.core.market_snapshot import get_active_snapshot, build_market_snapshot, load_snapshot_data, normalize_symbol
+    from app.core.persistence import get_enabled_symbols
+    
+    # Reload snapshot explicitly (refresh after build)
+    snapshot = get_active_snapshot()
+    with st.expander("📸 Market Snapshot", expanded=False):
+        if snapshot:
+            col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+            
+            with col_s1:
+                try:
+                    import pytz
+                    et_tz = pytz.timezone("America/New_York")
+                    snapshot_time = datetime.fromisoformat(snapshot["snapshot_timestamp_et"])
+                    if snapshot_time.tzinfo is None:
+                        snapshot_time = pytz.UTC.localize(snapshot_time)
+                    snapshot_time_et = snapshot_time.astimezone(et_tz)
+                    snapshot_str = snapshot_time_et.strftime("%Y-%m-%d %H:%M:%S %Z")
+                except Exception:
+                    snapshot_str = snapshot["snapshot_timestamp_et"]
+                st.metric("Snapshot Time (ET)", snapshot_str)
+            
+            with col_s2:
+                # Extract source from provider field
+                provider = snapshot.get("provider", "snapshot")
+                source = "UNKNOWN"
+                if "csv" in provider.lower():
+                    source = "CSV"
+                elif "cache" in provider.lower():
+                    source = "CACHE"
+                else:
+                    source = "SNAPSHOT"
+                st.metric("Mode", "SNAPSHOT", delta=f"Source: {source}")
+            
+            with col_s3:
+                # Calculate coverage: normalized(snapshot_symbols) ∩ normalized(enabled_universe_symbols)
+                snapshot_data = load_snapshot_data(snapshot["snapshot_id"])
+                snapshot_symbols_normalized = {normalize_symbol(s) for s in snapshot_data.keys()}
+                
+                enabled_symbols = get_enabled_symbols()
+                enabled_symbols_normalized = {normalize_symbol(s) for s in enabled_symbols}
+                
+                # Intersection = covered symbols
+                covered_symbols = snapshot_symbols_normalized & enabled_symbols_normalized
+                symbols_with_data = len([v for s, v in snapshot_data.items() if normalize_symbol(s) in covered_symbols and v is not None])
+                
+                st.metric(
+                    "Symbols Covered",
+                    f"{len(covered_symbols)}/{len(enabled_symbols_normalized)}",
+                    delta=f"{len(enabled_symbols_normalized) - len(covered_symbols)} missing"
+                )
+            
+            with col_s4:
+                age_minutes = snapshot.get("data_age_minutes", 0.0)
+                age_hours = age_minutes / 60.0
+                if age_hours < 1:
+                    age_str = f"{age_minutes:.1f}m"
+                else:
+                    age_str = f"{age_hours:.1f}h"
+                st.metric("Snapshot Age", age_str)
+        else:
+            st.warning("⚠️ No active snapshot available. Build a snapshot to enable evaluation.")
+        
+        # Build snapshot button
+        if st.button("🔨 Build New Snapshot", use_container_width=True, type="primary"):
+            with st.spinner("Building market snapshot from enabled universe..."):
+                try:
+                    result = build_market_snapshot(mode="AUTO")
+                    source = result.get("source", "UNKNOWN")
+                    st.success(
+                        f"✅ Snapshot built! "
+                        f"ID: {result['snapshot_id'][:8]}... | "
+                        f"Source: {source} | "
+                        f"Symbols: {result['symbols_with_data']}/{result['symbol_count']} with data"
+                    )
+                    st.rerun()
+                except ValueError as e:
+                    # Operator-facing error message
+                    st.error(f"❌ {str(e)}")
+                except Exception as e:
+                    st.error(f"❌ Failed to build snapshot: {e}")
     
     st.divider()
 

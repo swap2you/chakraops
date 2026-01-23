@@ -333,35 +333,24 @@ class HeartbeatManager:
                     }
                 return 0, 0
             
-            # Step 3: Get market data (use cache if fresh, check staleness)
-            symbol_to_df, data_timestamp, data_stale_minutes = self._get_market_data_with_staleness(symbols)
+            # Step 3: Get market data from frozen snapshot (Phase 2A)
+            symbol_to_df, data_timestamp, data_stale_minutes = self._get_snapshot_data()
             if not symbol_to_df:
-                logger.warning("[HEARTBEAT] No market data available, skipping cycle")
-                self._update_health("NO_DATA")
+                # Log once per session if snapshot missing
+                if not hasattr(self, '_snapshot_missing_logged'):
+                    logger.warning("[HEARTBEAT] No active snapshot available, skipping cycle")
+                    self._snapshot_missing_logged = True
+                self._update_health("NO_SNAPSHOT")
                 with self._health_lock:
                     self._last_cycle_eval = {
                         "symbols_evaluated": len(symbols),
                         "csp_candidates_count": 0,
                         "rejected_symbols_count": len(symbols),
-                        "rejection_reasons": {"No market data available": len(symbols)},
-                        "market_data_age_minutes": data_stale_minutes if data_stale_minutes else 0.0,
+                        "rejection_reasons": {"No snapshot available": len(symbols)},
+                        "market_data_age_minutes": 0.0,
                         "enabled_universe_size": len(symbols),
                     }
                 return 0, 0
-            
-            # Check data staleness and emit alert if needed
-            if data_stale_minutes > DATA_STALE_HALT_THRESHOLD_MINUTES:
-                from app.core.persistence import create_alert
-                create_alert(
-                    f"Market data is stale ({data_stale_minutes:.1f} minutes old). System may be using outdated data.",
-                    level="HALT"
-                )
-            elif data_stale_minutes > MARKET_DATA_STALE_THRESHOLD_MINUTES:
-                from app.core.persistence import create_alert
-                create_alert(
-                    f"Market data is stale ({data_stale_minutes:.1f} minutes old).",
-                    level="WATCH"
-                )
             
             # Step 4: Find CSP candidates
             from app.core.wheel import find_csp_candidates
@@ -600,6 +589,50 @@ class HeartbeatManager:
         except Exception as e:
             logger.error(f"[HEARTBEAT] Failed to recompute regime: {e}")
             return None
+    
+    def _get_snapshot_data(self) -> tuple[Dict[str, Any], Optional[datetime], float]:
+        """Get market data from active frozen snapshot (Phase 2A).
+        
+        Returns
+        -------
+        tuple[Dict[str, Any], Optional[datetime], float]
+            (symbol_to_df dict, snapshot timestamp, data age in minutes)
+        """
+        try:
+            from app.core.market_snapshot import get_active_snapshot, load_snapshot_data
+            
+            snapshot = get_active_snapshot()
+            if not snapshot:
+                return {}, None, 0.0
+            
+            snapshot_id = snapshot["snapshot_id"]
+            snapshot_timestamp_et = snapshot["snapshot_timestamp_et"]
+            data_age_minutes = snapshot["data_age_minutes"]
+            
+            # Load snapshot data
+            symbol_to_df = load_snapshot_data(snapshot_id)
+            
+            # Parse snapshot timestamp
+            try:
+                data_timestamp = datetime.fromisoformat(snapshot_timestamp_et)
+                data_timestamp = ensure_et_aware(data_timestamp)
+            except Exception:
+                data_timestamp = None
+            
+            # Filter to only symbols with data (remove None entries)
+            symbol_to_df = {k: v for k, v in symbol_to_df.items() if v is not None}
+            
+            if symbol_to_df:
+                logger.info(
+                    f"[SNAPSHOT] Using frozen snapshot {snapshot_id[:8]}... "
+                    f"({len(symbol_to_df)} symbols, age: {data_age_minutes:.1f} min)"
+                )
+            
+            return symbol_to_df, data_timestamp, data_age_minutes
+        
+        except Exception as e:
+            logger.error(f"[HEARTBEAT] Failed to load snapshot: {e}")
+            return {}, None, 0.0
     
     def _get_market_data_with_staleness(
         self,

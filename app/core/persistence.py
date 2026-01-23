@@ -281,6 +281,10 @@ def init_persistence_db() -> None:
         # Ensure candidate_daily_tracking schema is correct (migration)
         _ensure_candidate_daily_tracking_schema(cursor)
         
+        # Initialize market snapshot schema (Phase 2A)
+        from app.core.market_snapshot import init_snapshot_schema
+        init_snapshot_schema()
+        
         conn.commit()
     except Exception as e:
         # Log clear error if schema init fails
@@ -881,9 +885,12 @@ def get_enabled_symbols() -> list[str]:
     """
     Return list of enabled symbols from symbol_universe.
     This is the canonical universe filter used by the system.
+    Symbols are normalized (UPPER, TRIM) for consistency.
     """
+    from app.core.market_snapshot import normalize_symbol
     symbols = list_universe_symbols()
-    return [row["symbol"] for row in symbols if row.get("enabled")]
+    # Normalize symbols from DB
+    return [normalize_symbol(row["symbol"]) for row in symbols if row.get("enabled")]
 
 
 def list_universe_symbols() -> List[Dict[str, Any]]:

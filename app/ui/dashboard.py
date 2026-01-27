@@ -855,8 +855,16 @@ def main() -> None:
                 except ValueError as e:
                     # Operator-facing error message
                     st.error(f"❌ {str(e)}")
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"[DASHBOARD] Snapshot build ValueError: {e}")
                 except Exception as e:
-                    st.error(f"❌ Failed to build snapshot: {e}")
+                    # Step 2: Show clear error message with logging
+                    error_msg = str(e)
+                    st.error(f"❌ Failed to build snapshot: {error_msg}")
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"[DASHBOARD] Snapshot build error: {error_msg}", exc_info=True)
     
     st.divider()
 

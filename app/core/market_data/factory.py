@@ -44,11 +44,22 @@ def get_market_data_provider() -> MarketDataProvider:
         except Exception as e:
             logger.warning(f"MarketDataProvider: Failed to initialize ThetaDataProvider: {e}")
     
+    # Fallback to YFinance adapter
+    try:
+        from app.core.market_data.yfinance_adapter import YFinanceMarketDataAdapter
+        provider = YFinanceMarketDataAdapter()
+        logger.info("MarketDataProvider: Using YFinanceMarketDataAdapter (fallback)")
+        return provider
+    except ImportError as e:
+        logger.warning(f"MarketDataProvider: YFinance adapter not available: {e}")
+    except Exception as e:
+        logger.warning(f"MarketDataProvider: Failed to initialize YFinance adapter: {e}")
+    
     # No provider available
     raise ValueError(
         "No market data provider available. "
         "Set THETADATA_USERNAME and THETADATA_PASSWORD environment variables, "
-        "or install thetadata package: pip install thetadata"
+        "or install yfinance package: pip install yfinance"
     )
 
 

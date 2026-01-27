@@ -277,19 +277,28 @@ class HeartbeatManager:
             # Step 1: Get or compute regime (check freshness)
             regime_result, regime_age_minutes = self._get_regime_with_age()
             if not regime_result:
-                logger.warning("[HEARTBEAT] No regime data available, skipping cycle")
-                self._update_health("NO_REGIME")
-                # Update eval details with partial info
-                with self._health_lock:
-                    self._last_cycle_eval = {
-                        "symbols_evaluated": 0,
-                        "csp_candidates_count": 0,
-                        "rejected_symbols_count": 0,
-                        "rejection_reasons": {"No regime data": 1},
-                        "market_data_age_minutes": 0.0,
-                        "enabled_universe_size": 0,
-                    }
-                return 0, 0
+                # Step 3: If no regime exists, try to compute it (bootstrap)
+                logger.info("[HEARTBEAT] No regime data available, attempting to compute regime...")
+                regime_result = self._recompute_regime()
+                if not regime_result:
+                    logger.warning("[HEARTBEAT] Failed to compute regime, skipping cycle")
+                    self._update_health("NO_REGIME")
+                    # Update eval details with partial info
+                    with self._health_lock:
+                        self._last_cycle_eval = {
+                            "symbols_evaluated": 0,
+                            "csp_candidates_count": 0,
+                            "rejected_symbols_count": 0,
+                            "rejection_reasons": {"No regime data": 1},
+                            "market_data_age_minutes": 0.0,
+                            "enabled_universe_size": 0,
+                        }
+                    return 0, 0
+                # Re-fetch regime after computation
+                regime_result, regime_age_minutes = self._get_regime_with_age()
+                if not regime_result:
+                    logger.warning("[HEARTBEAT] Regime computed but not found in DB, skipping cycle")
+                    return 0, 0
             
             # Check if regime is stale
             if regime_age_minutes > REGIME_STALE_THRESHOLD_MINUTES:
@@ -378,6 +387,7 @@ class HeartbeatManager:
             
             # Step 3: Compute intersection: enabled symbols ∩ snapshot symbols
             snapshot_id = snapshot["snapshot_id"]
+            logger.info(f"[HEARTBEAT] Evaluating cycle: snapshot_id={snapshot_id}")
             snapshot_data = load_snapshot_data(snapshot_id)
             snapshot_symbols = set(snapshot_data.keys())  # Already normalized
             
@@ -492,8 +502,12 @@ class HeartbeatManager:
                 else:
                     rejected_count += 1
             
-            # Persist evaluations to database
+            # Step 3: Persist evaluations to database and log insertion
             upsert_csp_evaluations(snapshot_id, evaluations)
+            logger.info(
+                f"[HEARTBEAT] wrote csp_evaluations snapshot_id={snapshot_id} "
+                f"total={len(evaluations)} eligible={eligible_count} rejected={rejected_count}"
+            )
             
             # Compute top rejection reasons
             rejection_reason_counts: Dict[str, int] = {}
@@ -962,8 +976,9 @@ class HeartbeatManager:
             )
             from app.core.persistence import upsert_regime
             
-            # Get latest snapshot (S2) and previous snapshot (S1)
+            # Step 3: Fetch latest snapshot_id and log it
             latest_id = get_latest_snapshot_id()
+            logger.info(f"[HEARTBEAT] Regime recompute: latest_snapshot_id={latest_id}")
             if not latest_id:
                 logger.warning("[HEARTBEAT] No latest snapshot available for regime computation")
                 return {
@@ -973,56 +988,99 @@ class HeartbeatManager:
                     "created_at": datetime.now(timezone.utc).isoformat(),
                 }
             
+            logger.info(f"[HEARTBEAT] Regime recompute: latest_snapshot_id={latest_id}")
             previous_id = get_previous_snapshot_id(latest_id)
-            if not previous_id:
-                logger.warning("[HEARTBEAT] No previous snapshot available for regime computation")
-                # Return UNKNOWN instead of failing
-                return {
-                    "regime": "UNKNOWN",
-                    "confidence": 0,
-                    "details": {"error": "No previous snapshot"},
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                }
             
-            # Get prices from both snapshots
-            prices_s2 = get_snapshot_prices(latest_id)
-            prices_s1 = get_snapshot_prices(previous_id)
+            # Bootstrap mode: if no previous snapshot, use latest snapshot only with baseline return = 0
+            bootstrap_mode = (previous_id is None)
             
-            # Pick benchmark symbol in priority order: SPX, SPY, QQQ
-            # Use first found in BOTH snapshots
-            benchmark_candidates = ["SPX", "SPY", "QQQ"]
-            benchmark_symbol = None
-            
-            for candidate in benchmark_candidates:
-                normalized_candidate = normalize_symbol(candidate)
-                if normalized_candidate in prices_s2 and normalized_candidate in prices_s1:
-                    benchmark_symbol = normalized_candidate
-                    break
-            
-            if not benchmark_symbol:
-                logger.warning("[HEARTBEAT] No benchmark symbol (SPX/SPY/QQQ) found in both snapshots")
-                return {
-                    "regime": "UNKNOWN",
-                    "confidence": 0,
-                    "details": {"error": "Benchmark symbol missing"},
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                }
-            
-            # Get prices
-            p2 = prices_s2[benchmark_symbol]
-            p1 = prices_s1[benchmark_symbol]
-            
-            if p1 is None or p2 is None or p1 <= 0:
-                logger.warning(f"[HEARTBEAT] Invalid prices for {benchmark_symbol}: p1={p1}, p2={p2}")
-                return {
-                    "regime": "UNKNOWN",
-                    "confidence": 0,
-                    "details": {"error": f"Invalid prices for {benchmark_symbol}"},
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                }
-            
-            # Compute return = (p2 - p1) / p1
-            benchmark_return = (p2 - p1) / p1
+            if bootstrap_mode:
+                logger.info("[HEARTBEAT] No previous snapshot - using bootstrap regime calculation (baseline return = 0)")
+                # Get prices from latest snapshot only
+                prices_s2 = get_snapshot_prices(latest_id)
+                
+                # Pick benchmark symbol in priority order: SPY, QQQ (SPX typically not in snapshots)
+                # Use first found in latest snapshot
+                benchmark_candidates = ["SPY", "QQQ"]
+                benchmark_symbol = None
+                
+                for candidate in benchmark_candidates:
+                    normalized_candidate = normalize_symbol(candidate)
+                    symbol_data = prices_s2.get(normalized_candidate, {})
+                    price = symbol_data.get("price") if isinstance(symbol_data, dict) else symbol_data
+                    if price is not None and price > 0:
+                        benchmark_symbol = normalized_candidate
+                        break
+                
+                if not benchmark_symbol:
+                    logger.warning("[HEARTBEAT] No benchmark symbol (SPY/QQQ) found in latest snapshot for bootstrap")
+                    return {
+                        "regime": "UNKNOWN",
+                        "confidence": 0,
+                        "details": {"error": "Benchmark symbol missing in bootstrap mode"},
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                
+                # Bootstrap: assume baseline return = 0 (no prior data)
+                benchmark_return = 0.0
+                p2 = prices_s2[benchmark_symbol].get("price") if isinstance(prices_s2[benchmark_symbol], dict) else prices_s2[benchmark_symbol]
+                p1 = p2  # For bootstrap, p1 = p2 (no change)
+                
+                if p2 is None or p2 <= 0:
+                    logger.warning(f"[HEARTBEAT] Invalid price for {benchmark_symbol} in bootstrap: p2={p2}")
+                    return {
+                        "regime": "UNKNOWN",
+                        "confidence": 0,
+                        "details": {"error": f"Invalid price for {benchmark_symbol} in bootstrap"},
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                    }
+            else:
+                # Normal mode: use both snapshots
+                # Get prices from both snapshots
+                prices_s2 = get_snapshot_prices(latest_id)
+                prices_s1 = get_snapshot_prices(previous_id)
+                
+                # Pick benchmark symbol in priority order: SPX, SPY, QQQ
+                # Use first found in BOTH snapshots
+                benchmark_candidates = ["SPX", "SPY", "QQQ"]
+                benchmark_symbol = None
+                
+                for candidate in benchmark_candidates:
+                    normalized_candidate = normalize_symbol(candidate)
+                    s2_data = prices_s2.get(normalized_candidate, {})
+                    s1_data = prices_s1.get(normalized_candidate, {})
+                    p2_val = s2_data.get("price") if isinstance(s2_data, dict) else s2_data
+                    p1_val = s1_data.get("price") if isinstance(s1_data, dict) else s1_data
+                    if p2_val is not None and p1_val is not None:
+                        benchmark_symbol = normalized_candidate
+                        break
+                
+                if not benchmark_symbol:
+                    logger.warning("[HEARTBEAT] No benchmark symbol (SPX/SPY/QQQ) found in both snapshots")
+                    return {
+                        "regime": "UNKNOWN",
+                        "confidence": 0,
+                        "details": {"error": "Benchmark symbol missing"},
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                
+                # Get prices
+                s2_data = prices_s2[benchmark_symbol]
+                s1_data = prices_s1[benchmark_symbol]
+                p2 = s2_data.get("price") if isinstance(s2_data, dict) else s2_data
+                p1 = s1_data.get("price") if isinstance(s1_data, dict) else s1_data
+                
+                if p1 is None or p2 is None or p1 <= 0:
+                    logger.warning(f"[HEARTBEAT] Invalid prices for {benchmark_symbol}: p1={p1}, p2={p2}")
+                    return {
+                        "regime": "UNKNOWN",
+                        "confidence": 0,
+                        "details": {"error": f"Invalid prices for {benchmark_symbol}"},
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                
+                # Compute return = (p2 - p1) / p1
+                benchmark_return = (p2 - p1) / p1
             
             # Determine regime based on thresholds
             if benchmark_return >= 0.0015:  # >= +0.15%
@@ -1033,8 +1091,9 @@ class HeartbeatManager:
                 regime = "NEUTRAL"
             
             # Log regime inputs and result
+            mode_str = "bootstrap" if bootstrap_mode else "normal"
             logger.info(
-                f"[HEARTBEAT] Regime computation: benchmark={benchmark_symbol}, "
+                f"[HEARTBEAT] Regime computation ({mode_str}): benchmark={benchmark_symbol}, "
                 f"p1={p1:.2f}, p2={p2:.2f}, return={benchmark_return:.4f}, regime={regime}"
             )
             
@@ -1046,13 +1105,17 @@ class HeartbeatManager:
             
             computed_at = created_at.isoformat()
             
-            # Persist regime for snapshot_id S2
+            # Step 3: Persist regime for snapshot_id S2 and log insertion
             upsert_regime(
                 snapshot_id=latest_id,
                 regime=regime,
                 benchmark_symbol=benchmark_symbol,
                 benchmark_return=benchmark_return,
                 computed_at=computed_at,
+            )
+            logger.info(
+                f"[HEARTBEAT] wrote market_regimes snapshot_id={latest_id} regime={regime} "
+                f"benchmark={benchmark_symbol} return={benchmark_return:.4f}"
             )
             
             return {
@@ -1063,7 +1126,7 @@ class HeartbeatManager:
                     "benchmark_return": benchmark_return,
                     "p1": p1,
                     "p2": p2,
-                    "method": "snapshot_price_only",
+                    "method": "snapshot_price_only_bootstrap" if bootstrap_mode else "snapshot_price_only",
                 },
                 "created_at": computed_at,
             }
@@ -1255,7 +1318,7 @@ class HeartbeatManager:
             List of actionable candidates.
         """
         try:
-            from app.db.database import get_db_path
+            from app.core.config.paths import DB_PATH
             import sqlite3
             
             # Get ET date (not UTC)
@@ -1268,7 +1331,7 @@ class HeartbeatManager:
                 et_date = datetime.now(timezone.utc).date().isoformat()
             
             count = len(actionable_candidates)
-            db_path = get_db_path()
+            db_path = DB_PATH
             db_path.parent.mkdir(parents=True, exist_ok=True)
             conn = sqlite3.connect(str(db_path))
             cursor = conn.cursor()

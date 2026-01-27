@@ -1,7 +1,13 @@
-SELECT COUNT(*) FROM market_regimes;
-SELECT COUNT(*) FROM csp_evaluations;
-SELECT COUNT(*) FROM alerts;
-SELECT COUNT(*) FROM regime_snapshots;
-SELECT COUNT(*) FROM open_positions;
-SELECT COUNT(*) FROM closed_positions;
-SELECT COUNT(*) FROM position_history;
+SELECT * FROM market_regimes ORDER BY created_at DESC;
+
+SELECT * FROM csp_evaluations ORDER BY created_at DESC;
+
+SELECT * FROM alerts ORDER BY created_at DESC;
+
+SELECT * FROM regime_snapshots ORDER BY created_at DESC;
+
+SELECT * FROM open_positions ORDER BY created_at DESC;
+
+SELECT * FROM closed_positions ORDER BY created_at DESC;
+
+SELECT * FROM position_history ORDER BY created_at DESC;

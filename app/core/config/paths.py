@@ -24,6 +24,17 @@ DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 # Log once at module import
 logger = logging.getLogger(__name__)
+
+# Step 5: Detect duplicate DB files and warn
+_data_dir = DB_PATH.parent
+if _data_dir.exists():
+    db_files = list(_data_dir.glob("*.db"))
+    if len(db_files) > 1:
+        logger.warning(
+            f"[CONFIG] Multiple DB files found in {_data_dir}: {[f.name for f in db_files]}. "
+            f"Using canonical: {DB_PATH.name}"
+        )
+
 logger.info(f"[CONFIG] Using DB_PATH={DB_PATH.absolute()}")
 
 __all__ = ["BASE_DIR", "DB_PATH"]

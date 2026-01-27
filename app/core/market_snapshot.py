@@ -10,6 +10,7 @@ This module provides frozen market snapshot functionality:
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -689,7 +690,7 @@ def build_market_snapshot(mode: str = "AUTO") -> Dict[str, Any]:
     if source == "CSV" and symbols_with_data == 0:
         raise ValueError(f"CSV loaded but no symbols with data found. Expected at least 1 symbol.")
     
-    # Persist snapshot metadata
+    # Step 2: Persist snapshot metadata (atomic write)
     db_path = get_db_path()
     conn = sqlite3.connect(str(db_path))
     cursor = conn.cursor()
@@ -740,14 +741,53 @@ def build_market_snapshot(mode: str = "AUTO") -> Dict[str, Any]:
             data_json = None
             
             if has_data:
-                # Convert DataFrame to JSON
+                # Step 1: Convert DataFrame to JSON (Fix JSON serialization)
                 try:
                     # Convert to dict with date as string
                     df_dict = df.to_dict(orient='records')
-                    data_json = json.dumps(df_dict)
+                    
+                    # Step 1: Safe JSON serializer for pandas Timestamp/datetime objects
+                    def json_serializer(obj):
+                        """Convert pandas Timestamp/datetime to ISO string for JSON serialization."""
+                        # Handle pandas Timestamp
+                        if hasattr(obj, 'to_pydatetime'):
+                            try:
+                                return obj.to_pydatetime().isoformat()
+                            except Exception:
+                                pass
+                        # Handle datetime objects (including timezone-aware)
+                        if hasattr(obj, 'isoformat'):
+                            try:
+                                return obj.isoformat()
+                            except Exception:
+                                pass
+                        # Handle date objects
+                        if hasattr(obj, 'isoformat') and hasattr(obj, 'year'):
+                            try:
+                                return obj.isoformat()
+                            except Exception:
+                                pass
+                        # Handle numpy types (if available)
+                        try:
+                            import numpy as np
+                            if isinstance(obj, (np.integer, np.floating)):
+                                return float(obj)
+                            if isinstance(obj, np.ndarray):
+                                return obj.tolist()
+                        except ImportError:
+                            pass
+                        # Fallback: convert to string
+                        return str(obj)
+                    
+                    data_json = json.dumps(df_dict, default=json_serializer)
                 except Exception as e:
-                    logger.warning(f"[SNAPSHOT] Failed to serialize {normalized_sym} data: {e}")
+                    logger.error(
+                        f"[SNAPSHOT] Failed to serialize {normalized_sym} data: {e}. "
+                        f"Symbol will be stored with has_data=0.",
+                        exc_info=True
+                    )
                     has_data = 0
+                    data_json = None
             
             # Store with normalized symbol
             cursor.execute("""
@@ -764,16 +804,18 @@ def build_market_snapshot(mode: str = "AUTO") -> Dict[str, Any]:
                 f"Failed to insert all symbol data. Expected {len(symbols)} rows, got {inserted_rows}"
             )
         
+        # Step 2: Atomic commit - all or nothing
         conn.commit()
+        
+        # Step 2: Log successful snapshot build with row counts
+        logger.info(
+            f"[SNAPSHOT] inserted snapshot_id={snapshot_id} rows={inserted_rows} symbols "
+            f"(with_data={symbols_with_data}, without_data={symbols_without_data})"
+        )
         
         logger.info(
             f"[SNAPSHOT] Built snapshot {snapshot_id[:8]}... using {source}, "
             f"symbols={symbols_with_data}/{len(symbols)}"
-        )
-        
-        # DEBUG log: Active snapshot info
-        logger.info(
-            f"[SNAPSHOT] Active snapshot id={snapshot_id[:8]}... symbols={symbols_with_data}/{len(symbols)}"
         )
         
         return {
@@ -788,8 +830,15 @@ def build_market_snapshot(mode: str = "AUTO") -> Dict[str, Any]:
             "symbols_without_data": symbols_without_data,
         }
     
+    except Exception as e:
+        # Step 2: Rollback on error and re-raise with clear message
+        if 'conn' in locals():
+            conn.rollback()
+        logger.error(f"[SNAPSHOT] Failed to build snapshot: {e}", exc_info=True)
+        raise RuntimeError(f"Snapshot build failed: {e}") from e
     finally:
-        conn.close()
+        if 'conn' in locals():
+            conn.close()
 
 
 def get_active_snapshot() -> Optional[Dict[str, Any]]:

@@ -16,6 +16,10 @@ from app.signals.adapters.theta_options_adapter import normalize_theta_chain
 from app.signals.cc import generate_cc_candidates
 from app.signals.csp import generate_csp_candidates
 from app.signals.utils import calc_dte
+from app.signals.scoring import ScoredSignalCandidate, score_signals
+from app.signals.selection import SelectedSignal, select_signals
+from app.signals.explain import SignalExplanation, build_explanations
+from app.signals.decision_snapshot import DecisionSnapshot, build_decision_snapshot
 from app.signals.models import (
     CCConfig,
     CSPConfig,
@@ -35,6 +39,14 @@ class SignalRunResult:
     candidates: List[SignalCandidate] = field(default_factory=list)
     exclusions: List[ExclusionReason] = field(default_factory=list)
     stats: Dict[str, int] = field(default_factory=dict)
+    # Optional scored/ ranked candidates (Phase 4A). None when scoring disabled.
+    scored_candidates: List[ScoredSignalCandidate] | None = None
+    # Optional selected signals after applying selection policy (Phase 4A Step 2).
+    selected_signals: List[SelectedSignal] | None = None
+    # Optional explanations for selected signals (Phase 4B Step 1).
+    explanations: List[SignalExplanation] | None = None
+    # JSON-serializable decision snapshot (Phase 4B Step 2). Always set.
+    decision_snapshot: DecisionSnapshot = field(default_factory=lambda: None)  # type: ignore
 
     def __post_init__(self) -> None:
         """Compute stats after initialization."""
@@ -398,13 +410,59 @@ def run_signal_engine(
         },
     }
 
-    return SignalRunResult(
+    # Optional scoring (Phase 4A) - does not affect raw candidates or stats
+    scored_candidates: List[ScoredSignalCandidate] | None = None
+    if base_config.scoring_config is not None and sorted_candidates:
+        scored_candidates = score_signals(
+            candidates=sorted_candidates,
+            config=base_config.scoring_config,
+        )
+
+    # Optional selection (Phase 4A Step 2) - only if scoring AND selection enabled
+    selected_signals: List[SelectedSignal] | None = None
+    if scored_candidates is not None and base_config.selection_config is not None:
+        selected_signals = select_signals(
+            scored_candidates=scored_candidates,
+            config=base_config.selection_config,
+        )
+
+    # Optional explanations (Phase 4B Step 1) - only if selection produced results
+    explanations: List[SignalExplanation] | None = None
+    if selected_signals is not None and base_config.selection_config is not None:
+        explanations = build_explanations(
+            selected_signals=selected_signals,
+            selection_config=base_config.selection_config,
+        )
+
+    # Build result first (without snapshot)
+    result = SignalRunResult(
         as_of=as_of,
         universe_id_or_hash=universe_id_or_hash,
         configs=configs_dict,
         candidates=sorted_candidates,
         exclusions=all_exclusions,
         stats=stats,
+        scored_candidates=scored_candidates,
+        selected_signals=selected_signals,
+        explanations=explanations,
+        decision_snapshot=None,  # Placeholder, will be replaced
+    )
+
+    # Build JSON-serializable decision snapshot (Phase 4B Step 2)
+    decision_snapshot = build_decision_snapshot(result)
+
+    # Return result with snapshot attached (reconstruct to set decision_snapshot)
+    return SignalRunResult(
+        as_of=result.as_of,
+        universe_id_or_hash=result.universe_id_or_hash,
+        configs=result.configs,
+        candidates=result.candidates,
+        exclusions=result.exclusions,
+        stats=result.stats,
+        scored_candidates=result.scored_candidates,
+        selected_signals=result.selected_signals,
+        explanations=result.explanations,
+        decision_snapshot=decision_snapshot,
     )
 
 

@@ -13,6 +13,8 @@ import pytest
 from app.core.market.stock_models import StockSnapshot
 from app.signals.engine import run_signal_engine
 from app.signals.models import CCConfig, CSPConfig, SignalEngineConfig
+from app.signals.scoring import ScoringConfig
+from app.signals.selection import SelectionConfig
 from tests.fixtures.mock_options_provider import MockOptionsChainProvider
 
 
@@ -451,6 +453,326 @@ class TestSignalEngineIntegration:
 
         # And the number of distinct expirations should not exceed the cap
         assert len(requested_dates) <= max_expiries
+
+    def test_scoring_deterministic_and_ranked(self) -> None:
+        """Scoring via engine should be deterministic and provide ranks."""
+        snapshots = create_test_snapshots()
+        options_data = create_test_options_data()
+        provider = MockOptionsChainProvider(options_data)
+
+        scoring_cfg = ScoringConfig(
+            premium_weight=1.0,
+            dte_weight=1.0,
+            spread_weight=1.0,
+            otm_weight=1.0,
+            liquidity_weight=1.0,
+        )
+
+        base_config = SignalEngineConfig(
+            dte_min=25,
+            dte_max=60,
+            min_bid=1.0,
+            min_open_interest=1000,
+            max_spread_pct=10.0,
+            scoring_config=scoring_cfg,
+        )
+
+        csp_config = CSPConfig(
+            otm_pct_min=0.03,
+            otm_pct_max=0.10,
+        )
+
+        cc_config = CCConfig(
+            otm_pct_min=0.02,
+            otm_pct_max=0.10,
+        )
+
+        # Run engine twice with scoring enabled
+        result1 = run_signal_engine(
+            stock_snapshots=snapshots,
+            options_chain_provider=provider,
+            base_config=base_config,
+            csp_config=csp_config,
+            cc_config=cc_config,
+            universe_id_or_hash="test_universe_scoring",
+        )
+
+        # Reuse provider (its behavior is deterministic)
+        result2 = run_signal_engine(
+            stock_snapshots=snapshots,
+            options_chain_provider=provider,
+            base_config=base_config,
+            csp_config=csp_config,
+            cc_config=cc_config,
+            universe_id_or_hash="test_universe_scoring",
+        )
+
+        assert result1.scored_candidates is not None
+        assert result2.scored_candidates is not None
+
+        scores1 = [s.score.total for s in result1.scored_candidates]
+        scores2 = [s.score.total for s in result2.scored_candidates]
+        ranks1 = [s.rank for s in result1.scored_candidates]
+        ranks2 = [s.rank for s in result2.scored_candidates]
+
+        assert scores1 == scores2
+        assert ranks1 == ranks2
+
+        # Ranks should be 1..N and scores non-increasing
+        assert ranks1 == list(range(1, len(ranks1) + 1))
+        assert scores1 == sorted(scores1, reverse=True)
+
+        # Raw candidates list must remain unchanged and equal between runs
+        raw1 = result1.candidates
+        raw2 = result2.candidates
+        assert [c.symbol for c in raw1] == [c.symbol for c in raw2]
+        assert [c.signal_type for c in raw1] == [c.signal_type for c in raw2]
+        assert [c.expiry for c in raw1] == [c.expiry for c in raw2]
+        assert [c.strike for c in raw1] == [c.strike for c in raw2]
+
+    def test_engine_without_scoring_config(self) -> None:
+        """Engine should work and leave scored/selected as None when scoring_config is None."""
+        snapshots = create_test_snapshots()
+        options_data = create_test_options_data()
+        provider = MockOptionsChainProvider(options_data)
+
+        base_config = SignalEngineConfig(
+            dte_min=25,
+            dte_max=60,
+            min_bid=1.0,
+            min_open_interest=1000,
+            max_spread_pct=10.0,
+            # scoring_config left as default None
+        )
+
+        csp_config = CSPConfig(
+            otm_pct_min=0.03,
+            otm_pct_max=0.10,
+        )
+
+        cc_config = CCConfig(
+            otm_pct_min=0.02,
+            otm_pct_max=0.10,
+        )
+
+        result = run_signal_engine(
+            stock_snapshots=snapshots,
+            options_chain_provider=provider,
+            base_config=base_config,
+            csp_config=csp_config,
+            cc_config=cc_config,
+            universe_id_or_hash="test_universe_noscoring",
+        )
+
+        assert result.scored_candidates is None
+        assert result.selected_signals is None
+        assert result.explanations is None
+        # Decision snapshot should always be present
+        assert result.decision_snapshot is not None
+        assert result.decision_snapshot.scored_candidates is None
+        assert result.decision_snapshot.selected_signals is None
+        assert result.decision_snapshot.explanations is None
+        # Existing stats semantics should remain valid
+        assert result.stats["total_candidates"] == len(result.candidates)
+
+    def test_selection_within_engine(self) -> None:
+        """Engine should apply selection when both scoring and selection configs are provided."""
+        snapshots = create_test_snapshots()
+        options_data = create_test_options_data()
+        provider = MockOptionsChainProvider(options_data)
+
+        scoring_cfg = ScoringConfig(
+            premium_weight=1.0,
+            dte_weight=1.0,
+            spread_weight=1.0,
+            otm_weight=1.0,
+            liquidity_weight=1.0,
+        )
+
+        selection_cfg = SelectionConfig(
+            max_total=1,
+            max_per_symbol=1,
+            max_per_signal_type=None,
+            min_score=0.0,
+        )
+
+        base_config = SignalEngineConfig(
+            dte_min=25,
+            dte_max=60,
+            min_bid=1.0,
+            min_open_interest=1000,
+            max_spread_pct=10.0,
+            scoring_config=scoring_cfg,
+            selection_config=selection_cfg,
+        )
+
+        csp_config = CSPConfig(
+            otm_pct_min=0.03,
+            otm_pct_max=0.10,
+        )
+
+        cc_config = CCConfig(
+            otm_pct_min=0.02,
+            otm_pct_max=0.10,
+        )
+
+        result = run_signal_engine(
+            stock_snapshots=snapshots,
+            options_chain_provider=provider,
+            base_config=base_config,
+            csp_config=csp_config,
+            cc_config=cc_config,
+            universe_id_or_hash="test_universe_selection",
+        )
+
+        # Selection should have run
+        assert result.scored_candidates is not None
+        assert result.selected_signals is not None
+
+        # Total cap applied
+        assert len(result.selected_signals) <= selection_cfg.max_total
+
+        # Raw and scored lists remain unchanged in size
+        assert len(result.candidates) == result.stats["total_candidates"]
+        assert len(result.scored_candidates) == len(result.candidates)
+
+    def test_decision_snapshot_in_engine(self) -> None:
+        """Engine should build decision snapshot and it should be JSON-serializable."""
+        import json
+        from dataclasses import asdict
+
+        snapshots = create_test_snapshots()
+        options_data = create_test_options_data()
+        provider = MockOptionsChainProvider(options_data)
+
+        scoring_cfg = ScoringConfig(
+            premium_weight=1.0,
+            dte_weight=1.0,
+            spread_weight=1.0,
+            otm_weight=1.0,
+            liquidity_weight=1.0,
+        )
+
+        selection_cfg = SelectionConfig(
+            max_total=2,
+            max_per_symbol=2,
+            max_per_signal_type=None,
+            min_score=0.0,
+        )
+
+        base_config = SignalEngineConfig(
+            dte_min=25,
+            dte_max=60,
+            min_bid=1.0,
+            min_open_interest=1000,
+            max_spread_pct=10.0,
+            scoring_config=scoring_cfg,
+            selection_config=selection_cfg,
+        )
+
+        csp_config = CSPConfig(
+            otm_pct_min=0.03,
+            otm_pct_max=0.10,
+        )
+
+        cc_config = CCConfig(
+            otm_pct_min=0.02,
+            otm_pct_max=0.10,
+        )
+
+        result = run_signal_engine(
+            stock_snapshots=snapshots,
+            options_chain_provider=provider,
+            base_config=base_config,
+            csp_config=csp_config,
+            cc_config=cc_config,
+            universe_id_or_hash="test_universe_snapshot",
+        )
+
+        # Snapshot should always be present
+        assert result.decision_snapshot is not None
+        snapshot = result.decision_snapshot
+
+        # Snapshot should mirror result content
+        assert snapshot.universe_id_or_hash == result.universe_id_or_hash
+        assert snapshot.stats == result.stats
+        assert len(snapshot.candidates) == len(result.candidates)
+
+        # Snapshot should be JSON-serializable
+        snapshot_dict = asdict(snapshot)
+        json_str = json.dumps(snapshot_dict)
+        parsed = json.loads(json_str)
+
+        assert parsed["universe_id_or_hash"] == result.universe_id_or_hash
+        assert parsed["stats"]["total_candidates"] == result.stats["total_candidates"]
+
+    def test_explanations_within_engine(self) -> None:
+        """Engine should build explanations when selection produces results."""
+        snapshots = create_test_snapshots()
+        options_data = create_test_options_data()
+        provider = MockOptionsChainProvider(options_data)
+
+        scoring_cfg = ScoringConfig(
+            premium_weight=1.0,
+            dte_weight=1.0,
+            spread_weight=1.0,
+            otm_weight=1.0,
+            liquidity_weight=1.0,
+        )
+
+        selection_cfg = SelectionConfig(
+            max_total=2,
+            max_per_symbol=2,
+            max_per_signal_type=None,
+            min_score=0.0,
+        )
+
+        base_config = SignalEngineConfig(
+            dte_min=25,
+            dte_max=60,
+            min_bid=1.0,
+            min_open_interest=1000,
+            max_spread_pct=10.0,
+            scoring_config=scoring_cfg,
+            selection_config=selection_cfg,
+        )
+
+        csp_config = CSPConfig(
+            otm_pct_min=0.03,
+            otm_pct_max=0.10,
+        )
+
+        cc_config = CCConfig(
+            otm_pct_min=0.02,
+            otm_pct_max=0.10,
+        )
+
+        result = run_signal_engine(
+            stock_snapshots=snapshots,
+            options_chain_provider=provider,
+            base_config=base_config,
+            csp_config=csp_config,
+            cc_config=cc_config,
+            universe_id_or_hash="test_universe_explanations",
+        )
+
+        # Explanations should be built when selection produces results
+        assert result.selected_signals is not None
+        assert result.explanations is not None
+        assert len(result.explanations) == len(result.selected_signals)
+
+        # Verify explanation fields
+        for expl in result.explanations:
+            assert expl.symbol
+            assert expl.signal_type in ("CSP", "CC")
+            assert expl.rank > 0
+            assert expl.total_score >= 0.0
+            assert len(expl.score_components) > 0
+            assert expl.selection_reason == "SELECTED_BY_POLICY"
+            assert expl.policy_snapshot["max_total"] == selection_cfg.max_total
+            assert expl.policy_snapshot["max_per_symbol"] == selection_cfg.max_per_symbol
+            assert expl.policy_snapshot["max_per_signal_type"] == selection_cfg.max_per_signal_type
+            assert expl.policy_snapshot["min_score"] == selection_cfg.min_score
 
 
 __all__ = ["TestSignalEngineIntegration"]

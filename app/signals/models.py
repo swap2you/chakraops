@@ -97,6 +97,12 @@ class SignalEngineConfig:
     min_open_interest: int
     max_spread_pct: float
     max_expiries_per_symbol: int = 12
+    # Optional scoring configuration (Phase 4A). When None, scoring is disabled
+    # and the engine behaves as in Phase 3.
+    scoring_config: "ScoringConfig | None" = None
+    # Optional selection configuration (Phase 4A Step 2). When None, selection
+    # is skipped even if scoring is enabled.
+    selection_config: "SelectionConfig | None" = None
 
 
 @dataclass(frozen=True)

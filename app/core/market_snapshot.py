@@ -439,7 +439,17 @@ def build_market_snapshot(mode: str = "AUTO") -> Dict[str, Any]:
         logger.info(f"[SNAPSHOT DIAG]     - row.get('enabled'): {row.get('enabled')} (type: {type(row.get('enabled')).__name__}, truthy: {bool(row.get('enabled'))})")
     
     symbols = get_enabled_symbols()
-    
+
+    # Benchmarks (SPY, QQQ) always included for regime computation; add if missing
+    _BENCHMARKS = ("SPY", "QQQ")
+    _seen = {normalize_symbol(s) for s in symbols}
+    for b in _BENCHMARKS:
+        _nb = normalize_symbol(b)
+        if _nb and _nb not in _seen:
+            symbols = list(symbols) + [b]
+            _seen.add(_nb)
+    logger.info("Benchmarks ensured: SPY, QQQ")
+
     # DIAGNOSTIC: Print enabled symbols from get_enabled_symbols() function
     logger.info("=" * 80)
     logger.info("[SNAPSHOT DIAG] get_enabled_symbols() final result:")

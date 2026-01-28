@@ -117,6 +117,83 @@ def db_exists() -> bool:
     return get_db_path().exists()
 
 
+@st.cache_data(ttl=60)
+def get_data_mode_status() -> Dict[str, Any]:
+    """
+    Fetch Data Mode / Realtime health for the dashboard indicator.
+    Calls the Phase 2.5 Theta capabilities probe in-process; never blocks
+    decision logic. Returns a small dict for UI display. Cached 60s to avoid
+    spamming Theta. On any failure, returns FAIL and notes (no crash).
+    """
+    out = {
+        "active_mode": "SNAPSHOT",
+        "realtime_health": "FAIL",
+        "source": "THETA",
+        "notes": [],
+    }
+    try:
+        import sys
+        _root = Path(__file__).resolve().parent.parent.parent
+        if str(_root) not in sys.path:
+            sys.path.insert(0, str(_root))
+        from tools.thetadata_capabilities import run as run_theta_capabilities
+        contract, _ = run_theta_capabilities(verbose=False, json_mode=True)
+        if contract:
+            out["realtime_health"] = contract.get("health", "FAIL")
+            out["notes"] = list(contract.get("notes", []) or [])
+    except Exception as e:
+        out["notes"] = [str(e)]
+    return out
+
+
+def get_shadow_realtime_regime() -> Optional[Dict[str, Any]]:
+    """
+    Compute shadow realtime regime (read-only, not used for decisions).
+    Reuses cached realtime health from get_data_mode_status(). If realtime
+    health is FAIL, returns None. If PASS/WARN, fetches Theta-derived signals
+    via tools.theta_shadow_signals and calls the Phase 3 market_regime_engine.
+    If all theta signals are unavailable, returns None. On any error, returns
+    None; never raises.
+    """
+    try:
+        import sys
+        data_mode = get_data_mode_status()
+        if data_mode.get("realtime_health") == "FAIL":
+            return None
+
+        _root = Path(__file__).resolve().parent.parent.parent
+        if str(_root) not in sys.path:
+            sys.path.insert(0, str(_root))
+
+        from tools.theta_shadow_signals import get_theta_shadow_signals
+        from tools.market_regime_engine import compute_market_regime
+
+        theta_signals = get_theta_shadow_signals("SPY")
+        price_trend = theta_signals.get("price_trend", "unavailable")
+        volatility = theta_signals.get("volatility", "unavailable")
+        liquidity = theta_signals.get("liquidity", "unavailable")
+        theta_notes = list(theta_signals.get("notes") or [])
+
+        if price_trend == "unavailable" and volatility == "unavailable" and liquidity == "unavailable":
+            return None
+
+        health = data_mode.get("realtime_health", "WARN")
+        inputs = {
+            "source": "REALTIME",
+            "health": health,
+            "price_trend": price_trend,
+            "volatility": volatility,
+            "liquidity": liquidity,
+            "notes": ["shadow evaluation"] + theta_notes,
+        }
+
+        result = compute_market_regime(inputs)
+        result["realtime_health"] = health
+        return result
+    except Exception:
+        return None
+
+
 def get_regime_snapshot() -> Optional[Dict[str, Any]]:
     """Read latest regime snapshot from database."""
     db_path = get_db_path()
@@ -408,6 +485,42 @@ def main() -> None:
     # Header
     st.title("📊 ChakraOps Dashboard")
     st.caption("Real-time market regime and CSP candidate analysis")
+
+    # Data Mode / Realtime Health (observability only; snapshot remains active for decisions)
+    try:
+        data_mode = get_data_mode_status()
+        active_mode = data_mode.get("active_mode", "SNAPSHOT")
+        realtime_health = data_mode.get("realtime_health", "FAIL")
+        notes = data_mode.get("notes", [])
+
+        st.subheader("Data Mode")
+        col_m, col_r = st.columns(2)
+        with col_m:
+            st.metric("Active Mode", active_mode, delta=None)
+        with col_r:
+            if realtime_health == "PASS":
+                st.success(f"Realtime ({data_mode.get('source', 'THETA')}): **{realtime_health}**")
+            elif realtime_health == "WARN":
+                st.warning(f"Realtime ({data_mode.get('source', 'THETA')}): **{realtime_health}**")
+            else:
+                st.error(f"Realtime ({data_mode.get('source', 'THETA')}): **{realtime_health}**")
+
+        if realtime_health == "FAIL":
+            st.caption("Realtime unavailable — snapshot fallback required.")
+        elif realtime_health == "PASS":
+            st.caption("Realtime healthy (not yet used for decisions).")
+        else:
+            st.caption("Realtime partial/stale (not yet used for decisions).")
+
+        if notes:
+            with st.expander("Details"):
+                for n in notes:
+                    st.text(n)
+    except Exception:
+        st.subheader("Data Mode")
+        st.metric("Active Mode", "SNAPSHOT", delta=None)
+        st.error("Realtime (THETA): **FAIL**")
+        st.caption("Realtime unavailable — snapshot fallback required.")
 
     # Sidebar
     with st.sidebar:
@@ -944,8 +1057,11 @@ def main() -> None:
 
     # Market Regime Section - Large Status Card
     st.header("📈 Market Regime")
+
+    # Snapshot (Authoritative) - only source used for decisions
+    st.caption("**Snapshot (Authoritative)**")
     regime = get_regime_snapshot()
-    
+
     # Check regime freshness (Phase 1D)
     regime_stale_warning = None
     if regime:
@@ -1000,6 +1116,37 @@ def main() -> None:
             st.json(regime.get("details", {}))
     else:
         st.warning("⚠️ No regime data available. Run the main application to collect regime snapshots.")
+
+    # Realtime Regime (Shadow) - read-only, not used for decisions
+    st.subheader("Realtime Regime (Shadow)")
+    shadow = get_shadow_realtime_regime()
+    if shadow is None:
+        st.info("Realtime regime unavailable")
+    else:
+        health = shadow.get("realtime_health", "WARN")
+        conf = shadow.get("confidence")
+        conf_pct = f"{int(round(conf * 100))}%" if conf is not None else "—"
+        rg = shadow.get("regime", "—")
+        with st.container():
+            rc, cc, hc = st.columns([2, 1, 1])
+            with rc:
+                st.markdown(
+                    f"""
+                    <div style="background-color: #f8f9fa; color: #6c757d; padding: 14px; border-radius: 8px; border: 1px solid #dee2e6;">
+                        <p style="margin: 0; font-size: 18px; color: #6c757d;">{rg}</p>
+                        <p style="margin: 4px 0 0 0; font-size: 14px; color: #6c757d;">Confidence: {conf_pct}</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with cc:
+                st.metric("Confidence", conf_pct)
+            with hc:
+                if health == "PASS":
+                    st.success(f"**{health}**")
+                else:
+                    st.warning(f"**{health}**")
+        st.caption("Shadow evaluation — not used for decisions.")
 
     st.divider()
 

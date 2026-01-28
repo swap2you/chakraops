@@ -101,7 +101,7 @@ def run_probe() -> int:
                 # Try /option/snapshot/ohlc with expiration="*" per user spec
                 path = "/option/snapshot/ohlc"
                 params = {
-                    "root": symbol,
+                    "symbol": symbol,
                     "exp": "*",
                     "right": "C",
                     "strike": STRIKE_1_10_CENT.get(symbol, 50000),
@@ -112,7 +112,7 @@ def run_probe() -> int:
                 except httpx.HTTPStatusError as e:
                     if e.response.status_code == 404:
                         path = "/option/bulk_snapshot/ohlc"
-                        params_bulk = {"root": symbol, "exp": "0"}
+                        params_bulk = {"symbol": symbol, "exp": "0"}
                         try:
                             text = _req(client, path, params_bulk)
                         except httpx.HTTPStatusError:

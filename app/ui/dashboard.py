@@ -132,17 +132,59 @@ def get_data_mode_status() -> Dict[str, Any]:
         "notes": [],
     }
     try:
-        import sys
-        _root = Path(__file__).resolve().parent.parent.parent
-        if str(_root) not in sys.path:
-            sys.path.insert(0, str(_root))
-        from tools.thetadata_capabilities import run as run_theta_capabilities
-        contract, _ = run_theta_capabilities(verbose=False, json_mode=True)
-        if contract:
-            out["realtime_health"] = contract.get("health", "FAIL")
-            out["notes"] = list(contract.get("notes", []) or [])
+        from app.core.options.theta_diagnostics import run_theta_diagnostic
+
+        diag = run_theta_diagnostic("SPY")
+        # Overall Theta health = PASS if option_available == True
+        option_available = bool(diag.get("option_available"))
+        stock_available = bool(diag.get("stock_available"))
+        index_available = diag.get("index_available")  # May be None if not tested
+        
+        exp_ok = bool(diag.get("theta_expirations_ok"))
+        chain_ok = bool(diag.get("theta_chain_ok"))
+        err = diag.get("error")
+
+        if option_available:
+            out["realtime_health"] = "PASS"
+        elif exp_ok or chain_ok:
+            out["realtime_health"] = "WARN"
+        else:
+            out["realtime_health"] = "FAIL"
+
+        notes: list[str] = []
+        notes.append(
+            f"now_et={diag.get('now_et')} market_state={diag.get('market_state')} is_market_open={diag.get('is_market_open')}"
+        )
+        # Availability flags
+        notes.append(
+            f"stock_available={stock_available} option_available={option_available} index_available={index_available}"
+        )
+        if diag.get("stock_error"):
+            notes.append(f"stock_error={diag.get('stock_error_type')}: {diag.get('stock_error')}")
+        if diag.get("index_error"):
+            notes.append(f"index_error={diag.get('index_error_type')}: {diag.get('index_error')}")
+        # Option details
+        notes.append(
+            f"exp_ok={exp_ok} count={diag.get('expirations_count')} first_exp={diag.get('first_expiration')} "
+            f"lat_ms_exp={diag.get('latency_ms_expirations')}"
+        )
+        notes.append(
+            f"chain_ok={chain_ok} count={diag.get('contracts_count')} lat_ms_chain={diag.get('latency_ms_chain')}"
+        )
+        sample = diag.get("sample_contract") or {}
+        if sample:
+            notes.append(
+                "sample_contract="
+                + ", ".join(
+                    f"{k}={sample.get(k)}"
+                    for k in ("strike", "expiry", "bid", "ask", "delta", "iv", "open_interest")
+                )
+            )
+        if err:
+            notes.append(f"error_type={diag.get('error_type')} error={err}")
+        out["notes"] = notes
     except Exception as e:
-        out["notes"] = [str(e)]
+        out["notes"] = [f"theta_diagnostic_failed: {e}"]
     return out
 
 
@@ -486,7 +528,112 @@ def main() -> None:
     st.title("📊 ChakraOps Dashboard")
     st.caption("Real-time market regime and CSP candidate analysis")
 
-    # Data Mode / Realtime Health (observability only; snapshot remains active for decisions)
+    # ---- System Status Bar ----
+    try:
+        from app.core.market_time import get_market_state
+        from app.core.market_snapshot import get_active_snapshot
+
+        market_state = get_market_state() or {}
+        regime_snapshot = get_regime_snapshot()
+        last_update = get_last_update_time()
+        data_mode = get_data_mode_status()
+
+        # Market state
+        m_state = market_state.get("state") or "—"
+
+        # Regime + confidence
+        if regime_snapshot:
+            r_name = regime_snapshot.get("regime") or "—"
+            r_conf = regime_snapshot.get("confidence")
+            r_conf_str = f"{r_conf:.0f}%" if isinstance(r_conf, (int, float)) else "—"
+            regime_str = f"{r_name} ({r_conf_str})"
+        else:
+            regime_str = "—"
+
+        # Snapshot age
+        snap = get_active_snapshot()
+        if snap and snap.get("data_age_minutes") is not None:
+            age_min = float(snap.get("data_age_minutes") or 0.0)
+            if age_min < 60:
+                snap_age = f"{age_min:.1f}m old"
+            else:
+                snap_age = f"{age_min/60:.1f}h old"
+        else:
+            snap_age = "—"
+
+        # Data mode + Theta health
+        active_mode = data_mode.get("active_mode") or "SNAPSHOT"
+        source = data_mode.get("source") or "Theta"
+        rt_health = data_mode.get("realtime_health") or "FAIL"
+        mode_str = f"{active_mode} ({source} {rt_health})"
+
+        status_line = (
+            f"MARKET: {m_state} | "
+            f"REGIME: {regime_str} | "
+            f"SNAPSHOT: {snap_age} | "
+            f"MODE: {mode_str}"
+        )
+        st.markdown(f"**{status_line}**")
+    except Exception:
+        st.markdown("**MARKET: — | REGIME: — | SNAPSHOT: — | MODE: SNAPSHOT (Theta FAIL)**")
+
+    # Theta Diagnostics (on-demand, market hours)
+    st.subheader("Theta Diagnostics (Market Hours)")
+    if st.button("Test Theta Now", key="theta_diag_now", use_container_width=True):
+        try:
+            from app.core.options.theta_diagnostics import run_theta_diagnostic
+
+            diag = run_theta_diagnostic("SPY")
+            import logging
+            _log = logging.getLogger(__name__)
+            _log.info(
+                "[THETA][DIAG] run symbol=SPY state=%s is_open=%s exp_ok=%s chain_ok=%s err_type=%s err=%s",
+                diag.get("market_state"),
+                diag.get("is_market_open"),
+                diag.get("theta_expirations_ok"),
+                diag.get("theta_chain_ok"),
+                diag.get("error_type"),
+                diag.get("error"),
+            )
+
+            st.write(f"**Now (ET):** {diag.get('now_et')}")
+            st.write(f"**Market State:** {diag.get('market_state')} | is_market_open={diag.get('is_market_open')}")
+
+            if diag.get("error"):
+                st.error(
+                    f"Theta diagnostic FAILED: {diag.get('error_type')} — {diag.get('error')}"
+                )
+            else:
+                st.success("Theta diagnostic PASSED for SPY")
+
+            st.write(
+                f"Expirations: ok={diag.get('theta_expirations_ok')} "
+                f"count={diag.get('expirations_count')} first={diag.get('first_expiration')}"
+            )
+            st.write(
+                f"Chain: ok={diag.get('theta_chain_ok')} count={diag.get('contracts_count')}"
+            )
+            st.write(
+                f"Latency: expirations={diag.get('latency_ms_expirations')} ms, "
+                f"chain={diag.get('latency_ms_chain')} ms"
+            )
+
+            sample = diag.get("sample_contract") or {}
+            if sample:
+                import pandas as pd
+
+                st.write("Sample contract (from Theta chain):")
+                st.dataframe(
+                    pd.DataFrame([sample]),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+            else:
+                st.caption("No sample contract available (empty or filtered chain).")
+        except Exception as e:
+            st.error(f"Theta diagnostic failed to run: {e}")
+
+    # Data Mode / Realtime Health (detailed; snapshot remains active for decisions)
     try:
         data_mode = get_data_mode_status()
         active_mode = data_mode.get("active_mode", "SNAPSHOT")
@@ -513,7 +660,7 @@ def main() -> None:
             st.caption("Realtime partial/stale (not yet used for decisions).")
 
         if notes:
-            with st.expander("Details"):
+            with st.expander("Data Mode Details", expanded=False):
                 for n in notes:
                     st.text(n)
     except Exception:
@@ -1028,6 +1175,55 @@ def main() -> None:
     
     st.divider()
 
+    # ---- Today’s Action (Top CSP candidates) ----
+    st.divider()
+    st.header("🎯 Today’s Action")
+    st.caption("Top opportunities based on latest snapshot. Review → decide → act.")
+
+    from app.core.market_snapshot import get_active_snapshot
+    from app.core.persistence import get_csp_evaluations, get_rejection_reason_counts
+
+    snapshot = get_active_snapshot()
+    if snapshot:
+        snapshot_id = snapshot["snapshot_id"]
+        _evals = get_csp_evaluations(snapshot_id)
+        _eligible = [e for e in _evals if e.get("eligible")]
+        _eligible.sort(key=lambda x: x.get("score", 0), reverse=True)
+        top_csp = _eligible[:3]
+        if top_csp:
+            for e in top_csp:
+                symbol = e.get("symbol", "?")
+                score = e.get("score", 0)
+                features = e.get("features", {}) or {}
+                short_reason = features.get("assignment_label") or "Snapshot-qualified CSP candidate"
+                status_key = f"todays_action_status_{symbol}_CSP"
+                if status_key not in st.session_state:
+                    st.session_state[status_key] = "New"
+
+                with st.container():
+                    col1, col2 = st.columns([2, 1])
+                    with col1:
+                        st.markdown(f"### {symbol} · CSP")
+                        st.metric("Score", f"{score}/100")
+                        st.caption(short_reason)
+                    with col2:
+                        st.caption(f"Status: {st.session_state[status_key]}")
+                        b1, b2, b3 = st.columns(3)
+                        with b1:
+                            if st.button("Reviewed", key=f"ta_review_{symbol}"):
+                                st.session_state[status_key] = "Reviewed"
+                        with b2:
+                            if st.button("Open", key=f"ta_open_{symbol}"):
+                                # Reuse existing execution form via record_execution_modal
+                                st.session_state.record_execution_modal = symbol
+                        with b3:
+                            if st.button("Ignore", key=f"ta_ignore_{symbol}"):
+                                st.session_state[status_key] = "Ignored"
+        else:
+            st.caption("No eligible CSP candidates for today.")
+    else:
+        st.caption("No active snapshot; build a snapshot to see today's action.")
+
     # Daily Trading Plan Card (Phase 1C)
     st.header("📋 Daily Trading Plan")
     
@@ -1197,227 +1393,229 @@ def main() -> None:
 
     st.divider()
 
-    # CSP Candidates Section (Phase 2B Step 2 - Deterministic Evaluation)
-    st.header("🎯 CSP Candidates")
-    
-    # Load evaluations from latest active snapshot
-    from app.core.market_snapshot import get_active_snapshot
-    from app.core.persistence import get_csp_evaluations, get_rejection_reason_counts
-    
-    snapshot = get_active_snapshot()
-    if snapshot:
-        snapshot_id = snapshot["snapshot_id"]
-        evaluations = get_csp_evaluations(snapshot_id)
-        rejection_reasons = get_rejection_reason_counts(snapshot_id)
-        
-        # Filter to eligible only and sort by score desc
-        eligible_evaluations = [e for e in evaluations if e["eligible"]]
-        eligible_evaluations.sort(key=lambda x: x["score"], reverse=True)
-        
-        # Show summary metrics
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("CSP Candidates Found", len(eligible_evaluations))
-        with col2:
-            rejected_count = len([e for e in evaluations if not e["eligible"]])
-            st.metric("Rejected Symbols", rejected_count)
-        with col3:
-            if rejection_reasons:
-                top_reason = rejection_reasons[0][0]
-                top_count = rejection_reasons[0][1]
-                st.metric("Top Rejection Reason", f"{top_reason} ({top_count})")
-        
-        # Show top rejection reasons
-        if rejection_reasons:
-            with st.expander("📊 Top Rejection Reasons", expanded=False):
-                for reason, count in rejection_reasons[:5]:
-                    st.write(f"- **{reason}**: {count} symbols")
-        
-        # Options rejection details (Phase 5): options-layer rejection reasons and debug_inputs
-        _opts_rejected = [e for e in evaluations if e.get("features", {}).get("options_rejection_reasons") or e.get("features", {}).get("options_debug_inputs")]
-        if _opts_rejected:
-            with st.expander("🔬 Options rejection details", expanded=False):
-                for e in _opts_rejected:
+    # ---- Candidate Explorer (Full list) ----
+    with st.expander("📋 Candidate Explorer (Full List)", expanded=False):
+        from app.core.market_snapshot import get_active_snapshot
+        from app.core.persistence import get_csp_evaluations, get_rejection_reason_counts
+
+        snapshot = get_active_snapshot()
+        if snapshot:
+            snapshot_id = snapshot["snapshot_id"]
+            evaluations = get_csp_evaluations(snapshot_id)
+            rejection_reasons = get_rejection_reason_counts(snapshot_id)
+
+            # Filter to eligible only and sort by score desc
+            eligible_evaluations = [e for e in evaluations if e["eligible"]]
+            eligible_evaluations.sort(key=lambda x: x["score"], reverse=True)
+
+            with st.expander("📊 Candidate Summary", expanded=False):
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("CSP Candidates Found", len(eligible_evaluations))
+                with col2:
+                    rejected_count = len([e for e in evaluations if not e["eligible"]])
+                    st.metric("Rejected Symbols", rejected_count)
+                with col3:
+                    if rejection_reasons:
+                        top_reason = rejection_reasons[0][0]
+                        top_count = rejection_reasons[0][1]
+                        st.metric("Top Rejection Reason", f"{top_reason} ({top_count})")
+
+                if rejection_reasons:
+                    with st.expander("Top Rejection Reasons (detail)", expanded=False):
+                        for reason, count in rejection_reasons[:5]:
+                            st.write(f"- **{reason}**: {count} symbols")
+
+            # Options rejection details (Phase 5): options-layer rejection reasons and debug_inputs
+            _opts_rejected = [
+                e
+                for e in evaluations
+                if e.get("features", {}).get("options_rejection_reasons")
+                or e.get("features", {}).get("options_debug_inputs")
+            ]
+            if _opts_rejected:
+                with st.expander("🔬 Options rejection details", expanded=False):
+                    for e in _opts_rejected:
+                        sym = e.get("symbol", "?")
+                        reasons = e.get("features", {}).get("options_rejection_reasons") or []
+                        debug = e.get("features", {}).get("options_debug_inputs") or {}
+                        st.write(f"**{sym}**")
+                        if reasons:
+                            st.caption(f"Options rejection reasons: {', '.join(reasons)}")
+                        if debug:
+                            st.json(debug)
+                        st.divider()
+
+            # Why symbols were rejected: per-symbol eval details (price, volume, iv_rank, regime, snapshot_age_minutes)
+            with st.expander("🔍 Why symbols were rejected", expanded=False):
+                for e in evaluations:
                     sym = e.get("symbol", "?")
-                    reasons = e.get("features", {}).get("options_rejection_reasons") or []
-                    debug = e.get("features", {}).get("options_debug_inputs") or {}
-                    st.write(f"**{sym}**")
-                    if reasons:
-                        st.caption(f"Options rejection reasons: {', '.join(reasons)}")
-                    if debug:
-                        st.json(debug)
-                    st.divider()
-        
-        # Why symbols were rejected: per-symbol eval details (price, volume, iv_rank, regime, snapshot_age_minutes)
-        with st.expander("🔍 Why symbols were rejected", expanded=False):
-            for e in evaluations:
-                sym = e.get("symbol", "?")
-                elig = e.get("eligible", False)
-                score = e.get("score", 0)
-                reasons = e.get("rejection_reasons", [])
-                feat = e.get("features", {})
-                rctx = e.get("regime_context", {})
-                price = feat.get("price")
-                volume = feat.get("volume")
-                iv_rank = feat.get("iv_rank")
-                snapshot_age_minutes = feat.get("snapshot_age_minutes")
-                regime = rctx.get("regime", "?")
-                st.write(
-                    f"**{sym}** | eligible={elig} | score={score} | "
-                    f"price={price} | volume={volume} | iv_rank={iv_rank} | "
-                    f"regime={regime} | snapshot_age_min={snapshot_age_minutes}"
-                )
-                if reasons:
-                    st.caption(f"Rejection reasons: {', '.join(reasons)}")
-                st.divider()
-        
-        # Update daily tracking (Phase 1C)
-        _update_candidate_daily_tracking(len(eligible_evaluations))
-        
-        # Display eligible candidates
-        if eligible_evaluations:
-            # Top candidate highlight
-            if len(eligible_evaluations) > 0:
-                top_eval = eligible_evaluations[0]
-                with st.container():
-                    st.success(
-                        f"🏆 **Top Candidate: {top_eval['symbol']}** "
-                        f"| Score: **{top_eval['score']}/100**"
+                    elig = e.get("eligible", False)
+                    score = e.get("score", 0)
+                    reasons = e.get("rejection_reasons", [])
+                    feat = e.get("features", {})
+                    rctx = e.get("regime_context", {})
+                    price = feat.get("price")
+                    volume = feat.get("volume")
+                    iv_rank = feat.get("iv_rank")
+                    snapshot_age_minutes = feat.get("snapshot_age_minutes")
+                    regime = rctx.get("regime", "?")
+                    st.write(
+                        f"**{sym}** | eligible={elig} | score={score} | "
+                        f"price={price} | volume={volume} | iv_rank={iv_rank} | "
+                        f"regime={regime} | snapshot_age_min={snapshot_age_minutes}"
                     )
-            
-            st.write("")  # Spacing
-            
-            # Candidate cards with "Why?" expanders
-            for i, eval_result in enumerate(eligible_evaluations, 1):
-                symbol = eval_result["symbol"]
-                score = eval_result["score"]
-                features = eval_result.get("features", {})
-                regime_context = eval_result.get("regime_context", {})
-                rejection_reasons = eval_result.get("rejection_reasons", [])
-                
-                with st.container():
-                    # Score badge color
-                    if score >= 80:
-                        badge_color = "🟢"
-                    elif score >= 60:
-                        badge_color = "🟡"
-                    else:
-                        badge_color = "🟠"
-                    
-                    # Main candidate card
-                    col1, col2, col3 = st.columns([1, 2, 1])
-                    
-                    with col1:
-                        st.markdown(f"### {badge_color} {symbol}")
-                        st.metric("CSP Score", f"{score}/100")
-                    
-                    with col2:
-                        price = features.get("price", "N/A")
-                        volume = features.get("volume")
-                        iv_rank = features.get("iv_rank")
-                        snapshot_age = features.get("snapshot_age_minutes", 0)
-                        regime = regime_context.get("regime", "UNKNOWN")
-                        
-                        st.write("**Details:**")
-                        cols = st.columns(5)
-                        with cols[0]:
-                            st.metric("Price", f"${price:.2f}" if isinstance(price, (int, float)) else str(price))
-                        with cols[1]:
-                            st.metric("Regime", regime)
-                        with cols[2]:
-                            age_str = f"{snapshot_age:.1f}m" if snapshot_age < 60 else f"{snapshot_age/60:.1f}h"
-                            st.metric("Data Age", age_str)
-                        with cols[3]:
-                            if volume is not None:
-                                vol_str = f"{volume/1_000_000:.1f}M" if volume >= 1_000_000 else f"{volume/1_000:.1f}K"
-                                st.metric("Volume", vol_str)
-                            else:
-                                st.metric("Volume", "N/A")
-                        with cols[4]:
-                            if iv_rank is not None:
-                                st.metric("IV Rank", f"{iv_rank:.1f}")
-                            else:
-                                st.metric("IV Rank", "N/A")
-                        
-                        # Chosen Contract (Phase 5): expiry, strike, delta, mid, roc, spread_pct
-                        chosen = features.get("chosen_contract")
-                        if chosen:
-                            st.write("**Chosen Contract:**")
-                            cc_cols = st.columns(6)
-                            with cc_cols[0]:
-                                st.metric("Expiry", str(chosen.get("expiry", "—"))[:10])
-                            with cc_cols[1]:
-                                st.metric("Strike", f"${chosen.get('strike', 0):.2f}" if chosen.get("strike") is not None else "—")
-                            with cc_cols[2]:
-                                d = chosen.get("delta")
-                                st.metric("Delta", f"{d:.2f}" if d is not None else "—")
-                            with cc_cols[3]:
-                                m = chosen.get("mid")
-                                st.metric("Mid", f"${m:.2f}" if m is not None else "—")
-                            with cc_cols[4]:
-                                roc = features.get("options_roc")
-                                st.metric("ROC", f"{roc*100:.2f}%" if roc is not None else "—")
-                            with cc_cols[5]:
-                                sp = features.get("options_spread_pct")
-                                st.metric("Spread %", f"{sp:.1f}%" if sp is not None else "—")
-                    
-                    with col3:
-                        # "Why?" expander (Phase 2B Step 3)
-                        with st.expander("❓ Why?", expanded=False):
-                            st.write("**Score Breakdown:**")
-                            score_components = features.get("score_components", {})
-                            if score_components:
-                                for component, value in score_components.items():
-                                    st.write(f"- {component.replace('_', ' ').title()}: {value:.1f}")
-                            else:
-                                st.write("No score components available")
-                            
-                            st.divider()
-                            
-                            # Display volume and IV rank explicitly (Phase 2B Step 3)
-                            st.write("**Market Data:**")
-                            col_data1, col_data2 = st.columns(2)
-                            with col_data1:
-                                vol = features.get("volume")
-                                if vol is not None:
-                                    vol_str = f"{vol/1_000_000:.2f}M" if vol >= 1_000_000 else f"{vol/1_000:.2f}K"
-                                    st.write(f"Volume: {vol_str}")
-                                else:
-                                    st.write("Volume: N/A")
-                            with col_data2:
-                                iv = features.get("iv_rank")
-                                if iv is not None:
-                                    st.write(f"IV Rank: {iv:.1f}")
-                                else:
-                                    st.write("IV Rank: N/A")
-                            
-                            # Show which gate failed (if rejected)
-                            if rejection_reasons:
-                                st.divider()
-                                st.write("**Rejection Reasons:**")
-                                for reason in rejection_reasons:
-                                    if reason == "low_liquidity":
-                                        st.error(f"❌ {reason}: Volume < 1M (current: {vol/1_000_000:.2f}M)" if vol is not None else f"❌ {reason}: Volume < 1M")
-                                    elif reason == "iv_too_low":
-                                        st.error(f"❌ {reason}: IV Rank < 20 (current: {iv:.1f})" if iv is not None else f"❌ {reason}: IV Rank < 20")
-                                    else:
-                                        st.write(f"- {reason}")
-                            
-                            st.divider()
-                            st.write("**All Features:**")
-                            st.json(features)
-                            
-                            st.write("**Regime Context:**")
-                            st.json(regime_context)
-                    
+                    if reasons:
+                        st.caption(f"Rejection reasons: {', '.join(reasons)}")
                     st.divider()
+
+            # Update daily tracking (Phase 1C)
+            _update_candidate_daily_tracking(len(eligible_evaluations))
+
+            # Display eligible candidates
+            if eligible_evaluations:
+                # Top candidate highlight
+                if len(eligible_evaluations) > 0:
+                    top_eval = eligible_evaluations[0]
+                    with st.container():
+                        st.success(
+                            f"🏆 **Top Candidate: {top_eval['symbol']}** "
+                            f"| Score: **{top_eval['score']}/100**"
+                        )
+
+                st.write("")  # Spacing
+
+                # Candidate cards with "Why?" expanders
+                for i, eval_result in enumerate(eligible_evaluations, 1):
+                    symbol = eval_result["symbol"]
+                    score = eval_result["score"]
+                    features = eval_result.get("features", {})
+                    regime_context = eval_result.get("regime_context", {})
+                    rejection_reasons = eval_result.get("rejection_reasons", [])
+
+                    with st.container():
+                        # Score badge color
+                        if score >= 80:
+                            badge_color = "🟢"
+                        elif score >= 60:
+                            badge_color = "🟡"
+                        else:
+                            badge_color = "🟠"
+
+                        # Main candidate card
+                        col1, col2, col3 = st.columns([1, 2, 1])
+
+                        with col1:
+                            st.markdown(f"### {badge_color} {symbol}")
+                            st.metric("CSP Score", f"{score}/100")
+
+                        with col2:
+                            price = features.get("price", "N/A")
+                            volume = features.get("volume")
+                            iv_rank = features.get("iv_rank")
+                            snapshot_age = features.get("snapshot_age_minutes", 0)
+                            regime = regime_context.get("regime", "UNKNOWN")
+
+                            st.write("**Details:**")
+                            cols = st.columns(5)
+                            with cols[0]:
+                                st.metric("Price", f"${price:.2f}" if isinstance(price, (int, float)) else str(price))
+                            with cols[1]:
+                                st.metric("Regime", regime)
+                            with cols[2]:
+                                age_str = f"{snapshot_age:.1f}m" if snapshot_age < 60 else f"{snapshot_age/60:.1f}h"
+                                st.metric("Data Age", age_str)
+                            with cols[3]:
+                                if volume is not None:
+                                    vol_str = f"{volume/1_000_000:.1f}M" if volume >= 1_000_000 else f"{volume/1_000:.1f}K"
+                                    st.metric("Volume", vol_str)
+                                else:
+                                    st.metric("Volume", "N/A")
+                            with cols[4]:
+                                if iv_rank is not None:
+                                    st.metric("IV Rank", f"{iv_rank:.1f}")
+                                else:
+                                    st.metric("IV Rank", "N/A")
+
+                            # Chosen Contract (Phase 5): expiry, strike, delta, mid, roc, spread_pct
+                            chosen = features.get("chosen_contract")
+                            if chosen:
+                                st.write("**Chosen Contract:**")
+                                cc_cols = st.columns(6)
+                                with cc_cols[0]:
+                                    st.metric("Expiry", str(chosen.get("expiry", "—"))[:10])
+                                with cc_cols[1]:
+                                    st.metric("Strike", f"${chosen.get('strike', 0):.2f}" if chosen.get("strike") is not None else "—")
+                                with cc_cols[2]:
+                                    d = chosen.get("delta")
+                                    st.metric("Delta", f"{d:.2f}" if d is not None else "—")
+                                with cc_cols[3]:
+                                    m = chosen.get("mid")
+                                    st.metric("Mid", f"${m:.2f}" if m is not None else "—")
+                                with cc_cols[4]:
+                                    roc = features.get("options_roc")
+                                    st.metric("ROC", f"{roc*100:.2f}%" if roc is not None else "—")
+                                with cc_cols[5]:
+                                    sp = features.get("options_spread_pct")
+                                    st.metric("Spread %", f"{sp:.1f}%" if sp is not None else "—")
+
+                        with col3:
+                            # "Why?" expander (Phase 2B Step 3)
+                            with st.expander("❓ Why?", expanded=False):
+                                st.write("**Score Breakdown:**")
+                                score_components = features.get("score_components", {})
+                                if score_components:
+                                    for component, value in score_components.items():
+                                        st.write(f"- {component.replace('_', ' ').title()}: {value:.1f}")
+                                else:
+                                    st.write("No score components available")
+
+                                st.divider()
+
+                                # Display volume and IV rank explicitly (Phase 2B Step 3)
+                                st.write("**Market Data:**")
+                                col_data1, col_data2 = st.columns(2)
+                                with col_data1:
+                                    vol = features.get("volume")
+                                    if vol is not None:
+                                        vol_str = f"{vol/1_000_000:.2f}M" if vol >= 1_000_000 else f"{vol/1_000:.2f}K"
+                                        st.write(f"Volume: {vol_str}")
+                                    else:
+                                        st.write("Volume: N/A")
+                                with col_data2:
+                                    iv = features.get("iv_rank")
+                                    if iv is not None:
+                                        st.write(f"IV Rank: {iv:.1f}")
+                                    else:
+                                        st.write("IV Rank: N/A")
+
+                                # Show which gate failed (if rejected)
+                                if rejection_reasons:
+                                    st.divider()
+                                    st.write("**Rejection Reasons:**")
+                                    for reason in rejection_reasons:
+                                        if reason == "low_liquidity":
+                                            st.error(f"❌ {reason}: Volume < 1M (current: {vol/1_000_000:.2f}M)" if vol is not None else f"❌ {reason}: Volume < 1M")
+                                        elif reason == "iv_too_low":
+                                            st.error(f"❌ {reason}: IV Rank < 20 (current: {iv:.1f})" if iv is not None else f"❌ {reason}: IV Rank < 20")
+                                        else:
+                                            st.write(f"- {reason}")
+
+                                st.divider()
+                                st.write("**All Features:**")
+                                st.json(features)
+
+                                st.write("**Regime Context:**")
+                                st.json(regime_context)
+
+                        st.divider()
+            else:
+                st.info("📭 No eligible CSP candidates found. Check rejection reasons above.")
         else:
-            st.info("📭 No eligible CSP candidates found. Check rejection reasons above.")
-    else:
-        st.warning("⚠️ No active snapshot available. Build a snapshot to enable evaluation.")
-        
-        # No fallback - csp_candidates table removed, only csp_evaluations exists
-        st.info("📭 No CSP candidates found. Build a snapshot and wait for heartbeat evaluation.")
+            st.warning("⚠️ No active snapshot available. Build a snapshot to enable evaluation.")
+
+            # No fallback - csp_candidates table removed, only csp_evaluations exists
+            st.info("📭 No CSP candidates found. Build a snapshot and wait for heartbeat evaluation.")
 
     st.divider()
     
@@ -1550,9 +1748,12 @@ def main() -> None:
                         st.rerun()
     
     st.divider()
-    
-    # Active Positions Section (Phase 1A)
-    st.header("📊 Active Positions")
+
+    # ---- Positions ----
+    st.header("📂 Positions")
+
+    # Active Positions Section (Phase 1A) - Open Positions summary
+    st.subheader("Open Positions")
     try:
         open_positions = persistence_list_open_positions()
         
@@ -1652,8 +1853,8 @@ def main() -> None:
                 unsafe_allow_html=True
             )
 
-    # Open Positions Section
-    st.header("📂 Open Positions")
+    # Open Positions Section - Historical / Reviewed positions
+    st.subheader("Historical / Reviewed Positions")
     try:
         position_engine = PositionEngine()
         open_positions = position_engine.get_open_positions()

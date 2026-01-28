@@ -136,7 +136,7 @@ def get_theta_shadow_signals(symbol: str = "SPY") -> dict[str, Any]:
                 exp_yyyymmdd = _next_friday_yyyymmdd()
                 for path in ["/bulk_snapshot/option/greeks", "/option/bulk_snapshot/greeks"]:
                     try:
-                        text = _req_csv(client, path, {"root": symbol, "exp": exp_yyyymmdd})
+                        text = _req_csv(client, path, {"symbol": symbol, "exp": exp_yyyymmdd})
                         rows = _parse_csv(text)
                         if not rows:
                             continue
@@ -169,9 +169,9 @@ def get_theta_shadow_signals(symbol: str = "SPY") -> dict[str, Any]:
                 strike = 50000 if symbol.upper() == "SPY" else 40000
                 for path in ["/option/snapshot/ohlc", "/option/bulk_snapshot/ohlc", "/bulk_snapshot/option/ohlc"]:
                     try:
-                        params: dict[str, Any] = {"root": symbol, "exp": exp_yyyymmdd, "right": "C", "strike": strike}
+                        params: dict[str, Any] = {"symbol": symbol, "exp": exp_yyyymmdd, "right": "C", "strike": strike}
                         if "bulk" in path:
-                            params = {"root": symbol, "exp": exp_yyyymmdd}
+                            params = {"symbol": symbol, "exp": exp_yyyymmdd}
                         text = _req_csv(client, path, params)
                         rows = _parse_csv(text)
                         if not rows:

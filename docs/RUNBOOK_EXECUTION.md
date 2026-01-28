@@ -41,7 +41,7 @@ CONNECTED: Bundle: OPTION.STANDARD
 **From project root, PowerShell commands:**
 ```powershell
 cd C:\Development\Workspace\ChakraOps\chakraops
-streamlit run app/ui/dashboard.py
+python -m streamlit run app/ui/dashboard.py
 ```
 
 (If your entrypoint differs, replace only the last command with the correct entrypoint.)

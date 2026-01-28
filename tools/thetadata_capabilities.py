@@ -218,9 +218,9 @@ def run(verbose: bool = False, json_mode: bool = False) -> tuple[dict[str, Any],
             vol_from_ohlc: Any = None
             for path in ["/option/snapshot/ohlc", "/option/bulk_snapshot/ohlc", "/bulk_snapshot/option/ohlc"]:
                 try:
-                    params: dict[str, Any] = {"root": OPTION_ROOT, "exp": exp_yyyymmdd, "right": OPTION_RIGHT, "strike": OPTION_STRIKE_1_10_CENT}
+                    params: dict[str, Any] = {"symbol": OPTION_ROOT, "exp": exp_yyyymmdd, "right": OPTION_RIGHT, "strike": OPTION_STRIKE_1_10_CENT}
                     if "bulk" in path:
-                        params = {"root": OPTION_ROOT, "exp": exp_yyyymmdd}
+                        params = {"symbol": OPTION_ROOT, "exp": exp_yyyymmdd}
                     text = _req_csv(client, path, params)
                 except (httpx.HTTPStatusError, httpx.RequestError):
                     continue
@@ -258,7 +258,7 @@ def run(verbose: bool = False, json_mode: bool = False) -> tuple[dict[str, Any],
             iv_ok = False
             for path in ["/bulk_snapshot/option/greeks", "/option/bulk_snapshot/greeks"]:
                 try:
-                    text = _req_csv(client, path, {"root": OPTION_ROOT, "exp": exp_yyyymmdd})
+                    text = _req_csv(client, path, {"symbol": OPTION_ROOT, "exp": exp_yyyymmdd})
                 except (httpx.HTTPStatusError, httpx.RequestError):
                     continue
                 rows = _parse_csv(text)
@@ -300,7 +300,7 @@ def run(verbose: bool = False, json_mode: bool = False) -> tuple[dict[str, Any],
             # OI: try common column names in options/greeks responses
             for path in ["/bulk_snapshot/option/greeks", "/option/bulk_snapshot/ohlc"]:
                 try:
-                    text = _req_csv(client, path, {"root": OPTION_ROOT, "exp": exp_yyyymmdd})
+                    text = _req_csv(client, path, {"symbol": OPTION_ROOT, "exp": exp_yyyymmdd})
                 except (httpx.HTTPStatusError, httpx.RequestError):
                     continue
                 rows = _parse_csv(text)

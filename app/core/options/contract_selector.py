@@ -91,7 +91,12 @@ def select_csp_contract(
             rejection_reasons=["options_skipped_no_price"],
             debug_inputs=debug,
         )
-    today = date.today()
+    # Backtest support: use as_of_date when provided, else date.today()
+    _ao = snapshot_context.get("as_of_date")
+    if _ao is not None:
+        today = _ao if isinstance(_ao, date) else date.fromisoformat(str(_ao))
+    else:
+        today = date.today()
     try:
         expirations = chain_provider.get_expirations(symbol)
     except Exception:
@@ -241,7 +246,11 @@ def select_cc_contract(
     min_oi = int(_get(cfg, "min_oi", 0) or 0)
     min_volume = int(_get(cfg, "min_volume", 0) or 0)
     min_roc = float(_get(cfg, "min_roc", 0.005) or 0.005)
-    today = date.today()
+    _ao = snapshot_context.get("as_of_date")
+    if _ao is not None:
+        today = _ao if isinstance(_ao, date) else date.fromisoformat(str(_ao))
+    else:
+        today = date.today()
     try:
         expirations = chain_provider.get_expirations(symbol)
     except Exception:

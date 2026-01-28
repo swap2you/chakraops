@@ -2037,6 +2037,71 @@ def main() -> None:
         st.info("✅ No alerts found.")
     
     st.divider()
+
+    # Backtest Section (Phase 5 – DEV only)
+    st.header("📉 Backtest", anchor="backtest")
+    _dev_mode_bt = os.environ.get("CHAKRAOPS_DEV", "").lower() in ("1", "true", "yes")
+    if _dev_mode_bt:
+        try:
+            from app.core.config.paths import BASE_DIR
+            _backtest_base = BASE_DIR / "app" / "data" / "backtests"
+        except Exception:
+            _backtest_base = Path(__file__).resolve().parents[2] / "data" / "backtests"
+        if st.button("Run backtest (fixtures)", key="backtest_run", use_container_width=True):
+            try:
+                from app.backtest.engine import BacktestEngine, BacktestConfig, SnapshotCSVDataSource
+                _fixtures = _backtest_base.parent / "backtest_fixtures" / "snapshots"
+                if not _fixtures.exists():
+                    st.warning("No fixture folder found. Create dated snapshot CSVs in `app/data/backtest_fixtures/snapshots/` (e.g. 2026-01-01.csv) or run the fixture generator.")
+                else:
+                    _ds = SnapshotCSVDataSource(_fixtures)
+                    _cfg = BacktestConfig(data_source=_ds, output_dir=_backtest_base)
+                    _eng = BacktestEngine(_cfg)
+                    with st.spinner("Running backtest..."):
+                        _report = _eng.run(_cfg)
+                    st.session_state["backtest_last_run_id"] = _report.run_id
+                    st.success(f"Backtest complete: run_id={_report.run_id} | PnL={_report.total_pnl:.2f} | trades={_report.total_trades}")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Backtest failed: {e}")
+                import traceback
+                st.code(traceback.format_exc())
+        # Last report summary: prefer session last_run_id, else newest by mtime
+        _last_id = st.session_state.get("backtest_last_run_id")
+        _report_path = None
+        if _backtest_base.exists():
+            if _last_id:
+                _rp = _backtest_base / _last_id / "backtest_report.json"
+                if _rp.exists():
+                    _report_path = _rp
+            if _report_path is None:
+                _candidates = [_d / "backtest_report.json" for _d in _backtest_base.iterdir() if _d.is_dir() and (_d / "backtest_report.json").exists()]
+                if _candidates:
+                    _report_path = max(_candidates, key=lambda p: p.stat().st_mtime)
+        if _report_path and _report_path.exists():
+            with open(_report_path, "r", encoding="utf-8") as f:
+                _report_json = json.load(f)
+            st.subheader("Last report summary")
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                st.metric("Total PnL", f"{_report_json.get('total_pnl', 0):.2f}")
+            with c2:
+                st.metric("Win rate", f"{_report_json.get('win_rate', 0)*100:.1f}%")
+            with c3:
+                st.metric("Trades", _report_json.get("total_trades", 0))
+            with c4:
+                st.metric("Max DD", f"{_report_json.get('max_drawdown', 0):.2f}")
+            _trades_path = _report_path.parent / "backtest_trades.csv"
+            if _trades_path.exists():
+                import pandas as pd
+                _df = pd.read_csv(_trades_path)
+                st.dataframe(_df, use_container_width=True, height=min(400, 80 + 35 * len(_df)))
+        else:
+            st.caption("No backtest report yet. Run backtest (requires fixture folder).")
+    else:
+        st.caption("Backtest is available in DEV mode (CHAKRAOPS_DEV=1).")
+    
+    st.divider()
     
     # Symbol Universe Manager Section (Phase 2B Step 4)
     st.header("Symbol Universe Manager", anchor="symbol-universe-manager")

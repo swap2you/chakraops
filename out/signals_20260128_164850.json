@@ -1,0 +1,53 @@
+{
+  "as_of": "2026-01-28T16:48:50.571234",
+  "universe_id_or_hash": "phase2_default",
+  "configs": {
+    "base": {
+      "dte_min": 30,
+      "dte_max": 45,
+      "min_bid": 0.01,
+      "min_open_interest": 100,
+      "max_spread_pct": 20.0
+    },
+    "csp": {
+      "otm_pct_min": 0.05,
+      "otm_pct_max": 0.15,
+      "delta_min": null,
+      "delta_max": null
+    },
+    "cc": {
+      "otm_pct_min": 0.02,
+      "otm_pct_max": 0.1,
+      "delta_min": null,
+      "delta_max": null
+    }
+  },
+  "candidates": [],
+  "exclusions": [
+    {
+      "code": "NO_OPTIONS_FOR_SYMBOL",
+      "message": "AAPL: No PUT options found for AAPL",
+      "data": {
+        "symbol": "AAPL",
+        "total_options": 0
+      }
+    },
+    {
+      "code": "NO_OPTIONS_FOR_SYMBOL",
+      "message": "AAPL: No CALL options found for AAPL",
+      "data": {
+        "symbol": "AAPL",
+        "total_options": 0
+      }
+    }
+  ],
+  "stats": {
+    "total_symbols": 1,
+    "symbols_evaluated": 1,
+    "total_candidates": 0,
+    "csp_candidates": 0,
+    "cc_candidates": 0,
+    "total_exclusions": 2,
+    "unique_exclusion_codes": 1
+  }
+}

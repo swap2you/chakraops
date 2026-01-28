@@ -960,23 +960,42 @@ def main() -> None:
         else:
             st.warning("⚠️ No active snapshot available. Build a snapshot to enable evaluation.")
         
-        # DEV-only: Seed Snapshot from Last Close (writes CSV only; then use Build New Snapshot)
+        # DEV-only: Seed Snapshot from fixture (no yfinance). Writes market_snapshot.csv from eod_seed.csv.
         _dev_mode = os.environ.get("CHAKRAOPS_DEV", "").lower() in ("1", "true", "yes")
         if _dev_mode:
             if st.button("🌱 Seed Snapshot from Last Close (DEV)", use_container_width=True, type="secondary"):
                 try:
-                    from app.core.dev_seed import seed_snapshot_from_last_close
-                    path, count = seed_snapshot_from_last_close()
+                    from app.core.dev_seed import seed_snapshot_from_fixture
+                    path, count = seed_snapshot_from_fixture()
                     st.success(f"✅ Seeded {count} symbols to {path.name}. Click **Build New Snapshot** to ingest.")
                     st.rerun()
+                except FileNotFoundError as e:
+                    st.error(
+                        f"❌ Fixture missing: {e}\n\n"
+                        "**Steps:**\n"
+                        "1. Run: `python tools/generate_eod_seed_fixture.py`\n"
+                        "2. Or create `app/data/fixtures/eod_seed.csv` with columns: symbol, price, volume, iv_rank, timestamp (ET ISO)\n"
+                        "3. Then click this button again."
+                    )
                 except Exception as e:
                     st.error(f"❌ Seed failed: {e}")
         
-        # Build snapshot button
+        # DB path hint when multiple DBs exist (deterministic rebuild clarity)
+        try:
+            from app.core.config.paths import DB_PATH
+            _data_dir = DB_PATH.parent
+            if _data_dir.exists():
+                _db_files = list(_data_dir.glob("*.db"))
+                if len(_db_files) > 1:
+                    st.caption(f"⚠️ Multiple DB files in {_data_dir.name}/ — using: **{str(DB_PATH)}**")
+        except Exception:
+            pass
+        
+        # Build snapshot button: always rebuild from current market_snapshot.csv, then run one heartbeat cycle
         if st.button("🔨 Build New Snapshot", use_container_width=True, type="primary"):
-            with st.spinner("Building market snapshot from enabled universe..."):
+            with st.spinner("Building market snapshot from current CSV, then running evaluation..."):
                 try:
-                    result = build_market_snapshot(mode="AUTO")
+                    result = build_market_snapshot(mode="CSV")
                     source = result.get("source", "UNKNOWN")
                     st.success(
                         f"✅ Snapshot built! "
@@ -984,10 +1003,18 @@ def main() -> None:
                         f"Source: {source} | "
                         f"Symbols: {result['symbols_with_data']}/{result['symbol_count']} with data"
                     )
+                    try:
+                        HeartbeatManager.get_instance().run_one_cycle()
+                    except Exception as _e:
+                        import logging
+                        logging.getLogger(__name__).warning("Heartbeat cycle after build failed: %s", _e)
                     st.rerun()
                 except ValueError as e:
-                    # Operator-facing error message
-                    st.error(f"❌ {str(e)}")
+                    msg = str(e)
+                    if "CSV" in msg or "csv" in msg.lower():
+                        st.error(f"❌ {msg}\n\n**Hint:** Run **Seed Snapshot from Last Close (DEV)** first, or `python tools/generate_eod_seed_fixture.py`.")
+                    else:
+                        st.error(f"❌ {msg}")
                     import logging
                     logger = logging.getLogger(__name__)
                     logger.error(f"[DASHBOARD] Snapshot build ValueError: {e}")
@@ -1206,6 +1233,44 @@ def main() -> None:
                 for reason, count in rejection_reasons[:5]:
                     st.write(f"- **{reason}**: {count} symbols")
         
+        # Options rejection details (Phase 5): options-layer rejection reasons and debug_inputs
+        _opts_rejected = [e for e in evaluations if e.get("features", {}).get("options_rejection_reasons") or e.get("features", {}).get("options_debug_inputs")]
+        if _opts_rejected:
+            with st.expander("🔬 Options rejection details", expanded=False):
+                for e in _opts_rejected:
+                    sym = e.get("symbol", "?")
+                    reasons = e.get("features", {}).get("options_rejection_reasons") or []
+                    debug = e.get("features", {}).get("options_debug_inputs") or {}
+                    st.write(f"**{sym}**")
+                    if reasons:
+                        st.caption(f"Options rejection reasons: {', '.join(reasons)}")
+                    if debug:
+                        st.json(debug)
+                    st.divider()
+        
+        # Why symbols were rejected: per-symbol eval details (price, volume, iv_rank, regime, snapshot_age_minutes)
+        with st.expander("🔍 Why symbols were rejected", expanded=False):
+            for e in evaluations:
+                sym = e.get("symbol", "?")
+                elig = e.get("eligible", False)
+                score = e.get("score", 0)
+                reasons = e.get("rejection_reasons", [])
+                feat = e.get("features", {})
+                rctx = e.get("regime_context", {})
+                price = feat.get("price")
+                volume = feat.get("volume")
+                iv_rank = feat.get("iv_rank")
+                snapshot_age_minutes = feat.get("snapshot_age_minutes")
+                regime = rctx.get("regime", "?")
+                st.write(
+                    f"**{sym}** | eligible={elig} | score={score} | "
+                    f"price={price} | volume={volume} | iv_rank={iv_rank} | "
+                    f"regime={regime} | snapshot_age_min={snapshot_age_minutes}"
+                )
+                if reasons:
+                    st.caption(f"Rejection reasons: {', '.join(reasons)}")
+                st.divider()
+        
         # Update daily tracking (Phase 1C)
         _update_candidate_daily_tracking(len(eligible_evaluations))
         
@@ -1273,6 +1338,28 @@ def main() -> None:
                                 st.metric("IV Rank", f"{iv_rank:.1f}")
                             else:
                                 st.metric("IV Rank", "N/A")
+                        
+                        # Chosen Contract (Phase 5): expiry, strike, delta, mid, roc, spread_pct
+                        chosen = features.get("chosen_contract")
+                        if chosen:
+                            st.write("**Chosen Contract:**")
+                            cc_cols = st.columns(6)
+                            with cc_cols[0]:
+                                st.metric("Expiry", str(chosen.get("expiry", "—"))[:10])
+                            with cc_cols[1]:
+                                st.metric("Strike", f"${chosen.get('strike', 0):.2f}" if chosen.get("strike") is not None else "—")
+                            with cc_cols[2]:
+                                d = chosen.get("delta")
+                                st.metric("Delta", f"{d:.2f}" if d is not None else "—")
+                            with cc_cols[3]:
+                                m = chosen.get("mid")
+                                st.metric("Mid", f"${m:.2f}" if m is not None else "—")
+                            with cc_cols[4]:
+                                roc = features.get("options_roc")
+                                st.metric("ROC", f"{roc*100:.2f}%" if roc is not None else "—")
+                            with cc_cols[5]:
+                                sp = features.get("options_spread_pct")
+                                st.metric("Spread %", f"{sp:.1f}%" if sp is not None else "—")
                     
                     with col3:
                         # "Why?" expander (Phase 2B Step 3)

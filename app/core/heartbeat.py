@@ -265,6 +265,10 @@ class HeartbeatManager:
         
         logger.info("[HEARTBEAT] Background evaluation loop stopped")
     
+    def run_one_cycle(self) -> tuple[int, int]:
+        """Run one evaluation cycle (for UI-triggered refresh after snapshot build)."""
+        return self._evaluate_cycle()
+    
     def _evaluate_cycle(self) -> tuple[int, int]:
         """Run one evaluation cycle (NO Streamlit calls).
         
@@ -512,6 +516,42 @@ class HeartbeatManager:
                 else:
                     rejected_count += 1
             
+            # Phase 5: Options-layer contract selection for stock-eligible symbols
+            _chain_provider = None
+            try:
+                from app.data.options_chain_provider import ThetaDataOptionsChainProvider
+                _chain_provider = ThetaDataOptionsChainProvider()
+            except Exception as _e:
+                logger.debug("[HEARTBEAT] Options chain provider unavailable, skipping contract selection: %s", _e)
+            if _chain_provider is not None:
+                from app.core.options.contract_selector import select_csp_contract
+                for eval_result in evaluations:
+                    if not eval_result.get("eligible"):
+                        continue
+                    ctx = {
+                        "price": eval_result.get("features", {}).get("price"),
+                        "iv_rank": eval_result.get("features", {}).get("iv_rank"),
+                        "regime": eval_result.get("regime_context", {}).get("regime"),
+                        "snapshot_age_minutes": eval_result.get("features", {}).get("snapshot_age_minutes"),
+                    }
+                    r = select_csp_contract(eval_result["symbol"], ctx, _chain_provider, None)
+                    if not r.eligible:
+                        eval_result["eligible"] = False
+                        eval_result["rejection_reasons"] = list(eval_result.get("rejection_reasons", [])) + r.rejection_reasons
+                        (eval_result.setdefault("features", {})).update({
+                            "options_rejection_reasons": r.rejection_reasons,
+                            "options_debug_inputs": r.debug_inputs,
+                        })
+                        eligible_count -= 1
+                        rejected_count += 1
+                    else:
+                        (eval_result.setdefault("features", {})).update({
+                            "chosen_contract": r.chosen_contract,
+                            "options_roc": r.roc,
+                            "options_spread_pct": r.spread_pct,
+                            "options_dte": r.dte,
+                        })
+            
             # Step 3: Persist evaluations to database and log insertion
             upsert_csp_evaluations(snapshot_id, evaluations)
             logger.info(
@@ -616,9 +656,6 @@ class HeartbeatManager:
             if symbols_without_candidates > 0:
                 reason = "No CSP candidates found"
                 rejection_reasons[reason] = rejection_reasons.get(reason, 0) + symbols_without_candidates
-            
-            # Step 6: Log candidates to database
-            log_csp_candidates(candidates)
             
             # Step 7: Update daily tracking (ET date)
             self._update_daily_tracking(actionable_candidates)

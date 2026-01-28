@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -439,6 +440,14 @@ def build_market_snapshot(mode: str = "AUTO") -> Dict[str, Any]:
         logger.info(f"[SNAPSHOT DIAG]     - row.get('enabled'): {row.get('enabled')} (type: {type(row.get('enabled')).__name__}, truthy: {bool(row.get('enabled'))})")
     
     symbols = get_enabled_symbols()
+    # DEV: if universe is empty, use default_universe.txt for snapshot building only (no DB overwrite)
+    if not symbols and os.getenv("CHAKRAOPS_DEV", "").lower() in ("1", "true", "yes"):
+        try:
+            from app.core.dev_seed import load_default_universe
+            symbols = load_default_universe()
+            logger.info("[SNAPSHOT] DEV: enabled universe empty, using default_universe.txt (%d symbols)", len(symbols))
+        except Exception as e:
+            logger.warning("[SNAPSHOT] DEV: failed to load default_universe: %s", e)
 
     # Benchmarks (SPY, QQQ) always included for regime computation; add if missing
     _BENCHMARKS = ("SPY", "QQQ")
@@ -707,6 +716,19 @@ def build_market_snapshot(mode: str = "AUTO") -> Dict[str, Any]:
     
     try:
         created_at = datetime.now(timezone.utc).isoformat()
+        
+        # Snapshot rebuild hygiene: clear stale rows before inserting
+        _dev_mode = os.getenv("CHAKRAOPS_DEV", "").lower() in ("1", "true", "yes")
+        if _dev_mode:
+            cursor.execute("DELETE FROM market_snapshot_data")
+            cursor.execute("DELETE FROM market_snapshots")
+            logger.info("[SNAPSHOT] DEV mode: truncated snapshot tables before rebuild")
+        else:
+            cursor.execute(
+                "DELETE FROM market_snapshot_data WHERE snapshot_id IN (SELECT snapshot_id FROM market_snapshots WHERE snapshot_timestamp_et = ?)",
+                (snapshot_timestamp_et,),
+            )
+            cursor.execute("DELETE FROM market_snapshots WHERE snapshot_timestamp_et = ?", (snapshot_timestamp_et,))
         
         # Mark previous snapshots as not frozen (only one active snapshot)
         cursor.execute("""

@@ -274,6 +274,7 @@ class HeartbeatManager:
             (candidates_count, alerts_count)
         """
         try:
+            symbols_evaluated = 0
             # Step 1: Get or compute regime (check freshness)
             regime_result, regime_age_minutes = self._get_regime_with_age()
             if not regime_result:
@@ -344,6 +345,14 @@ class HeartbeatManager:
             logger.info("[HEARTBEAT][DIAG] Starting symbol loading diagnostics")
             
             enabled_symbols = get_enabled_symbols()
+            # DEV: if universe is empty, use default_universe.txt for this cycle only (no DB overwrite)
+            if not enabled_symbols and os.getenv("CHAKRAOPS_DEV", "").lower() in ("1", "true", "yes"):
+                try:
+                    from app.core.dev_seed import load_default_universe
+                    enabled_symbols = load_default_universe()
+                    logger.info("[HEARTBEAT] DEV: enabled universe empty, using default_universe.txt (%d symbols)", len(enabled_symbols))
+                except Exception as e:
+                    logger.warning("[HEARTBEAT] DEV: failed to load default_universe: %s", e)
             enabled_universe_size = len(enabled_symbols) if enabled_symbols else 0
             
             logger.info(f"[HEARTBEAT][DIAG] enabled_symbols length={enabled_universe_size}")
@@ -496,6 +505,7 @@ class HeartbeatManager:
                         iv_too_low_count += 1
                 
                 evaluations.append(eval_result)
+                symbols_evaluated += 1
                 
                 if eval_result["eligible"]:
                     eligible_count += 1
@@ -602,7 +612,7 @@ class HeartbeatManager:
                     rejection_reasons[reason] = rejection_reasons.get(reason, 0) + 1
             
             # Track symbols that didn't produce any candidates
-            symbols_without_candidates = symbols_evaluated - len(symbols_with_candidates)
+            symbols_without_candidates = max(0, symbols_evaluated - len(symbols_with_candidates))
             if symbols_without_candidates > 0:
                 reason = "No CSP candidates found"
                 rejection_reasons[reason] = rejection_reasons.get(reason, 0) + symbols_without_candidates
@@ -1040,8 +1050,15 @@ class HeartbeatManager:
                 prices_s2 = get_snapshot_prices(latest_id)
                 prices_s1 = get_snapshot_prices(previous_id)
                 
+                # Benchmark presence: check only the latest snapshot; warn only if SPY and QQQ both missing
+                symbols_in_latest = set(prices_s2.keys())
+                spy_ok = normalize_symbol("SPY") in symbols_in_latest
+                qqq_ok = normalize_symbol("QQQ") in symbols_in_latest
+                if not spy_ok and not qqq_ok:
+                    logger.warning("[HEARTBEAT] Benchmarks missing from latest snapshot: SPY, QQQ")
+                
                 # Pick benchmark symbol in priority order: SPX, SPY, QQQ
-                # Use first found in BOTH snapshots
+                # Use first found in BOTH snapshots (for return computation)
                 benchmark_candidates = ["SPX", "SPY", "QQQ"]
                 benchmark_symbol = None
                 
@@ -1056,7 +1073,7 @@ class HeartbeatManager:
                         break
                 
                 if not benchmark_symbol:
-                    logger.warning("[HEARTBEAT] No benchmark symbol (SPX/SPY/QQQ) found in both snapshots")
+                    logger.warning("[HEARTBEAT] No benchmark symbol with data in both snapshots")
                     return {
                         "regime": "UNKNOWN",
                         "confidence": 0,

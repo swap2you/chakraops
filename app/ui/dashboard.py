@@ -54,7 +54,6 @@ from app.core.persistence import (
     add_universe_symbol,
     toggle_universe_symbol,
     delete_universe_symbol,
-    reset_local_trading_state,
     get_assignment_profile,
     set_assignment_override,
     is_assignment_blocked,
@@ -66,6 +65,7 @@ from app.core.symbol_cache import (
 )
 from app.core.market_time import get_market_state, is_market_open
 from app.core.heartbeat import HeartbeatManager, REGIME_STALE_THRESHOLD_MINUTES
+from app.core.dev_utils import reset_local_trading_state
 
 # Set page config
 st.set_page_config(
@@ -949,8 +949,28 @@ def main() -> None:
                 else:
                     age_str = f"{age_hours:.1f}h"
                 st.metric("Snapshot Age", age_str)
+            # Benchmarks presence (display only)
+            _snap_syms = {normalize_symbol(s) for s in snapshot_data.keys()}
+            _spy_ok = normalize_symbol("SPY") in _snap_syms
+            _qqq_ok = normalize_symbol("QQQ") in _snap_syms
+            if _spy_ok and _qqq_ok:
+                st.caption("Benchmarks present: SPY, QQQ")
+            else:
+                st.caption("Benchmarks missing")
         else:
             st.warning("⚠️ No active snapshot available. Build a snapshot to enable evaluation.")
+        
+        # DEV-only: Seed Snapshot from Last Close (writes CSV only; then use Build New Snapshot)
+        _dev_mode = os.environ.get("CHAKRAOPS_DEV", "").lower() in ("1", "true", "yes")
+        if _dev_mode:
+            if st.button("🌱 Seed Snapshot from Last Close (DEV)", use_container_width=True, type="secondary"):
+                try:
+                    from app.core.dev_seed import seed_snapshot_from_last_close
+                    path, count = seed_snapshot_from_last_close()
+                    st.success(f"✅ Seeded {count} symbols to {path.name}. Click **Build New Snapshot** to ingest.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Seed failed: {e}")
         
         # Build snapshot button
         if st.button("🔨 Build New Snapshot", use_container_width=True, type="primary"):

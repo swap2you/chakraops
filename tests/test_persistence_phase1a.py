@@ -144,7 +144,7 @@ def test_alert_lifecycle(temp_db):
     # Archive alert
     archive_alert(alert_id)
     archived_alerts = list_alerts(status="ARCHIVED")
-    assert any(a["id"] == alert_id for archived_alerts)
+    assert any(a["id"] == alert_id for a in archived_alerts)
 
 
 def test_portfolio_snapshot_roundtrip(temp_db):

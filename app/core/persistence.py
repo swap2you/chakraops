@@ -216,11 +216,23 @@ def init_persistence_db() -> None:
                     VALUES (?, 1, ?, ?)
                 """, (symbol, note, created_at))
         
-        # Update alerts table: add status column if it doesn't exist
+        # Ensure alerts table exists before applying migrations
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message TEXT NOT NULL,
+                level TEXT NOT NULL,
+                status TEXT DEFAULT 'OPEN',
+                created_at TEXT NOT NULL
+            )
+        """)
+        
+        # Update alerts table: add status column if it doesn't exist (legacy migration)
         try:
             cursor.execute("ALTER TABLE alerts ADD COLUMN status TEXT DEFAULT 'OPEN'")
         except sqlite3.OperationalError:
-            pass  # Column already exists
+            # Column already exists or legacy schema without alerts table; safe to ignore
+            pass
         
         # Migrate existing alerts to OPEN status
         cursor.execute("""
@@ -281,10 +293,6 @@ def init_persistence_db() -> None:
         # Ensure candidate_daily_tracking schema is correct (migration)
         _ensure_candidate_daily_tracking_schema(cursor)
         
-        # Initialize market snapshot schema (Phase 2A)
-        from app.core.market_snapshot import init_snapshot_schema
-        init_snapshot_schema()
-        
         # Create market_regimes table (Phase 2B)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS market_regimes (
@@ -328,6 +336,11 @@ def init_persistence_db() -> None:
         raise
     finally:
         conn.close()
+    
+    # Initialize market snapshot schema (Phase 2A) AFTER closing persistence connection
+    # This avoids concurrent writes to the same SQLite file on Windows.
+    from app.core.market_snapshot import init_snapshot_schema
+    init_snapshot_schema()
 
 
 def record_trade(

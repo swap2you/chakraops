@@ -1087,6 +1087,8 @@ def get_snapshot_prices(snapshot_id: str) -> Dict[str, Dict[str, Optional[float]
                     # If IV is provided but not IV rank, we can't compute IV rank
                     # Leave it as None
                     pass
+            if data.get("iv_rank") is None:
+                logger.debug("[SNAPSHOT] %s: no iv_rank; iv_too_low gate skipped (iv_rank treated as None)", symbol)
             
             symbol_data[symbol] = data
     

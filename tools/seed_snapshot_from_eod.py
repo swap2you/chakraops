@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI to seed market_snapshot.csv from last close (EOD) using yfinance. DEV-only, no DB writes."""
+"""CLI to seed market_snapshot.csv from fixture or last close (yfinance). DEV-only, no DB writes."""
 
 from __future__ import annotations
 
@@ -14,12 +14,17 @@ if str(_repo) not in sys.path:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Seed market_snapshot.csv from last close (DEV)")
+    parser = argparse.ArgumentParser(description="Seed market_snapshot.csv (fixture or yfinance, DEV)")
+    parser.add_argument(
+        "--from-fixture",
+        action="store_true",
+        help="Use app/data/fixtures/eod_seed.csv (no yfinance)",
+    )
     parser.add_argument(
         "--symbols",
         nargs="*",
         default=None,
-        help="Symbols to fetch; if omitted, use app/data/default_universe.txt",
+        help="Symbols to fetch (yfinance only); if omitted, use default_universe.txt",
     )
     parser.add_argument(
         "--out",
@@ -30,9 +35,12 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        from app.core.dev_seed import seed_snapshot_from_last_close
-
-        path, count = seed_snapshot_from_last_close(symbols=args.symbols or None, csv_path=args.out)
+        if args.from_fixture:
+            from app.core.dev_seed import seed_snapshot_from_fixture
+            path, count = seed_snapshot_from_fixture(out_path=args.out)
+        else:
+            from app.core.dev_seed import seed_snapshot_from_last_close
+            path, count = seed_snapshot_from_last_close(symbols=args.symbols or None, csv_path=args.out)
         print(f"OK: wrote {path} ({count} symbols)")
         return 0
     except Exception as e:

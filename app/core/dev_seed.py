@@ -1,13 +1,14 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""DEV-only: seed market snapshot CSV from last close (EOD) without Theta.
+"""DEV-only: seed market snapshot CSV from fixture or (optional) last close.
 
-Writes app/data/snapshots/market_snapshot.csv for consumption by the
-existing Build New Snapshot flow. Does not write to the DB.
+Fixture-based path (no yfinance): reads app/data/fixtures/eod_seed.csv and
+writes app/data/snapshots/market_snapshot.csv. Use this for off-hours DEV.
 """
 
 from __future__ import annotations
 
+import csv as csv_module
 import logging
 import os
 from datetime import datetime, timezone
@@ -22,6 +23,12 @@ except ImportError:
     pytz = None
 
 _ET_TZ = pytz.timezone("America/New_York") if pytz else None
+
+# Fixture path (source for off-hours seeding)
+def get_fixture_path() -> Path:
+    from app.core.config.paths import BASE_DIR
+    return BASE_DIR / "app" / "data" / "fixtures" / "eod_seed.csv"
+
 
 # Default CSV path (compatible with existing snapshot ingestion)
 def _default_csv_path() -> Path:
@@ -49,6 +56,60 @@ def load_default_universe() -> List[str]:
         if b not in symbols:
             symbols.insert(0, b)
     return symbols
+
+
+def seed_snapshot_from_fixture(
+    fixture_path: Optional[Path] = None,
+    out_path: Optional[Path] = None,
+) -> Tuple[Path, int]:
+    """Copy fixture eod_seed.csv to market_snapshot.csv. No network, no DB.
+
+    Fixture must have columns: symbol, price, volume, iv_rank, timestamp (ET ISO).
+    Use this for DEV off-hours when yfinance/live data is unavailable.
+
+    Parameters
+    ----------
+    fixture_path : Path to app/data/fixtures/eod_seed.csv. If None, uses get_fixture_path().
+    out_path : Where to write. If None, uses app/data/snapshots/market_snapshot.csv.
+
+    Returns
+    -------
+    (path, row_count) written.
+
+    Raises
+    ------
+    FileNotFoundError
+        If fixture file is missing.
+    ValueError
+        If fixture has no valid rows or missing required columns.
+    """
+    src = fixture_path or get_fixture_path()
+    dst = out_path or _default_csv_path()
+    if not src.exists():
+        raise FileNotFoundError(
+            f"Fixture not found: {src}\n"
+            "Generate it with: python tools/generate_eod_seed_fixture.py\n"
+            "Or create app/data/fixtures/eod_seed.csv with columns: symbol,price,volume,iv_rank,timestamp"
+        )
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    required = {"symbol", "price", "volume", "iv_rank", "timestamp"}
+    with open(src, "r", encoding="utf-8") as f:
+        r = csv_module.DictReader(f)
+        if not r.fieldnames or required - set(r.fieldnames or ()):
+            raise ValueError(
+                f"Fixture must have columns: {required}. Got: {r.fieldnames}"
+            )
+        rows = [row for row in r if row.get("symbol", "").strip()]
+    if not rows:
+        raise ValueError("Fixture has no data rows")
+    with open(dst, "w", newline="", encoding="utf-8") as f:
+        w = csv_module.DictWriter(
+            f, fieldnames=["symbol", "price", "volume", "iv_rank", "timestamp"]
+        )
+        w.writeheader()
+        w.writerows(rows)
+    logger.info("[DEV_SEED] Wrote %s from fixture %s (%d rows)", dst, src, len(rows))
+    return (dst, len(rows))
 
 
 def seed_snapshot_from_last_close(

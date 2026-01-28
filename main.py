@@ -282,7 +282,6 @@ def main():
             from app.core.wheel import find_csp_candidates
             from app.core.assignment_scoring import score_assignment_worthiness
             from app.core.persistence import save_assignment_profile, is_assignment_blocked, create_alert
-            from app.db.database import log_csp_candidates
             
             candidates = find_csp_candidates(symbol_to_df, regime_result["regime"])
             
@@ -333,9 +332,6 @@ def main():
                     candidate["blocked"] = True
                     candidate["blocked_reason"] = "Assignment scoring error"
                     blocked_count += 1
-            
-            # Log all candidates (including blocked ones) for UI display
-            log_csp_candidates(candidates)
             
             print(f"  Found {len(candidates)} candidates ({len(actionable_candidates)} actionable, {blocked_count} blocked)", file=sys.stderr)
         except Exception as e:

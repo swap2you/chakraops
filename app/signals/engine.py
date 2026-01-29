@@ -8,9 +8,12 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from time import perf_counter
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from app.core.market.stock_models import StockSnapshot
+
+if TYPE_CHECKING:
+    from app.core.options.options_availability import OptionsAvailabilityRecorder
 from app.data.options_chain_provider import OptionsChainProvider
 from app.signals.adapters.theta_options_adapter import normalize_theta_chain
 from app.signals.cc import generate_cc_candidates
@@ -65,6 +68,7 @@ def run_signal_engine(
     csp_config: CSPConfig,
     cc_config: CCConfig,
     universe_id_or_hash: str = "default",
+    options_availability_recorder: Optional["OptionsAvailabilityRecorder"] = None,
 ) -> SignalRunResult:
     """Run signal engine for a list of stock snapshots.
 
@@ -93,7 +97,7 @@ def run_signal_engine(
 
         # Per-symbol timing and progress logging
         symbol_start = perf_counter()
-        print(f"→ Processing symbol {symbol}", flush=True)
+        print(f"-> Processing symbol {symbol}", flush=True)
 
         # Fetch expirations for this symbol
         try:
@@ -108,6 +112,8 @@ def run_signal_engine(
                 flush=True,
             )
         except Exception as e:
+            if options_availability_recorder:
+                options_availability_recorder.record_reason(symbol, "CHAIN_FETCH_ERROR")
             symbol_exclusions.append(
                 ExclusionReason(
                     code="CHAIN_FETCH_ERROR",
@@ -119,6 +125,8 @@ def run_signal_engine(
             continue
 
         if not expirations:
+            if options_availability_recorder:
+                options_availability_recorder.record_reason(symbol, "NO_EXPIRATIONS")
             symbol_exclusions.append(
                 ExclusionReason(
                     code="NO_EXPIRATIONS",
@@ -165,6 +173,8 @@ def run_signal_engine(
         )
 
         if not dte_filtered_expirations:
+            if options_availability_recorder:
+                options_availability_recorder.record_reason(symbol, "NO_EXPIRY_IN_DTE_WINDOW")
             symbol_exclusions.append(
                 ExclusionReason(
                     code="NO_EXPIRY_IN_DTE_WINDOW",
@@ -218,7 +228,7 @@ def run_signal_engine(
                         },
                     )
                 )
-                print(f"✗ Timeout symbol {symbol} after {elapsed_ms} ms", flush=True)
+                print(f"[TIMEOUT] symbol {symbol} after {elapsed_ms} ms", flush=True)
                 break
 
             # Fetch PUT chain
@@ -252,6 +262,8 @@ def run_signal_engine(
                             )
                         )
             except Exception as e:
+                if options_availability_recorder:
+                    options_availability_recorder.record_reason(symbol, "CHAIN_FETCH_ERROR")
                 print(
                     f"  [timing] fetch_put_chain error for {symbol} {expiry}: {e}",
                     flush=True,
@@ -300,6 +312,8 @@ def run_signal_engine(
                             )
                         )
             except Exception as e:
+                if options_availability_recorder:
+                    options_availability_recorder.record_reason(symbol, "CHAIN_FETCH_ERROR")
                 print(
                     f"  [timing] fetch_call_chain error for {symbol} {expiry}: {e}",
                     flush=True,
@@ -363,7 +377,7 @@ def run_signal_engine(
 
         # Per-symbol completion logging
         total_elapsed_ms = int((perf_counter() - symbol_start) * 1000)
-        print(f"✓ Finished symbol {symbol} in {total_elapsed_ms} ms", flush=True)
+        print(f"[OK] Finished symbol {symbol} in {total_elapsed_ms} ms", flush=True)
 
     # Sort candidates deterministically: (symbol, signal_type, expiry, strike)
     sorted_candidates = sorted(
@@ -449,7 +463,13 @@ def run_signal_engine(
     )
 
     # Build JSON-serializable decision snapshot (Phase 4B Step 2)
-    decision_snapshot = build_decision_snapshot(result)
+    options_diagnostics = None
+    if options_availability_recorder:
+        options_diagnostics = {
+            "symbols_with_options": options_availability_recorder.get_symbols_with_options(),
+            "symbols_without_options": options_availability_recorder.get_symbols_without_options(),
+        }
+    decision_snapshot = build_decision_snapshot(result, options_diagnostics=options_diagnostics)
 
     # Return result with snapshot attached (reconstruct to set decision_snapshot)
     return SignalRunResult(

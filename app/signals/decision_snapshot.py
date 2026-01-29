@@ -38,6 +38,9 @@ class DecisionSnapshot:
     exclusion_summary: Dict[str, Any] | None = None  # Phase 7.3: Aggregated exclusion diagnostics
     coverage_summary: Dict[str, Any] | None = None  # Phase 7.4: Coverage funnel per symbol
     near_misses: List[Dict[str, Any]] | None = None  # Phase 7.4: Candidates that failed exactly one rule
+    # Phase 8: Partial-universe options availability
+    symbols_with_options: List[str] | None = None  # Symbols that had valid options data
+    symbols_without_options: Dict[str, str] | None = None  # symbol -> reason (NO_EXPIRATIONS, EMPTY_CHAIN, etc.)
 
 
 def _convert_datetime_to_iso(dt: datetime) -> str:
@@ -464,7 +467,10 @@ def _derive_operator_verdict(exclusion_summary: Dict[str, Any] | None) -> str:
         return f"Blocked by {top_rule} ({top_count} occurrences)"
 
 
-def build_decision_snapshot(result: "SignalRunResult") -> DecisionSnapshot:
+def build_decision_snapshot(
+    result: "SignalRunResult",
+    options_diagnostics: Dict[str, Any] | None = None,
+) -> DecisionSnapshot:
     """Build a JSON-serializable snapshot from a SignalRunResult.
 
     Preserves all data and ordering from the result. Converts:
@@ -474,6 +480,8 @@ def build_decision_snapshot(result: "SignalRunResult") -> DecisionSnapshot:
 
     Args:
         result: SignalRunResult from run_signal_engine
+        options_diagnostics: Optional dict with symbols_with_options (list) and
+            symbols_without_options (dict symbol -> reason) for partial-universe visibility.
 
     Returns:
         DecisionSnapshot with all fields converted to JSON-serializable types
@@ -522,6 +530,17 @@ def build_decision_snapshot(result: "SignalRunResult") -> DecisionSnapshot:
         max_near_misses=10,
     )
 
+    # Phase 8: Partial-universe options availability
+    symbols_with_options: List[str] | None = None
+    symbols_without_options: Dict[str, str] | None = None
+    if options_diagnostics:
+        symbols_with_options = options_diagnostics.get("symbols_with_options")
+        symbols_without_options = options_diagnostics.get("symbols_without_options")
+        if symbols_with_options is not None and not isinstance(symbols_with_options, list):
+            symbols_with_options = None
+        if symbols_without_options is not None and not isinstance(symbols_without_options, dict):
+            symbols_without_options = None
+
     return DecisionSnapshot(
         as_of=as_of_iso,
         universe_id_or_hash=result.universe_id_or_hash,
@@ -534,6 +553,8 @@ def build_decision_snapshot(result: "SignalRunResult") -> DecisionSnapshot:
         exclusion_summary=exclusion_summary,  # Phase 7.3
         coverage_summary=coverage_summary,  # Phase 7.4
         near_misses=near_misses,  # Phase 7.4
+        symbols_with_options=symbols_with_options,
+        symbols_without_options=symbols_without_options,
     )
 
 

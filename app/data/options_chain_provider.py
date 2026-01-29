@@ -5,8 +5,9 @@
 from __future__ import annotations
 
 import logging
+import os
 from abc import ABC, abstractmethod
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from app.data.theta_v3_routes import option_url, build_headers
@@ -15,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 # Timeout for all provider calls; retries=0 by default
 CHAIN_REQUEST_TIMEOUT = 5.0
+
+# Fallback weekly expirations: OFF by default (Phase 8)
+OPTIONS_FALLBACK_WEEKLY_ENV = "OPTIONS_FALLBACK_WEEKLY_EXPIRATIONS"
+OPTIONS_FALLBACK_DAYS_ENV = "OPTIONS_FALLBACK_DAYS"
+DEFAULT_FALLBACK_DAYS = 14
 
 
 class OptionsChainProvider(ABC):
@@ -253,6 +259,61 @@ class ThetaDataOptionsChainProvider(OptionsChainProvider):
             return []
 
 
+def _next_weekly_expirations_within_days(days: int) -> List[date]:
+    """Return next weekly (Friday) expirations within the given number of days from today."""
+    today = date.today()
+    out: List[date] = []
+    d = today
+    for _ in range(days):
+        if d.weekday() == 4:  # Friday
+            out.append(d)
+        d += timedelta(days=1)
+        if (d - today).days > days:
+            break
+    return sorted(out)[:4]  # Cap at 4 expirations
+
+
+class FallbackWeeklyExpirationsProvider(OptionsChainProvider):
+    """Wrapper that when inner returns zero expirations, optionally returns nearest weekly expirations within N days.
+
+    OFF by default. Set OPTIONS_FALLBACK_WEEKLY_EXPIRATIONS=1 to enable.
+    OPTIONS_FALLBACK_DAYS (default 14) limits how many days ahead to look.
+    Clearly logged when fallback is used.
+    """
+
+    def __init__(self, inner: OptionsChainProvider) -> None:
+        self._inner = inner
+        self._enabled = os.getenv(OPTIONS_FALLBACK_WEEKLY_ENV, "").strip().lower() in ("1", "true", "yes")
+        try:
+            self._days = int(os.getenv(OPTIONS_FALLBACK_DAYS_ENV, str(DEFAULT_FALLBACK_DAYS)))
+        except ValueError:
+            self._days = DEFAULT_FALLBACK_DAYS
+
+    def get_expirations(self, symbol: str) -> List[date]:
+        result = self._inner.get_expirations(symbol)
+        if result:
+            return result
+        if self._enabled and self._days > 0:
+            fallback = _next_weekly_expirations_within_days(self._days)
+            if fallback:
+                logger.info(
+                    "[OptionsChain] Fallback: provider returned 0 expirations for %s; using %d weekly expiration(s) within %d days",
+                    symbol,
+                    len(fallback),
+                    self._days,
+                )
+                return fallback
+        return []
+
+    def get_chain(
+        self,
+        symbol: str,
+        expiry: date,
+        right: str,
+    ) -> List[Dict[str, Any]]:
+        return self._inner.get_chain(symbol, expiry, right)
+
+
 def _parse_date_any(x: Any) -> Optional[date]:
     if x is None:
         return None
@@ -276,6 +337,7 @@ def _parse_date_any(x: Any) -> Optional[date]:
 __all__ = [
     "OptionsChainProvider",
     "ThetaDataOptionsChainProvider",
+    "FallbackWeeklyExpirationsProvider",
     "CHAIN_REQUEST_TIMEOUT",
 ]
 

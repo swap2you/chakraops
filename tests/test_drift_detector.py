@@ -14,8 +14,10 @@ import pytest
 
 from app.market.drift_detector import (
     DriftReason,
+    DriftSeverity,
     DriftStatus,
     DriftItem,
+    DriftConfig,
     detect_drift,
 )
 from app.market.live_market_adapter import LiveMarketData
@@ -210,7 +212,7 @@ def test_drift_reason_values() -> None:
 
 
 def test_drift_item_attributes() -> None:
-    """DriftItem has reason, symbol, message, optional snapshot_value/live_value."""
+    """DriftItem has reason, symbol, message, severity, optional snapshot_value/live_value."""
     item = DriftItem(
         reason=DriftReason.PRICE_DRIFT,
         symbol="AAPL",
@@ -222,3 +224,21 @@ def test_drift_item_attributes() -> None:
     assert item.symbol == "AAPL"
     assert item.snapshot_value == 100.0
     assert item.live_value == 105.0
+    assert item.severity == DriftSeverity.INFO or item.severity == DriftSeverity.WARN
+
+
+def test_drift_configurable_threshold_warn_vs_info() -> None:
+    """With price_drift_warn_pct 0.75, small drift can be INFO; larger WARN."""
+    snapshot = _make_snapshot(selected_underlying_prices={"AAPL": 100.0})
+    config = DriftConfig(price_drift_warn_pct=0.75)
+    # 0.5% drift: below 0.75% so no item
+    live_small = _make_live(underlying_prices={"AAPL": 100.5}, option_chain_available={"AAPL": True})
+    result_small = detect_drift(snapshot, live_small, config=config)
+    price_items_small = [i for i in result_small.items if i.reason == DriftReason.PRICE_DRIFT]
+    assert len(price_items_small) == 0
+    # 1% drift: >= 0.75%, severity INFO (1% < 1.5% = 2 * 0.75)
+    live_1pct = _make_live(underlying_prices={"AAPL": 101.0}, option_chain_available={"AAPL": True})
+    result_1 = detect_drift(snapshot, live_1pct, config=config)
+    price_items_1 = [i for i in result_1.items if i.reason == DriftReason.PRICE_DRIFT]
+    assert len(price_items_1) >= 1
+    assert price_items_1[0].severity in (DriftSeverity.INFO, DriftSeverity.WARN)

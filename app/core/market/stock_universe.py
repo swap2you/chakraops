@@ -43,6 +43,7 @@ class StockUniverseManager:
         max_price: float = 500.0,
         min_avg_volume: int = 1_500_000,
         curated: Optional[List[UniverseSymbol]] = None,
+        symbols_from_db: Optional[List[str]] = None,
     ) -> None:
         self._provider = provider
         self._allow_etfs = bool(allow_etfs)
@@ -50,33 +51,42 @@ class StockUniverseManager:
         self._max_price = float(max_price)
         self._min_avg_volume = int(min_avg_volume)
 
-        # Curated, deterministic universe (NO Theta auto-discovery).
-        self._curated: List[UniverseSymbol] = curated or [
-            # Mega / large cap equities (options-listed)
-            UniverseSymbol("AAPL"),
-            UniverseSymbol("MSFT"),
-            UniverseSymbol("AMZN"),
-            UniverseSymbol("NVDA"),
-            UniverseSymbol("META"),
-            UniverseSymbol("GOOGL"),
-            UniverseSymbol("TSLA"),
-            UniverseSymbol("JPM"),
-            UniverseSymbol("XOM"),
-            UniverseSymbol("JNJ"),
-            UniverseSymbol("UNH"),
-            UniverseSymbol("V"),
-            UniverseSymbol("MA"),
-            UniverseSymbol("AVGO"),
-            UniverseSymbol("COST"),
-            UniverseSymbol("HD"),
-            UniverseSymbol("WMT"),
-            UniverseSymbol("LLY"),
-            UniverseSymbol("NFLX"),
-            UniverseSymbol("CRM"),
-            # Common ETFs (present but excluded by default unless allow_etfs=True)
-            UniverseSymbol("SPY", has_options=True, is_etf=True),
-            UniverseSymbol("QQQ", has_options=True, is_etf=True),
-        ]
+        # When symbols_from_db is provided, use it as the authoritative list (no hardcoded universe).
+        if symbols_from_db is not None and len(symbols_from_db) > 0:
+            self._curated = [
+                UniverseSymbol(s.strip().upper(), has_options=True, is_etf=False)
+                for s in symbols_from_db
+                if s and str(s).strip()
+            ]
+        elif curated is not None:
+            self._curated = curated
+        else:
+            self._curated = [
+                # Mega / large cap equities (options-listed)
+                UniverseSymbol("AAPL"),
+                UniverseSymbol("MSFT"),
+                UniverseSymbol("AMZN"),
+                UniverseSymbol("NVDA"),
+                UniverseSymbol("META"),
+                UniverseSymbol("GOOGL"),
+                UniverseSymbol("TSLA"),
+                UniverseSymbol("JPM"),
+                UniverseSymbol("XOM"),
+                UniverseSymbol("JNJ"),
+                UniverseSymbol("UNH"),
+                UniverseSymbol("V"),
+                UniverseSymbol("MA"),
+                UniverseSymbol("AVGO"),
+                UniverseSymbol("COST"),
+                UniverseSymbol("HD"),
+                UniverseSymbol("WMT"),
+                UniverseSymbol("LLY"),
+                UniverseSymbol("NFLX"),
+                UniverseSymbol("CRM"),
+                # Common ETFs (present but excluded by default unless allow_etfs=True)
+                UniverseSymbol("SPY", has_options=True, is_etf=True),
+                UniverseSymbol("QQQ", has_options=True, is_etf=True),
+            ]
 
         # Exclusion reasons from last `get_eligible_stocks()` run.
         self._last_exclusions: Dict[str, str] = {}

@@ -250,7 +250,7 @@ def test_send_decision_alert_with_drift_status(mock_post: MagicMock) -> None:
     drift_status = DriftStatus(
         has_drift=True,
         items=[
-            DriftItem(DriftReason.PRICE_DRIFT, "AAPL", "Underlying price drifted 5%", 100.0, 105.0),
+            DriftItem(DriftReason.PRICE_DRIFT, "AAPL", "Underlying price drifted 5%", snapshot_value=100.0, live_value=105.0),
         ],
     )
 

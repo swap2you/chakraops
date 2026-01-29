@@ -19,7 +19,7 @@ from app.ui.operator_recommendations import (
     RecommendationSeverity,
     generate_operator_recommendations,
 )
-from app.market.drift_detector import DriftReason, DriftStatus
+from app.market.drift_detector import DriftStatus, drift_status_max_severity
 
 
 def _format_signal_summary(selected_signals: List[Dict[str, Any]], max_signals: int = 3) -> List[str]:
@@ -60,16 +60,39 @@ def _format_signal_summary(selected_signals: List[Dict[str, Any]], max_signals: 
     return lines
 
 
-def _drift_severity(drift_status: DriftStatus) -> str:
-    """Map drift status to message severity: INFO, WARN, BLOCK (Phase 8.2)."""
-    if not drift_status.has_drift or not drift_status.items:
-        return "INFO"
-    reasons = {item.reason for item in drift_status.items}
-    if DriftReason.CHAIN_UNAVAILABLE in reasons:
-        return "BLOCK"
-    if reasons & {DriftReason.PRICE_DRIFT, DriftReason.IV_DRIFT, DriftReason.SPREAD_WIDENED}:
-        return "WARN"
-    return "INFO"
+def _drift_severity_str(drift_status: DriftStatus) -> str:
+    """Max severity among items: BLOCK, WARN, or INFO (Phase 8.3)."""
+    sev = drift_status_max_severity(drift_status)
+    return sev.value if sev else "INFO"
+
+
+def should_post_slack_alert(
+    gate_allowed: bool,
+    drift_status: Optional[DriftStatus],
+    last_gate_allowed: Optional[bool],
+    last_drift_severity: Optional[str],
+    heartbeat: bool,
+) -> bool:
+    """Only post when: gate status changed OR drift severity WARN/BLOCK OR heartbeat (Phase 8.3)."""
+    if heartbeat:
+        return True
+    if last_gate_allowed is not None and gate_allowed != last_gate_allowed:
+        return True
+    sev = drift_status_max_severity(drift_status) if drift_status else None
+    sev_str = sev.value if sev else None
+    if sev_str in ("WARN", "BLOCK"):
+        return True
+    if last_gate_allowed is None and last_drift_severity is None:
+        return True  # first run: always post
+    return False
+
+
+def slack_webhook_available() -> tuple[bool, str]:
+    """Config validation at startup: (ok, message). Exact env var: SLACK_WEBHOOK_URL."""
+    url = os.getenv("SLACK_WEBHOOK_URL")
+    if not url or not url.strip():
+        return False, "SLACK_WEBHOOK_URL is not set. Slack alerts disabled."
+    return True, "Slack webhook configured."
 
 
 def send_decision_alert(
@@ -79,11 +102,13 @@ def send_decision_alert(
     decision_file_path: Optional[Path] = None,
     webhook_url: Optional[str] = None,
     drift_status: Optional[DriftStatus] = None,
-) -> None:
-    """Send Phase 7 decision alert to Slack.
+    last_gate_allowed: Optional[bool] = None,
+    last_drift_severity: Optional[str] = None,
+    heartbeat: bool = False,
+) -> bool:
+    """Send decision alert to Slack when gate change / drift WARN|BLOCK / heartbeat.
 
-    This function formats and sends a read-only decision intelligence alert.
-    It does NOT execute trades or call brokers.
+    Returns True if message was sent, False if skipped (e.g. no change, no WARN/BLOCK).
 
     Args:
         snapshot: DecisionSnapshot from signal engine
@@ -91,15 +116,14 @@ def send_decision_alert(
         execution_plan: ExecutionPlan with orders (if allowed)
         decision_file_path: Optional path to decision JSON file (for reference)
         webhook_url: Optional Slack webhook URL (defaults to SLACK_WEBHOOK_URL env var)
-        drift_status: Optional Phase 8.2 drift status (snapshot vs live); when present, appended with severity
+        drift_status: Optional drift status (snapshot vs live); appended with severity
+        last_gate_allowed: If set, only post when gate_allowed != last_gate_allowed (or drift WARN/BLOCK or heartbeat)
+        last_drift_severity: Previous max drift severity (for optional filtering)
+        heartbeat: If True, always post (e.g. once-per-day summary)
 
     Raises:
         ValueError: If webhook URL is not provided and not found in environment.
         requests.RequestException: If HTTP request fails.
-
-    Note:
-        This function is designed to fail gracefully. If Slack is unavailable,
-        the pipeline should continue (caller should catch exceptions).
     """
     if webhook_url is None:
         webhook_url = os.getenv("SLACK_WEBHOOK_URL")
@@ -110,11 +134,20 @@ def send_decision_alert(
             "Slack alerts are optional. Set SLACK_WEBHOOK_URL to enable alerts."
         )
 
+    if not should_post_slack_alert(
+        gate_result.allowed,
+        drift_status,
+        last_gate_allowed,
+        last_drift_severity,
+        heartbeat,
+    ):
+        return False
+
     # Build message lines
     lines: List[str] = []
     
     # Header
-    lines.append("*ChakraOps Phase 7 Decision Alert*")
+    lines.append("*ChakraOps Decision Alert*")
     lines.append("")
     
     # Timestamp and universe
@@ -127,6 +160,16 @@ def send_decision_alert(
     status_emoji = "✅" if gate_result.allowed else "❌"
     lines.append(f"*Gate Status:* {status_emoji} {gate_status}")
     lines.append("")
+
+    # Phase 8: Partial-universe options availability
+    symbols_with_options = getattr(snapshot, "symbols_with_options", None) or []
+    symbols_without_options = getattr(snapshot, "symbols_without_options", None) or {}
+    if isinstance(symbols_with_options, list) and isinstance(symbols_without_options, dict):
+        eligible = len(symbols_with_options)
+        excluded = len(symbols_without_options)
+        if eligible > 0 or excluded > 0:
+            lines.append(f"*Options universe:* {eligible} eligible, {excluded} excluded (missing options)")
+            lines.append("")
     
     # If blocked, show reasons
     if not gate_result.allowed:
@@ -252,12 +295,14 @@ def send_decision_alert(
             lines.append("*Selected Signals:* None")
             lines.append("")
     
-    # Phase 8.2: Drift status (when present)
+    # Phase 8.2/8.3: Drift status with severity
     if drift_status is not None and drift_status.has_drift:
-        severity = _drift_severity(drift_status)
-        lines.append(f"*Live Market Drift [{severity}]*")
+        max_sev = _drift_severity_str(drift_status)
+        lines.append(f"*Live Market Drift [{max_sev}]*")
         for item in drift_status.items[:5]:
-            lines.append(f"• [{item.reason.value}] {item.symbol}: {item.message}")
+            sev = getattr(item, "severity", None)
+            sev_str = sev.value if sev else "INFO"
+            lines.append(f"• [{sev_str}] {item.reason.value} {item.symbol}: {item.message}")
         lines.append("")
 
     # Decision file path (if provided)
@@ -283,6 +328,7 @@ def send_decision_alert(
             timeout=10,
         )
         response.raise_for_status()
+        return True
     except requests.HTTPError as exc:
         raise ValueError(
             f"Slack webhook returned error {response.status_code}: {response.text}"
@@ -291,4 +337,8 @@ def send_decision_alert(
         raise ValueError(f"Failed to send Slack message: {exc}") from exc
 
 
-__all__ = ["send_decision_alert"]
+__all__ = [
+    "send_decision_alert",
+    "should_post_slack_alert",
+    "slack_webhook_available",
+]

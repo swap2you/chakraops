@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""Launch the live (persistent) decision dashboard (Phase 7 Step 1).
+"""Launch the live decision dashboard.
 
-This is a convenience wrapper around Streamlit.
-
-STRICT: Read-only dashboard. It only reads JSON artifacts from disk.
+Convenience wrapper: runs ONLY Streamlit. It does NOT trigger pipeline runs.
+STRICT: Read-only; reads decision_*.json from disk.
+To generate decision_*.json on a schedule, run scripts.run_pipeline_loop instead.
 """
 
 from __future__ import annotations

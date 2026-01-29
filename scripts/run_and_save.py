@@ -13,11 +13,20 @@ from pathlib import Path
 repo_root = Path(__file__).parent.parent
 sys.path.insert(0, str(repo_root))
 
+from app.core.persistence import get_enabled_symbols
 from app.core.market.stock_universe import StockUniverseManager
-from app.data.options_chain_provider import ThetaDataOptionsChainProvider
+from app.core.options.options_availability import (
+    DiagnosticsOptionsChainProvider,
+    OptionsAvailabilityRecorder,
+)
+from app.core.gates.options_data_health import evaluate_options_data_health
+from app.data.options_chain_provider import (
+    FallbackWeeklyExpirationsProvider,
+    ThetaDataOptionsChainProvider,
+)
 from app.data.stock_snapshot_provider import StockSnapshotProvider
 from app.execution.dry_run_executor import execute_dry_run
-from app.execution.execution_gate import evaluate_execution_gate
+from app.execution.execution_gate import evaluate_execution_gate, ExecutionGateResult
 from app.execution.execution_plan import build_execution_plan
 from app.signals.engine import run_signal_engine
 from app.signals.models import CCConfig, CSPConfig, SignalEngineConfig
@@ -44,19 +53,29 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    # Initialize providers
+    # Initialize providers (optional fallback: OPTIONS_FALLBACK_WEEKLY_EXPIRATIONS=1)
     snapshot_provider = StockSnapshotProvider()
-    options_provider = ThetaDataOptionsChainProvider()
+    options_provider_inner = ThetaDataOptionsChainProvider()
+    options_provider_inner = FallbackWeeklyExpirationsProvider(options_provider_inner)
+    options_recorder = OptionsAvailabilityRecorder()
+    options_provider = DiagnosticsOptionsChainProvider(options_provider_inner, options_recorder)
 
-    # Load Phase 2 universe
-    universe_manager = StockUniverseManager(snapshot_provider)
+    # Load universe from DB (symbol_universe where enabled=1). Fail loudly if empty.
+    enabled_symbols = get_enabled_symbols()
+    if not enabled_symbols:
+        print("ERROR: Zero enabled symbols in symbol_universe. Import universe from CSV first.")
+        print("  Example: python -c \"from app.db.universe_import import import_universe_from_csv; import_universe_from_csv()\"")
+        return 1
+    print(f"Symbols from DB (enabled=1): {len(enabled_symbols)}")
+
+    universe_manager = StockUniverseManager(snapshot_provider, symbols_from_db=enabled_symbols)
     eligible_stocks = universe_manager.get_eligible_stocks()
 
     # Apply limit if specified
     if args.limit:
         eligible_stocks = eligible_stocks[: args.limit]
 
-    print(f"Processing {len(eligible_stocks)} symbols from Phase 2 universe...")
+    print(f"Processing {len(eligible_stocks)} symbols (from DB universe, after filters)...")
 
     # Scoring configuration
     scoring_config = ScoringConfig(
@@ -100,7 +119,7 @@ def main() -> int:
         delta_max=None,
     )
 
-    # Run signal engine
+    # Run signal engine (with options diagnostics recorder)
     print("Running signal engine...")
     result = run_signal_engine(
         stock_snapshots=eligible_stocks,
@@ -108,7 +127,8 @@ def main() -> int:
         base_config=base_config,
         csp_config=csp_config,
         cc_config=cc_config,
-        universe_id_or_hash="phase2_default",
+        universe_id_or_hash="db_universe",
+        options_availability_recorder=options_recorder,
     )
 
     # Extract decision snapshot
@@ -117,8 +137,22 @@ def main() -> int:
         print("ERROR: Decision snapshot is None")
         return 1
 
+    # Options data health gate: block only if zero symbols have valid options
+    symbols_with_options = list(decision_snapshot.symbols_with_options or [])
+    symbols_without_options = dict(decision_snapshot.symbols_without_options or {})
+    options_health = evaluate_options_data_health(symbols_with_options, symbols_without_options)
+    if options_health.allowed:
+        print(f"  Partial universe: {options_health.valid_symbols_count} eligible, {options_health.excluded_count} excluded (missing options)")
+    else:
+        print(f"  Options data health: BLOCKED (0 symbols with options, {options_health.excluded_count} excluded)")
+
     # Evaluate execution gate
     gate_result = evaluate_execution_gate(decision_snapshot)
+
+    # Merge options data health: if options health blocks, gate is blocked with clear reason
+    if not options_health.allowed:
+        combined_reasons = list(gate_result.reasons or []) + options_health.reasons
+        gate_result = ExecutionGateResult(allowed=False, reasons=combined_reasons)
 
     # Build execution plan
     execution_plan = build_execution_plan(decision_snapshot, gate_result)
@@ -155,16 +189,46 @@ def main() -> int:
     print(f"  Orders: {len(execution_plan.orders)}")
     print(f"  Output: {output_file}")
 
-    # Send Slack alert (Phase 7.1) - non-blocking, failures don't break pipeline
+    # Slack: only notify on gate state change, advisory severity change, or manual send (UX requirement).
+    # Persist last state next to output dir so we do not fire on every refresh/run.
+    slack_state_path = output_dir / ".slack_state.json"
+    last_gate_allowed = None
+    last_drift_severity = None
+    if slack_state_path.exists():
+        try:
+            with open(slack_state_path) as f:
+                state = json.load(f)
+            last_gate_allowed = state.get("last_gate_allowed")
+            last_drift_severity = state.get("last_drift_severity")
+        except (json.JSONDecodeError, OSError):
+            pass
     try:
         from app.notifications.slack_notifier import send_decision_alert
-        send_decision_alert(
+        sent = send_decision_alert(
             snapshot=decision_snapshot,
             gate_result=gate_result,
             execution_plan=execution_plan,
             decision_file_path=output_file,
+            last_gate_allowed=last_gate_allowed,
+            last_drift_severity=last_drift_severity,
         )
-        print(f"  Slack alert sent")
+        # Persist current state so next run only notifies on change
+        try:
+            with open(slack_state_path, "w") as f:
+                json.dump(
+                    {
+                        "last_gate_allowed": gate_result.allowed,
+                        "last_drift_severity": last_drift_severity,
+                    },
+                    f,
+                    indent=2,
+                )
+        except OSError:
+            pass
+        if sent:
+            print(f"  Slack alert sent")
+        else:
+            print(f"  Slack skipped (no gate/severity change)")
     except Exception as e:
         # Slack failure must NOT break pipeline
         print(f"  Slack alert failed (non-blocking): {e}")

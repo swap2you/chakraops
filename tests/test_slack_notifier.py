@@ -11,6 +11,7 @@ from app.execution.execution_gate import ExecutionGateResult
 from app.execution.execution_plan import ExecutionPlan, ExecutionOrder
 from app.notifications.slack_notifier import send_decision_alert
 from app.signals.decision_snapshot import DecisionSnapshot
+from app.market.drift_detector import DriftReason, DriftStatus, DriftItem
 
 
 def test_send_decision_alert_blocked_no_webhook() -> None:
@@ -225,3 +226,40 @@ def test_send_decision_alert_http_error(mock_post: MagicMock) -> None:
     with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/test"}):
         with pytest.raises(ValueError, match="Slack webhook returned error"):
             send_decision_alert(snapshot, gate_result, execution_plan)
+
+
+@patch("app.notifications.slack_notifier.requests.post")
+def test_send_decision_alert_with_drift_status(mock_post: MagicMock) -> None:
+    """Phase 8.2: When drift_status is provided, message includes drift block with severity."""
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.raise_for_status = MagicMock()
+    mock_post.return_value = mock_response
+
+    snapshot = DecisionSnapshot(
+        as_of="2026-01-28T10:00:00",
+        universe_id_or_hash="test",
+        stats={"total_candidates": 0},
+        candidates=[],
+        scored_candidates=None,
+        selected_signals=None,
+        explanations=None,
+    )
+    gate_result = ExecutionGateResult(allowed=False, reasons=["NO_SELECTED_SIGNALS"])
+    execution_plan = ExecutionPlan(allowed=False, blocked_reason="NO_SELECTED_SIGNALS", orders=[])
+    drift_status = DriftStatus(
+        has_drift=True,
+        items=[
+            DriftItem(DriftReason.PRICE_DRIFT, "AAPL", "Underlying price drifted 5%", 100.0, 105.0),
+        ],
+    )
+
+    with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/test"}):
+        send_decision_alert(snapshot, gate_result, execution_plan, drift_status=drift_status)
+
+    payload = mock_post.call_args[1]["json"]
+    message = payload["text"]
+    assert "Live Market Drift" in message
+    assert "WARN" in message or "BLOCK" in message or "INFO" in message
+    assert "PRICE_DRIFT" in message
+    assert "AAPL" in message

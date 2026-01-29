@@ -5,7 +5,7 @@ This runbook provides step-by-step instructions for running ChakraOps locally on
 ## Prerequisites
 
 - Java required (to run ThetaTerminalv3.jar)
-- Streamlit required (to run ChakraOps UI)
+- Python 3 with Streamlit (to run ChakraOps UI)
 - ThetaTerminal v3 must be running locally on port 25503
 
 ## Directory (Confirmed)
@@ -36,15 +36,61 @@ CONNECTED: Bundle: OPTION.STANDARD
 
 **⚠️ WARNING: If Theta Terminal is not running, ChakraOps will not work.**
 
-## Step 2: Run ChakraOps
+## Execution Options
 
-**From project root, PowerShell commands:**
+### Option A (Recommended): Python Virtual Environment (.venv)
+
+Assume Windows / PowerShell. Use a `.venv` in the app directory (create once with `python -m venv .venv` if needed).
+
+**Activate venv:**
 ```powershell
 cd C:\Development\Workspace\ChakraOps\chakraops
-python -m streamlit run app/ui/dashboard.py
+.\.venv\Scripts\Activate.ps1
 ```
 
-(If your entrypoint differs, replace only the last command with the correct entrypoint.)
+**Install dependencies:**
+```powershell
+pip install -r requirements.txt
+```
+
+**Run tests:**
+```powershell
+cd C:\Development\Workspace\ChakraOps
+python -m pytest chakraops/tests/ -v
+```
+
+**Start Streamlit live dashboard:**
+```powershell
+cd C:\Development\Workspace\ChakraOps\chakraops
+python -m scripts.live_dashboard
+```
+
+**Deactivate venv:**
+```powershell
+deactivate
+```
+
+### Option B (Fallback): System Python (no venv)
+
+**⚠️ WARNING: This is NOT the recommended path. Use Option A when possible.**
+
+**Install dependencies:**
+```powershell
+cd C:\Development\Workspace\ChakraOps\chakraops
+pip install -r requirements.txt
+```
+
+**Run tests:**
+```powershell
+cd C:\Development\Workspace\ChakraOps
+python -m pytest chakraops/tests/ -v
+```
+
+**Start Streamlit live dashboard:**
+```powershell
+cd C:\Development\Workspace\ChakraOps\chakraops
+python -m scripts.live_dashboard
+```
 
 ## Fail Fast
 

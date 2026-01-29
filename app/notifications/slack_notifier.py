@@ -14,7 +14,12 @@ import requests
 
 from app.execution.execution_gate import ExecutionGateResult
 from app.execution.execution_plan import ExecutionPlan
-from app.signals.decision_snapshot import DecisionSnapshot
+from app.signals.decision_snapshot import DecisionSnapshot, _derive_operator_verdict
+from app.ui.operator_recommendations import (
+    RecommendationSeverity,
+    generate_operator_recommendations,
+)
+from app.market.drift_detector import DriftReason, DriftStatus
 
 
 def _format_signal_summary(selected_signals: List[Dict[str, Any]], max_signals: int = 3) -> List[str]:
@@ -55,12 +60,25 @@ def _format_signal_summary(selected_signals: List[Dict[str, Any]], max_signals: 
     return lines
 
 
+def _drift_severity(drift_status: DriftStatus) -> str:
+    """Map drift status to message severity: INFO, WARN, BLOCK (Phase 8.2)."""
+    if not drift_status.has_drift or not drift_status.items:
+        return "INFO"
+    reasons = {item.reason for item in drift_status.items}
+    if DriftReason.CHAIN_UNAVAILABLE in reasons:
+        return "BLOCK"
+    if reasons & {DriftReason.PRICE_DRIFT, DriftReason.IV_DRIFT, DriftReason.SPREAD_WIDENED}:
+        return "WARN"
+    return "INFO"
+
+
 def send_decision_alert(
     snapshot: DecisionSnapshot,
     gate_result: ExecutionGateResult,
     execution_plan: ExecutionPlan,
     decision_file_path: Optional[Path] = None,
     webhook_url: Optional[str] = None,
+    drift_status: Optional[DriftStatus] = None,
 ) -> None:
     """Send Phase 7 decision alert to Slack.
 
@@ -73,6 +91,7 @@ def send_decision_alert(
         execution_plan: ExecutionPlan with orders (if allowed)
         decision_file_path: Optional path to decision JSON file (for reference)
         webhook_url: Optional Slack webhook URL (defaults to SLACK_WEBHOOK_URL env var)
+        drift_status: Optional Phase 8.2 drift status (snapshot vs live); when present, appended with severity
 
     Raises:
         ValueError: If webhook URL is not provided and not found in environment.
@@ -184,6 +203,37 @@ def send_decision_alert(
                     for rule, count in sorted_rules:
                         lines.append(f"• {rule}: {count} occurrence(s)")
                     lines.append("")
+        
+        # Phase 8.1: Include top operator recommendations (concise)
+        try:
+            # Convert DecisionSnapshot to dict for recommendations
+            snapshot_dict = {
+                "exclusion_summary": snapshot.exclusion_summary,
+                "coverage_summary": snapshot.coverage_summary,
+                "near_misses": snapshot.near_misses,
+                "exclusions": snapshot.exclusions,
+                "candidates": [],
+                "scored_candidates": [],
+                "selected_signals": snapshot.selected_signals,
+            }
+            
+            recommendations = generate_operator_recommendations(snapshot_dict, sandbox_result=None)
+            
+            # Include top 1-2 HIGH or MEDIUM severity recommendations
+            top_recommendations = [
+                r for r in recommendations
+                if r.severity in (RecommendationSeverity.HIGH, RecommendationSeverity.MEDIUM)
+            ][:2]
+            
+            if top_recommendations:
+                lines.append("*Top Recommendations:*")
+                for rec in top_recommendations:
+                    severity_emoji = "🔴" if rec.severity == RecommendationSeverity.HIGH else "🟡"
+                    lines.append(f"{severity_emoji} *{rec.title}*: {rec.action}")
+                lines.append("")
+        except Exception:
+            # Ignore recommendation errors in Slack (non-blocking)
+            pass
     
     # If allowed, show top signals
     if gate_result.allowed:
@@ -202,6 +252,14 @@ def send_decision_alert(
             lines.append("*Selected Signals:* None")
             lines.append("")
     
+    # Phase 8.2: Drift status (when present)
+    if drift_status is not None and drift_status.has_drift:
+        severity = _drift_severity(drift_status)
+        lines.append(f"*Live Market Drift [{severity}]*")
+        for item in drift_status.items[:5]:
+            lines.append(f"• [{item.reason.value}] {item.symbol}: {item.message}")
+        lines.append("")
+
     # Decision file path (if provided)
     if decision_file_path:
         lines.append(f"*Decision File:* `{decision_file_path.name}`")

@@ -34,6 +34,13 @@ from app.ui.live_dashboard_utils import (
 )
 from app.ui.sandbox import SandboxParams, evaluate_sandbox
 from app.ui.viability_analysis import analyze_signal_viability
+from app.ui.operator_recommendations import (
+    OperatorRecommendation,
+    RecommendationSeverity,
+    generate_operator_recommendations,
+)
+from app.market.live_market_adapter import LiveMarketData, fetch_live_market_data
+from app.market.drift_detector import DriftReason, DriftStatus, detect_drift
 
 
 def _repo_root() -> Path:
@@ -165,9 +172,9 @@ def _group_exclusions(exclusions: List[Dict[str, Any]]) -> Dict[str, List[Dict[s
 
 
 def main() -> None:
-    st.set_page_config(page_title="ChakraOps Live Decision Dashboard", layout="wide")
+    st.set_page_config(page_title="ChakraOps – Live Decision Monitor", layout="wide")
 
-    st.title("ChakraOps Live Decision Dashboard")
+    st.title("ChakraOps – Live Decision Monitor")
     st.caption(
         "Read-only decision intelligence. No broker integration. Manual execution only."
     )
@@ -287,6 +294,42 @@ def main() -> None:
             "**Interpretation:** Green = allowed, Yellow = review, Red = blocked. This UI never executes trades."
         )
 
+    # Live Market Status (Phase 8.2) – advisory only
+    st.subheader("Live Market Status")
+    try:
+        symbols_for_live: List[str] = []
+        for sel in (snapshot.get("selected_signals") or []) + (snapshot.get("scored_candidates") or [])[:30]:
+            if not isinstance(sel, dict):
+                continue
+            scored = sel.get("scored") or {}
+            if not isinstance(scored, dict):
+                continue
+            cand = scored.get("candidate") or {}
+            if isinstance(cand, dict) and cand.get("symbol"):
+                symbols_for_live.append(str(cand["symbol"]))
+        symbols_for_live = list(dict.fromkeys(symbols_for_live))
+        if not symbols_for_live:
+            symbols_for_live = ["SPY"]
+        live_data = fetch_live_market_data(symbols_for_live)
+        drift_status = detect_drift(snapshot, live_data)
+    except Exception as e:
+        live_data = None
+        drift_status = None
+        st.warning(f"Live market data unavailable: {e}")
+    if live_data is not None:
+        st.markdown(f"**Data source:** {live_data.data_source}")
+        st.markdown(f"**Last update (UTC):** {live_data.last_update_utc}")
+        if live_data.errors:
+            with st.expander("Live data warnings", expanded=False):
+                for err in live_data.errors[:10]:
+                    st.caption(err)
+        if drift_status is not None and drift_status.has_drift:
+            st.warning("Drift detected (snapshot vs live – advisory only)")
+            for item in drift_status.items:
+                st.caption(f"[{item.reason.value}] {item.symbol}: {item.message}")
+        else:
+            st.caption("No drift detected. Snapshot and live data aligned (or live unavailable).")
+
     # Snapshot metadata
     st.subheader("Snapshot metadata")
     meta_cols = st.columns(4)
@@ -326,6 +369,74 @@ def main() -> None:
     if gate_reasons:
         st.markdown("**Gate reasons**")
         st.write(gate_reasons)
+    
+    # Phase 8.1: Operator Action Recommendations (Advisory)
+    # Show recommendations when blocked, optional when allowed
+    if not gate_allowed or True:  # Always show for now, can be made conditional
+        st.subheader("Operator Action Recommendations (Advisory)")
+        st.info(
+            "⚠️ **Advisory Only** - These recommendations are derived from diagnostics "
+            "and are for operator consideration only. They do not modify any logic or execution."
+        )
+        
+        try:
+            # Get sandbox result if available
+            sandbox_result_for_recommendations = None
+            if sandbox_enabled:
+                try:
+                    sandbox_params = SandboxParams(
+                        min_score=sandbox_min_score if sandbox_min_score > 0 else None,
+                        max_total=sandbox_max_total,
+                        max_per_symbol=sandbox_max_per_symbol,
+                        max_per_signal_type=sandbox_max_per_signal_type_val,
+                    )
+                    sandbox_result_for_recommendations = evaluate_sandbox(snapshot, sandbox_params)
+                except Exception:
+                    pass  # Ignore sandbox errors for recommendations
+            
+            recommendations = generate_operator_recommendations(
+                snapshot,
+                sandbox_result=sandbox_result_for_recommendations,
+            )
+            
+            if recommendations:
+                # Group by severity
+                high_recs = [r for r in recommendations if r.severity == RecommendationSeverity.HIGH]
+                medium_recs = [r for r in recommendations if r.severity == RecommendationSeverity.MEDIUM]
+                low_recs = [r for r in recommendations if r.severity == RecommendationSeverity.LOW]
+                
+                # Render HIGH severity first
+                for rec in high_recs:
+                    with st.expander(f"🔴 **HIGH:** {rec.title}", expanded=True):
+                        st.markdown(f"**Action:** {rec.action}")
+                        st.markdown("**Evidence:**")
+                        for evidence_line in rec.evidence:
+                            st.markdown(f"- {evidence_line}")
+                        st.caption(f"Category: {rec.category}")
+                
+                # Render MEDIUM severity
+                for rec in medium_recs:
+                    with st.expander(f"🟡 **MEDIUM:** {rec.title}", expanded=False):
+                        st.markdown(f"**Action:** {rec.action}")
+                        st.markdown("**Evidence:**")
+                        for evidence_line in rec.evidence:
+                            st.markdown(f"- {evidence_line}")
+                        st.caption(f"Category: {rec.category}")
+                
+                # Render LOW severity
+                for rec in low_recs:
+                    with st.expander(f"🟢 **LOW:** {rec.title}", expanded=False):
+                        st.markdown(f"**Action:** {rec.action}")
+                        st.markdown("**Evidence:**")
+                        for evidence_line in rec.evidence:
+                            st.markdown(f"- {evidence_line}")
+                        st.caption(f"Category: {rec.category}")
+            else:
+                st.info("No recommendations available. System appears to be operating normally.")
+        
+        except Exception as e:
+            st.error(f"Recommendation generation failed: {e}")
+            st.code(str(e))
 
     # Phase 7.3: Diagnostics (Why the system is blocked)
     if not gate_allowed:

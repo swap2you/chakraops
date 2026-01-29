@@ -1,0 +1,358 @@
+{
+  "decision_snapshot": {
+    "as_of": "2026-01-28T18:41:16.036138",
+    "universe_id_or_hash": "phase2_default",
+    "stats": {
+      "total_symbols": 16,
+      "symbols_evaluated": 16,
+      "total_candidates": 0,
+      "csp_candidates": 0,
+      "cc_candidates": 0,
+      "total_exclusions": 32,
+      "unique_exclusion_codes": 1
+    },
+    "candidates": [],
+    "scored_candidates": null,
+    "selected_signals": null,
+    "explanations": null,
+    "exclusions": [
+      {
+        "symbol": "AAPL",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "AAPL: No PUT options found for AAPL",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "AAPL",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "AAPL",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "AAPL: No CALL options found for AAPL",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "AAPL",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "MSFT",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "MSFT: No PUT options found for MSFT",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "MSFT",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "MSFT",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "MSFT: No CALL options found for MSFT",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "MSFT",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "AMZN",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "AMZN: No PUT options found for AMZN",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "AMZN",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "AMZN",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "AMZN: No CALL options found for AMZN",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "AMZN",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "NVDA",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "NVDA: No PUT options found for NVDA",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "NVDA",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "NVDA",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "NVDA: No CALL options found for NVDA",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "NVDA",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "GOOGL",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "GOOGL: No PUT options found for GOOGL",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "GOOGL",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "GOOGL",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "GOOGL: No CALL options found for GOOGL",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "GOOGL",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "TSLA",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "TSLA: No PUT options found for TSLA",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "TSLA",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "TSLA",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "TSLA: No CALL options found for TSLA",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "TSLA",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "JPM",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "JPM: No PUT options found for JPM",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "JPM",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "JPM",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "JPM: No CALL options found for JPM",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "JPM",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "XOM",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "XOM: No PUT options found for XOM",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "XOM",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "XOM",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "XOM: No CALL options found for XOM",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "XOM",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "JNJ",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "JNJ: No PUT options found for JNJ",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "JNJ",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "JNJ",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "JNJ: No CALL options found for JNJ",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "JNJ",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "UNH",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "UNH: No PUT options found for UNH",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "UNH",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "UNH",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "UNH: No CALL options found for UNH",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "UNH",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "V",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "V: No PUT options found for V",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "V",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "V",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "V: No CALL options found for V",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "V",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "AVGO",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "AVGO: No PUT options found for AVGO",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "AVGO",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "AVGO",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "AVGO: No CALL options found for AVGO",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "AVGO",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "HD",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "HD: No PUT options found for HD",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "HD",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "HD",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "HD: No CALL options found for HD",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "HD",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "WMT",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "WMT: No PUT options found for WMT",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "WMT",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "WMT",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "WMT: No CALL options found for WMT",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "WMT",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "NFLX",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "NFLX: No PUT options found for NFLX",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "NFLX",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "NFLX",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "NFLX: No CALL options found for NFLX",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "NFLX",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "CRM",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "CRM: No PUT options found for CRM",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "CRM",
+          "total_options": 0
+        }
+      },
+      {
+        "symbol": "CRM",
+        "rule": "NO_OPTIONS_FOR_SYMBOL",
+        "message": "CRM: No CALL options found for CRM",
+        "stage": "NORMALIZATION",
+        "metadata": {
+          "symbol": "CRM",
+          "total_options": 0
+        }
+      }
+    ]
+  },
+  "execution_gate": {
+    "allowed": false,
+    "reasons": [
+      "NO_SELECTED_SIGNALS"
+    ]
+  },
+  "execution_plan": {
+    "allowed": false,
+    "blocked_reason": "NO_SELECTED_SIGNALS",
+    "orders": []
+  },
+  "dry_run_result": {
+    "allowed": false,
+    "blocked_reason": "NO_SELECTED_SIGNALS",
+    "orders": [],
+    "executed_at": "2026-01-28T18:41:54.627490"
+  }
+}

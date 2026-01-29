@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""ChakraOps Dashboard - Streamlit web interface."""
+"""ChakraOps Dashboard - Streamlit web interface (Legacy Position Management).
+
+⚠️ NOTE: This is the legacy position management dashboard (trades, positions, alerts).
+For Phase 7 decision intelligence dashboard, use:
+- scripts/live_dashboard.py (launches app/ui/live_decision_dashboard.py)
+
+This dashboard remains for position management workflows but is separate from Phase 7.
+"""
 
 from __future__ import annotations
 

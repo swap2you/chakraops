@@ -11,6 +11,7 @@ from app.signals.models import (
     CCConfig,
     CSPConfig,
     ExclusionReason,
+    ExclusionDetail,
     SignalCandidate,
     SignalEngineConfig,
     SignalType,
@@ -205,3 +206,81 @@ def test_snapshot_without_scoring_selection() -> None:
     assert parsed["scored_candidates"] is None
     assert parsed["selected_signals"] is None
     assert parsed["explanations"] is None
+
+
+def test_decision_snapshot_with_exclusions() -> None:
+    """Snapshot should include exclusion details when present (Phase 7.2)."""
+    candidate = _make_candidate("AAPL", SignalType.CSP)
+    
+    exclusions = [
+        ExclusionReason(
+            code="NO_OPTIONS_FOR_SYMBOL",
+            message="AAPL: No PUT options found for AAPL",
+            data={"symbol": "AAPL", "total_options": 0},
+        ),
+        ExclusionReason(
+            code="NO_EXPIRY_IN_DTE_WINDOW",
+            message="MSFT: No expirations in DTE window [30, 45]",
+            data={"symbol": "MSFT", "dte_min": 30, "dte_max": 45},
+        ),
+    ]
+
+    result = SignalRunResult(
+        as_of=datetime(2026, 1, 22, 10, 0, 0),
+        universe_id_or_hash="test",
+        configs={},
+        candidates=[candidate],
+        exclusions=exclusions,
+        stats={"total_candidates": 1, "total_exclusions": 2},
+        scored_candidates=None,
+        selected_signals=None,
+        explanations=None,
+        decision_snapshot=None,
+    )
+
+    snapshot = build_decision_snapshot(result)
+
+    # Verify exclusions are present
+    assert snapshot.exclusions is not None
+    assert len(snapshot.exclusions) == 2
+    
+    # Verify exclusion structure
+    excl1 = snapshot.exclusions[0]
+    assert excl1["symbol"] == "AAPL"
+    assert excl1["rule"] == "NO_OPTIONS_FOR_SYMBOL"
+    assert excl1["message"] == "AAPL: No PUT options found for AAPL"
+    assert excl1["stage"] in ("CSP_GENERATION", "NORMALIZATION", "UNKNOWN")
+    
+    excl2 = snapshot.exclusions[1]
+    assert excl2["symbol"] == "MSFT"
+    assert excl2["rule"] == "NO_EXPIRY_IN_DTE_WINDOW"
+    
+    # Verify JSON serialization
+    snapshot_dict = asdict(snapshot)
+    json_str = json.dumps(snapshot_dict)
+    parsed = json.loads(json_str)
+    assert parsed["exclusions"] is not None
+    assert len(parsed["exclusions"]) == 2
+
+
+def test_decision_snapshot_without_exclusions() -> None:
+    """Snapshot should have exclusions=None when no exclusions present (backward compatibility)."""
+    candidate = _make_candidate("AAPL", SignalType.CSP)
+
+    result = SignalRunResult(
+        as_of=datetime(2026, 1, 22, 10, 0, 0),
+        universe_id_or_hash="test",
+        configs={},
+        candidates=[candidate],
+        exclusions=[],  # Empty list
+        stats={"total_candidates": 1},
+        scored_candidates=None,
+        selected_signals=None,
+        explanations=None,
+        decision_snapshot=None,
+    )
+
+    snapshot = build_decision_snapshot(result)
+
+    # Empty exclusions list should result in None (backward compatibility)
+    assert snapshot.exclusions is None

@@ -36,6 +36,21 @@ class ExclusionReason:
 
 
 @dataclass(frozen=True)
+class ExclusionDetail:
+    """Detailed exclusion information for DecisionSnapshot (Phase 7.2).
+    
+    Provides structured exclusion details with symbol, rule, message, stage,
+    and optional metadata for display in dashboard and alerts.
+    """
+
+    symbol: str
+    rule: str  # Exclusion code/rule identifier
+    message: str
+    stage: str  # e.g., "CHAIN_FETCH", "CSP_GENERATION", "CC_GENERATION", "NORMALIZATION"
+    metadata: Dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
 class SignalCandidate:
     """Immutable signal candidate (CSP or CC)."""
 
@@ -130,6 +145,7 @@ __all__ = [
     "SignalCandidate",
     "ExplanationItem",
     "ExclusionReason",
+    "ExclusionDetail",
     "SignalEngineConfig",
     "CSPConfig",
     "CCConfig",

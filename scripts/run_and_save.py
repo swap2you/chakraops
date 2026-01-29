@@ -155,6 +155,20 @@ def main() -> int:
     print(f"  Orders: {len(execution_plan.orders)}")
     print(f"  Output: {output_file}")
 
+    # Send Slack alert (Phase 7.1) - non-blocking, failures don't break pipeline
+    try:
+        from app.notifications.slack_notifier import send_decision_alert
+        send_decision_alert(
+            snapshot=decision_snapshot,
+            gate_result=gate_result,
+            execution_plan=execution_plan,
+            decision_file_path=output_file,
+        )
+        print(f"  Slack alert sent")
+    except Exception as e:
+        # Slack failure must NOT break pipeline
+        print(f"  Slack alert failed (non-blocking): {e}")
+
     return 0
 
 

@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 """
-ChakraOps - Main orchestrator
+ChakraOps - Main orchestrator (Legacy)
+
+⚠️ NOTE: This is the legacy orchestrator for position management, regime detection,
+and Slack alerts. For Phase 7 decision intelligence pipeline, use:
+- scripts/run_and_save.py (generate snapshots)
+- scripts/live_dashboard.py (view dashboard)
+
+This file remains for legacy workflows but is NOT part of the Phase 7 golden path.
 """
 
 import os

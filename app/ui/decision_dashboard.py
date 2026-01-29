@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""Decision Dashboard (Phase 6A) - Read-only visualization of decision runs."""
+"""Decision Dashboard (Phase 6A) - Read-only visualization of decision runs.
+
+⚠️ DEPRECATED: This module is deprecated in favor of app/ui/live_decision_dashboard.py (Phase 7).
+This file is kept for backward compatibility but should not be used for new development.
+Use scripts/live_dashboard.py instead.
+"""
 
 import json
 from pathlib import Path

@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""View decision dashboard (Phase 6A)."""
+"""View decision dashboard (Phase 6A).
+
+⚠️ DEPRECATED: This script is deprecated in favor of scripts/live_dashboard.py (Phase 7).
+This file is kept for backward compatibility but should not be used for new development.
+Use scripts/live_dashboard.py instead.
+"""
 
 import argparse
 import sys

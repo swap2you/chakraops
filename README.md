@@ -36,11 +36,54 @@ A Python application for managing operations.
 
 ## Run
 
+### Phase 7: Decision Intelligence Pipeline (Recommended)
+
+**Generate Decision Snapshot:**
+```bash
+python scripts/run_and_save.py
+```
+Output: `out/decision_<timestamp>.json`
+
+**Launch Live Dashboard:**
+```bash
+python scripts/live_dashboard.py
+```
+Open: http://localhost:8501
+
+**See:** `docs/PHASE7_QUICK_REFERENCE.md` for details
+
+#### Phase 7.1: Slack Alerts (Optional)
+
+After generating a decision snapshot, the pipeline can send alerts to Slack:
+
+1. **Set environment variable:**
+   ```bash
+   set SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+   ```
+   (Windows) or
+   ```bash
+   export SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+   ```
+   (Linux/Mac)
+
+2. **Run pipeline:** Slack alerts are sent automatically after decision artifact is written
+   ```bash
+   python scripts/run_and_save.py
+   ```
+
+**Note:** Slack alerts are optional. If `SLACK_WEBHOOK_URL` is not set, the pipeline continues normally without alerts.
+
+**See:** `docs/PHASE7_OPERATOR_RUNBOOK.md` for detailed operator guide
+
+### Legacy: Full Orchestrator
+
 ```bash
 python main.py
 ```
 
 The application should print "ChakraOps boot OK" and exit successfully.
+
+**Note:** `main.py` is the legacy orchestrator (regime detection, position monitoring, Slack alerts). Phase 7 uses the snapshot-driven pipeline above.
 
 ## Development
 

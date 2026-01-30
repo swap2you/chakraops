@@ -104,8 +104,9 @@ def generate_csp_candidates(
             if opt.bid is None or opt.bid < base_cfg.min_bid:
                 continue
 
-            # Check open interest
-            if opt.open_interest is None or opt.open_interest < base_cfg.min_open_interest:
+            # Check open interest (skip check if OI data not available)
+            # Note: quote_bulk endpoint doesn't return open_interest, so we allow None
+            if opt.open_interest is not None and opt.open_interest < base_cfg.min_open_interest:
                 continue
 
             # Check spread

@@ -15,7 +15,7 @@ import streamlit as st
 # Design tokens (Stripe/GitHub-ish: calm, spacious, high contrast for status)
 # ---------------------------------------------------------------------------
 
-# Colors - Premium professional palette
+# Colors - Premium professional palette with refined contrast
 COLORS = {
     "bg": "#f5f7fa",
     "card_bg": "#ffffff",
@@ -23,32 +23,36 @@ COLORS = {
     "border_light": "#eaeef2",
     "text_primary": "#24292f",
     "text_muted": "#57606a",
-    "accent": "#007acc",      # Primary blue
-    "primary": "#007acc",     # Alias for accent
+    "accent": "#005ea6",      # Slightly lighter primary blue for headers
+    "primary": "#005ea6",     # Alias for accent
+    "primary_dark": "#004580",  # Darker variant for gradients
     "success": "#2aa872",     # Green for positive metrics
+    "success_border": "#1e8a5e",  # Darker green for borders
     "warning": "#e0a800",     # Amber for caution
+    "warning_border": "#c49300",  # Darker amber for borders
     "danger": "#d9534f",      # Red for negative metrics
+    "danger_border": "#c9302c",  # Darker red for borders
     "neutral": "#6c757d",     # Grey for neutral
     "nav_bg": "#1e293b",
     "nav_text": "#e6edf3",
     "nav_text_muted": "#8b949e",
 }
 
-# Spacing scale (px) - Increased for better visual balance
+# Spacing scale (px) - 16px gap between cards, increased padding
 SPACING = {
     "xs": 4,
     "sm": 8,
-    "md": 14,
-    "lg": 20,  # Increased from 16 for card padding
-    "xl": 28,  # Increased from 24
-    "2xl": 36,  # Increased from 32
+    "md": 16,   # Card gap
+    "lg": 20,   # Card padding
+    "xl": 28,
+    "2xl": 36,
 }
 
-# Border radii - Consistent across all components
+# Border radii - Consistent 16px for cards
 RADII = {
-    "sm": 8,   # Increased from 6
-    "md": 12,  # Increased from 10
-    "lg": 16,  # Increased from 14
+    "sm": 8,    # Small elements
+    "md": 12,   # Medium elements
+    "lg": 16,   # Cards and panels
 }
 
 # Shadows
@@ -76,19 +80,23 @@ STATUS_TONE = {
     "FAIL": "danger",
 }
 
-# Premium palette: professional trading platform aesthetic
+# Premium palette: professional trading platform aesthetic with borders
 PALETTE_LIGHT = {
     "bg": "#f5f7fa",
     "surface": "#ffffff",
     "border": "#e1e4e8",
     "text_primary": "#24292f",
     "text_secondary": "#57606a",
-    "accent": "#007acc",
-    "accent_muted": "#4da6d9",
-    "primary": "#007acc",
+    "accent": "#005ea6",
+    "accent_muted": "#3d8ec9",
+    "primary": "#005ea6",
+    "primary_dark": "#004580",
     "success": "#2aa872",
+    "success_border": "#1e8a5e",
     "danger": "#d9534f",
+    "danger_border": "#c9302c",
     "warning": "#e0a800",
+    "warning_border": "#c49300",
     "neutral": "#6c757d",
 }
 
@@ -101,9 +109,13 @@ PALETTE_DARK = {
     "accent": "#58a6ff",
     "accent_muted": "#388bfd",
     "primary": "#58a6ff",
+    "primary_dark": "#1f6feb",
     "success": "#3fb950",
+    "success_border": "#238636",
     "danger": "#f85149",
+    "danger_border": "#da3633",
     "warning": "#d29922",
+    "warning_border": "#9e6a03",
     "neutral": "#8b949e",
 }
 

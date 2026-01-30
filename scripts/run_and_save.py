@@ -48,12 +48,15 @@ from app.data.options_chain_provider import (
     ThetaDataOptionsChainProvider,
 )
 from app.data.stock_snapshot_provider import StockSnapshotProvider
-from app.data.theta_v3_provider import (
-    ThetaV3Provider,
-    DATA_SOURCE_LIVE,
-    DATA_SOURCE_SNAPSHOT,
-    DATA_SOURCE_UNAVAILABLE,
+from app.data.theta_v3_pipeline import (
+    check_theta_health,
+    ThetaHealthStatus,
 )
+
+# Data source constants
+DATA_SOURCE_LIVE = "live"
+DATA_SOURCE_SNAPSHOT = "snapshot"
+DATA_SOURCE_UNAVAILABLE = "unavailable"
 from app.execution.dry_run_executor import execute_dry_run
 from app.execution.execution_gate import evaluate_execution_gate, ExecutionGateResult
 from app.execution.execution_plan import build_execution_plan
@@ -114,9 +117,7 @@ def enforce_daily_retention(output_dir: Path, max_days: int = 7) -> Tuple[int, L
 
 def _run_health_check(test_mode: bool = False) -> Tuple[bool, str, Optional[str]]:
     """Run Theta Terminal health check."""
-    provider = ThetaV3Provider()
-    status = provider.health_check()
-    provider.close()
+    status = check_theta_health()
     
     if test_mode:
         print(f"  Health check: {status.message}")

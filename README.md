@@ -48,10 +48,11 @@ Output: `out/decision_<timestamp>.json` and `out/decision_latest.json`
 ```bash
 python scripts/run_and_save.py --realtime
 ```
-- Refreshes every 60 seconds (configurable via `--interval` or `config.yaml`)
-- Automatically stops at market close (16:00 EST by default)
+- Refreshes every 30-60 seconds (configurable via `config.yaml` → `realtime.refresh_interval`)
+- Automatically stops at market close (16:00 by default, configurable via `realtime.end_time`)
 - Overwrites `decision_latest.json` on each refresh
-- Creates timestamped `decision_*_end.json` at close
+- Creates single `decision_YYYY-MM-DD_end.json` at close
+- Keeps only end-of-day snapshots (last 7 days by default)
 
 **Test Mode (Diagnostics):**
 ```bash
@@ -97,16 +98,30 @@ realtime:
 
 ChakraOps uses ThetaData Terminal v3 REST API for real-time options data.
 
-**Key endpoint:** `/option/snapshot/ohlc`
-- Fetches complete option chains in a single call
-- Do NOT pass `strike` parameter (returns all strikes)
-- Use `expiration=*` or omit to get all expirations
+**Pipeline Pattern:** Based on ThetaData's official examples (basic_pipeline.html):
+
+1. **List Expirations:** `GET /option/list/expirations?symbol={symbol}`
+2. **Filter by DTE:** Keep expirations within configured window (default: 7-45 days)
+3. **List Strikes:** `GET /option/list/strikes?symbol={symbol}&expiration={exp}`
+4. **Fetch Quotes:** `GET /option/snapshot/ohlc?symbol={symbol}&expiration={exp}&strike={strike}&right={C|P}`
 
 **Endpoints used:**
 ```
-GET /option/snapshot/ohlc?symbol={symbol}&format=json  # Full chain
-GET /option/list/expirations?symbol={symbol}&format=json  # List expirations
+GET /option/list/expirations?symbol={symbol}&format=json  # Step 1
+GET /option/list/strikes?symbol={symbol}&expiration={exp}&format=json  # Step 3
+GET /option/snapshot/ohlc?symbol={symbol}&expiration={exp}&strike={strike}&right=C|P&format=json  # Step 4
 GET /stock/snapshot/quote?symbol={symbol}&format=json  # Stock price
+```
+
+**Configuration (`config.yaml`):**
+```yaml
+# DTE window for option chain filtering
+dte_min: 7   # Minimum days to expiration
+dte_max: 45  # Maximum days to expiration
+
+realtime:
+  refresh_interval: 30  # Seconds between pipeline runs (30-60 recommended)
+  end_time: "16:00:00"  # Market close time
 ```
 
 **Concurrency:** Max 4 concurrent requests (Theta Terminal limit)
@@ -114,6 +129,13 @@ GET /stock/snapshot/quote?symbol={symbol}&format=json  # Stock price
 **Requirements:**
 - Theta Terminal v3 running locally on port 25503
 - Valid ThetaData subscription (Options.Standard or higher)
+
+**Module:** `app/data/theta_v3_pipeline.py`
+- `list_expirations(symbol)` - Get all expirations
+- `list_strikes(symbol, expiration)` - Get all strikes for an expiration  
+- `snapshot_ohlc(symbol, expiration, strike, right)` - Get OHLC for single contract
+- `fetch_chain(symbol, dte_min, dte_max)` - High-level chain fetch (combines all steps)
+- `fetch_chain_async(symbol, dte_min, dte_max)` - Async version with concurrent fetching
 
 #### Phase 7.1: Slack Alerts (Optional)
 

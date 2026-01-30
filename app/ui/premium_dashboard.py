@@ -19,19 +19,19 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-# Try to import Theta provider for Test page
+# Try to import Theta pipeline for Test page
 try:
-    from app.data.theta_v3_provider import (
-        ThetaV3Provider,
+    from app.data.theta_v3_pipeline import (
         check_theta_health,
-        DATA_SOURCE_LIVE,
-        DATA_SOURCE_SNAPSHOT,
+        list_expirations,
+        fetch_chain,
     )
     THETA_AVAILABLE = True
 except ImportError:
     THETA_AVAILABLE = False
-    DATA_SOURCE_LIVE = "live"
-    DATA_SOURCE_SNAPSHOT = "snapshot"
+
+DATA_SOURCE_LIVE = "live"
+DATA_SOURCE_SNAPSHOT = "snapshot"
 
 import streamlit as st
 
@@ -795,9 +795,9 @@ def render_execution_panel(data: Dict) -> None:
 
 
 def render_test_page() -> None:
-    """Render the Test page with real Theta data fetching via snapshot_ohlc."""
+    """Render the Test page with real Theta data fetching via basic pipeline."""
     st.markdown("## 🧪 Test Page")
-    st.caption("Test Theta v3 API using `/option/snapshot/ohlc` endpoint. Fetches complete chains in a single call.")
+    st.caption("Test Theta v3 API using the basic pipeline: list_expirations → list_strikes → snapshot_ohlc (per-strike)")
     
     c1, c2 = st.columns([2, 1])
     
@@ -815,7 +815,7 @@ def render_test_page() -> None:
             dte_max = st.number_input("DTE Max", value=45, min_value=1, max_value=365, key="dte_max")
         
         st.markdown(f"**Testing: `{symbol}`** (DTE: {dte_min}–{dte_max} days)")
-        st.caption("API: `GET /option/snapshot/ohlc?symbol={symbol}&format=json` (no strike param = all strikes)")
+        st.caption("Pipeline: `list_expirations` → `list_strikes` → `snapshot_ohlc` (per-strike fetching)")
     
     with c2:
         st.markdown("### Actions")
@@ -970,40 +970,58 @@ def _theta_health_check() -> Tuple[bool, str]:
     """Check Theta Terminal health."""
     if THETA_AVAILABLE:
         try:
-            return check_theta_health()
+            status = check_theta_health()
+            return status.healthy, status.message
         except Exception as e:
             return False, str(e)
     else:
-        return False, "Theta provider not available (import failed)"
+        return False, "Theta pipeline not available (import failed)"
 
 
 def _fetch_real_chain(symbol: str, dte_min: int, dte_max: int) -> Dict[str, Any]:
-    """Fetch real options chain from Theta API."""
+    """Fetch real options chain from Theta API using basic pipeline.
+    
+    Uses: list_expirations → list_strikes → snapshot_ohlc (per strike)
+    """
     if not THETA_AVAILABLE:
-        return {"error": "Theta provider module not available. Ensure theta_v3_provider.py is in app/data/"}
+        return {"error": "Theta pipeline not available. Ensure theta_v3_pipeline.py is in app/data/"}
     
     try:
-        provider = ThetaV3Provider()
-        result = provider.fetch_full_chain(symbol, dte_min=dte_min, dte_max=dte_max)
-        provider.close()
+        from datetime import datetime, timezone
         
-        if result.chain_status != "ok":
+        # Fetch chain using the basic pipeline pattern
+        contracts = fetch_chain(symbol, dte_min=dte_min, dte_max=dte_max)
+        
+        if not contracts:
+            # Check if symbol has expirations at all
+            expirations = list_expirations(symbol)
+            if not expirations:
+                return {
+                    "error": f"No expirations found for {symbol}",
+                    "chain_status": "no_options_for_symbol",
+                    "data_source": DATA_SOURCE_LIVE,
+                }
             return {
-                "error": result.error or f"Chain status: {result.chain_status}",
-                "chain_status": result.chain_status,
-                "data_source": result.data_source,
+                "error": f"No contracts in DTE window [{dte_min}-{dte_max}]. Symbol has {len(expirations)} expirations total.",
+                "chain_status": "empty_chain",
+                "data_source": DATA_SOURCE_LIVE,
             }
         
+        # Split into puts and calls
+        puts = [c for c in contracts if c.get("right") == "P"]
+        calls = [c for c in contracts if c.get("right") == "C"]
+        expirations = sorted(set(c.get("expiration", "") for c in contracts if c.get("expiration")))
+        
         return {
-            "symbol": result.symbol,
-            "expirations": result.expirations,
-            "contracts": result.contracts,
-            "puts": result.puts,
-            "calls": result.calls,
-            "expiration_count": result.expiration_count,
-            "contract_count": result.contract_count,
-            "data_source": result.data_source,
-            "timestamp": result.timestamp,
+            "symbol": symbol,
+            "expirations": expirations,
+            "contracts": contracts,
+            "puts": puts,
+            "calls": calls,
+            "expiration_count": len(expirations),
+            "contract_count": len(contracts),
+            "data_source": DATA_SOURCE_LIVE,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         
     except Exception as e:

@@ -45,28 +45,27 @@ class OptionsChainProvider(ABC):
 
 
 class ThetaDataOptionsChainProvider(OptionsChainProvider):
-    """Theta v3 provider using the basic pipeline pattern.
+    """Theta v3 provider using bulk endpoints (one API call per expiration).
     
-    Uses theta_v3_pipeline functions:
-    - list_expirations() for get_expirations()
-    - list_strikes() + snapshot_ohlc() for get_chain()
+    Uses theta_v3_pipeline.fetch_chain() which calls bulk endpoints:
+    - quote_bulk: /option/snapshot/quote (recommended, no strike param)
+    - ohlc_bulk: /option/snapshot/ohlc (no strike param)
     
-    Includes strike limiting to focus on near-ATM options for efficiency.
+    The endpoint is configured in config.yaml (theta.endpoint) or THETA_ENDPOINT env var.
     """
 
     def __init__(
         self,
         base_url: Optional[str] = None,
         timeout: float = CHAIN_REQUEST_TIMEOUT,
-        strike_limit: int = 30,
     ) -> None:
         from app.core.settings import get_theta_base_url
         
         self.base_url = (base_url or get_theta_base_url()).rstrip("/")
         self.timeout = timeout
-        self.strike_limit = strike_limit  # Max strikes per expiration (centered on ATM)
-        # Cache expirations to avoid redundant API calls
+        # Cache for expiration and chain data
         self._expiration_cache: Dict[str, List[str]] = {}
+        self._chain_cache: Dict[str, List[Dict[str, Any]]] = {}  # key: "symbol:expiration"
 
     def get_expirations(self, symbol: str) -> List[date]:
         """Get expirations via theta_v3_pipeline.list_expirations."""
@@ -110,74 +109,69 @@ class ThetaDataOptionsChainProvider(OptionsChainProvider):
         expiry: date,
         right: str,
     ) -> List[Dict[str, Any]]:
-        """Get chain for specific expiration using pipeline.
+        """Get chain for specific expiration using BULK endpoint.
         
-        Steps:
-        1. list_strikes(symbol, expiration)
-        2. Filter strikes to near-ATM (strike_limit)
-        3. For each strike: snapshot_ohlc(symbol, expiration, strike, right)
+        Fetches ALL contracts for the expiration in one API call,
+        then filters by the requested right (PUT/CALL).
         """
-        from app.data.theta_v3_pipeline import list_strikes, snapshot_ohlc, _filter_strikes_near_atm
+        from app.data.theta_v3_pipeline import snapshot_quote_bulk, snapshot_ohlc_bulk
+        from app.core.settings import get_theta_endpoint
         
         symbol = (symbol or "").upper()
         right_upper = (right or "P").upper()
         if right_upper not in ("P", "C"):
             right_upper = "P"
         
-        # Format expiration as YYYY-MM-DD
         exp_str = expiry.strftime("%Y-%m-%d")
+        cache_key = f"{symbol}:{exp_str}"
         
         try:
-            # Get all strikes for this expiration
-            all_strikes = list_strikes(
-                symbol,
-                exp_str,
-                base_url=self.base_url,
-                timeout=self.timeout,
-            )
+            # Check cache first
+            if cache_key in self._chain_cache:
+                all_contracts = self._chain_cache[cache_key]
+            else:
+                # Fetch ALL contracts for this expiration via bulk endpoint
+                endpoint_mode = get_theta_endpoint()
+                
+                if endpoint_mode in ("quote_bulk", "auto"):
+                    all_contracts = snapshot_quote_bulk(symbol, exp_str, base_url=self.base_url, timeout=self.timeout)
+                    if not all_contracts and endpoint_mode == "auto":
+                        all_contracts = snapshot_ohlc_bulk(symbol, exp_str, base_url=self.base_url, timeout=self.timeout)
+                else:
+                    all_contracts = snapshot_ohlc_bulk(symbol, exp_str, base_url=self.base_url, timeout=self.timeout)
+                
+                self._chain_cache[cache_key] = all_contracts or []
             
-            if not all_strikes:
-                logger.debug("[OptionsChain] No strikes for %s %s", symbol, exp_str)
+            if not all_contracts:
+                logger.debug("[OptionsChain] No contracts for %s %s", symbol, exp_str)
                 return []
             
-            # Filter to near-ATM strikes for efficiency
-            strikes = _filter_strikes_near_atm(all_strikes, None, self.strike_limit)
-            logger.debug("[OptionsChain] %s %s: %d strikes (filtered from %d)", 
-                        symbol, exp_str, len(strikes), len(all_strikes))
-            
-            # Fetch OHLC for each strike
+            # Filter by right (PUT or CALL)
             out: List[Dict[str, Any]] = []
-            for strike in strikes:
-                contract = snapshot_ohlc(
-                    symbol,
-                    exp_str,
-                    strike,
-                    right_upper,
-                    base_url=self.base_url,
-                    timeout=self.timeout,
-                )
+            for contract in all_contracts:
+                contract_right = contract.get("right", "").upper()
+                if contract_right != right_upper:
+                    continue
                 
-                if contract:
-                    # Normalize output format for signal engine
-                    out.append({
-                        "strike": contract.get("strike"),
-                        "bid": contract.get("bid"),
-                        "ask": contract.get("ask"),
-                        "mid": contract.get("mid"),
-                        "delta": contract.get("delta"),
-                        "gamma": contract.get("gamma"),
-                        "theta": contract.get("theta"),
-                        "vega": contract.get("vega"),
-                        "iv": contract.get("iv"),
-                        "open_interest": contract.get("open_interest"),
-                        "volume": contract.get("volume"),
-                        "right": right_upper,
-                        "expiry": expiry.isoformat(),
-                        "dte": contract.get("dte"),
-                    })
+                out.append({
+                    "strike": contract.get("strike"),
+                    "bid": contract.get("bid"),
+                    "ask": contract.get("ask"),
+                    "mid": contract.get("mid"),
+                    "delta": contract.get("delta"),
+                    "gamma": contract.get("gamma"),
+                    "theta": contract.get("theta"),
+                    "vega": contract.get("vega"),
+                    "iv": contract.get("iv"),
+                    "open_interest": contract.get("open_interest"),
+                    "volume": contract.get("volume"),
+                    "right": right_upper,
+                    "expiry": expiry.isoformat(),
+                    "dte": contract.get("dte"),
+                })
             
-            logger.debug("[OptionsChain] %s %s %s returned %d contracts", 
-                        symbol, exp_str, right_upper, len(out))
+            logger.debug("[OptionsChain] %s %s %s returned %d contracts (from %d total)", 
+                        symbol, exp_str, right_upper, len(out), len(all_contracts))
             return out
             
         except Exception as e:
@@ -191,7 +185,7 @@ class ThetaDataOptionsChainProvider(OptionsChainProvider):
         dte_min: int = 7,
         dte_max: int = 45,
     ) -> Dict[str, Any]:
-        """Get full chain with DTE filtering using pipeline."""
+        """Get full chain with DTE filtering using bulk endpoints."""
         from app.data.theta_v3_pipeline import fetch_chain
         
         try:
@@ -199,7 +193,6 @@ class ThetaDataOptionsChainProvider(OptionsChainProvider):
                 symbol,
                 dte_min=dte_min,
                 dte_max=dte_max,
-                strike_limit=self.strike_limit,
                 base_url=self.base_url,
                 timeout=self.timeout,
             )
@@ -242,8 +235,9 @@ class ThetaDataOptionsChainProvider(OptionsChainProvider):
             }
 
     def clear_cache(self) -> None:
-        """Clear expiration cache."""
+        """Clear caches."""
         self._expiration_cache.clear()
+        self._chain_cache.clear()
 
 
 def _next_weekly_expirations_within_days(days: int) -> List[date]:

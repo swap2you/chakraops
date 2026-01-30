@@ -25,6 +25,8 @@ try:
         check_theta_health,
         list_expirations,
         fetch_chain,
+        snapshot_quote_bulk,
+        snapshot_ohlc_bulk,
     )
     THETA_AVAILABLE = True
 except ImportError:
@@ -795,9 +797,9 @@ def render_execution_panel(data: Dict) -> None:
 
 
 def render_test_page() -> None:
-    """Render the Test page with real Theta data fetching via basic pipeline."""
+    """Render the Test page with real Theta data fetching via bulk endpoints."""
     st.markdown("## 🧪 Test Page")
-    st.caption("Test Theta v3 API using the basic pipeline: list_expirations → list_strikes → snapshot_ohlc (per-strike)")
+    st.caption("Test Theta v3 API using bulk endpoints: one API call per expiration (fast)")
     
     c1, c2 = st.columns([2, 1])
     
@@ -815,11 +817,11 @@ def render_test_page() -> None:
             dte_max = st.number_input("DTE Max", value=45, min_value=1, max_value=365, key="dte_max")
         
         st.markdown(f"**Testing: `{symbol}`** (DTE: {dte_min}–{dte_max} days)")
-        st.caption("Pipeline: `list_expirations` → `list_strikes` → `snapshot_ohlc` (per-strike fetching)")
+        st.caption("Using bulk endpoints: `list_expirations` → `snapshot_quote_bulk` (all strikes per expiration)")
     
     with c2:
         st.markdown("### Actions")
-        fetch_btn = st.button("📥 Fetch Chain", key="fetch_btn", use_container_width=True, help="GET /option/snapshot/ohlc")
+        fetch_btn = st.button("📥 Fetch Chain", key="fetch_btn", use_container_width=True, help="Fetch via bulk endpoint")
         slack_btn = st.button("💬 Test Slack", key="slack_btn", use_container_width=True, help="Generate simulated Slack message")
         health_btn = st.button("🏥 Health Check", key="health_btn", use_container_width=True, help="Check Theta Terminal connection")
     
@@ -834,9 +836,9 @@ def render_test_page() -> None:
             else:
                 st.error(f"❌ {message}")
     
-    # Fetch Chain - Real Theta Integration via snapshot_ohlc
+    # Fetch Chain - Real Theta Integration via bulk endpoint
     if fetch_btn:
-        with st.spinner(f"Fetching chain for {symbol} via snapshot_ohlc..."):
+        with st.spinner(f"Fetching chain for {symbol} via bulk endpoint..."):
             chain_result = _fetch_real_chain(symbol, dte_min, dte_max)
             
             if chain_result.get("error"):

@@ -525,37 +525,33 @@ def fetch_chain(
     symbol: str,
     dte_min: int = 7,
     dte_max: int = 45,
-    strike_limit: int = 30,
-    underlying_price: Optional[float] = None,
     endpoint: Optional[str] = None,
     base_url: Optional[str] = None,
     timeout: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
-    """Fetch complete option chain with configurable endpoint selection.
+    """Fetch complete option chain using bulk endpoints (one API call per expiration).
     
-    Supports multiple endpoint modes based on your Theta subscription:
-    - "ohlc_bulk": Try /option/snapshot/ohlc without strike param (fastest if supported)
-    - "quote_bulk": Try /option/snapshot/quote without strike param
-    - "ohlc_per_strike": Call /option/snapshot/ohlc for each strike (default)
-    - "quote_per_strike": Call /option/snapshot/quote for each strike
-    - "auto": Try bulk first, fall back to per-strike
+    RECOMMENDED: Use "quote_bulk" or "ohlc_bulk" for Standard subscriptions.
+    Per-strike endpoints are deprecated and may not work.
     
-    Run `python scripts/test_theta_chain.py AAPL` to determine which works for your subscription.
+    Endpoint modes:
+    - "quote_bulk": Fetch via /option/snapshot/quote (recommended, fastest)
+    - "ohlc_bulk": Fetch via /option/snapshot/ohlc (includes OHLC data)
+    - "auto": Try quote_bulk first, then ohlc_bulk
+    - "ohlc_per_strike" / "quote_per_strike": Legacy per-strike (slow, may not work)
+    
+    Run `python scripts/test_theta_chain.py AAPL` to verify which endpoint works.
     
     Parameters
     ----------
     symbol : str
-        Underlying ticker
+        Underlying ticker (e.g., "AAPL")
     dte_min : int
         Minimum days to expiration (default: 7)
     dte_max : int
         Maximum days to expiration (default: 45)
-    strike_limit : int
-        Max strikes per expiration for per-strike modes (default: 30)
-    underlying_price : float, optional
-        Current stock price for ATM centering
     endpoint : str, optional
-        Endpoint mode. If None, reads from config.yaml or env var THETA_ENDPOINT.
+        Endpoint mode. If None, reads from config.yaml (theta.endpoint) or THETA_ENDPOINT env var.
     """
     from app.core.settings import get_theta_endpoint, get_theta_strike_limit
     
@@ -566,10 +562,6 @@ def fetch_chain(
     url = base_url or get_theta_base_url()
     tout = timeout if timeout is not None else DEFAULT_TIMEOUT
     endpoint_mode = endpoint or get_theta_endpoint()
-    
-    # Use config strike limit if not specified
-    if strike_limit == 30:  # Default value
-        strike_limit = get_theta_strike_limit()
     
     # Step 1: Get all expirations
     expirations = list_expirations(symbol, base_url=url, timeout=tout)
@@ -597,21 +589,8 @@ def fetch_chain(
     
     all_contracts: List[Dict[str, Any]] = []
     
-    # Try bulk endpoints first if configured
-    if endpoint_mode in ("ohlc_bulk", "auto"):
-        for exp in valid_expirations:
-            contracts = snapshot_ohlc_bulk(symbol, exp, base_url=url, timeout=tout)
-            if contracts:
-                all_contracts.extend(contracts)
-        
-        if all_contracts:
-            logger.info("fetch_chain: %s returned %d contracts via ohlc_bulk", symbol, len(all_contracts))
-            return all_contracts
-        elif endpoint_mode == "ohlc_bulk":
-            logger.warning("fetch_chain: ohlc_bulk returned no data for %s", symbol)
-            return []
-        # If auto mode, fall through to try quote_bulk
-    
+    # BULK ENDPOINTS (recommended)
+    # Try quote_bulk first (fastest and most compatible)
     if endpoint_mode in ("quote_bulk", "auto"):
         for exp in valid_expirations:
             contracts = snapshot_quote_bulk(symbol, exp, base_url=url, timeout=tout)
@@ -624,35 +603,54 @@ def fetch_chain(
         elif endpoint_mode == "quote_bulk":
             logger.warning("fetch_chain: quote_bulk returned no data for %s", symbol)
             return []
-        # If auto mode, fall through to per-strike
+        # If auto mode, fall through to try ohlc_bulk
     
-    # Per-strike mode (default or fallback)
-    use_quote = endpoint_mode == "quote_per_strike"
-    fetch_func = snapshot_quote if use_quote else snapshot_ohlc
-    func_name = "quote" if use_quote else "ohlc"
+    # Try ohlc_bulk
+    if endpoint_mode in ("ohlc_bulk", "auto"):
+        for exp in valid_expirations:
+            contracts = snapshot_ohlc_bulk(symbol, exp, base_url=url, timeout=tout)
+            if contracts:
+                all_contracts.extend(contracts)
+        
+        if all_contracts:
+            logger.info("fetch_chain: %s returned %d contracts via ohlc_bulk", symbol, len(all_contracts))
+            return all_contracts
+        elif endpoint_mode == "ohlc_bulk":
+            logger.warning("fetch_chain: ohlc_bulk returned no data for %s", symbol)
+            return []
+        # If auto mode, fall through to per-strike (legacy)
     
-    for exp in valid_expirations:
-        strikes = list_strikes(symbol, exp, base_url=url, timeout=tout)
-        if not strikes:
-            continue
+    # PER-STRIKE ENDPOINTS (legacy, may not work for Standard subscriptions)
+    if endpoint_mode in ("ohlc_per_strike", "quote_per_strike", "auto"):
+        use_quote = endpoint_mode == "quote_per_strike"
+        fetch_func = snapshot_quote if use_quote else snapshot_ohlc
+        func_name = "quote" if use_quote else "ohlc"
+        strike_limit = get_theta_strike_limit()
         
-        # Filter to near-ATM strikes
-        filtered_strikes = _filter_strikes_near_atm(strikes, underlying_price, strike_limit)
-        logger.debug("fetch_chain: %s %s: %d strikes (filtered from %d)", 
-                    symbol, exp, len(filtered_strikes), len(strikes))
+        logger.warning("fetch_chain: using legacy per-strike mode (%s) for %s - this may be slow", func_name, symbol)
         
-        for strike in filtered_strikes:
-            # Fetch call
-            call_data = fetch_func(symbol, exp, strike, "C", base_url=url, timeout=tout)
-            if call_data:
-                all_contracts.append(call_data)
+        for exp in valid_expirations:
+            strikes = list_strikes(symbol, exp, base_url=url, timeout=tout)
+            if not strikes:
+                continue
             
-            # Fetch put
-            put_data = fetch_func(symbol, exp, strike, "P", base_url=url, timeout=tout)
-            if put_data:
-                all_contracts.append(put_data)
+            # Filter to near-ATM strikes
+            filtered_strikes = _filter_strikes_near_atm(strikes, None, strike_limit)
+            
+            for strike in filtered_strikes:
+                call_data = fetch_func(symbol, exp, strike, "C", base_url=url, timeout=tout)
+                if call_data:
+                    all_contracts.append(call_data)
+                
+                put_data = fetch_func(symbol, exp, strike, "P", base_url=url, timeout=tout)
+                if put_data:
+                    all_contracts.append(put_data)
+        
+        if all_contracts:
+            logger.info("fetch_chain: %s returned %d contracts via %s_per_strike", symbol, len(all_contracts), func_name)
+        else:
+            logger.warning("fetch_chain: per-strike mode returned no data for %s", symbol)
     
-    logger.info("fetch_chain: %s returned %d contracts via %s_per_strike", symbol, len(all_contracts), func_name)
     return all_contracts
 
 

@@ -98,33 +98,48 @@ realtime:
 
 ChakraOps uses ThetaData Terminal v3 REST API for real-time options data.
 
-**Pipeline Pattern:** Based on ThetaData's official examples (basic_pipeline.html):
+**RECOMMENDED: Use Bulk Endpoints**
 
+For Standard subscriptions, use bulk endpoints which fetch all contracts per expiration in one API call:
+
+```yaml
+# config.yaml
+theta:
+  endpoint: "quote_bulk"  # Recommended: fast, one call per expiration
+  # Other options: "ohlc_bulk", "auto"
+```
+
+**Bulk Pipeline (Recommended):**
 1. **List Expirations:** `GET /option/list/expirations?symbol={symbol}`
 2. **Filter by DTE:** Keep expirations within configured window (default: 7-45 days)
-3. **List Strikes:** `GET /option/list/strikes?symbol={symbol}&expiration={exp}`
-4. **Fetch Quotes:** `GET /option/snapshot/ohlc?symbol={symbol}&expiration={exp}&strike={strike}&right={C|P}`
+3. **Fetch All Contracts:** `GET /option/snapshot/quote?symbol={symbol}&expiration={exp}` (no strike param = all strikes)
 
 **Endpoints used:**
 ```
-GET /option/list/expirations?symbol={symbol}&format=json  # Step 1
-GET /option/list/strikes?symbol={symbol}&expiration={exp}&format=json  # Step 3
-GET /option/snapshot/ohlc?symbol={symbol}&expiration={exp}&strike={strike}&right=C|P&format=json  # Step 4
-GET /stock/snapshot/quote?symbol={symbol}&format=json  # Stock price
+GET /option/list/expirations?symbol={symbol}&format=json     # List expirations
+GET /option/snapshot/quote?symbol={symbol}&expiration={exp}&format=json  # All contracts (bulk)
+GET /option/snapshot/ohlc?symbol={symbol}&expiration={exp}&format=json   # Alternative bulk
+GET /stock/snapshot/quote?symbol={symbol}&format=json        # Stock price
+```
+
+**Diagnostic Tool:** Run before configuring to find which endpoint works:
+```bash
+python scripts/test_theta_chain.py AAPL
 ```
 
 **Configuration (`config.yaml`):**
 ```yaml
-# DTE window for option chain filtering
-dte_min: 7   # Minimum days to expiration
-dte_max: 45  # Maximum days to expiration
+theta:
+  endpoint: "quote_bulk"  # "quote_bulk", "ohlc_bulk", or "auto"
+  timeout: 10.0
+  fallback_enabled: true
 
 realtime:
-  refresh_interval: 30  # Seconds between pipeline runs (30-60 recommended)
-  end_time: "16:00:00"  # Market close time
+  refresh_interval: 60    # Seconds between pipeline runs
+  end_time: "16:00:00"    # Market close time
 ```
 
-**Concurrency:** Max 4 concurrent requests (Theta Terminal limit)
+**Note:** Per-strike endpoints (`ohlc_per_strike`, `quote_per_strike`) are deprecated and may not return data for Standard subscriptions. Use bulk endpoints instead.
 
 **Requirements:**
 - Theta Terminal v3 running locally on port 25503
@@ -132,10 +147,9 @@ realtime:
 
 **Module:** `app/data/theta_v3_pipeline.py`
 - `list_expirations(symbol)` - Get all expirations
-- `list_strikes(symbol, expiration)` - Get all strikes for an expiration  
-- `snapshot_ohlc(symbol, expiration, strike, right)` - Get OHLC for single contract
-- `fetch_chain(symbol, dte_min, dte_max)` - High-level chain fetch (combines all steps)
-- `fetch_chain_async(symbol, dte_min, dte_max)` - Async version with concurrent fetching
+- `snapshot_quote_bulk(symbol, expiration)` - Get ALL contracts for an expiration (recommended)
+- `snapshot_ohlc_bulk(symbol, expiration)` - Get ALL contracts with OHLC data
+- `fetch_chain(symbol, dte_min, dte_max)` - High-level chain fetch (uses configured endpoint)
 
 #### Phase 7.1: Slack Alerts (Optional)
 

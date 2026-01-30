@@ -56,6 +56,52 @@ SCORE_MAX = 5.0  # Maximum possible score
 # Common test symbols
 TEST_SYMBOLS = ["AAPL", "NVDA", "NFLX", "TSLA", "MSFT", "GOOGL", "AMZN", "META", "AMD", "CRM"]
 
+# ---------------------------------------------------------------------------
+# Safe Formatting Helpers
+# ---------------------------------------------------------------------------
+
+def safe_format(value: Any, fmt: str = ".2f", default: str = "N/A") -> str:
+    """Format a numeric value safely, returning default if None or invalid."""
+    if value is None:
+        return default
+    try:
+        if isinstance(value, (int, float)):
+            return format(value, fmt)
+        return str(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def safe_percent(value: Any, default: str = "N/A") -> str:
+    """Format a value as percentage (e.g., 0.15 -> '15%')."""
+    if value is None:
+        return default
+    try:
+        return f"{float(value) * 100:.1f}%"
+    except (TypeError, ValueError):
+        return default
+
+
+def safe_currency(value: Any, default: str = "N/A") -> str:
+    """Format a value as currency (e.g., 1.50 -> '$1.50')."""
+    if value is None:
+        return default
+    try:
+        return f"${float(value):.2f}"
+    except (TypeError, ValueError):
+        return default
+
+
+def safe_delta(value: Any, default: str = "N/A") -> str:
+    """Format delta value (e.g., -0.25 -> '-0.25')."""
+    if value is None:
+        return default
+    try:
+        return f"{float(value):.3f}"
+    except (TypeError, ValueError):
+        return default
+
+
 NAV_ITEMS = [
     ("Dashboard", "dashboard", "📊"),
     ("Test", "test", "🧪"),
@@ -686,10 +732,10 @@ def render_candidates_table(parsed: Dict) -> None:
                 "Strike": f"${strike:,.2f}",
                 "Exp": cand.get("expiry", "") or cand.get("expiration", ""),
                 "Premium": f"${mid:,.2f}",
-                "Delta": f"{_safe_float(delta):.2f}" if delta else "—",
-                "IV": f"{_safe_float(iv)*100:.1f}%" if iv else "—",
+                "Delta": safe_delta(delta, "—"),
+                "IV": safe_percent(iv, "—") if iv else "—",
                 f"Score (0-{int(SCORE_MAX)})": _format_score(score),
-                "✓": "✅" if symbol in selected_symbols else "",
+                "Selected": "Yes" if symbol in selected_symbols else "",
             })
         
         df = pd.DataFrame(rows)
@@ -736,7 +782,7 @@ def render_signals_panel(parsed: Dict) -> None:
                     </div>
                     <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.3rem;">
                         Strike: <b>${strike:,.2f}</b> | Exp: <b>{cand.get('expiry', '') or cand.get('expiration', 'N/A')}</b> | 
-                        Premium: <b>${mid:.2f}</b> | Delta: <b>{_safe_float(delta):.2f if delta else 'N/A'}</b>
+                        Premium: <b>${mid:.2f}</b> | Delta: <b>{safe_delta(delta)}</b>
                     </div>
                     <div class="slack-msg">{_generate_slack_message(cand)}</div>
                 </div>
@@ -981,9 +1027,9 @@ def _theta_health_check() -> Tuple[bool, str]:
 
 
 def _fetch_real_chain(symbol: str, dte_min: int, dte_max: int) -> Dict[str, Any]:
-    """Fetch real options chain from Theta API using basic pipeline.
+    """Fetch real options chain from Theta API using bulk endpoints.
     
-    Uses: list_expirations → list_strikes → snapshot_ohlc (per strike)
+    Uses: list_expirations → snapshot_quote_bulk (one call per expiration)
     """
     if not THETA_AVAILABLE:
         return {"error": "Theta pipeline not available. Ensure theta_v3_pipeline.py is in app/data/"}

@@ -31,8 +31,8 @@ class ThetaConfig:
     base_url: str
     timeout: float
     fallback_enabled: bool
-    endpoint: str  # "ohlc_per_strike", "quote_per_strike", "ohlc_bulk", "quote_bulk", "auto"
-    strike_limit: int  # Max strikes per expiration for per-strike modes
+    endpoint: str  # "quote_bulk" (recommended), "ohlc_bulk", "auto"
+    strike_limit: int  # Legacy: ignored for bulk endpoints
 
 
 @dataclass(frozen=True)
@@ -123,13 +123,14 @@ def load_config(*, reload: bool = False) -> ChakraOpsConfig:
     else:
         theta_fallback = theta_raw.get("fallback_enabled", True)
     
-    # Theta endpoint selection: ohlc_per_strike, quote_per_strike, ohlc_bulk, quote_bulk, auto
+    # Theta endpoint selection: quote_bulk (recommended), ohlc_bulk, auto
+    # Per-strike endpoints are deprecated and don't work for Standard subscriptions
     theta_endpoint = os.getenv(
         "THETA_ENDPOINT",
-        theta_raw.get("endpoint", "ohlc_per_strike")
+        theta_raw.get("endpoint", "quote_bulk")
     ).lower()
     if theta_endpoint not in ("ohlc_per_strike", "quote_per_strike", "ohlc_bulk", "quote_bulk", "auto"):
-        theta_endpoint = "ohlc_per_strike"
+        theta_endpoint = "quote_bulk"
     
     # Strike limit for per-strike modes
     theta_strike_limit = int(os.getenv(
@@ -241,7 +242,8 @@ def get_realtime_end_time() -> str:
 def get_theta_endpoint() -> str:
     """Convenience: return Theta endpoint mode from config.
     
-    Returns one of: "ohlc_per_strike", "quote_per_strike", "ohlc_bulk", "quote_bulk", "auto"
+    Returns one of: "quote_bulk" (default), "ohlc_bulk", "auto"
+    Per-strike endpoints are deprecated and don't work for Standard subscriptions.
     """
     return load_config().theta.endpoint
 

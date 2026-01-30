@@ -231,7 +231,7 @@ def run_signal_engine(
                 print(f"[TIMEOUT] symbol {symbol} after {elapsed_ms} ms", flush=True)
                 break
 
-            # Fetch PUT chain via pipeline (list_strikes → snapshot_ohlc per strike)
+            # Fetch PUT chain via bulk endpoint (one API call per expiration)
             try:
                 put_start = perf_counter()
                 print(
@@ -281,7 +281,7 @@ def run_signal_engine(
                     )
                 )
 
-            # Fetch CALL chain via pipeline (list_strikes → snapshot_ohlc per strike)
+            # Fetch CALL chain (uses cached data from PUT fetch)
             try:
                 call_start = perf_counter()
                 print(

@@ -89,9 +89,31 @@ snapshots:
   output_dir: "out"
 
 realtime:
-  refresh_interval: 60  # Seconds between updates in realtime mode
+  refresh_interval: 30  # Seconds between updates (30-60 recommended)
   end_time: "16:00:00"  # Market close (local time)
 ```
+
+### Theta v3 API Integration
+
+ChakraOps uses ThetaData Terminal v3 REST API for real-time options data.
+
+**Key endpoint:** `/option/snapshot/ohlc`
+- Fetches complete option chains in a single call
+- Do NOT pass `strike` parameter (returns all strikes)
+- Use `expiration=*` or omit to get all expirations
+
+**Endpoints used:**
+```
+GET /option/snapshot/ohlc?symbol={symbol}&format=json  # Full chain
+GET /option/list/expirations?symbol={symbol}&format=json  # List expirations
+GET /stock/snapshot/quote?symbol={symbol}&format=json  # Stock price
+```
+
+**Concurrency:** Max 4 concurrent requests (Theta Terminal limit)
+
+**Requirements:**
+- Theta Terminal v3 running locally on port 25503
+- Valid ThetaData subscription (Options.Standard or higher)
 
 #### Phase 7.1: Slack Alerts (Optional)
 

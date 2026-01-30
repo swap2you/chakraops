@@ -32,6 +32,8 @@ from app.core.settings import (
     get_output_dir,
     get_snapshot_max_files,
     get_snapshot_retention_days,
+    get_realtime_refresh_interval,
+    get_realtime_end_time,
     is_fallback_enabled,
     load_config,
 )
@@ -381,14 +383,9 @@ def run_realtime_loop(args: argparse.Namespace, config: Any) -> int:
     
     Continuously refreshes data at the specified interval.
     """
-    # Get realtime settings from config
-    refresh_interval = getattr(config, 'refresh_interval', 60)  # Default 60 seconds
-    if hasattr(config, 'realtime') and hasattr(config.realtime, 'refresh_interval'):
-        refresh_interval = config.realtime.refresh_interval
-    
-    end_time_str = "16:00:00"  # Default market close EST
-    if hasattr(config, 'realtime') and hasattr(config.realtime, 'end_time'):
-        end_time_str = config.realtime.end_time
+    # Get realtime settings - command line overrides config
+    refresh_interval = args.interval if args.interval else get_realtime_refresh_interval()
+    end_time_str = get_realtime_end_time()
     
     print("=" * 60)
     print("ChakraOps Decision Pipeline - REALTIME MODE")
@@ -469,14 +466,6 @@ def main() -> int:
     
     # Load configuration
     config = load_config()
-    
-    # Override refresh interval from command line
-    if args.interval:
-        if not hasattr(config, 'realtime'):
-            class RealtimeConfig:
-                pass
-            config.realtime = RealtimeConfig()
-        config.realtime.refresh_interval = args.interval
     
     if args.realtime:
         return run_realtime_loop(args, config)

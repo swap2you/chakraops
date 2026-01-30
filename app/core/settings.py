@@ -42,10 +42,18 @@ class SnapshotConfig:
 
 
 @dataclass(frozen=True)
+class RealtimeConfig:
+    """Realtime mode configuration."""
+    refresh_interval: int
+    end_time: str
+
+
+@dataclass(frozen=True)
 class ChakraOpsConfig:
     """Root configuration object."""
     theta: ThetaConfig
     snapshots: SnapshotConfig
+    realtime: RealtimeConfig
     debug: bool
 
 
@@ -140,6 +148,22 @@ def load_config(*, reload: bool = False) -> ChakraOpsConfig:
         output_dir=snap_output_dir,
     )
     
+    # Realtime configuration
+    realtime_raw = raw.get("realtime", {}) or {}
+    realtime_refresh_interval = int(os.getenv(
+        "REALTIME_REFRESH_INTERVAL",
+        str(realtime_raw.get("refresh_interval", 60))
+    ))
+    realtime_end_time = os.getenv(
+        "REALTIME_END_TIME",
+        realtime_raw.get("end_time", "16:00:00")
+    )
+    
+    realtime_config = RealtimeConfig(
+        refresh_interval=realtime_refresh_interval,
+        end_time=realtime_end_time,
+    )
+    
     # App-level settings
     app_raw = raw.get("app", {}) or {}
     debug = os.getenv("CHAKRAOPS_DEBUG", "").lower() in ("true", "1", "yes") or \
@@ -148,6 +172,7 @@ def load_config(*, reload: bool = False) -> ChakraOpsConfig:
     config = ChakraOpsConfig(
         theta=theta_config,
         snapshots=snapshot_config,
+        realtime=realtime_config,
         debug=bool(debug),
     )
     
@@ -185,10 +210,21 @@ def get_output_dir() -> str:
     return load_config().snapshots.output_dir
 
 
+def get_realtime_refresh_interval() -> int:
+    """Convenience: return realtime refresh interval from config."""
+    return load_config().realtime.refresh_interval
+
+
+def get_realtime_end_time() -> str:
+    """Convenience: return realtime end time from config."""
+    return load_config().realtime.end_time
+
+
 __all__ = [
     "ChakraOpsConfig",
     "ThetaConfig",
     "SnapshotConfig",
+    "RealtimeConfig",
     "load_config",
     "get_theta_base_url",
     "get_theta_timeout",
@@ -196,4 +232,6 @@ __all__ = [
     "get_snapshot_retention_days",
     "get_snapshot_max_files",
     "get_output_dir",
+    "get_realtime_refresh_interval",
+    "get_realtime_end_time",
 ]

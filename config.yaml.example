@@ -1,5 +1,6 @@
-# ChakraOps Configuration
+# ChakraOps Configuration Example
 # Copy this file to config.yaml and customize as needed
+# Central configuration for all pipeline and data provider settings
 
 app:
   name: ChakraOps
@@ -9,20 +10,22 @@ app:
 # ThetaData Terminal v3 configuration
 theta:
   # Base URL for Theta Terminal REST API (v3 endpoints)
-  # The terminal must be running locally.
+  # The terminal must be running locally. Do NOT include /v3 suffix here.
   base_url: "http://127.0.0.1:25503/v3"
   
   # Request timeout in seconds
   timeout: 10.0
   
   # Enable fallback to latest snapshot when live data is unavailable
-  # When true: if Theta Terminal is unreachable or returns NOT_FOUND, load latest decision JSON
+  # When true: if Theta Terminal is unreachable, load latest decision JSON from out/
   # When false: fail immediately if live data is unavailable
   fallback_enabled: true
 
 # Snapshot retention settings
 snapshots:
   # Number of days to retain decision_*.json files
+  # Files older than this will be deleted during cleanup
+  # Only one file per day is kept (newest)
   retention_days: 7
   
   # Maximum number of decision files to keep regardless of age
@@ -32,13 +35,17 @@ snapshots:
   # Output directory for decision files
   output_dir: "out"
 
+# Realtime mode settings (--realtime flag in run_and_save.py)
+realtime:
+  # Refresh interval in seconds between pipeline runs
+  # Recommended: 60 for production, 300 for testing
+  refresh_interval: 60
+  
+  # Market close time (HH:MM:SS) when realtime mode should stop
+  # Uses local time. Default is 16:00:00 EST (US market close)
+  end_time: "16:00:00"
+
 # Logging configuration
 logging:
   level: INFO
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-
-# Example sections for future use
-# database:
-#   host: localhost
-#   port: 5432
-#   name: chakraops

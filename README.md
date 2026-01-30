@@ -38,11 +38,26 @@ A Python application for managing operations.
 
 ### Phase 7: Decision Intelligence Pipeline (Recommended)
 
-**Generate Decision Snapshot:**
+**Generate Decision Snapshot (One-time):**
 ```bash
 python scripts/run_and_save.py
 ```
-Output: `out/decision_<timestamp>.json`
+Output: `out/decision_<timestamp>.json` and `out/decision_latest.json`
+
+**Realtime Mode (Continuous updates during market hours):**
+```bash
+python scripts/run_and_save.py --realtime
+```
+- Refreshes every 60 seconds (configurable via `--interval` or `config.yaml`)
+- Automatically stops at market close (16:00 EST by default)
+- Overwrites `decision_latest.json` on each refresh
+- Creates timestamped `decision_*_end.json` at close
+
+**Test Mode (Diagnostics):**
+```bash
+python scripts/run_and_save.py --test
+```
+Shows detailed scoring, chain info, and rejection summaries.
 
 **Launch Live Dashboard:**
 ```bash
@@ -50,7 +65,33 @@ python scripts/live_dashboard.py
 ```
 Open: http://localhost:8501
 
+The dashboard includes:
+- Real-time metrics and charts
+- Test page for individual symbol chain fetching
+- Live/Snapshot data source indicator
+- Exclusion breakdown and candidate distribution
+
 **See:** `docs/PHASE7_QUICK_REFERENCE.md` for details
+
+### Configuration
+
+Copy `config.yaml.example` to `config.yaml` and customize:
+
+```yaml
+theta:
+  base_url: "http://127.0.0.1:25503/v3"  # Theta Terminal v3 URL
+  timeout: 10.0
+  fallback_enabled: true  # Use snapshot when Theta unavailable
+
+snapshots:
+  retention_days: 7  # Keep snapshots for 7 days
+  max_files: 30      # Max files to keep
+  output_dir: "out"
+
+realtime:
+  refresh_interval: 60  # Seconds between updates in realtime mode
+  end_time: "16:00:00"  # Market close (local time)
+```
 
 #### Phase 7.1: Slack Alerts (Optional)
 

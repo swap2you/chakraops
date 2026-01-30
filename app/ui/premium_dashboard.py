@@ -151,9 +151,9 @@ def inject_premium_css(dark: bool = False) -> None:
         background: var(--bg-surface);
         border: 1px solid var(--border-color);
         border-radius: 12px;
-        padding: 1.25rem;
-        margin-bottom: 1rem;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        padding: 1.5rem;
+        margin-bottom: 1.25rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.06);
     }}
     
     .premium-card-header {{
@@ -456,9 +456,7 @@ def render_hero(
     </div>
     """, unsafe_allow_html=True)
     
-    # Metrics row
-    cols = st.columns(6)
-    
+    # Metrics in a single row of 6 with equal widths
     metrics = [
         ("Total Symbols", stats.get("total_symbols", 0), None),
         ("Evaluated", stats.get("symbols_evaluated", 0), None),
@@ -467,6 +465,9 @@ def render_hero(
         ("Missing Chains", len(symbols_without), "warning" if len(symbols_without) > 0 else None),
         ("Exclusions", stats.get("total_exclusions", 0), "danger" if stats.get("total_exclusions", 0) > 10 else None),
     ]
+    
+    # Use 6 equal columns
+    cols = st.columns(6)
     
     for col, (label, value, tone) in zip(cols, metrics):
         with col:
@@ -491,38 +492,117 @@ def render_charts(parsed: Dict[str, Any], dark: bool) -> None:
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown('<div class="premium-card"><div class="premium-card-header"><h3 class="premium-card-title">Exclusion Breakdown</h3></div>', unsafe_allow_html=True)
-        
-        exclusion_summary = parsed.get("exclusion_summary", {})
-        rule_counts = exclusion_summary.get("rule_counts", {})
-        
-        if rule_counts:
-            df = pd.DataFrame([
-                {"Rule": humanize_label(rule), "Count": count}
-                for rule, count in sorted(rule_counts.items(), key=lambda x: -x[1])
-            ])
-            st.bar_chart(df.set_index("Rule"), use_container_width=True, height=250)
-        else:
-            st.info("No exclusions recorded")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+        with st.container():
+            st.markdown('<div class="premium-card">', unsafe_allow_html=True)
+            st.markdown("#### 📊 Exclusion Breakdown")
+            
+            exclusion_summary = parsed.get("exclusion_summary", {})
+            rule_counts = exclusion_summary.get("rule_counts", {})
+            
+            if rule_counts:
+                df = pd.DataFrame([
+                    {"Rule": humanize_label(rule), "Count": count}
+                    for rule, count in sorted(rule_counts.items(), key=lambda x: -x[1])
+                ])
+                st.bar_chart(df.set_index("Rule"), use_container_width=True, height=220)
+            else:
+                st.info("No exclusions recorded")
+            
+            st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
-        st.markdown('<div class="premium-card"><div class="premium-card-header"><h3 class="premium-card-title">Candidate Distribution</h3></div>', unsafe_allow_html=True)
-        
-        candidates = parsed.get("candidates", [])
-        if candidates:
-            # Count by signal type
-            type_counts = Counter(c.get("signal_type", "Unknown") for c in candidates)
-            df = pd.DataFrame([
-                {"Strategy": stype, "Count": count}
-                for stype, count in type_counts.items()
-            ])
-            st.bar_chart(df.set_index("Strategy"), use_container_width=True, height=250, color=["#3b82f6"])
-        else:
-            st.info("No candidates found")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+        with st.container():
+            st.markdown('<div class="premium-card">', unsafe_allow_html=True)
+            st.markdown("#### 📈 Candidate Distribution")
+            
+            # Gather candidates from both scored and raw
+            candidates = parsed.get("candidates", [])
+            scored_candidates = parsed.get("scored_candidates", [])
+            
+            # Extract candidates from scored if available
+            all_candidates = []
+            if scored_candidates:
+                for sc in scored_candidates:
+                    cand = sc.get("candidate", {})
+                    if cand:
+                        all_candidates.append(cand)
+            elif candidates:
+                all_candidates = candidates
+            
+            if all_candidates:
+                # Count by strategy using the helper function
+                strategy_counts: Dict[str, int] = {}
+                for c in all_candidates:
+                    label = _get_strategy_label(c)
+                    strategy_counts[label] = strategy_counts.get(label, 0) + 1
+                
+                # Build dataframe with meaningful labels
+                df = pd.DataFrame([
+                    {"Strategy": stype, "Count": count}
+                    for stype, count in sorted(strategy_counts.items(), key=lambda x: -x[1])
+                ])
+                
+                # Use color based on strategy type
+                st.bar_chart(df.set_index("Strategy"), use_container_width=True, height=220, color=["#3b82f6"])
+            else:
+                st.info("No candidate data available")
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+
+
+# ---------------------------------------------------------------------------
+# Helper Functions
+# ---------------------------------------------------------------------------
+
+
+def _safe_float(val: Any, default: float = 0.0) -> float:
+    """Safely convert a value to float."""
+    if val is None:
+        return default
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+
+def _extract_score(score_val: Any) -> float:
+    """Extract numeric score from dict or float."""
+    if score_val is None:
+        return 0.0
+    if isinstance(score_val, dict):
+        return _safe_float(score_val.get("total", 0))
+    return _safe_float(score_val)
+
+
+def _get_strategy_label(candidate: Dict[str, Any]) -> str:
+    """Get strategy label from candidate data."""
+    # Try signal_type first (CSP, CC)
+    signal_type = candidate.get("signal_type", "")
+    if signal_type and signal_type not in ("", "Unknown"):
+        return signal_type
+    
+    # Try strategy field
+    strategy = candidate.get("strategy", "")
+    if strategy and strategy not in ("", "Unknown"):
+        return strategy
+    
+    # Derive from option_type (PUT -> CSP, CALL -> CC)
+    option_type = candidate.get("option_type", "")
+    if option_type:
+        if option_type.upper() in ("PUT", "P"):
+            return "PUT"
+        elif option_type.upper() in ("CALL", "C"):
+            return "CALL"
+    
+    # Check right field
+    right = candidate.get("right", "")
+    if right:
+        if right.upper() in ("P", "PUT"):
+            return "PUT"
+        elif right.upper() in ("C", "CALL"):
+            return "CALL"
+    
+    return "Other"
 
 
 # ---------------------------------------------------------------------------
@@ -546,18 +626,25 @@ def render_candidates_table(parsed: Dict[str, Any], dark: bool) -> None:
         rows = []
         for sc in scored[:20]:  # Limit to top 20
             candidate = sc.get("candidate", {})
-            score = sc.get("score", {})
+            score_val = sc.get("score", 0)
+            score_total = _extract_score(score_val)
             symbol = candidate.get("symbol", "")
+            
+            # Safe extraction of numeric fields
+            strike = _safe_float(candidate.get("strike", 0))
+            mid = _safe_float(candidate.get("mid", 0))
+            delta = candidate.get("delta")
+            iv = candidate.get("iv")
             
             rows.append({
                 "Symbol": symbol,
-                "Type": candidate.get("signal_type", ""),
-                "Strike": f"${candidate.get('strike', 0):.2f}",
-                "Expiration": candidate.get("expiry", ""),
-                "Premium": f"${candidate.get('mid', 0):.2f}",
-                "Delta": f"{candidate.get('delta', 0):.2f}" if candidate.get("delta") else "—",
-                "IV": f"{candidate.get('iv', 0)*100:.1f}%" if candidate.get("iv") else "—",
-                "Score": f"{score.get('total', 0):.2f}",
+                "Type": _get_strategy_label(candidate),
+                "Strike": f"${strike:.2f}",
+                "Expiration": candidate.get("expiry", "") or candidate.get("expiration", ""),
+                "Premium": f"${mid:.2f}",
+                "Delta": f"{_safe_float(delta):.2f}" if delta is not None else "—",
+                "IV": f"{_safe_float(iv) * 100:.1f}%" if iv is not None else "—",
+                "Score": f"{score_total:.2f}",
                 "Selected": "✅" if symbol in selected_symbols else "",
             })
         
@@ -584,13 +671,17 @@ def render_candidates_table(parsed: Dict[str, Any], dark: bool) -> None:
         if candidates:
             rows = []
             for c in candidates[:20]:
+                strike = _safe_float(c.get("strike", 0))
+                mid = _safe_float(c.get("mid", 0))
+                delta = c.get("delta")
+                
                 rows.append({
                     "Symbol": c.get("symbol", ""),
-                    "Type": c.get("signal_type", ""),
-                    "Strike": f"${c.get('strike', 0):.2f}",
-                    "Expiration": c.get("expiry", ""),
-                    "Premium": f"${c.get('mid', 0):.2f}",
-                    "Delta": f"{c.get('delta', 0):.2f}" if c.get("delta") else "—",
+                    "Type": _get_strategy_label(c),
+                    "Strike": f"${strike:.2f}",
+                    "Expiration": c.get("expiry", "") or c.get("expiration", ""),
+                    "Premium": f"${mid:.2f}",
+                    "Delta": f"{_safe_float(delta):.2f}" if delta is not None else "—",
                 })
             
             df = pd.DataFrame(rows)
@@ -617,24 +708,31 @@ def render_detail_panels(data: Dict[str, Any], parsed: Dict[str, Any], dark: boo
             for i, signal in enumerate(selected):
                 scored = signal.get("scored", {})
                 candidate = scored.get("candidate", {})
-                score = scored.get("score", {})
+                score_val = scored.get("score", 0)
+                score_total = _extract_score(score_val)
+                
+                # Safe extraction of numeric fields
+                strike = _safe_float(candidate.get("strike", 0))
+                mid = _safe_float(candidate.get("mid", 0))
+                delta = candidate.get("delta")
+                delta_str = f"{_safe_float(delta):.2f}" if delta is not None else "N/A"
                 
                 st.markdown(f"""
                 <div class="premium-card" style="margin-bottom: 0.75rem;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
                             <strong style="font-size: 1rem;">{candidate.get('symbol', 'N/A')}</strong>
-                            <span class="badge badge-info" style="margin-left: 0.5rem;">{candidate.get('signal_type', 'N/A')}</span>
+                            <span class="badge badge-info" style="margin-left: 0.5rem;">{_get_strategy_label(candidate)}</span>
                         </div>
                         <div style="text-align: right;">
-                            <span style="font-weight: 600;">Score: {score.get('total', 0):.2f}</span>
+                            <span style="font-weight: 600;">Score: {score_total:.2f}</span>
                         </div>
                     </div>
                     <div style="margin-top: 0.5rem; font-size: 0.875rem; color: var(--text-secondary);">
-                        Strike: ${candidate.get('strike', 0):.2f} | 
-                        Expiration: {candidate.get('expiry', 'N/A')} | 
-                        Premium: ${candidate.get('mid', 0):.2f} |
-                        Delta: {candidate.get('delta', 'N/A')}
+                        Strike: ${strike:.2f} | 
+                        Expiration: {candidate.get('expiry', '') or candidate.get('expiration', 'N/A')} | 
+                        Premium: ${mid:.2f} |
+                        Delta: {delta_str}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)

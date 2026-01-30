@@ -15,7 +15,7 @@ import streamlit as st
 # Design tokens (Stripe/GitHub-ish: calm, spacious, high contrast for status)
 # ---------------------------------------------------------------------------
 
-# Colors
+# Colors - Muted, professional palette
 COLORS = {
     "bg": "#f6f8fa",
     "card_bg": "#ffffff",
@@ -23,7 +23,7 @@ COLORS = {
     "border_light": "#eaeef2",
     "text_primary": "#1f2328",
     "text_muted": "#656d76",
-    "accent": "#0969da",
+    "accent": "#007acc",  # More muted blue
     "success": "#1a7f37",
     "warning": "#9a6700",
     "danger": "#cf222e",
@@ -32,21 +32,21 @@ COLORS = {
     "nav_text_muted": "#8b949e",
 }
 
-# Spacing scale (px)
+# Spacing scale (px) - Increased for better visual balance
 SPACING = {
     "xs": 4,
     "sm": 8,
-    "md": 12,
-    "lg": 16,
-    "xl": 24,
-    "2xl": 32,
+    "md": 14,
+    "lg": 20,  # Increased from 16 for card padding
+    "xl": 28,  # Increased from 24
+    "2xl": 36,  # Increased from 32
 }
 
-# Border radii
+# Border radii - Consistent across all components
 RADII = {
-    "sm": 6,
-    "md": 10,
-    "lg": 14,
+    "sm": 8,   # Increased from 6
+    "md": 12,  # Increased from 10
+    "lg": 16,  # Increased from 14
 }
 
 # Shadows
@@ -81,11 +81,11 @@ PALETTE_LIGHT = {
     "border": "#e1e4e8",
     "text_primary": "#24292f",
     "text_secondary": "#57606a",
-    "accent": "#0969da",
-    "accent_muted": "#54aeff",
+    "accent": "#007acc",      # More muted blue
+    "accent_muted": "#4da6d9",
     "success": "#1a7f37",
     "danger": "#cf222e",
-    "warning": "#9a6700",
+    "warning": "#b08800",     # Slightly warmer warning
 }
 
 PALETTE_DARK = {
@@ -94,8 +94,8 @@ PALETTE_DARK = {
     "border": "#30363d",
     "text_primary": "#e6edf3",
     "text_secondary": "#8b949e",
-    "accent": "#58a6ff",
-    "accent_muted": "#388bfd",
+    "accent": "#4da6d9",      # More muted blue for dark mode
+    "accent_muted": "#3d8fc2",
     "success": "#3fb950",
     "danger": "#f85149",
     "warning": "#d29922",

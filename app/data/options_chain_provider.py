@@ -1,9 +1,11 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""Options chain provider using Theta v3 snapshot_ohlc for complete chains.
+"""Options chain provider using Theta v3 per-expiration calls.
 
-Key change: Uses snapshot_ohlc(symbol, '*') to get ALL contracts in ONE call.
-No more per-strike or per-expiration fetching.
+Correct approach:
+1. Call list_expirations(symbol) to get available expirations
+2. For each expiration needed, call snapshot_ohlc(symbol, expiration)
+3. DO NOT pass expiration="*" - Theta API rejects it
 """
 
 from __future__ import annotations
@@ -45,11 +47,7 @@ class OptionsChainProvider(ABC):
 
 
 class ThetaDataOptionsChainProvider(OptionsChainProvider):
-    """Theta v3 provider using snapshot_ohlc for complete chain retrieval.
-    
-    Uses snapshot_ohlc(symbol, '*') to get ALL contracts in ONE call,
-    then filters by expiration and right as needed.
-    """
+    """Theta v3 provider using per-expiration snapshot_ohlc calls."""
 
     def __init__(
         self,
@@ -61,9 +59,6 @@ class ThetaDataOptionsChainProvider(OptionsChainProvider):
         self.base_url = (base_url or get_theta_base_url()).rstrip("/")
         self.timeout = timeout
         self._provider = None
-        self._chain_cache: Dict[str, List[Dict[str, Any]]] = {}
-        self._cache_time: Dict[str, datetime] = {}
-        self._cache_ttl = timedelta(seconds=30)  # Cache for 30 seconds
 
     def _get_provider(self):
         """Lazy load ThetaV3Provider."""
@@ -76,46 +71,24 @@ class ThetaDataOptionsChainProvider(OptionsChainProvider):
             )
         return self._provider
 
-    def _get_full_chain(self, symbol: str) -> List[Dict[str, Any]]:
-        """Get full chain for symbol, using cache if fresh."""
-        symbol = symbol.upper()
-        now = datetime.now()
-        
-        # Check cache
-        if symbol in self._chain_cache:
-            cache_age = now - self._cache_time.get(symbol, datetime.min)
-            if cache_age < self._cache_ttl:
-                return self._chain_cache[symbol]
-        
-        # Fetch fresh data using snapshot_ohlc with '*' for all expirations
-        provider = self._get_provider()
-        contracts = provider.snapshot_ohlc(symbol, "*")
-        
-        # Update cache
-        self._chain_cache[symbol] = contracts
-        self._cache_time[symbol] = now
-        
-        return contracts
-
     def get_expirations(self, symbol: str) -> List[date]:
-        """Get expirations from the full chain."""
+        """Get expirations via ThetaV3Provider.list_expirations."""
         try:
-            contracts = self._get_full_chain(symbol)
+            provider = self._get_provider()
+            exp_strings = provider.list_expirations(symbol)
             
-            if not contracts:
-                logger.debug("[OptionsChain] No contracts for %s", symbol)
+            if not exp_strings:
+                logger.debug("[OptionsChain] No expirations for %s", symbol)
                 return []
             
-            # Extract unique expirations
-            expirations_set: set = set()
-            for contract in contracts:
-                exp_str = contract.get("expiration", "")
-                if exp_str:
-                    d = _parse_date_any(exp_str)
-                    if d:
-                        expirations_set.add(d)
+            # Convert strings to dates
+            out: List[date] = []
+            for exp_str in exp_strings:
+                d = _parse_date_any(exp_str)
+                if d:
+                    out.append(d)
             
-            return sorted(expirations_set)
+            return sorted(out)
             
         except Exception as e:
             logger.debug("[OptionsChain] get_expirations failed for %s: %s", symbol, e)
@@ -127,37 +100,28 @@ class ThetaDataOptionsChainProvider(OptionsChainProvider):
         expiry: date,
         right: str,
     ) -> List[Dict[str, Any]]:
-        """Get chain filtered by expiration and right from the full chain."""
+        """Get chain for specific expiration via snapshot_ohlc."""
         try:
-            contracts = self._get_full_chain(symbol)
+            provider = self._get_provider()
+            symbol_upper = symbol.upper()
+            right_upper = (right or "P").upper()
+            
+            # Format expiration as YYYY-MM-DD
+            exp_str = expiry.strftime("%Y-%m-%d")
+            
+            # Call snapshot_ohlc for this specific expiration
+            contracts = provider.snapshot_ohlc(symbol_upper, exp_str)
             
             if not contracts:
                 return []
             
-            symbol_upper = symbol.upper()
-            right_upper = (right or "P").upper()
-            expiry_str = expiry.strftime("%Y-%m-%d")
-            
-            # Filter contracts
+            # Filter by right and normalize output
             out: List[Dict[str, Any]] = []
             for contract in contracts:
-                # Filter by right
                 contract_right = contract.get("right", "").upper()
                 if contract_right != right_upper:
                     continue
                 
-                # Filter by expiration
-                contract_exp = contract.get("expiration", "")
-                if not contract_exp:
-                    continue
-                
-                # Normalize and compare expiration
-                contract_exp_normalized = contract_exp.replace("-", "")[:8]
-                expiry_normalized = expiry_str.replace("-", "")[:8]
-                if contract_exp_normalized != expiry_normalized:
-                    continue
-                
-                # Normalize output format
                 out.append({
                     "strike": contract.get("strike"),
                     "bid": contract.get("bid"),

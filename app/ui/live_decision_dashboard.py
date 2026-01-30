@@ -13,7 +13,7 @@ STRICT: This UI does NOT trade, does NOT place orders, and does NOT call brokers
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import streamlit as st
 from streamlit.components.v1 import html as st_html
@@ -42,16 +42,26 @@ from app.db.database import get_db_path
 from app.core.persistence import get_enabled_symbols
 from app.db.universe_import import import_universe_from_csv, get_effective_universe_csv_path
 from app.ui.ui_theme import (
+    NAV_ITEMS,
     badge,
     card_header,
     card_html,
+    get_theme_palette,
     humanize_label,
     inject_global_css,
     metric_tile,
     icon_svg,
+    dataframe_title_case,
     COLORS,
     STATUS_TONE,
 )
+
+try:
+    from streamlit_elements import elements, mui, html
+    _USE_ELEMENTS = True
+except ImportError:
+    _USE_ELEMENTS = False
+    elements = mui = html = None
 
 # Footer version/build (UI-only)
 UI_VERSION = "1.0"
@@ -193,43 +203,411 @@ def _group_exclusions(exclusions: List[Dict[str, Any]]) -> Dict[str, List[Dict[s
     return dict(sorted(by_symbol.items(), key=lambda kv: kv[0]))
 
 
-def _render_nav(current_page: str) -> None:
-    """Top nav: logo, title, and nav buttons (set session state and rerun)."""
-    logo_path = Path(__file__).resolve().parent / "static" / "chakra_logo.svg"
-    logo_placeholder = st.empty()
-    with logo_placeholder.container():
-        col_logo, col_title, c1, c2, c3, c4, c5 = st.columns([0.5, 2, 0.8, 0.8, 1, 1.2, 0.8])
-        with col_logo:
-            if logo_path.exists():
-                try:
-                    st.image(str(logo_path), width=28)
-                except Exception:
-                    st.write("")
+def _render_sidebar_nav(current_page: str) -> None:
+    """Vertical sidebar nav: Dashboard, Diagnostics, Strategy, Configuration, About with icons and active highlight."""
+    st.sidebar.markdown("**Navigation**")
+    for label, page_id, icon_name in NAV_ITEMS:
+        is_active = current_page == page_id
+        if st.sidebar.button(
+            f" {label}",
+            key=f"nav_{page_id}",
+            type="primary" if is_active else "secondary",
+            width="stretch",
+        ):
+            st.session_state.nav_page = page_id
+            st.rerun()
+
+
+def _render_tab_signals(
+    snapshot: Dict[str, Any],
+    selected_signals_table: Callable,
+    fmt_float: Callable,
+    render_kv: Callable,
+    dataframe_title_case_fn: Callable,
+) -> None:
+    """Signals tab: selected signals table and Why This (score components)."""
+    selected_signals = snapshot.get("selected_signals") or []
+    if not isinstance(selected_signals, list):
+        selected_signals = []
+    st.markdown("**Selected Signals (Ranked)**")
+    if selected_signals:
+        rows = dataframe_title_case_fn(selected_signals_table(selected_signals))
+        st.dataframe(rows, width="stretch")
+    else:
+        st.caption("No selected signals in this snapshot.")
+    explanations = snapshot.get("explanations") or []
+    if isinstance(explanations, list) and explanations:
+        st.markdown("---")
+        st.markdown("**Why This (Score Components)**")
+        for expl in explanations:
+            if not isinstance(expl, dict):
+                continue
+            symbol = expl.get("symbol", "N/A")
+            signal_type = expl.get("signal_type", "N/A")
+            rank = expl.get("rank", "N/A")
+            total_score = expl.get("total_score", "N/A")
+            comps = expl.get("score_components", []) if isinstance(expl.get("score_components", []), list) else []
+            policy = expl.get("policy_snapshot", {}) if isinstance(expl.get("policy_snapshot", {}), dict) else {}
+            with st.expander(f"{symbol} {signal_type} · rank {rank} · score {fmt_float(total_score)}"):
+                render_kv("Selection reason", expl.get("selection_reason", "N/A"))
+                if comps:
+                    st.dataframe(
+                        dataframe_title_case_fn([{"name": c.get("name"), "value": c.get("value"), "weight": c.get("weight")} for c in comps if isinstance(c, dict)]),
+                        width="stretch",
+                    )
+                if policy:
+                    st.caption("Policy snapshot: see artifact for full details.")
+
+
+def _render_tab_diagnostics(
+    snapshot: Dict[str, Any],
+    gate_allowed: bool,
+    sandbox_enabled: bool,
+    sandbox_min_score: float,
+    sandbox_max_total: int,
+    sandbox_max_per_symbol: int,
+    sandbox_max_per_signal_type_val: Optional[int],
+    SandboxParamsCls: type,
+    evaluate_sandbox_fn: Callable,
+    RecommendationSeverityCls: type,
+    generate_operator_recommendations_fn: Callable,
+    derive_operator_verdict_fn: Callable,
+    dataframe_title_case_fn: Callable,
+    fmt_float: Callable,
+) -> None:
+    """Diagnostics tab: operator recommendations, exclusion summary, coverage, signal viability."""
+    try:
+        sandbox_result_for_recommendations = None
+        if sandbox_enabled:
+            try:
+                sandbox_params = SandboxParamsCls(
+                    min_score=sandbox_min_score if sandbox_min_score > 0 else None,
+                    max_total=sandbox_max_total,
+                    max_per_symbol=sandbox_max_per_symbol,
+                    max_per_signal_type=sandbox_max_per_signal_type_val,
+                )
+                sandbox_result_for_recommendations = evaluate_sandbox_fn(snapshot, sandbox_params)
+            except Exception:
+                pass
+        recommendations = generate_operator_recommendations_fn(
+            snapshot,
+            sandbox_result=sandbox_result_for_recommendations,
+        )
+        if recommendations:
+            high_recs = [r for r in recommendations if r.severity == RecommendationSeverityCls.HIGH]
+            medium_recs = [r for r in recommendations if r.severity == RecommendationSeverityCls.MEDIUM]
+            low_recs = [r for r in recommendations if r.severity == RecommendationSeverityCls.LOW]
+            for rec in high_recs:
+                with st.expander(f"**HIGH:** {rec.title}", expanded=True):
+                    st.markdown(f"**Action:** {rec.action}")
+                    st.markdown("**Evidence:**")
+                    for evidence_line in rec.evidence:
+                        st.markdown(f"- {evidence_line}")
+                    st.caption(f"Category: {rec.category}")
+            for rec in medium_recs:
+                with st.expander(f"**MEDIUM:** {rec.title}", expanded=False):
+                    st.markdown(f"**Action:** {rec.action}")
+                    st.markdown("**Evidence:**")
+                    for evidence_line in rec.evidence:
+                        st.markdown(f"- {evidence_line}")
+                    st.caption(f"Category: {rec.category}")
+            for rec in low_recs:
+                with st.expander(f"**LOW:** {rec.title}", expanded=False):
+                    st.markdown(f"**Action:** {rec.action}")
+                    st.markdown("**Evidence:**")
+                    for evidence_line in rec.evidence:
+                        st.markdown(f"- {evidence_line}")
+                    st.caption(f"Category: {rec.category}")
+        else:
+            st.info("No recommendations. System operating normally.")
+    except Exception as e:
+        st.error(f"Recommendation generation failed: {e}")
+
+    if not gate_allowed:
+        exclusion_summary = snapshot.get("exclusion_summary")
+        if isinstance(exclusion_summary, dict):
+            st.subheader("Diagnostics (Why the system is blocked)")
+            verdict = derive_operator_verdict_fn(exclusion_summary)
+            st.info(f"**Operator Verdict:** {verdict}")
+            rule_counts = exclusion_summary.get("rule_counts", {})
+            symbols_by_rule = exclusion_summary.get("symbols_by_rule", {})
+            if rule_counts:
+                diagnostics_rows = []
+                for rule, count in sorted(rule_counts.items(), key=lambda x: x[1], reverse=True):
+                    stage = None
+                    snapshot_exclusions = snapshot.get("exclusions") or []
+                    for excl in snapshot_exclusions:
+                        if isinstance(excl, dict) and excl.get("rule") == rule:
+                            stage = excl.get("stage", "UNKNOWN")
+                            break
+                    symbols = symbols_by_rule.get(rule, [])
+                    symbol_str = ", ".join(symbols[:5])
+                    if len(symbols) > 5:
+                        symbol_str += f" (+{len(symbols) - 5} more)"
+                    diagnostics_rows.append({
+                        "Rule": rule,
+                        "Count": count,
+                        "Stage": stage or "UNKNOWN",
+                        "Symbols": symbol_str if symbol_str else "N/A",
+                    })
+                st.dataframe(dataframe_title_case_fn(diagnostics_rows), width="stretch")
             else:
-                st.write("")
-        with col_title:
-            st.markdown("**ChakraOps — Live Decision Monitor**")
-        with c1:
-            if st.button("Dashboard", key="nav_dashboard", type="primary" if current_page == "dashboard" else "secondary"):
-                st.session_state.nav_page = "dashboard"
-                st.rerun()
-        with c2:
-            if st.button("Strategy", key="nav_strategy", type="primary" if current_page == "strategy" else "secondary"):
-                st.session_state.nav_page = "strategy"
-                st.rerun()
-        with c3:
-            if st.button("Diagnostics", key="nav_diagnostics", type="primary" if current_page == "diagnostics" else "secondary"):
-                st.session_state.nav_page = "diagnostics"
-                st.rerun()
-        with c4:
-            if st.button("Configuration", key="nav_config", type="primary" if current_page == "configuration" else "secondary"):
-                st.session_state.nav_page = "configuration"
-                st.rerun()
-        with c5:
-            if st.button("About", key="nav_about", type="primary" if current_page == "about" else "secondary"):
-                st.session_state.nav_page = "about"
-                st.rerun()
+                st.info("No exclusion rules found in diagnostics.")
+        coverage_summary = snapshot.get("coverage_summary")
+        near_misses = snapshot.get("near_misses")
+        if isinstance(coverage_summary, dict) or (isinstance(near_misses, list) and len(near_misses) > 0):
+            st.subheader("Coverage & Near-Miss Diagnostics")
+            if isinstance(coverage_summary, dict):
+                coverage_by_symbol = coverage_summary.get("by_symbol", {})
+                if coverage_by_symbol:
+                    st.markdown("**Coverage Funnel (per symbol)**")
+                    funnel_rows = []
+                    for symbol in sorted(coverage_by_symbol.keys()):
+                        counts = coverage_by_symbol[symbol]
+                        funnel_rows.append({
+                            "Symbol": symbol,
+                            "Normalization": counts.get("normalization", 0),
+                            "Generation": counts.get("generation", 0),
+                            "Scoring": counts.get("scoring", 0),
+                            "Selection": counts.get("selection", 0),
+                        })
+                    st.dataframe(dataframe_title_case_fn(funnel_rows), width="stretch")
+            if isinstance(near_misses, list) and len(near_misses) > 0:
+                st.markdown(f"**Near-Misses ({len(near_misses)} candidates that failed exactly one rule)**")
+                with st.expander("View near-misses"):
+                    near_miss_rows = []
+                    for nm in near_misses:
+                        if isinstance(nm, dict):
+                            near_miss_rows.append({
+                                "Symbol": nm.get("symbol", "N/A"),
+                                "Strategy": nm.get("strategy", "N/A"),
+                                "Failed Rule": nm.get("failed_rule", "N/A"),
+                                "Actual": nm.get("actual_value", "N/A"),
+                                "Required": nm.get("required_value", "N/A"),
+                                "Score": fmt_float(nm.get("score")),
+                                "Strike": nm.get("strike", "N/A"),
+                                "Expiry": nm.get("expiry", "N/A"),
+                            })
+                    if near_miss_rows:
+                        st.dataframe(dataframe_title_case_fn(near_miss_rows), width="stretch")
+            elif isinstance(coverage_summary, dict):
+                st.info("No near-misses identified.")
+
     st.markdown("---")
+    st.markdown("**Signal Viability**")
+    try:
+        viability_list = analyze_signal_viability(snapshot)
+        if viability_list:
+            viable_count = sum(1 for v in viability_list if v.primary_blockage == "VIABLE")
+            total_symbols = len(viability_list)
+            if viable_count > 0:
+                st.success(f"**{viable_count} of {total_symbols} symbols** produced viable candidates.")
+            else:
+                st.caption(f"0 of {total_symbols} symbols produced viable candidates.")
+            viability_rows = []
+            for v in viability_list:
+                blockage_display = v.primary_blockage.replace("_", " ").title()
+                if v.primary_blockage == "VIABLE":
+                    blockage_display = "Viable"
+                viability_rows.append({
+                    "Symbol": v.symbol,
+                    "Expiries in DTE Window": v.expiries_in_dte_window,
+                    "PUTs Scanned": v.puts_scanned,
+                    "CALLs Scanned": v.calls_scanned,
+                    "IV Available": "Yes" if v.iv_available else "No",
+                    "Primary Blockage": blockage_display,
+                })
+            st.dataframe(dataframe_title_case_fn(viability_rows), width="stretch")
+        else:
+            st.caption("No symbol viability data.")
+    except Exception as e:
+        st.error(f"Viability analysis failed: {e}")
+
+
+def _render_tab_why_not(
+    gate_reasons: List[str],
+    snapshot: Dict[str, Any],
+    exclusions: List[Dict[str, Any]],
+    group_exclusions_fn: Callable,
+    humanize_label_fn: Callable,
+    dataframe_title_case_fn: Callable,
+) -> None:
+    """Why Not tab: gate-level blocks and exclusions grouped by rule/symbol."""
+    st.markdown("**Gate-level blocks**")
+    if gate_reasons:
+        for r in gate_reasons:
+            st.caption(f"• {r}")
+    else:
+        st.caption("(none)")
+    snapshot_exclusions = snapshot.get("exclusions") or []
+    if isinstance(snapshot_exclusions, list) and len(snapshot_exclusions) > 0:
+        by_rule: Dict[str, List[Dict[str, Any]]] = {}
+        for excl in snapshot_exclusions:
+            if not isinstance(excl, dict):
+                continue
+            rule = excl.get("rule") or excl.get("code") or "UNKNOWN"
+            by_rule.setdefault(str(rule), []).append(excl)
+        symbol_filter = st.text_input("Filter by symbol", key="why_not_symbol_filter", placeholder="e.g. AAPL")
+        for rule, items in sorted(by_rule.items(), key=lambda x: -len(x[1])):
+            symbols_in_rule = list({(e.get("data") or {}).get("symbol") or e.get("symbol") for e in items if isinstance(e, dict)})
+            symbols_in_rule = [s for s in symbols_in_rule if s]
+            if symbol_filter and symbol_filter.strip():
+                q = symbol_filter.strip().upper()
+                symbols_in_rule = [s for s in symbols_in_rule if q in str(s).upper()]
+                if not symbols_in_rule:
+                    continue
+            with st.expander(f"**{humanize_label_fn(rule)}** ({len(items)} exclusions, {len(symbols_in_rule)} symbols)", expanded=False):
+                rows = []
+                for e in items:
+                    if isinstance(e, dict):
+                        data = e.get("data") or {}
+                        sym = data.get("symbol") if isinstance(data, dict) else e.get("symbol")
+                        rows.append({"Rule": rule, "Symbol": sym, "Stage": e.get("stage"), "Message": e.get("message")})
+                if rows:
+                    st.dataframe(dataframe_title_case_fn(rows), width="stretch")
+    elif exclusions:
+        grouped = group_exclusions_fn(exclusions)
+        symbol_filter_legacy = st.text_input("Filter by symbol", key="why_not_symbol_filter_legacy", placeholder="e.g. AAPL")
+        for symbol, items in sorted(grouped.items()):
+            if symbol_filter_legacy and symbol_filter_legacy.strip() and symbol_filter_legacy.strip().upper() not in str(symbol).upper():
+                continue
+            with st.expander(f"{symbol} ({len(items)} exclusions)", expanded=False):
+                st.dataframe(dataframe_title_case_fn([{"code": e.get("code"), "message": e.get("message")} for e in items]), width="stretch")
+    else:
+        st.caption("No exclusions in this artifact.")
+
+
+def _render_tab_sandbox(
+    snapshot: Dict[str, Any],
+    sandbox_enabled: bool,
+    sandbox_min_score: float,
+    sandbox_max_total: int,
+    sandbox_max_per_symbol: int,
+    sandbox_max_per_signal_type_val: Optional[int],
+    SandboxParamsCls: type,
+    evaluate_sandbox_fn: Callable,
+    selected_signals: List[Dict[str, Any]],
+    selected_signals_table_fn: Callable,
+    candidate_key_fn: Callable,
+    fmt_float: Callable,
+    dataframe_title_case_fn: Callable,
+) -> None:
+    """Sandbox tab: hypothetical selection and comparison."""
+    if sandbox_enabled:
+        st.subheader("Operator Calibration Sandbox")
+        st.warning(
+            "**Sandbox Mode – Hypothetical Analysis Only**\n\n"
+            "This sandbox allows you to test different selection parameters without modifying:\n"
+            "- Live DecisionSnapshot (source of truth)\n"
+            "- Execution gate evaluation\n"
+            "- Execution plans\n"
+            "- Slack alerts\n"
+            "- Any persisted artifacts\n\n"
+            "All sandbox evaluation runs entirely in memory. No changes are saved."
+        )
+        try:
+            sandbox_params = SandboxParamsCls(
+                min_score=sandbox_min_score if sandbox_min_score > 0 else None,
+                max_total=sandbox_max_total,
+                max_per_symbol=sandbox_max_per_symbol,
+                max_per_signal_type=sandbox_max_per_signal_type_val,
+            )
+            sandbox_result = evaluate_sandbox_fn(snapshot, sandbox_params)
+            sandbox_symbols = []
+            for sel in sandbox_result.selected_signals or []:
+                if not isinstance(sel, dict):
+                    continue
+                scored = sel.get("scored") or {}
+                cand = scored.get("candidate") if isinstance(scored, dict) else {}
+                if isinstance(cand, dict) and cand.get("symbol"):
+                    sandbox_symbols.append(str(cand["symbol"]))
+            sandbox_symbols = sorted(set(sandbox_symbols))
+            st.markdown("**Hypothetical eligible symbols under current sandbox settings**")
+            st.caption("Read-only. Does not affect real gating or execution.")
+            if sandbox_symbols:
+                st.text(", ".join(sandbox_symbols))
+            else:
+                st.caption("(none – no signals would be selected with these parameters)")
+            live_count = len(selected_signals)
+            sandbox_count = sandbox_result.selected_count
+            st.markdown("**Live vs Sandbox Comparison**")
+            comp_cols = st.columns(2)
+            with comp_cols[0]:
+                st.metric("Live Selected", live_count)
+            with comp_cols[1]:
+                st.metric("Sandbox Selected", sandbox_count)
+            if sandbox_result.newly_admitted:
+                st.markdown(f"**Newly Admitted Candidates ({len(sandbox_result.newly_admitted)})**")
+                newly_admitted_rows = []
+                for nm in sandbox_result.newly_admitted:
+                    if isinstance(nm, dict):
+                        scored = nm.get("scored", {}) or {}
+                        candidate = scored.get("candidate", {}) or {}
+                        score = scored.get("score", {}) or {}
+                        key = candidate_key_fn(nm)
+                        reason = sandbox_result.rejected_reasons.get(str(key), "UNKNOWN")
+                        newly_admitted_rows.append({
+                            "Symbol": candidate.get("symbol", "N/A"),
+                            "Strategy": candidate.get("signal_type", "N/A"),
+                            "Strike": candidate.get("strike", "N/A"),
+                            "Expiry": candidate.get("expiry", "N/A"),
+                            "Score": fmt_float(score.get("total")),
+                            "Why Rejected Live": reason,
+                        })
+                if newly_admitted_rows:
+                    st.dataframe(dataframe_title_case_fn(newly_admitted_rows), width="stretch")
+            else:
+                st.caption("No newly admitted candidates.")
+            if sandbox_count != live_count or sandbox_result.newly_admitted:
+                with st.expander("View all sandbox selected signals"):
+                    if sandbox_result.selected_signals:
+                        st.dataframe(dataframe_title_case_fn(selected_signals_table_fn(sandbox_result.selected_signals)), width="stretch")
+                    else:
+                        st.caption("No signals selected in sandbox.")
+        except Exception as e:
+            st.error(f"Sandbox evaluation failed: {e}")
+    else:
+        st.caption("Enable sandbox mode in the sidebar to run hypothetical selection.")
+
+
+def _render_tab_execution_plan(
+    plan: Dict[str, Any],
+    dry_run: Dict[str, Any],
+    orders_table_fn: Callable,
+    render_kv: Callable,
+    dataframe_title_case_fn: Callable,
+) -> None:
+    """Execution Plan tab: plan status, orders, dry-run result."""
+    st.subheader("Execution Plan")
+    plan_allowed = bool(plan.get("allowed", False))
+    plan_blocked_reason = plan.get("blocked_reason")
+    plan_orders = plan.get("orders", []) if isinstance(plan.get("orders", []), list) else []
+    if plan_allowed:
+        if plan_orders:
+            st.success(f"Plan status: ALLOWED ({len(plan_orders)} orders)")
+        else:
+            st.warning("Plan status: ALLOWED but zero orders (REVIEW)")
+    else:
+        st.error("Plan status: BLOCKED")
+    if plan_blocked_reason:
+        render_kv("Blocked reason", plan_blocked_reason)
+    if plan_orders:
+        st.dataframe(dataframe_title_case_fn(orders_table_fn(plan_orders)), width="stretch")
+    st.subheader("Dry-Run Result")
+    dry_allowed = bool(dry_run.get("allowed", False))
+    dry_blocked_reason = dry_run.get("blocked_reason")
+    dry_executed_at = dry_run.get("executed_at")
+    dry_orders = dry_run.get("orders", []) if isinstance(dry_run.get("orders", []), list) else []
+    if dry_allowed:
+        st.success(f"Dry-run status: ALLOWED ({len(dry_orders)} orders)")
+    else:
+        st.error("Dry-run status: BLOCKED")
+    if dry_executed_at:
+        render_kv("Executed at", dry_executed_at)
+    if dry_blocked_reason:
+        render_kv("Blocked reason", dry_blocked_reason)
+    if dry_orders:
+        st.dataframe(dataframe_title_case_fn(orders_table_fn(dry_orders)), width="stretch")
 
 
 def main() -> None:
@@ -242,17 +620,25 @@ def main() -> None:
         initial_sidebar_state="expanded",
         page_icon=str(favicon_path) if favicon_path.exists() else None,
     )
-    inject_global_css()
-
+    if "dark_mode" not in st.session_state:
+        st.session_state.dark_mode = False
     if "nav_page" not in st.session_state:
         st.session_state.nav_page = "dashboard"
+    if "out_dir" not in st.session_state:
+        st.session_state.out_dir = str(_default_out_dir())
+    if "dashboard_tab_index" not in st.session_state:
+        st.session_state.dashboard_tab_index = 0
     current_page = st.session_state.nav_page
+    dark = st.session_state.dark_mode
+    inject_global_css(dark)
 
-    # Sidebar: minimal Controls only; output dir hidden in Advanced expander
-    st.sidebar.header("Controls")
-    with st.sidebar.expander("Advanced", expanded=False):
-        st.sidebar.text_input("Output directory", str(_default_out_dir()), key="out_dir")
-    out_dir = Path(st.session_state.get("out_dir", str(_default_out_dir())))
+    # Sidebar: dark/light toggle, then nav, then controls
+    st.sidebar.checkbox("Dark mode", value=dark, key="dark_mode")
+    st.sidebar.markdown("---")
+    _render_sidebar_nav(current_page)
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("**Controls**")
+    out_dir = Path(st.session_state.out_dir)
     out_dir_resolved = out_dir.resolve() if out_dir.exists() else out_dir
     decision_files = list_decision_files(out_dir)
 
@@ -280,7 +666,6 @@ def main() -> None:
     sandbox_enabled = st.sidebar.checkbox("Enable sandbox mode", value=False, key="sandbox_enabled")
 
     # --- Page routing: Strategy, Configuration, About (no artifact needed) ---
-    _render_nav(current_page)
     if current_page == "strategy":
         st.subheader("Strategy")
         card_html(
@@ -305,26 +690,34 @@ def main() -> None:
         return
     if current_page == "configuration":
         st.subheader("Configuration")
+        # Advanced: output directory (moved from sidebar)
+        card_header("Output Directory", icon="database")
+        st.caption("Decision JSON files are loaded from this path. Change and rerun to use a different folder.")
+        st.text_input("Output Directory", key="out_dir", label_visibility="visible")
+        st.caption("Resolved path (select to copy):")
+        st.code(str(out_dir_resolved), language=None)
         try:
             db_path = get_db_path()
             enabled_symbols = get_enabled_symbols()
-            st.markdown("**Database**")
-            st.text(f"Path: {db_path.resolve()}")
-            st.text(f"Enabled symbols: {len(enabled_symbols)}")
             csv_path_effective = get_effective_universe_csv_path()
-            st.markdown("**Universe CSV**")
-            st.text(f"Path: {os.environ.get('UNIVERSE_CSV_PATH', '(default)')} → {csv_path_effective}")
-            if st.button("Import universe from CSV"):
+            card_header("Database", icon="database")
+            st.caption("Path (select to copy)")
+            st.code(str(db_path.resolve()), language=None)
+            metric_tile("Enabled Symbols", len(enabled_symbols))
+            card_header("Universe CSV", icon="database")
+            st.caption("Path (select to copy)")
+            st.code(str(csv_path_effective), language=None)
+            if st.button("Import Universe From CSV"):
                 n = import_universe_from_csv(notes="core_watchlist", enabled=True)
                 st.success(f"Imported {n} symbols")
                 st.rerun()
         except Exception as e:
             st.warning(str(e))
-        st.markdown("**Slack**")
+        card_header("Slack", icon="alert")
         slack_ok, slack_msg = slack_webhook_available()
         st.caption(slack_msg)
         st.caption("Notifications are sent only on: gate state change, advisory severity change, or manual send.")
-        if st.button("Send Slack now (manual)"):
+        if st.button("Send Slack Now (Manual)"):
             try:
                 from app.signals.decision_snapshot import DecisionSnapshot
                 from app.execution.execution_plan import ExecutionPlan
@@ -344,11 +737,13 @@ def main() -> None:
                 st.success("Slack sent." if sent else "Slack skipped (filter).")
             except Exception as e:
                 st.error(str(e))
-        with st.expander("Debug paths"):
-            st.text(f"Output dir: {out_dir_resolved}")
-            st.text("Glob: decision_*.json")
+        with st.expander("Debug Paths"):
+            st.caption("Output Dir")
+            st.code(str(out_dir_resolved), language=None)
+            st.caption("Glob: decision_*.json")
             if selected_path:
-                st.text(f"Selected file: {selected_path.resolve()}")
+                st.caption("Selected File")
+                st.code(str(selected_path.resolve()), language=None)
         _render_footer()
         return
     if current_page == "about":
@@ -380,7 +775,7 @@ def main() -> None:
 
     snapshot, gate, plan, dry_run = extract_snapshot_gate_plan_dryrun(artifact)
     exclusions = extract_exclusions(artifact, snapshot)
-    
+
     # Phase 7.5: Extract current config from snapshot for sandbox defaults
     current_config = {}
     explanations = snapshot.get("explanations") or []
@@ -430,6 +825,16 @@ def main() -> None:
     modified_ts = datetime.fromtimestamp(selected_path.stat().st_mtime)
     modified_str = modified_ts.strftime("%Y-%m-%d %H:%M")
 
+    # Check data source from snapshot (pipeline annotation)
+    # data_source: "live", "snapshot", or "unavailable"
+    snapshot_data_source = snapshot.get("data_source") or artifact.get("metadata", {}).get("data_source") or "live"
+    is_offline_data = snapshot_data_source == "snapshot"
+
+    # Check chain health (symbols without options)
+    symbols_without_options = snapshot.get("symbols_without_options") or {}
+    has_missing_chains = len(symbols_without_options) > 0
+    missing_chain_count = len(symbols_without_options)
+
     # Live data for hero and tiles
     mode_label: Optional[str] = None
     live_data = None
@@ -453,444 +858,122 @@ def main() -> None:
         pass
     live_str = (mode_label or "—") if live_data else "Unavailable"
     reason_line = "; ".join(gate_reasons[:2]) if gate_reasons else ("—" if gate_allowed else "No selected signals")
+    selected_count = len(snapshot.get("selected_signals") or []) if isinstance(snapshot.get("selected_signals"), list) else 0
+    selected_signals = snapshot.get("selected_signals") or []
+    if not isinstance(selected_signals, list):
+        selected_signals = []
+    palette = get_theme_palette(dark)
 
-    # Compact dashboard header: LIVE / MARKET CLOSED + last updated (no long text)
-    _live_label = "LIVE" if market_open else "MARKET CLOSED"
-    _pulse_class = "chakra-theme-pulse" if market_open else ""
-    _live_style = f'<span style="color:{COLORS["success"]};">' if market_open else f'<span style="color:{COLORS["text_muted"]};">'
-    st.markdown(
-        f'<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;">'
-        f'<span class="{_pulse_class}" style="width:8px;height:8px;border-radius:50%;background:{COLORS["success"] if market_open else COLORS["text_muted"]};"></span>'
-        f'{_live_style}{_live_label}</span>'
-        f'<span style="color:{COLORS["text_muted"]};font-size:0.875rem;">Last updated: {modified_str}</span>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
+    if _USE_ELEMENTS and elements is not None and mui is not None:
+        # Option Alpha–style layout: streamlit-elements header, status bar, grid, MUI Tabs
+        def _on_tab_change(ev, val):
+            st.session_state.dashboard_tab_index = int(val) if val is not None else 0
 
-    # Hero row: full width — left: big status badge + one-line reason; right: tiles (Market, Provider, Snapshot Time)
-    hero_tone = "allowed" if status == "ALLOWED" else ("warning" if status == "REVIEW" else "blocked")
-    gate_badge_html = badge("BLOCKED" if not gate_allowed else "ALLOWED", "danger" if not gate_allowed else "success")
-    c_left, c_right = st.columns([2, 1])
-    with c_left:
+        with elements("chakra_dashboard"):
+            with mui.Box(sx={"display": "flex", "alignItems": "center", "justifyContent": "space-between", "mb": 2, "p": 2, "bgcolor": palette["surface"], "borderRadius": 1, "border": f"1px solid {palette['border']}"}):
+                with mui.Stack(direction="row", spacing=2, sx={"alignItems": "center"}):
+                    mui.Typography("ChakraOps — Live Decision Monitor", variant="h6", sx={"fontWeight": 600, "color": palette["text_primary"]})
+                    # Offline Data badge when using snapshot fallback
+                    if is_offline_data:
+                        mui.Chip(label="Offline Data", size="small", sx={"bgcolor": "#6b7280", "color": "#fff", "fontWeight": 500, "fontSize": "0.75rem"})
+                    # Chain health warning badge
+                    if has_missing_chains:
+                        mui.Chip(label=f"{missing_chain_count} Missing Chains", size="small", sx={"bgcolor": "#d97706", "color": "#fff", "fontWeight": 500, "fontSize": "0.75rem"})
+                with mui.Stack(direction="row", spacing=2):
+                    mui.Typography(f"Market: {live_str}", variant="body2", sx={"color": palette["text_secondary"]})
+                    mui.Typography("Theta Terminal", variant="body2", sx={"color": palette["text_secondary"]})
+                    mui.Typography(f"Snapshot: {as_of}", variant="body2", sx={"color": palette["text_secondary"]})
+            with mui.Grid(container=True, spacing=2, sx={"mb": 2}):
+                with mui.Grid(item=True, xs=12, md=6):
+                    border_color = palette["danger"] if not gate_allowed else (palette["warning"] if status == "REVIEW" else palette["success"])
+                    with mui.Paper(elevation=0, sx={"p": 2, "borderLeft": f"4px solid {border_color}", "bgcolor": palette["surface"], "border": f"1px solid {palette['border']}"}):
+                        with mui.Stack(direction="row", spacing=1, sx={"alignItems": "center", "mb": 1}):
+                            mui.Typography("System Status", variant="subtitle1", sx={"fontWeight": 600})
+                            # Show offline indicator in hero card
+                            if is_offline_data:
+                                mui.Chip(label="Offline", size="small", sx={"bgcolor": "#6b7280", "color": "#fff", "fontSize": "0.65rem"})
+                        mui.Chip(label=status, sx={"bgcolor": border_color, "color": "#fff", "fontWeight": 600, "mt": 1})
+                        mui.Typography(reason_line, variant="body2", sx={"mt": 1, "color": palette["text_secondary"]})
+                        mui.Typography(f"Timestamp: {modified_str}", variant="caption", sx={"display": "block", "mt": 1, "color": palette["text_secondary"]})
+                with mui.Grid(item=True, xs=12, md=6):
+                    with mui.Stack(direction="row", spacing=2, sx={"flexWrap": "wrap"}):
+                        with mui.Paper(elevation=0, sx={"p": 1.5, "minWidth": 100, "bgcolor": palette["surface"], "border": f"1px solid {palette['border']}"}):
+                            mui.Typography("Market", variant="caption", sx={"color": palette["text_secondary"]})
+                            mui.Typography(live_str, variant="body2", sx={"fontWeight": 600})
+                        with mui.Paper(elevation=0, sx={"p": 1.5, "minWidth": 100, "bgcolor": palette["surface"], "border": f"1px solid {palette['border']}"}):
+                            mui.Typography("Provider", variant="caption", sx={"color": palette["text_secondary"]})
+                            mui.Typography("Theta Terminal", variant="body2", sx={"fontWeight": 600})
+                        with mui.Paper(elevation=0, sx={"p": 1.5, "minWidth": 100, "bgcolor": palette["surface"], "border": f"1px solid {palette['border']}"}):
+                            mui.Typography("Snapshot Age", variant="caption", sx={"color": palette["text_secondary"]})
+                            mui.Typography(str(as_of), variant="body2", sx={"fontWeight": 600})
+                        with mui.Paper(elevation=0, sx={"p": 1.5, "minWidth": 100, "bgcolor": palette["surface"], "border": f"1px solid {palette['border']}"}):
+                            mui.Typography("Symbols Evaluated", variant="caption", sx={"color": palette["text_secondary"]})
+                            mui.Typography(str(stats.get("symbols_evaluated", 0)), variant="body2", sx={"fontWeight": 600})
+                        with mui.Paper(elevation=0, sx={"p": 1.5, "minWidth": 100, "bgcolor": palette["surface"], "border": f"1px solid {palette['border']}"}):
+                            mui.Typography("Candidates", variant="caption", sx={"color": palette["text_secondary"]})
+                            mui.Typography(str(stats.get("total_candidates", 0)), variant="body2", sx={"fontWeight": 600})
+                        with mui.Paper(elevation=0, sx={"p": 1.5, "minWidth": 100, "bgcolor": palette["surface"], "border": f"1px solid {palette['border']}"}):
+                            mui.Typography("Selected", variant="caption", sx={"color": palette["text_secondary"]})
+                            mui.Typography(str(selected_count), variant="body2", sx={"fontWeight": 600})
+            tab_index = st.session_state.dashboard_tab_index
+            with mui.Tabs(value=tab_index, onChange=_on_tab_change, sx={"borderBottom": f"1px solid {palette['border']}", "mb": 2}):
+                mui.Tab(label="Signals")
+                mui.Tab(label="Diagnostics")
+                mui.Tab(label="Why Not")
+                mui.Tab(label="Sandbox")
+                mui.Tab(label="Execution Plan")
+
+        # Tab content (Streamlit) keyed by dashboard_tab_index
+        tab_index = st.session_state.dashboard_tab_index
+        if tab_index == 0:
+            _render_tab_signals(snapshot, _selected_signals_table, _fmt_float, _render_kv, dataframe_title_case)
+        elif tab_index == 1:
+            _render_tab_diagnostics(snapshot, gate_allowed, sandbox_enabled, sandbox_min_score, sandbox_max_total, sandbox_max_per_symbol, sandbox_max_per_signal_type_val, SandboxParams, evaluate_sandbox, RecommendationSeverity, generate_operator_recommendations, _derive_operator_verdict, dataframe_title_case, _fmt_float)
+        elif tab_index == 2:
+            _render_tab_why_not(gate_reasons, snapshot, exclusions, _group_exclusions, humanize_label, dataframe_title_case)
+        elif tab_index == 3:
+            _render_tab_sandbox(snapshot, sandbox_enabled, sandbox_min_score, sandbox_max_total, sandbox_max_per_symbol, sandbox_max_per_signal_type_val, SandboxParams, evaluate_sandbox, selected_signals, _selected_signals_table, _candidate_key, _fmt_float, dataframe_title_case)
+        else:
+            _render_tab_execution_plan(plan, dry_run, _orders_table, _render_kv, dataframe_title_case)
+    else:
+        # Fallback: native Streamlit layout (hero + metrics + st.tabs)
+        hero_tone = "allowed" if status == "ALLOWED" else ("warning" if status == "REVIEW" else "blocked")
+        gate_badge_html = badge(status, "danger" if not gate_allowed else ("warning" if status == "REVIEW" else "success"))
+        offline_badge_html = '<span class="chakra-theme-badge" style="background:#6b7280;color:#fff;margin-left:8px;font-size:0.7rem;">Offline Data</span>' if is_offline_data else ""
+        chain_badge_html = f'<span class="chakra-theme-badge" style="background:#d97706;color:#fff;margin-left:8px;font-size:0.7rem;">{missing_chain_count} Missing Chains</span>' if has_missing_chains else ""
         st.markdown(
             f'<div class="chakra-theme-card chakra-theme-hero hero-{hero_tone}">'
-            f'<h4 style="margin:0 0 8px 0;">System Status</h4>'
-            f'<div style="margin-bottom:4px;">{gate_badge_html}</div>'
-            f'<p style="margin:0;font-size:0.875rem;color:{COLORS["text_muted"]};">{reason_line}</p>'
-            f'</div>',
+            f'<h4 style="margin:0 0 8px 0;">System Status{offline_badge_html}{chain_badge_html}</h4><div style="margin-bottom:6px;">{gate_badge_html}</div>'
+            f'<p style="margin:0;font-size:0.875rem;color:var(--chakra-text-muted);">{reason_line}</p>'
+            f'<p style="margin:6px 0 0 0;font-size:0.8rem;color:var(--chakra-text-muted);">Timestamp: {modified_str}</p></div>',
             unsafe_allow_html=True,
         )
-    with c_right:
-        metric_tile("Market", live_str)
-        metric_tile("Provider", "Theta Terminal")
-        metric_tile("Snapshot time", as_of)
-
-    # Second row: 3 cards — Snapshot Summary, Options Data Health, Operator Advisory
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        summary_body = (
-            f'<p style="margin:0;font-size:0.875rem;">As of: {as_of}</p>'
-            f'<p style="margin:4px 0 0 0;font-size:0.875rem;">Universe: {snapshot.get("universe_id_or_hash", "N/A")}</p>'
-            f'<p style="margin:4px 0 0 0;font-size:0.875rem;">Symbols evaluated: {stats.get("symbols_evaluated", 0)} · Candidates: {stats.get("total_candidates", 0)}</p>'
-            f'<p style="margin:4px 0 0 0;font-size:0.8rem;color:{COLORS["text_muted"]};">File: {selected_path.name}</p>'
-        )
-        card_html("Snapshot Summary", summary_body, icon="database")
-        with st.expander("👁️ Info"):
-            st.caption("Key metrics from the current decision artifact. Human-readable only.")
-
-    with col2:
-        options_pass = with_options_count > 0
-        health_body = (
-            f'<p style="margin:0;font-size:0.875rem;">Provider: Theta Terminal</p>'
-            f'<p style="margin:4px 0 0 0;">With options: <strong>{with_options_count}</strong> · Without: <strong>{without_options_count}</strong></p>'
-        )
-        card_html("Options Data Health", health_body, icon="pulse", status_badge=("PASS" if options_pass else "FAIL"))
-        if with_options_count == 0:
-            st.caption("No symbols have valid options chains. Execution is blocked.")
-        with st.expander("View details"):
-            if symbols_without_options:
-                reason_counts: Dict[str, int] = {}
-                for r in symbols_without_options.values():
-                    reason_counts[r] = reason_counts.get(r, 0) + 1
-                for reason, count in sorted(reason_counts.items(), key=lambda x: x[1], reverse=True)[:5]:
-                    st.caption(f"{reason}: {count} symbol(s)")
-        with st.expander("👁️ Info"):
-            st.caption("Whether the pipeline had valid options chains. FAIL when zero symbols have options.")
-
-    with col3:
-        try:
-            sandbox_result_for_rec = None
-            if sandbox_enabled:
-                try:
-                    sandbox_result_for_rec = evaluate_sandbox(snapshot, SandboxParams(
-                        min_score=sandbox_min_score if sandbox_min_score > 0 else None,
-                        max_total=sandbox_max_total,
-                        max_per_symbol=sandbox_max_per_symbol,
-                        max_per_signal_type=sandbox_max_per_signal_type_val,
-                    ))
-                except Exception:
-                    pass
-            recommendations = generate_operator_recommendations(snapshot, sandbox_result=sandbox_result_for_rec)
-            top = [r for r in recommendations if r.severity in (RecommendationSeverity.HIGH, RecommendationSeverity.MEDIUM)][:1]
-            if top:
-                rec = top[0]
-                sev = rec.severity.value
-                adv_body = (
-                    f'<p style="margin:0;font-size:0.875rem;"><strong>{sev}</strong> · {rec.title}</p>'
-                    f'<p style="margin:4px 0 0 0;font-size:0.8rem;">Action: {rec.action}</p>'
-                    f'<p style="margin:2px 0 0 0;font-size:0.75rem;color:{COLORS["text_muted"]};">{" · ".join(rec.evidence[:2])}</p>'
-                )
-                card_html("Operator Advisory", adv_body, icon="alert", status_badge=sev)
-            else:
-                card_html("Operator Advisory", '<p style="margin:0;font-size:0.875rem;">No recommendations. System operating normally.</p>', icon="alert")
-        except Exception:
-            card_html("Operator Advisory", '<p style="margin:0;font-size:0.875rem;">Recommendations unavailable.</p>', icon="alert")
-        with st.expander("👁️ Info"):
-            st.caption("Severity and recommended action from diagnostics. Advisory only.")
-
-    # Tabs: Signals, Diagnostics, Why Not, Sandbox, Execution Plan
-    default_tab = 1 if current_page == "diagnostics" else 0
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Signals", "Diagnostics", "Why Not", "Sandbox", "Execution Plan"])
-
-    # Tab content: Signals, Diagnostics, Why Not, Sandbox, Execution Plan
-    with tab1:
-        # Signals: selected signals table
-        selected_signals = snapshot.get("selected_signals") or []
-        if not isinstance(selected_signals, list):
-            selected_signals = []
-        st.markdown("**Selected Signals (Ranked)**")
-        if selected_signals:
-            st.dataframe(_selected_signals_table(selected_signals), width="stretch")
-        else:
-            st.caption("No selected signals in this snapshot.")
-        # WHY THIS (score components)
-        explanations = snapshot.get("explanations") or []
-        if isinstance(explanations, list) and explanations:
-            st.markdown("---")
-            st.markdown("**Why This (Score Components)**")
-            for expl in explanations:
-                if not isinstance(expl, dict):
-                    continue
-                symbol = expl.get("symbol", "N/A")
-                signal_type = expl.get("signal_type", "N/A")
-                rank = expl.get("rank", "N/A")
-                total_score = expl.get("total_score", "N/A")
-                comps = expl.get("score_components", []) if isinstance(expl.get("score_components", []), list) else []
-                policy = expl.get("policy_snapshot", {}) if isinstance(expl.get("policy_snapshot", {}), dict) else {}
-                with st.expander(f"{symbol} {signal_type} · rank {rank} · score {_fmt_float(total_score)}"):
-                    _render_kv("Selection reason", expl.get("selection_reason", "N/A"))
-                    if comps:
-                        st.dataframe([{"Name": c.get("name"), "Value": c.get("value"), "Weight": c.get("weight")} for c in comps if isinstance(c, dict)], width="stretch")
-                    if policy:
-                        st.caption("Policy snapshot: see artifact for full details.")
-
-    with tab2:
-        # Diagnostics: Operator Action Recommendations + exclusion summary + coverage
-        try:
-            sandbox_result_for_recommendations = None
-            if sandbox_enabled:
-                try:
-                    sandbox_params = SandboxParams(
-                        min_score=sandbox_min_score if sandbox_min_score > 0 else None,
-                        max_total=sandbox_max_total,
-                        max_per_symbol=sandbox_max_per_symbol,
-                        max_per_signal_type=sandbox_max_per_signal_type_val,
-                    )
-                    sandbox_result_for_recommendations = evaluate_sandbox(snapshot, sandbox_params)
-                except Exception:
-                    pass
-            recommendations = generate_operator_recommendations(
-                snapshot,
-                sandbox_result=sandbox_result_for_recommendations,
+        m1, m2, m3, m4, m5, m6 = st.columns(6)
+        for col, (label, val) in zip([m1, m2, m3, m4, m5, m6], [
+            ("Market Status", live_str), ("Provider", "Theta Terminal"), ("Snapshot Age", as_of),
+            ("Symbols Evaluated", stats.get("symbols_evaluated", 0)), ("Candidates", stats.get("total_candidates", 0)), ("Selected", selected_count)]):
+            with col:
+                metric_tile(label, val)
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["Signals", "Diagnostics", "Why Not", "Sandbox", "Execution Plan"])
+        with tab1:
+            _render_tab_signals(snapshot, _selected_signals_table, _fmt_float, _render_kv, dataframe_title_case)
+        with tab2:
+            _render_tab_diagnostics(
+                snapshot, gate_allowed, sandbox_enabled, sandbox_min_score, sandbox_max_total,
+                sandbox_max_per_symbol, sandbox_max_per_signal_type_val, SandboxParams, evaluate_sandbox,
+                RecommendationSeverity, generate_operator_recommendations, _derive_operator_verdict,
+                dataframe_title_case, _fmt_float,
             )
-            if recommendations:
-                high_recs = [r for r in recommendations if r.severity == RecommendationSeverity.HIGH]
-                medium_recs = [r for r in recommendations if r.severity == RecommendationSeverity.MEDIUM]
-                low_recs = [r for r in recommendations if r.severity == RecommendationSeverity.LOW]
-                for rec in high_recs:
-                    with st.expander(f"🔴 **HIGH:** {rec.title}", expanded=True):
-                        st.markdown(f"**Action:** {rec.action}")
-                        st.markdown("**Evidence:**")
-                        for evidence_line in rec.evidence:
-                            st.markdown(f"- {evidence_line}")
-                        st.caption(f"Category: {rec.category}")
-                for rec in medium_recs:
-                    with st.expander(f"🟡 **MEDIUM:** {rec.title}", expanded=False):
-                        st.markdown(f"**Action:** {rec.action}")
-                        st.markdown("**Evidence:**")
-                        for evidence_line in rec.evidence:
-                            st.markdown(f"- {evidence_line}")
-                        st.caption(f"Category: {rec.category}")
-                for rec in low_recs:
-                    with st.expander(f"🟢 **LOW:** {rec.title}", expanded=False):
-                        st.markdown(f"**Action:** {rec.action}")
-                        st.markdown("**Evidence:**")
-                        for evidence_line in rec.evidence:
-                            st.markdown(f"- {evidence_line}")
-                        st.caption(f"Category: {rec.category}")
-            else:
-                st.info("No recommendations. System operating normally.")
-        except Exception as e:
-            st.error(f"Recommendation generation failed: {e}")
-
-        # Phase 7.3: Diagnostics (Why the system is blocked)
-        if not gate_allowed:
-            exclusion_summary = snapshot.get("exclusion_summary")
-            if isinstance(exclusion_summary, dict):
-                st.subheader("Diagnostics (Why the system is blocked)")
-                verdict = _derive_operator_verdict(exclusion_summary)
-                st.info(f"**Operator Verdict:** {verdict}")
-                rule_counts = exclusion_summary.get("rule_counts", {})
-                symbols_by_rule = exclusion_summary.get("symbols_by_rule", {})
-                if rule_counts:
-                    diagnostics_rows = []
-                    for rule, count in sorted(rule_counts.items(), key=lambda x: x[1], reverse=True):
-                        stage = None
-                        snapshot_exclusions = snapshot.get("exclusions") or []
-                        for excl in snapshot_exclusions:
-                            if isinstance(excl, dict) and excl.get("rule") == rule:
-                                stage = excl.get("stage", "UNKNOWN")
-                                break
-                        symbols = symbols_by_rule.get(rule, [])
-                        symbol_str = ", ".join(symbols[:5])
-                        if len(symbols) > 5:
-                            symbol_str += f" (+{len(symbols) - 5} more)"
-                        diagnostics_rows.append({
-                            "Rule": rule,
-                            "Count": count,
-                            "Stage": stage or "UNKNOWN",
-                            "Symbols": symbol_str if symbol_str else "N/A",
-                        })
-                    st.dataframe(diagnostics_rows, width="stretch")
-                else:
-                    st.info("No exclusion rules found in diagnostics.")
-            coverage_summary = snapshot.get("coverage_summary")
-            near_misses = snapshot.get("near_misses")
-            if isinstance(coverage_summary, dict) or (isinstance(near_misses, list) and len(near_misses) > 0):
-                st.subheader("Coverage & Near-Miss Diagnostics")
-                if isinstance(coverage_summary, dict):
-                    coverage_by_symbol = coverage_summary.get("by_symbol", {})
-                    if coverage_by_symbol:
-                        st.markdown("**Coverage Funnel (per symbol)**")
-                        funnel_rows = []
-                        for symbol in sorted(coverage_by_symbol.keys()):
-                            counts = coverage_by_symbol[symbol]
-                            funnel_rows.append({
-                                "Symbol": symbol,
-                                "Normalization": counts.get("normalization", 0),
-                                "Generation": counts.get("generation", 0),
-                                "Scoring": counts.get("scoring", 0),
-                                "Selection": counts.get("selection", 0),
-                            })
-                        st.dataframe(funnel_rows, width="stretch")
-                if isinstance(near_misses, list) and len(near_misses) > 0:
-                    st.markdown(f"**Near-Misses ({len(near_misses)} candidates that failed exactly one rule)**")
-                    with st.expander("View near-misses"):
-                        near_miss_rows = []
-                        for nm in near_misses:
-                            if isinstance(nm, dict):
-                                near_miss_rows.append({
-                                    "Symbol": nm.get("symbol", "N/A"),
-                                    "Strategy": nm.get("strategy", "N/A"),
-                                    "Failed Rule": nm.get("failed_rule", "N/A"),
-                                    "Actual": nm.get("actual_value", "N/A"),
-                                    "Required": nm.get("required_value", "N/A"),
-                                    "Score": _fmt_float(nm.get("score")),
-                                    "Strike": nm.get("strike", "N/A"),
-                                    "Expiry": nm.get("expiry", "N/A"),
-                                })
-                        if near_miss_rows:
-                            st.dataframe(near_miss_rows, width="stretch")
-                elif isinstance(coverage_summary, dict):
-                    st.info("No near-misses identified.")
-
-        # Signal Viability (inside Diagnostics tab)
-        st.markdown("---")
-        st.markdown("**Signal Viability**")
-        try:
-            viability_list = analyze_signal_viability(snapshot)
-            if viability_list:
-                viable_count = sum(1 for v in viability_list if v.primary_blockage == "VIABLE")
-                total_symbols = len(viability_list)
-                if viable_count > 0:
-                    st.success(f"**{viable_count} of {total_symbols} symbols** produced viable candidates.")
-                else:
-                    st.caption(f"0 of {total_symbols} symbols produced viable candidates.")
-                viability_rows = []
-                for v in viability_list:
-                    blockage_display = v.primary_blockage.replace("_", " ").title()
-                    if v.primary_blockage == "VIABLE":
-                        blockage_display = "Viable"
-                    viability_rows.append({
-                        "Symbol": v.symbol,
-                        "Expiries in DTE Window": v.expiries_in_dte_window,
-                        "PUTs Scanned": v.puts_scanned,
-                        "CALLs Scanned": v.calls_scanned,
-                        "IV Available": "Yes" if v.iv_available else "No",
-                        "Primary Blockage": blockage_display,
-                    })
-                st.dataframe(viability_rows, width="stretch")
-            else:
-                st.caption("No symbol viability data.")
-        except Exception as e:
-            st.error(f"Viability analysis failed: {e}")
-
-    with tab3:
-        # Why Not: exclusions grouped by rule (not by symbol list spam) + symbol search
-        st.markdown("**Gate-level blocks**")
-        if gate_reasons:
-            for r in gate_reasons:
-                st.caption(f"• {r}")
-        else:
-            st.caption("(none)")
-        snapshot_exclusions = snapshot.get("exclusions") or []
-        if isinstance(snapshot_exclusions, list) and len(snapshot_exclusions) > 0:
-            # Group by rule (reason), not by symbol
-            by_rule: Dict[str, List[Dict[str, Any]]] = {}
-            for excl in snapshot_exclusions:
-                if not isinstance(excl, dict):
-                    continue
-                rule = excl.get("rule") or excl.get("code") or "UNKNOWN"
-                by_rule.setdefault(str(rule), []).append(excl)
-            symbol_filter = st.text_input("Filter by symbol", key="why_not_symbol_filter", placeholder="e.g. AAPL")
-            for rule, items in sorted(by_rule.items(), key=lambda x: -len(x[1])):
-                symbols_in_rule = list({(e.get("data") or {}).get("symbol") or e.get("symbol") for e in items if isinstance(e, dict)})
-                symbols_in_rule = [s for s in symbols_in_rule if s]
-                if symbol_filter and symbol_filter.strip():
-                    q = symbol_filter.strip().upper()
-                    symbols_in_rule = [s for s in symbols_in_rule if q in str(s).upper()]
-                    if not symbols_in_rule:
-                        continue
-                with st.expander(f"**{humanize_label(rule)}** ({len(items)} exclusions, {len(symbols_in_rule)} symbols)", expanded=False):
-                    rows = []
-                    for e in items:
-                        if isinstance(e, dict):
-                            data = e.get("data") or {}
-                            sym = data.get("symbol") if isinstance(data, dict) else e.get("symbol")
-                            rows.append({"Rule": rule, "Symbol": sym, "Stage": e.get("stage"), "Message": e.get("message")})
-                    if rows:
-                        st.dataframe(rows, width="stretch")
-        elif exclusions:
-            grouped = _group_exclusions(exclusions)
-            symbol_filter_legacy = st.text_input("Filter by symbol", key="why_not_symbol_filter_legacy", placeholder="e.g. AAPL")
-            for symbol, items in sorted(grouped.items()):
-                if symbol_filter_legacy and symbol_filter_legacy.strip() and symbol_filter_legacy.strip().upper() not in str(symbol).upper():
-                    continue
-                with st.expander(f"{symbol} ({len(items)} exclusions)", expanded=False):
-                    st.dataframe([{"code": e.get("code"), "message": e.get("message")} for e in items], width="stretch")
-        else:
-            st.caption("No exclusions in this artifact.")
-
-    with tab4:
-        # Sandbox
-        if sandbox_enabled:
-            st.subheader("Operator Calibration Sandbox")
-            st.warning(
-                "⚠️ **Sandbox Mode – Hypothetical Analysis Only**\n\n"
-                "This sandbox allows you to test different selection parameters without modifying:\n"
-                "- Live DecisionSnapshot (source of truth)\n"
-                "- Execution gate evaluation\n"
-                "- Execution plans\n"
-                "- Slack alerts\n"
-                "- Any persisted artifacts\n\n"
-                "All sandbox evaluation runs entirely in memory. No changes are saved."
+        with tab3:
+            _render_tab_why_not(gate_reasons, snapshot, exclusions, _group_exclusions, humanize_label, dataframe_title_case)
+        with tab4:
+            _render_tab_sandbox(
+                snapshot, sandbox_enabled, sandbox_min_score, sandbox_max_total, sandbox_max_per_symbol,
+                sandbox_max_per_signal_type_val, SandboxParams, evaluate_sandbox, selected_signals,
+                _selected_signals_table, _candidate_key, _fmt_float, dataframe_title_case,
             )
-            try:
-                sandbox_params = SandboxParams(
-                    min_score=sandbox_min_score if sandbox_min_score > 0 else None,
-                    max_total=sandbox_max_total,
-                    max_per_symbol=sandbox_max_per_symbol,
-                    max_per_signal_type=sandbox_max_per_signal_type_val,
-                )
-                sandbox_result = evaluate_sandbox(snapshot, sandbox_params)
-                sandbox_symbols = []
-                for sel in sandbox_result.selected_signals or []:
-                    if not isinstance(sel, dict):
-                        continue
-                    scored = sel.get("scored") or {}
-                    cand = scored.get("candidate") if isinstance(scored, dict) else {}
-                    if isinstance(cand, dict) and cand.get("symbol"):
-                        sandbox_symbols.append(str(cand["symbol"]))
-                sandbox_symbols = sorted(set(sandbox_symbols))
-                st.markdown("**Hypothetical eligible symbols under current sandbox settings**")
-                st.caption("Read-only. Does not affect real gating or execution.")
-                if sandbox_symbols:
-                    st.text(", ".join(sandbox_symbols))
-                else:
-                    st.caption("(none – no signals would be selected with these parameters)")
-                live_count = len(selected_signals)
-                sandbox_count = sandbox_result.selected_count
-                st.markdown("**Live vs Sandbox Comparison**")
-                comp_cols = st.columns(2)
-                with comp_cols[0]:
-                    st.metric("Live Selected", live_count)
-                with comp_cols[1]:
-                    st.metric("Sandbox Selected", sandbox_count)
-                if sandbox_result.newly_admitted:
-                    st.markdown(f"**Newly Admitted Candidates ({len(sandbox_result.newly_admitted)})**")
-                    newly_admitted_rows = []
-                    for nm in sandbox_result.newly_admitted:
-                        if isinstance(nm, dict):
-                            scored = nm.get("scored", {}) or {}
-                            candidate = scored.get("candidate", {}) or {}
-                            score = scored.get("score", {}) or {}
-                            key = _candidate_key(nm)
-                            reason = sandbox_result.rejected_reasons.get(str(key), "UNKNOWN")
-                            newly_admitted_rows.append({
-                                "Symbol": candidate.get("symbol", "N/A"),
-                                "Strategy": candidate.get("signal_type", "N/A"),
-                                "Strike": candidate.get("strike", "N/A"),
-                                "Expiry": candidate.get("expiry", "N/A"),
-                                "Score": _fmt_float(score.get("total")),
-                                "Why Rejected Live": reason,
-                            })
-                    if newly_admitted_rows:
-                        st.dataframe(newly_admitted_rows, width="stretch")
-                else:
-                    st.caption("No newly admitted candidates.")
-                if sandbox_count != live_count or sandbox_result.newly_admitted:
-                    with st.expander("View all sandbox selected signals"):
-                        if sandbox_result.selected_signals:
-                            st.dataframe(_selected_signals_table(sandbox_result.selected_signals), width="stretch")
-                        else:
-                            st.caption("No signals selected in sandbox.")
-            except Exception as e:
-                st.error(f"Sandbox evaluation failed: {e}")
-        else:
-            st.caption("Enable sandbox mode in the sidebar to run hypothetical selection.")
-
-    with tab5:
-        # Execution Plan and Dry-run
-        st.subheader("Execution Plan")
-        plan_allowed = bool(plan.get("allowed", False))
-        plan_blocked_reason = plan.get("blocked_reason")
-        plan_orders = plan.get("orders", []) if isinstance(plan.get("orders", []), list) else []
-        if plan_allowed:
-            if plan_orders:
-                st.success(f"Plan status: ALLOWED ({len(plan_orders)} orders)")
-            else:
-                st.warning("Plan status: ALLOWED but zero orders (REVIEW)")
-        else:
-            st.error("Plan status: BLOCKED")
-        if plan_blocked_reason:
-            _render_kv("Blocked reason", plan_blocked_reason)
-        if plan_orders:
-            st.dataframe(_orders_table(plan_orders), width="stretch")
-        st.subheader("Dry-Run Result")
-        dry_allowed = bool(dry_run.get("allowed", False))
-        dry_blocked_reason = dry_run.get("blocked_reason")
-        dry_executed_at = dry_run.get("executed_at")
-        dry_orders = dry_run.get("orders", []) if isinstance(dry_run.get("orders", []), list) else []
-        if dry_allowed:
-            st.success(f"Dry-run status: ALLOWED ({len(dry_orders)} orders)")
-        else:
-            st.error("Dry-run status: BLOCKED")
-        if dry_executed_at:
-            _render_kv("Executed at", dry_executed_at)
-        if dry_blocked_reason:
-            _render_kv("Blocked reason", dry_blocked_reason)
-        if dry_orders:
-            st.dataframe(_orders_table(dry_orders), width="stretch")
+        with tab5:
+            _render_tab_execution_plan(plan, dry_run, _orders_table, _render_kv, dataframe_title_case)
 
     st.markdown("---")
     _render_footer()

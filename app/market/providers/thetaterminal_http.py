@@ -1,19 +1,34 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""ThetaTerminal v3 HTTP provider (PRIMARY). Base URL http://127.0.0.1:25503."""
+"""ThetaTerminal v3 HTTP provider (PRIMARY).
+
+Base URL is configured via config.yaml or THETA_REST_URL environment variable.
+"""
 
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
+from app.core.settings import get_theta_base_url, get_theta_timeout
 from app.market.providers.base import MarketDataProviderInterface
 
 logger = logging.getLogger(__name__)
 
-THETA_BASE_URL = "http://127.0.0.1:25503"
+
+def _get_theta_base() -> str:
+    """Get Theta base URL from config (without /v3 suffix for this provider)."""
+    url = get_theta_base_url()
+    # Remove /v3 suffix if present (we add it back as THETA_V3_PREFIX)
+    if url.endswith("/v3"):
+        return url[:-3]
+    return url
+
+
+# These are now computed from centralized config
+THETA_BASE_URL = None  # Set dynamically
 THETA_V3_PREFIX = "/v3"
 DEFAULT_TIMEOUT = 10.0
 
@@ -24,11 +39,11 @@ class ThetaTerminalHttpProvider(MarketDataProviderInterface):
     def __init__(
         self,
         base_url: Optional[str] = None,
-        timeout: float = DEFAULT_TIMEOUT,
+        timeout: Optional[float] = None,
     ) -> None:
-        self.base_url = (base_url or THETA_BASE_URL).rstrip("/")
+        self.base_url = (base_url or _get_theta_base()).rstrip("/")
         self.v3_url = f"{self.base_url}{THETA_V3_PREFIX}"
-        self.timeout = timeout
+        self.timeout = timeout if timeout is not None else get_theta_timeout()
         self._client: Optional[httpx.Client] = None
 
     def _client_get(self) -> httpx.Client:

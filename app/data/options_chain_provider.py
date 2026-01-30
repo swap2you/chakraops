@@ -54,10 +54,10 @@ class ThetaDataOptionsChainProvider(OptionsChainProvider):
         base_url: Optional[str] = None,
         timeout: float = CHAIN_REQUEST_TIMEOUT,
     ) -> None:
-        import os
+        from app.core.settings import get_theta_base_url
 
-        # base_url kept for backwards compatibility; routing now via theta_v3_routes
-        self.base_url = (base_url or os.getenv("THETA_REST_URL", "http://127.0.0.1:25503/v3")).rstrip("/")
+        # base_url from centralized config; can be overridden for testing
+        self.base_url = (base_url or get_theta_base_url()).rstrip("/")
         self.timeout = timeout
 
     def get_expirations(self, symbol: str) -> List[date]:

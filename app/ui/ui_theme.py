@@ -74,6 +74,38 @@ STATUS_TONE = {
     "FAIL": "danger",
 }
 
+# Option Alpha–style palette: light greys, muted blues, red/green accents
+PALETTE_LIGHT = {
+    "bg": "#f5f6f8",
+    "surface": "#ffffff",
+    "border": "#e1e4e8",
+    "text_primary": "#24292f",
+    "text_secondary": "#57606a",
+    "accent": "#0969da",
+    "accent_muted": "#54aeff",
+    "success": "#1a7f37",
+    "danger": "#cf222e",
+    "warning": "#9a6700",
+}
+
+PALETTE_DARK = {
+    "bg": "#0d1117",
+    "surface": "#161b22",
+    "border": "#30363d",
+    "text_primary": "#e6edf3",
+    "text_secondary": "#8b949e",
+    "accent": "#58a6ff",
+    "accent_muted": "#388bfd",
+    "success": "#3fb950",
+    "danger": "#f85149",
+    "warning": "#d29922",
+}
+
+
+def get_theme_palette(dark: bool) -> dict:
+    """Return the active palette (light or dark)."""
+    return PALETTE_DARK if dark else PALETTE_LIGHT
+
 
 def _tone_color(tone: Optional[str]) -> str:
     if not tone:
@@ -88,24 +120,36 @@ def _tone_color(tone: Optional[str]) -> str:
     return COLORS["text_primary"]
 
 
-def inject_global_css() -> None:
+def inject_global_css(dark: bool = False) -> None:
     """
-    Inject global CSS for premium SaaS admin look.
+    Inject global CSS for premium SaaS / Option Alpha–style look.
+    - Light/dark palette via CSS variables
     - Page background, max-width container, system font stack
-    - Compact buttons, tabs, expanders, tables
-    - Card and badge styles; status colors; footer
+    - Compact buttons, tabs, expanders, tables; card and badge styles; footer
     """
     s = SPACING
     r = RADII
     sh = SHADOWS
-    c = COLORS
+    p = get_theme_palette(dark)
+    c = COLORS  # keep for non-theme tokens
     t = TYPO
     font_stack = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
     st.markdown(
         f"""
         <style>
+        :root {{
+            --chakra-bg: {p['bg']};
+            --chakra-surface: {p['surface']};
+            --chakra-border: {p['border']};
+            --chakra-text: {p['text_primary']};
+            --chakra-text-muted: {p['text_secondary']};
+            --chakra-accent: {p['accent']};
+            --chakra-success: {p['success']};
+            --chakra-danger: {p['danger']};
+            --chakra-warning: {p['warning']};
+        }}
         /* Base */
-        .stApp {{ background: {c['bg']}; }}
+        .stApp {{ background: var(--chakra-bg); }}
         .main .block-container {{ max-width: 1320px; padding: {s['lg']}px {s['xl']}px; margin: 0 auto; }}
         * {{ font-family: {font_stack}; }}
 
@@ -125,44 +169,46 @@ def inject_global_css() -> None:
         .stTabs [data-baseweb="tab"] {{ padding: {s['sm']}px {s['lg']}px; font-size: {t['body']}; }}
 
         /* Expanders: accordion-like, no heavy borders */
-        .streamlit-expanderHeader {{ background: {c['card_bg']}; border: 1px solid {c['border_light']}; border-radius: {r['sm']}px; }}
-        .streamlit-expanderContent {{ border: 1px solid {c['border_light']}; border-top: none; border-radius: 0 0 {r['sm']}px {r['sm']}px; }}
+        .streamlit-expanderHeader {{ background: var(--chakra-surface); border: 1px solid var(--chakra-border); border-radius: {r['sm']}px; }}
+        .streamlit-expanderContent {{ border: 1px solid var(--chakra-border); border-top: none; border-radius: 0 0 {r['sm']}px {r['sm']}px; }}
 
         /* DataFrames: compact, striped */
         .stDataFrame {{ font-size: {t['small']}; }}
         .stDataFrame td, .stDataFrame th {{ padding: {s['xs']}px {s['sm']}px !important; }}
-        div[data-testid="stDataFrameResizable"] {{ border-radius: {r['sm']}px; border: 1px solid {c['border_light']}; overflow: hidden; }}
-        .stDataFrame tbody tr:nth-child(even) {{ background: {c['bg']}; }}
+        div[data-testid="stDataFrameResizable"] {{ border-radius: {r['sm']}px; border: 1px solid var(--chakra-border); overflow: hidden; }}
+        .stDataFrame tbody tr:nth-child(even) {{ background: var(--chakra-bg); }}
 
         /* Metrics: compact */
         [data-testid="stMetric"] {{ padding: {s['sm']}px; }}
         [data-testid="stMetricValue"] {{ font-size: 1rem; }}
 
         /* Cards (theme class) */
-        .chakra-theme-card {{ background: {c['card_bg']}; border: 1px solid {c['border_light']}; border-radius: {r['md']}px;
+        .chakra-theme-card {{ background: var(--chakra-surface); border: 1px solid var(--chakra-border); border-radius: {r['md']}px;
             padding: {s['lg']}px; margin-bottom: {s['lg']}px; box-shadow: {sh['subtle_1']}; }}
-        .chakra-theme-card h4 {{ margin: 0 0 {s['sm']}px 0; font-size: {t['h3']}; font-weight: 600; color: {c['text_primary']}; }}
+        .chakra-theme-card h4 {{ margin: 0 0 {s['sm']}px 0; font-size: {t['h3']}; font-weight: 600; color: var(--chakra-text); }}
         .chakra-theme-card-header-only {{ margin-bottom: {s['sm']}px; }}
-        .chakra-theme-hero {{ border-left: 4px solid {c['border']}; }}
-        .chakra-theme-hero.hero-blocked {{ border-left-color: {c['danger']}; }}
-        .chakra-theme-hero.hero-allowed {{ border-left-color: {c['success']}; }}
-        .chakra-theme-hero.hero-warning {{ border-left-color: {c['warning']}; }}
+        .chakra-theme-hero {{ border-left: 4px solid var(--chakra-border); }}
+        .chakra-theme-hero.hero-blocked {{ border-left-color: var(--chakra-danger); }}
+        .chakra-theme-hero.hero-allowed {{ border-left-color: var(--chakra-success); }}
+        .chakra-theme-hero.hero-warning {{ border-left-color: var(--chakra-warning); }}
 
         /* Badges */
         .chakra-theme-badge {{ display: inline-block; padding: 4px 10px; border-radius: 999px; font-weight: 600; font-size: {t['small']}; letter-spacing: 0.02em; }}
 
         /* Footer */
-        .chakra-theme-footer {{ margin-top: {s['2xl']}px; padding: {s['lg']}px; border-top: 1px solid {c['border_light']};
-            color: {c['text_muted']}; font-size: {t['small']}; text-align: center; }}
+        .chakra-theme-footer {{ margin-top: {s['2xl']}px; padding: {s['lg']}px; border-top: 1px solid var(--chakra-border);
+            color: var(--chakra-text-muted); font-size: {t['small']}; text-align: center; }}
 
         /* Live pulse */
         .chakra-theme-pulse {{ width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; vertical-align: middle;
             animation: chakra-pulse 2s infinite; }}
         @keyframes chakra-pulse {{ 0%,100% {{ opacity: 1; }} 50% {{ opacity: 0.5; }} }}
 
-        /* Sidebar: narrower */
-        [data-testid="stSidebar"] {{ min-width: 220px; }}
+        /* Sidebar: vertical nav + controls */
+        [data-testid="stSidebar"] {{ min-width: 240px; }}
         [data-testid="stSidebar"] .stMarkdown {{ font-size: {t['body']}; }}
+        [data-testid="stSidebar"] .stButton > button {{ width: 100%; justify-content: flex-start; text-align: left; margin-bottom: {s['xs']}px; }}
+        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {{ padding-top: {s['xs']}px; }}
 
         /* Hide Streamlit branding (optional, keep if policy requires) */
         #MainMenu {{ visibility: hidden; }}
@@ -305,3 +351,27 @@ def humanize_label(key: str) -> str:
         return key
     s = str(key).replace("_", " ").replace("-", " ")
     return " ".join(w.capitalize() for w in s.split())
+
+
+# Sidebar nav: (label, page_id, icon_name) for vertical nav
+NAV_ITEMS = [
+    ("Dashboard", "dashboard", "circle-live"),
+    ("Diagnostics", "diagnostics", "pulse"),
+    ("Strategy", "strategy", "shield"),
+    ("Configuration", "configuration", "database"),
+    ("About", "about", "alert"),
+]
+
+
+def dataframe_title_case(rows: list, key_map: Optional[dict] = None) -> list:
+    """Return list of dicts with keys converted to Title Case for display. key_map overrides specific keys."""
+    out = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        new_row = {}
+        for k, v in row.items():
+            display_key = (key_map or {}).get(k, humanize_label(str(k)))
+            new_row[display_key] = v
+        out.append(new_row)
+    return out

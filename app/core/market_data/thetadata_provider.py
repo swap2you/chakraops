@@ -9,7 +9,7 @@ IMPORTANT: ThetaData Terminal v3 must be running locally on port 25503.
 We use httpx to make HTTP requests to the REST API.
 
 Reference: https://docs.thetadata.us/
-API Base URL: http://127.0.0.1:25503/v3
+Base URL is configured via config.yaml or THETA_REST_URL environment variable.
 """
 
 from __future__ import annotations
@@ -19,12 +19,19 @@ from typing import Dict, List, Optional, Tuple
 
 import httpx
 
+from app.core.settings import get_theta_base_url
 from app.core.market_data.provider import MarketDataProvider
 
 logger = logging.getLogger(__name__)
 
-# ThetaData Terminal v3 base URL
-THETADATA_BASE_URL = "http://127.0.0.1:25503/v3"
+
+def _get_thetadata_base_url() -> str:
+    """Get ThetaData base URL from centralized config."""
+    return get_theta_base_url()
+
+
+# Kept for backward compatibility, but now uses centralized config
+THETADATA_BASE_URL = None  # Will be set dynamically
 
 
 class ProviderDataError(RuntimeError):
@@ -57,7 +64,7 @@ class ThetaDataProvider(MarketDataProvider):
         Parameters
         ----------
         base_url:
-            ThetaData Terminal base URL (default: http://127.0.0.1:25503/v3).
+            ThetaData Terminal base URL (default: from config.yaml).
         timeout:
             HTTP request timeout in seconds (default: 30.0).
         
@@ -66,7 +73,7 @@ class ThetaDataProvider(MarketDataProvider):
         ValueError
             If terminal is not accessible.
         """
-        self.base_url = base_url or THETADATA_BASE_URL
+        self.base_url = base_url or _get_thetadata_base_url()
         self.timeout = timeout
         
         # Initialize HTTP client

@@ -3,13 +3,12 @@
 """Premium ChakraOps Dashboard — Option Alpha-style trading platform UI.
 
 A modern, professional trading dashboard with:
-- Fixed sidebar toggle that remains visible when collapsed
-- Sidebar shows icons only when collapsed, full text when expanded
-- Working tooltips on all info icons
-- Reliable data source selection and refresh functionality
-- Hero section with decision status and key metrics
-- Plotly charts for exclusion analysis and candidate distribution
-- Simulated Slack messages for selected signals
+- Fixed sidebar toggle always visible
+- Collapsible sidebar (icons only when collapsed)
+- Test page for single-ticker data fetching and Slack simulation
+- Horizontal charts with color coding
+- Improved metrics with icons and clear scoring
+- Streamlined header and responsive layout
 """
 
 from __future__ import annotations
@@ -35,53 +34,80 @@ SAMPLE_DECISION = OUT_DIR / "sample_decision.json"
 SIDEBAR_EXPANDED_WIDTH = 220
 SIDEBAR_COLLAPSED_WIDTH = 70
 
+# Scoring configuration
+SCORE_MAX = 5.0  # Maximum possible score
+
+# Common test symbols
+TEST_SYMBOLS = ["AAPL", "NVDA", "NFLX", "TSLA", "MSFT", "GOOGL", "AMZN", "META", "AMD", "CRM"]
+
 NAV_ITEMS = [
     ("Dashboard", "dashboard", "📊"),
+    ("Test", "test", "🧪"),
     ("Strategies", "strategies", "🎯"),
     ("Analytics", "analytics", "📈"),
     ("History", "history", "📜"),
     ("Settings", "settings", "⚙️"),
 ]
 
-# Color palette - refined with better contrast
+# Metric icons and configuration
+METRIC_CONFIG = {
+    "Total Symbols": {"icon": "🌐", "tooltip": "Total symbols in universe"},
+    "Evaluated": {"icon": "🔍", "tooltip": "Symbols evaluated for options"},
+    "Candidates": {"icon": "📋", "tooltip": "Positions passing all filters"},
+    "Selected": {"icon": "✅", "tooltip": "Chosen for execution"},
+    "Missing Chains": {"icon": "⚠️", "tooltip": "No options data available"},
+    "Exclusions": {"icon": "🚫", "tooltip": "Filter rejections"},
+}
+
+# Color palette - refined
 COLORS = {
-    "primary": "#0066b8",       # Increased contrast header
+    "primary": "#0066b8",
     "primary_dark": "#004d8c",
     "success": "#2aa872",
     "success_border": "#1e8a5e",
-    "warning": "#d4940a",       # Slightly darker for better contrast
+    "warning": "#d4940a",
     "warning_border": "#b37d08",
     "danger": "#d9534f",
     "danger_border": "#c9302c",
     "neutral": "#6c757d",
+    "purple": "#7c3aed",
     "surface_light": "#ffffff",
     "surface_dark": "#1a1f2e",
     "bg_light": "#f5f7fa",
     "bg_dark": "#0d1117",
     "text_light": "#24292f",
     "text_dark": "#e6edf3",
-    "border_light": "#d0d7de",   # Slightly darker border
+    "border_light": "#d0d7de",
     "border_dark": "#30363d",
 }
 
-# Metric tooltips with detailed explanations
-METRIC_TOOLTIPS = {
-    "Total Symbols": "Total number of symbols in the trading universe being monitored",
-    "Evaluated": "Symbols that passed initial screening and were evaluated for options chains",
-    "Candidates": "Option positions that passed all filters and are available for selection",
-    "Selected": "Top-ranked candidates chosen by the scoring algorithm for potential execution",
-    "Missing Chains": "Symbols without available options data (market closed, no chains, or API errors)",
-    "Exclusions": "Total filter rejections across all symbols (spread too wide, delta out of range, etc.)",
+# Exclusion rule colors
+EXCLUSION_COLORS = {
+    "SPREAD_TOO_WIDE": "#dc2626",
+    "NO_EXPIRATIONS": "#f59e0b",
+    "DELTA_OUT_OF_RANGE": "#8b5cf6",
+    "LOW_OPEN_INTEREST": "#3b82f6",
+    "BID_BELOW_MIN": "#ef4444",
+    "NO_OPTIONS_FOR_SYMBOL": "#6b7280",
+}
+
+# Strategy colors
+STRATEGY_COLORS = {
+    "CSP": "#0066b8",
+    "CC": "#7c3aed",
+    "PUT": "#dc2626",
+    "CALL": "#16a34a",
+    "Other": "#6b7280",
 }
 
 # Card tooltips
 CARD_TOOLTIPS = {
-    "Exclusion Breakdown": "Count of symbols rejected by each filter rule during the screening process",
-    "Candidate Distribution": "Distribution of candidates by strategy type (CSP = Cash-Secured Put, CC = Covered Call)",
-    "Top Candidates": "Highest-scoring option positions after all filters, ranked by the scoring algorithm",
-    "Selected Signals": "Signals chosen for potential execution with simulated Slack alert messages",
-    "Exclusions by Rule": "Detailed breakdown of which symbols were rejected and why",
-    "Execution Plan": "Generated orders ready for execution (or reason why execution is blocked)",
+    "Exclusion Breakdown": "Symbols rejected by each filter rule",
+    "Candidate Distribution": "Candidates by strategy (CSP/CC/PUT/CALL)",
+    "Top Candidates": "Highest-scoring positions after filters",
+    "Selected Signals": "Signals for execution with Slack alerts",
+    "Exclusions by Rule": "Details of rejected symbols",
+    "Execution Plan": "Orders ready for execution",
 }
 
 
@@ -91,41 +117,29 @@ CARD_TOOLTIPS = {
 
 
 def get_available_snapshots() -> List[str]:
-    """Get list of available snapshot files in out/ directory."""
+    """Get list of available snapshot files."""
     if not OUT_DIR.exists():
         return []
     
     files = []
-    # Add decision_latest first if it exists
     if DECISION_LATEST.exists():
         files.append(DECISION_LATEST.name)
-    
-    # Add sample files
     if SAMPLE_DECISION_RICH.exists():
         files.append(SAMPLE_DECISION_RICH.name)
     if SAMPLE_DECISION.exists():
         files.append(SAMPLE_DECISION.name)
     
-    # Add timestamped decision files
     for f in sorted(OUT_DIR.glob("decision_*.json"), reverse=True):
         if f.name not in files:
             files.append(f.name)
     
-    return files[:20]  # Limit to 20 files
+    return files[:20]
 
 
 def load_decision_data(filename: Optional[str] = None) -> Tuple[Dict[str, Any], bool, str, Optional[str]]:
-    """Load decision data from specified file or auto-detect.
-    
-    Args:
-        filename: Specific file to load, or None to auto-detect
-        
-    Returns:
-        Tuple of (data dict, is_sample_data boolean, loaded_filename, error_message)
-    """
+    """Load decision data from specified file or auto-detect."""
     error_msg = None
     
-    # If specific file requested
     if filename and filename != "No files available":
         filepath = OUT_DIR / filename
         if filepath.exists():
@@ -135,56 +149,27 @@ def load_decision_data(filename: Optional[str] = None) -> Tuple[Dict[str, Any], 
                 is_sample = "sample" in filename.lower()
                 return data, is_sample, filename, None
             except json.JSONDecodeError as e:
-                error_msg = f"Invalid JSON in {filename}: {e}"
+                error_msg = f"Invalid JSON: {e}"
             except IOError as e:
-                error_msg = f"Cannot read {filename}: {e}"
+                error_msg = f"Read error: {e}"
         else:
             error_msg = f"File not found: {filename}"
     
-    # Auto-detect: Try decision_latest.json first
-    if DECISION_LATEST.exists():
-        try:
-            with open(DECISION_LATEST, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            snapshot = data.get("decision_snapshot", {})
-            if snapshot.get("stats", {}).get("total_symbols", 0) > 0:
-                return data, False, DECISION_LATEST.name, error_msg
-        except (json.JSONDecodeError, IOError):
-            pass
+    # Auto-detect
+    for path, is_sample_flag in [(DECISION_LATEST, False), (SAMPLE_DECISION_RICH, True), (SAMPLE_DECISION, True)]:
+        if path.exists():
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                return data, is_sample_flag, path.name, error_msg
+            except (json.JSONDecodeError, IOError):
+                continue
     
-    # Try rich sample data
-    if SAMPLE_DECISION_RICH.exists():
-        try:
-            with open(SAMPLE_DECISION_RICH, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            return data, True, SAMPLE_DECISION_RICH.name, error_msg
-        except (json.JSONDecodeError, IOError):
-            pass
-    
-    # Fall back to basic sample data
-    if SAMPLE_DECISION.exists():
-        try:
-            with open(SAMPLE_DECISION, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            return data, True, SAMPLE_DECISION.name, error_msg
-        except (json.JSONDecodeError, IOError):
-            pass
-    
-    # Return empty structure if nothing found
     return {
-        "decision_snapshot": {
-            "stats": {},
-            "candidates": [],
-            "selected_signals": [],
-            "exclusions": [],
-            "symbols_with_options": [],
-            "symbols_without_options": {},
-            "data_source": "unavailable",
-        },
-        "execution_gate": {"allowed": False, "reasons": ["No data available"]},
+        "decision_snapshot": {"stats": {}, "candidates": [], "selected_signals": [], "exclusions": []},
+        "execution_gate": {"allowed": False},
         "execution_plan": {"orders": []},
-        "metadata": {},
-    }, True, "none", error_msg or "No data files found in out/ directory"
+    }, True, "none", error_msg or "No data files found"
 
 
 def parse_snapshot(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -201,7 +186,6 @@ def parse_snapshot(data: Dict[str, Any]) -> Dict[str, Any]:
         "symbols_without_options": snapshot.get("symbols_without_options", {}),
         "data_source": snapshot.get("data_source", "unknown"),
         "as_of": snapshot.get("as_of", ""),
-        "pipeline_timestamp": snapshot.get("pipeline_timestamp", ""),
     }
 
 
@@ -211,7 +195,6 @@ def parse_snapshot(data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _safe_float(val: Any, default: float = 0.0) -> float:
-    """Safely convert a value to float."""
     if val is None:
         return default
     try:
@@ -221,7 +204,6 @@ def _safe_float(val: Any, default: float = 0.0) -> float:
 
 
 def _extract_score(score_val: Any) -> float:
-    """Extract numeric score from dict or float."""
     if score_val is None:
         return 0.0
     if isinstance(score_val, dict):
@@ -229,405 +211,205 @@ def _extract_score(score_val: Any) -> float:
     return _safe_float(score_val)
 
 
+def _format_score(score: float) -> str:
+    """Format score with value and percentage."""
+    pct = min(100, (score / SCORE_MAX) * 100)
+    return f"{score:.2f} ({pct:.0f}%)"
+
+
 def _get_strategy_label(candidate: Dict[str, Any]) -> str:
-    """Get strategy label from candidate data."""
     signal_type = candidate.get("signal_type", "")
     if signal_type and signal_type not in ("", "Unknown"):
         return signal_type
-    
     strategy = candidate.get("strategy", "")
     if strategy and strategy not in ("", "Unknown"):
         return strategy
-    
     option_type = candidate.get("option_type", "")
     if option_type:
-        if option_type.upper() in ("PUT", "P"):
-            return "PUT"
-        elif option_type.upper() in ("CALL", "C"):
-            return "CALL"
-    
-    right = candidate.get("right", "")
-    if right:
-        if right.upper() in ("P", "PUT"):
-            return "PUT"
-        elif right.upper() in ("C", "CALL"):
-            return "CALL"
-    
+        return "PUT" if option_type.upper() in ("PUT", "P") else "CALL"
     return "Other"
 
 
 def _humanize_label(key: str) -> str:
-    """Convert snake_case to Title Case."""
     if not key:
         return key
-    return " ".join(w.capitalize() for w in str(key).replace("_", " ").replace("-", " ").split())
+    return " ".join(w.capitalize() for w in str(key).replace("_", " ").split())
 
 
 def _generate_slack_message(candidate: Dict[str, Any]) -> str:
-    """Generate a simulated Slack alert message for a signal."""
     symbol = candidate.get("symbol", "???")
     strike = _safe_float(candidate.get("strike", 0))
     expiry = candidate.get("expiry", "") or candidate.get("expiration", "N/A")
     mid = _safe_float(candidate.get("mid", 0))
     signal_type = _get_strategy_label(candidate)
-    
     option_char = "P" if signal_type in ("CSP", "PUT") else "C"
-    
-    return f"📊 *SELL 1 {symbol} ${strike:.0f}{option_char}* expiring {expiry} @ *${mid:.2f}* credit"
+    return f"📊 *SELL 1 {symbol} ${strike:.0f}{option_char}* exp {expiry} @ *${mid:.2f}* credit"
 
 
-def _tooltip_icon(tooltip_text: str) -> str:
-    """Generate a working tooltip using abbr tag for native browser support."""
-    escaped = tooltip_text.replace('"', '&quot;').replace("'", "&#39;")
-    return f'<abbr title="{escaped}" style="cursor:help;text-decoration:none;border:none;"><span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:rgba(0,102,184,0.1);color:#0066b8;font-size:0.65rem;font-weight:600;margin-left:4px;">?</span></abbr>'
+def _tooltip(text: str) -> str:
+    """Generate tooltip HTML using abbr tag."""
+    escaped = text.replace('"', '&quot;')
+    return f'<abbr title="{escaped}" style="cursor:help;text-decoration:none;border:none;"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:rgba(0,102,184,0.12);color:#0066b8;font-size:0.6rem;font-weight:600;margin-left:3px;">?</span></abbr>'
 
 
 # ---------------------------------------------------------------------------
-# Theme CSS Injection
+# CSS Injection
 # ---------------------------------------------------------------------------
 
 
 def inject_premium_css(dark: bool = False, sidebar_collapsed: bool = False) -> None:
-    """Inject premium dashboard CSS with modern styling."""
+    """Inject premium dashboard CSS."""
     bg = COLORS["bg_dark"] if dark else COLORS["bg_light"]
     surface = COLORS["surface_dark"] if dark else COLORS["surface_light"]
     text = COLORS["text_dark"] if dark else COLORS["text_light"]
     text_muted = "#8b949e" if dark else "#57606a"
     border = COLORS["border_dark"] if dark else COLORS["border_light"]
-    
     sidebar_width = SIDEBAR_COLLAPSED_WIDTH if sidebar_collapsed else SIDEBAR_EXPANDED_WIDTH
     
     st.markdown(f"""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap');
     
     :root {{
-        --bg-primary: {bg};
-        --bg-surface: {surface};
-        --border-color: {border};
-        --text-primary: {text};
-        --text-secondary: {text_muted};
-        --primary: {COLORS['primary']};
-        --success: {COLORS['success']};
-        --success-border: {COLORS['success_border']};
-        --danger: {COLORS['danger']};
-        --danger-border: {COLORS['danger_border']};
-        --warning: {COLORS['warning']};
-        --warning-border: {COLORS['warning_border']};
+        --bg: {bg}; --surface: {surface}; --border: {border};
+        --text: {text}; --text-muted: {text_muted};
+        --primary: {COLORS['primary']}; --success: {COLORS['success']};
+        --warning: {COLORS['warning']}; --danger: {COLORS['danger']};
     }}
     
-    * {{ font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }}
+    * {{ font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }}
+    .stApp {{ background: var(--bg); }}
+    .main .block-container {{ max-width: 1400px; padding: 0.25rem 1.5rem 1.5rem; }}
+    #MainMenu, footer, header[data-testid="stHeader"] {{ display: none; }}
     
-    .stApp {{ background: var(--bg-primary); }}
-    .main .block-container {{ max-width: 1400px; padding: 0.5rem 2rem 2rem; }}
-    
-    /* Hide Streamlit branding */
-    #MainMenu, footer {{ visibility: hidden; }}
-    header[data-testid="stHeader"] {{ display: none; }}
-    
-    /* CRITICAL: Sidebar toggle - ALWAYS visible as floating button */
+    /* Sidebar toggle - ALWAYS visible */
     [data-testid="collapsedControl"] {{
         position: fixed !important;
         left: 8px !important;
         top: 12px !important;
         z-index: 999999 !important;
-        background: {'#1e293b' if dark else '#ffffff'} !important;
+        background: {'#1e293b' if dark else '#fff'} !important;
         border: 2px solid {'#3b82f6' if dark else '#0066b8'} !important;
-        border-radius: 10px !important;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.25) !important;
-        padding: 6px !important;
-        width: 36px !important;
-        height: 36px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
+        border-radius: 8px !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
+        width: 32px !important; height: 32px !important;
+        display: flex !important; align-items: center !important; justify-content: center !important;
     }}
+    [data-testid="collapsedControl"] svg {{ color: {'#60a5fa' if dark else '#0066b8'} !important; }}
     
-    [data-testid="collapsedControl"]:hover {{
-        background: {'#2d3a4f' if dark else '#f0f4f8'} !important;
-        transform: scale(1.05);
-    }}
-    
-    [data-testid="collapsedControl"] svg {{
-        color: {'#60a5fa' if dark else '#0066b8'} !important;
-        width: 20px !important;
-        height: 20px !important;
-    }}
-    
-    /* Sidebar styling with dynamic width */
+    /* Sidebar */
     [data-testid="stSidebar"] {{
         width: {sidebar_width}px !important;
         min-width: {sidebar_width}px !important;
-        max-width: {sidebar_width}px !important;
         background: {'#0f172a' if dark else '#1e293b'} !important;
-        transition: width 0.2s ease !important;
     }}
+    [data-testid="stSidebar"] > div:first-child {{ padding-top: 3rem; width: {sidebar_width}px !important; }}
     
-    [data-testid="stSidebar"] > div:first-child {{
-        padding-top: 3.5rem;
-        width: {sidebar_width}px !important;
-    }}
-    
-    [data-testid="stSidebar"] .stMarkdown {{
-        color: #e2e8f0;
-    }}
-    
-    /* Nav buttons in sidebar */
+    /* Nav buttons - compact */
     [data-testid="stSidebar"] .stButton > button {{
         background: transparent !important;
         color: #94a3b8 !important;
         border: none !important;
         text-align: {'center' if sidebar_collapsed else 'left'} !important;
-        padding: {'0.6rem' if sidebar_collapsed else '0.5rem 0.75rem'} !important;
-        font-size: {'1.2rem' if sidebar_collapsed else '0.85rem'} !important;
-        transition: all 0.15s ease !important;
-        min-height: 40px !important;
+        padding: 0.4rem {'0.5rem' if sidebar_collapsed else '0.6rem'} !important;
+        font-size: {'1.1rem' if sidebar_collapsed else '0.8rem'} !important;
+        min-height: 36px !important;
+        transition: all 0.15s !important;
     }}
-    
     [data-testid="stSidebar"] .stButton > button:hover {{
         background: rgba(255,255,255,0.1) !important;
-        color: #ffffff !important;
+        color: #fff !important;
     }}
-    
     [data-testid="stSidebar"] .stButton > button[kind="primary"] {{
-        background: rgba(0,102,184,0.3) !important;
+        background: rgba(0,102,184,0.25) !important;
         color: #60a5fa !important;
         border-left: {'none' if sidebar_collapsed else '3px solid #3b82f6'} !important;
     }}
     
-    /* Top header bar - increased contrast */
-    .top-header {{
+    /* Header bar - compact */
+    .header-bar {{
         background: linear-gradient(135deg, {COLORS['primary']} 0%, {COLORS['primary_dark']} 100%);
-        padding: 0.75rem 1.25rem;
-        margin: -0.5rem -2rem 1.25rem -2rem;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        box-shadow: 0 2px 12px rgba(0,0,0,0.15);
-        border-bottom: 2px solid rgba(255,255,255,0.15);
+        padding: 0.5rem 1rem;
+        margin: -0.25rem -1.5rem 1rem;
+        display: flex; align-items: center; justify-content: space-between;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
     }}
+    .header-brand {{ display: flex; align-items: center; gap: 0.5rem; }}
+    .header-logo {{ width: 32px; height: 32px; background: rgba(255,255,255,0.15); border-radius: 8px;
+        display: flex; align-items: center; justify-content: center; font-size: 1.1rem; }}
+    .header-title {{ color: #fff; font-size: 1.1rem; font-weight: 700; margin: 0; }}
+    .header-subtitle {{ color: rgba(255,255,255,0.7); font-size: 0.6rem; margin: 0; text-transform: uppercase; }}
+    .header-badge {{ background: rgba(255,255,255,0.15); color: #fff; padding: 0.25rem 0.5rem;
+        border-radius: 4px; font-size: 0.65rem; font-weight: 600; }}
     
-    .header-brand {{
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-    }}
+    /* Cards */
+    .card {{ background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+        padding: 1rem; margin-bottom: 0.75rem; box-shadow: 0 1px 4px rgba(0,0,0,0.03); }}
+    .card-title {{ font-size: 0.85rem; font-weight: 600; color: var(--text); margin: 0 0 0.75rem 0;
+        display: flex; align-items: center; gap: 0.4rem; }}
     
-    .header-logo {{
-        width: 40px;
-        height: 40px;
-        background: rgba(255,255,255,0.2);
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.4rem;
-    }}
-    
-    .header-title {{
-        color: white;
-        font-size: 1.4rem;
-        font-weight: 700;
-        margin: 0;
-        letter-spacing: -0.02em;
-        text-shadow: 0 1px 2px rgba(0,0,0,0.1);
-    }}
-    
-    .header-subtitle {{
-        color: rgba(255,255,255,0.75);
-        font-size: 0.7rem;
-        margin: 0;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-    }}
-    
-    .header-controls {{
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-    }}
-    
-    .header-badge {{
-        background: rgba(255,255,255,0.2);
-        color: white;
-        padding: 0.4rem 0.8rem;
-        border-radius: 6px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        backdrop-filter: blur(4px);
-        border: 1px solid rgba(255,255,255,0.2);
-    }}
-    
-    /* Premium card styling with better shadows */
-    .premium-card {{
-        background: var(--bg-surface);
-        border: 1px solid var(--border-color);
-        border-radius: 16px;
-        padding: 1.25rem;
-        margin-bottom: 1rem;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.02);
-    }}
-    
-    .card-header {{
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        margin-bottom: 1rem;
-        padding-bottom: 0.75rem;
-        border-bottom: 1px solid var(--border-color);
-    }}
-    
-    .card-title {{
-        font-size: 0.95rem;
-        font-weight: 600;
-        color: var(--text-primary);
-        margin: 0;
-    }}
-    
-    /* Hero section */
-    .hero-section {{
-        background: linear-gradient(135deg, var(--bg-surface) 0%, {'#1a1f2e' if dark else '#f0f4f8'} 100%);
-        border: 1px solid var(--border-color);
-        border-radius: 16px;
-        padding: 1.25rem;
-        margin-bottom: 1.25rem;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-    }}
-    
-    .hero-status {{
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        flex-wrap: wrap;
-    }}
-    
-    .status-badge {{
-        display: inline-flex;
-        align-items: center;
-        padding: 0.45rem 0.9rem;
-        border-radius: 8px;
-        font-weight: 600;
-        font-size: 0.8rem;
-    }}
-    
-    .status-allowed {{ background: #dcfce7; color: #166534; border: 2px solid #86efac; }}
-    .status-blocked {{ background: #fee2e2; color: #991b1b; border: 2px solid #fca5a5; }}
-    .status-live {{ background: #dbeafe; color: #1e40af; border: 2px solid #93c5fd; }}
-    .status-snapshot {{ background: #fef3c7; color: #92400e; border: 2px solid #fcd34d; }}
-    .status-sample {{ background: #f3f4f6; color: #374151; border: 2px solid #d1d5db; }}
-    
-    /* Metrics with colored borders - increased contrast */
+    /* Metric tiles - icon on top, value below */
     .metric-tile {{
-        background: var(--bg-surface);
-        border: 1px solid var(--border-color);
-        border-radius: 12px;
-        padding: 0.9rem;
-        text-align: center;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.03);
-        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+        padding: 0.6rem 0.5rem; text-align: center;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+        transition: transform 0.15s, box-shadow 0.15s;
     }}
-    
-    .metric-tile:hover {{
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    }}
-    
-    .metric-tile.success {{ border-left: 5px solid {COLORS['success_border']}; }}
-    .metric-tile.warning {{ border-left: 5px solid {COLORS['warning_border']}; }}
-    .metric-tile.danger {{ border-left: 5px solid {COLORS['danger_border']}; }}
-    
-    .metric-value {{
-        font-size: 1.6rem;
-        font-weight: 700;
-        color: var(--text-primary);
-        line-height: 1.2;
-    }}
-    
+    .metric-tile:hover {{ transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,0.06); }}
+    .metric-tile.success {{ border-left: 4px solid {COLORS['success_border']}; }}
+    .metric-tile.warning {{ border-left: 4px solid {COLORS['warning_border']}; }}
+    .metric-tile.danger {{ border-left: 4px solid {COLORS['danger_border']}; }}
+    .metric-icon {{ font-size: 1.3rem; margin-bottom: 0.2rem; }}
+    .metric-value {{ font-size: 1.4rem; font-weight: 700; color: var(--text); line-height: 1.2; }}
     .metric-value.success {{ color: {COLORS['success']}; }}
     .metric-value.warning {{ color: {COLORS['warning']}; }}
     .metric-value.danger {{ color: {COLORS['danger']}; }}
+    .metric-label {{ font-size: 0.55rem; color: var(--text-muted); text-transform: uppercase;
+        letter-spacing: 0.04em; margin-top: 0.2rem; }}
     
-    .metric-label {{
-        font-size: 0.65rem;
-        color: var(--text-secondary);
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin-top: 0.35rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 0.25rem;
-    }}
+    /* Hero section */
+    .hero {{ background: linear-gradient(135deg, var(--surface) 0%, {'#1a1f2e' if dark else '#f0f4f8'} 100%);
+        border: 1px solid var(--border); border-radius: 12px; padding: 0.75rem 1rem; margin-bottom: 1rem; }}
+    .status-badge {{ display: inline-flex; padding: 0.3rem 0.6rem; border-radius: 6px;
+        font-weight: 600; font-size: 0.7rem; margin-right: 0.5rem; }}
+    .status-allowed {{ background: #dcfce7; color: #166534; }}
+    .status-blocked {{ background: #fee2e2; color: #991b1b; }}
+    .status-live {{ background: #dbeafe; color: #1e40af; }}
+    .status-sample {{ background: #f3f4f6; color: #374151; }}
     
-    /* Slack message simulation - monospace font */
-    .slack-message {{
+    /* Slack message */
+    .slack-msg {{
         background: {'#2d333b' if dark else '#f1f5f9'};
         border-left: 4px solid {COLORS['primary']};
-        padding: 0.75rem 1rem;
-        margin-top: 0.5rem;
-        border-radius: 0 8px 8px 0;
-        font-family: 'JetBrains Mono', 'Monaco', 'Menlo', monospace;
-        font-size: 0.78rem;
-        color: var(--text-primary);
-        line-height: 1.5;
+        padding: 0.6rem 0.8rem; margin-top: 0.4rem; border-radius: 0 6px 6px 0;
+        font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+        color: var(--text); line-height: 1.4;
     }}
     
-    /* Strategy badges with better colors */
-    .strategy-badge {{
-        display: inline-block;
-        padding: 0.25rem 0.6rem;
-        border-radius: 6px;
-        font-size: 0.7rem;
-        font-weight: 600;
-        letter-spacing: 0.02em;
-    }}
-    
-    .strategy-csp {{ background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }}
-    .strategy-cc {{ background: #f3e8ff; color: #7c3aed; border: 1px solid #d8b4fe; }}
-    .strategy-put {{ background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }}
-    .strategy-call {{ background: #dcfce7; color: #166534; border: 1px solid #86efac; }}
+    /* Strategy badges */
+    .strat-badge {{ display: inline-block; padding: 0.15rem 0.4rem; border-radius: 4px;
+        font-size: 0.6rem; font-weight: 600; }}
+    .strat-csp {{ background: #dbeafe; color: #1e40af; }}
+    .strat-cc {{ background: #f3e8ff; color: #7c3aed; }}
+    .strat-put {{ background: #fee2e2; color: #991b1b; }}
+    .strat-call {{ background: #dcfce7; color: #166534; }}
     
     /* Tables */
-    .stDataFrame {{
-        border-radius: 12px;
-        overflow: hidden;
-    }}
+    div[data-testid="stDataFrameResizable"] {{ border: 1px solid var(--border); border-radius: 8px; }}
     
-    div[data-testid="stDataFrameResizable"] {{
-        border: 1px solid var(--border-color);
-        border-radius: 12px;
-    }}
-    
-    /* Expander */
-    .streamlit-expanderHeader {{
-        background: var(--bg-surface) !important;
-        border: 1px solid var(--border-color) !important;
-        border-radius: 12px !important;
-        font-weight: 500 !important;
-    }}
+    /* Test page */
+    .test-result {{ background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+        padding: 1rem; margin-top: 0.75rem; }}
     
     /* Footer */
-    .dashboard-footer {{
-        margin-top: 2rem;
-        padding: 0.75rem;
-        text-align: center;
-        color: var(--text-secondary);
-        font-size: 0.7rem;
-    }}
+    .footer {{ margin-top: 1.5rem; padding: 0.5rem; text-align: center;
+        color: var(--text-muted); font-size: 0.65rem; }}
+    .footer a {{ color: {COLORS['primary']}; text-decoration: none; }}
     
-    /* Loading spinner */
-    .loading-indicator {{
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        color: var(--text-secondary);
-        font-size: 0.85rem;
-    }}
-    
-    /* Native tooltip styling for abbr */
-    abbr[title] {{
-        text-decoration: none !important;
-        border-bottom: none !important;
+    /* Responsive */
+    @media (max-width: 1366px) {{
+        .main .block-container {{ padding: 0.25rem 1rem 1rem; }}
+        .metric-value {{ font-size: 1.2rem; }}
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -638,224 +420,150 @@ def inject_premium_css(dark: bool = False, sidebar_collapsed: bool = False) -> N
 # ---------------------------------------------------------------------------
 
 
-def render_top_header(is_sample: bool, dark: bool, current_file: str, available_files: List[str], error_msg: Optional[str] = None) -> Tuple[bool, Optional[str], bool]:
-    """Render the top header bar with controls.
-    
-    Returns tuple of (new_dark_mode, selected_file_if_changed, refresh_clicked)
-    """
-    # Create header using markdown for the brand section
-    st.markdown(f"""
-    <div class="top-header">
+def render_header(is_sample: bool, loaded_file: str, available_files: List[str]) -> Tuple[bool, Optional[str], bool]:
+    """Render compact header bar. Returns (new_dark, new_file, refresh_clicked)."""
+    st.markdown("""
+    <div class="header-bar">
         <div class="header-brand">
             <div class="header-logo">⚡</div>
             <div>
-                <p class="header-title">ChakraOps Dashboard</p>
-                <p class="header-subtitle">Options Trading Platform</p>
+                <p class="header-title">ChakraOps</p>
+                <p class="header-subtitle">Options Platform</p>
             </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
-    
-    # Show error message if any
-    if error_msg:
-        st.warning(f"⚠️ {error_msg}")
     
     # Controls row
-    col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+    c1, c2, c3, c4, c5 = st.columns([2.5, 1, 0.8, 0.8, 0.8])
     
-    with col1:
-        # Data source selector
-        current_idx = 0
-        if current_file in available_files:
-            current_idx = available_files.index(current_file)
-        
-        selected_file = st.selectbox(
-            "📁 Data Source",
-            available_files if available_files else ["No files available"],
-            index=current_idx if available_files else 0,
-            key="header_file_selector",
-            help="Select a snapshot file to load. Changes take effect immediately."
-        )
+    with c1:
+        idx = available_files.index(loaded_file) if loaded_file in available_files else 0
+        selected = st.selectbox("📁", available_files or ["No files"], index=idx,
+                                 key="file_sel", label_visibility="collapsed",
+                                 help="Select data file")
     
-    with col2:
-        if is_sample:
-            st.markdown('<div style="padding-top:1.5rem;"><span class="header-badge" style="background:#6b7280;">📊 Sample</span></div>', unsafe_allow_html=True)
-        else:
-            st.markdown('<div style="padding-top:1.5rem;"><span class="header-badge" style="background:#2aa872;">✓ Live</span></div>', unsafe_allow_html=True)
+    with c2:
+        badge_type = "Sample" if is_sample else "Live"
+        badge_color = "#6b7280" if is_sample else "#2aa872"
+        st.markdown(f'<div style="padding-top:0.5rem;"><span class="header-badge" style="background:{badge_color};">{badge_type}: {loaded_file[:20]}</span></div>', unsafe_allow_html=True)
     
-    with col3:
-        st.write("")  # Spacer
-        new_dark = st.toggle("🌙 Dark", value=dark, key="header_dark_toggle", help="Toggle dark mode")
+    with c3:
+        dark = st.toggle("🌙", value=st.session_state.get("dark_mode", False), key="dark_toggle")
     
-    with col4:
-        st.write("")  # Spacer
-        refresh_clicked = st.button("🔄 Refresh", key="header_refresh", help="Reload data from selected file", use_container_width=True)
+    with c4:
+        refresh = st.button("🔄", key="refresh_btn", help="Refresh")
     
-    # Determine if file changed
-    file_changed = selected_file != current_file and selected_file != "No files available"
-    
-    return new_dark, selected_file if file_changed else None, refresh_clicked
+    file_changed = selected != loaded_file and selected != "No files"
+    return dark, selected if file_changed else None, refresh
 
 
-def render_sidebar(current_page: str, sidebar_collapsed: bool) -> Tuple[str, bool]:
-    """Render the sidebar with navigation.
-    
-    Returns tuple of (selected_page, toggle_collapsed).
-    """
+def render_sidebar(current_page: str, collapsed: bool) -> Tuple[str, bool]:
+    """Render sidebar navigation."""
     with st.sidebar:
-        # Toggle button for collapse/expand
-        toggle_col1, toggle_col2 = st.columns([1, 1] if not sidebar_collapsed else [1, 0.01])
+        if not collapsed:
+            st.markdown('<div style="padding:0.25rem;margin-bottom:0.5rem;"><span style="color:#fff;font-size:0.9rem;font-weight:700;">⚡ ChakraOps</span></div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div style="text-align:center;padding:0.25rem;margin-bottom:0.5rem;font-size:1.2rem;">⚡</div>', unsafe_allow_html=True)
         
-        with toggle_col1:
-            if not sidebar_collapsed:
-                st.markdown("""
-                <div style="padding: 0.25rem 0.5rem; margin-bottom: 0.5rem;">
-                    <h2 style="color: white; font-size: 1rem; font-weight: 700; margin: 0;">
-                        ⚡ ChakraOps
-                    </h2>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown("""
-                <div style="text-align: center; padding: 0.25rem; margin-bottom: 0.5rem;">
-                    <span style="font-size: 1.5rem;">⚡</span>
-                </div>
-                """, unsafe_allow_html=True)
+        new_collapsed = st.checkbox("◀" if not collapsed else "▶", value=collapsed,
+                                     key="collapse_chk", help="Collapse/expand")
         
-        # Collapse/expand toggle
-        new_collapsed = st.checkbox(
-            "◀" if not sidebar_collapsed else "▶",
-            value=sidebar_collapsed,
-            key="sidebar_collapse_toggle",
-            help="Collapse/expand sidebar"
-        )
-        
-        if not sidebar_collapsed:
-            st.markdown('<p style="color: #64748b; font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.3rem; padding-left: 0.5rem;">Navigation</p>', unsafe_allow_html=True)
-        
-        selected_page = current_page
+        selected = current_page
         for label, page_id, icon in NAV_ITEMS:
             is_active = page_id == current_page
-            # Show only icon when collapsed, icon + label when expanded
-            button_label = icon if sidebar_collapsed else f"{icon}  {label}"
-            
-            if st.button(
-                button_label,
-                key=f"nav_{page_id}",
-                use_container_width=True,
-                type="primary" if is_active else "secondary",
-                help=label if sidebar_collapsed else None,
-            ):
-                selected_page = page_id
+            btn_label = icon if collapsed else f"{icon} {label}"
+            if st.button(btn_label, key=f"nav_{page_id}", use_container_width=True,
+                        type="primary" if is_active else "secondary",
+                        help=label if collapsed else None):
+                selected = page_id
         
-        if not sidebar_collapsed:
-            st.markdown("<hr style='border-color: rgba(255,255,255,0.1); margin: 0.5rem 0;'>", unsafe_allow_html=True)
-            
-            # Quick stats
-            st.markdown('<p style="color: #64748b; font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.3rem; padding-left: 0.5rem;">Status</p>', unsafe_allow_html=True)
-            st.markdown(f"""
-            <div style="padding: 0.4rem; background: rgba(255,255,255,0.05); border-radius: 8px; font-size: 0.7rem; color: #94a3b8;">
-                <div style="margin-bottom: 0.2rem;">🕐 Last refresh: now</div>
-                <div>📡 Active</div>
-            </div>
-            """, unsafe_allow_html=True)
+        if not collapsed:
+            st.markdown("<hr style='border-color:rgba(255,255,255,0.1);margin:0.5rem 0;'>", unsafe_allow_html=True)
+            st.markdown('<div style="font-size:0.6rem;color:#64748b;padding:0.3rem;">📡 Active</div>', unsafe_allow_html=True)
     
-    return selected_page, new_collapsed
+    return selected, new_collapsed
 
 
-def render_hero(data: Dict[str, Any], parsed: Dict[str, Any], is_sample: bool, dark: bool, loaded_file: str) -> None:
-    """Render the hero section with status and metrics."""
+def render_hero(data: Dict, parsed: Dict, is_sample: bool, loaded_file: str) -> None:
+    """Render hero section with status badges."""
     gate = data.get("execution_gate", {})
-    gate_allowed = gate.get("allowed", False)
-    stats = parsed["stats"]
-    data_source = parsed["data_source"]
+    allowed = gate.get("allowed", False)
     as_of = parsed.get("as_of", "")
-    symbols_without = parsed.get("symbols_without_options", {})
     
-    # Format timestamp
     try:
         ts = datetime.fromisoformat(as_of.replace("Z", "+00:00"))
-        formatted_time = ts.strftime("%b %d, %Y %H:%M")
-    except (ValueError, AttributeError):
-        formatted_time = as_of or "Unknown"
+        time_str = ts.strftime("%b %d, %H:%M")
+    except:
+        time_str = as_of or "Unknown"
     
-    gate_status = "ALLOWED" if gate_allowed else "BLOCKED"
-    gate_class = "status-allowed" if gate_allowed else "status-blocked"
-    source_class = "status-sample" if is_sample else ("status-live" if data_source == "live" else "status-snapshot")
-    source_label = "Sample Data" if is_sample else ("Live" if data_source == "live" else "Snapshot")
+    gate_class = "status-allowed" if allowed else "status-blocked"
+    gate_text = "ALLOWED" if allowed else "BLOCKED"
+    source_class = "status-sample" if is_sample else "status-live"
+    source_text = "Sample" if is_sample else "Live"
     
     st.markdown(f"""
-    <div class="hero-section">
-        <div class="hero-status">
-            <span class="status-badge {gate_class}">{gate_status}</span>
-            <span class="status-badge {source_class}">{source_label}</span>
-            <span style="color: var(--text-secondary); font-size: 0.8rem;">
-                📅 {formatted_time}
-            </span>
-            <span style="color: var(--text-secondary); font-size: 0.72rem; opacity: 0.8;">
-                | 📁 {loaded_file}
-            </span>
-        </div>
+    <div class="hero">
+        <span class="status-badge {gate_class}">{gate_text}</span>
+        <span class="status-badge {source_class}">{source_text}</span>
+        <span style="color:var(--text-muted);font-size:0.75rem;">📅 {time_str} | 📁 {loaded_file}</span>
     </div>
     """, unsafe_allow_html=True)
-    
-    # Metrics in a responsive grid
+
+
+def render_metrics(parsed: Dict) -> None:
+    """Render metric tiles with icons on top."""
+    stats = parsed.get("stats", {})
     selected_count = len(parsed.get("selected_signals", []) or [])
-    missing_count = len(symbols_without) if isinstance(symbols_without, dict) else 0
+    missing_count = len(parsed.get("symbols_without_options", {}) or {})
     exclusion_count = stats.get("total_exclusions", 0)
     candidate_count = stats.get("total_candidates", 0)
-    
-    cols = st.columns(6)
     
     metrics = [
         ("Total Symbols", stats.get("total_symbols", 0), "", ""),
         ("Evaluated", stats.get("symbols_evaluated", 0), "", ""),
-        ("Candidates", candidate_count, "success" if candidate_count > 0 else "", "success" if candidate_count > 0 else ""),
-        ("Selected", selected_count, "success" if selected_count > 0 else "", "success" if selected_count > 0 else ""),
-        ("Missing Chains", missing_count, "warning" if missing_count > 0 else "", "warning" if missing_count > 0 else ""),
-        ("Exclusions", exclusion_count, "danger" if exclusion_count > 10 else ("warning" if exclusion_count > 5 else ""), "danger" if exclusion_count > 10 else ("warning" if exclusion_count > 5 else "")),
+        ("Candidates", candidate_count, "success" if candidate_count > 0 else "", "success"),
+        ("Selected", selected_count, "success" if selected_count > 0 else "", "success"),
+        ("Missing Chains", missing_count, "warning" if missing_count > 0 else "", "warning"),
+        ("Exclusions", exclusion_count, "danger" if exclusion_count > 10 else "", "danger"),
     ]
     
-    for col, (label, value, color_class, border_class) in zip(cols, metrics):
+    cols = st.columns(6)
+    for col, (label, value, val_class, tile_class) in zip(cols, metrics):
         with col:
-            tooltip = METRIC_TOOLTIPS.get(label, "")
-            tooltip_html = _tooltip_icon(tooltip)
+            cfg = METRIC_CONFIG.get(label, {"icon": "📊", "tooltip": label})
+            tt = _tooltip(cfg["tooltip"])
+            tc = tile_class if value > 0 and tile_class else ""
+            vc = val_class if value > 0 and val_class else ""
             st.markdown(f"""
-            <div class="metric-tile {border_class}">
-                <div class="metric-value {color_class}">{value}</div>
-                <div class="metric-label">
-                    {label}{tooltip_html}
-                </div>
+            <div class="metric-tile {tc}">
+                <div class="metric-icon">{cfg['icon']}</div>
+                <div class="metric-value {vc}">{value}</div>
+                <div class="metric-label">{label}{tt}</div>
             </div>
             """, unsafe_allow_html=True)
 
 
-def render_charts(parsed: Dict[str, Any], dark: bool) -> None:
-    """Render charts using Plotly for better customization."""
+def render_charts(parsed: Dict, dark: bool) -> None:
+    """Render horizontal bar charts with color coding."""
     try:
         import plotly.express as px
+        import plotly.graph_objects as go
         has_plotly = True
     except ImportError:
         has_plotly = False
     
     import pandas as pd
     
-    col1, col2 = st.columns(2)
+    c1, c2 = st.columns(2)
     
-    with col1:
-        tooltip = CARD_TOOLTIPS.get("Exclusion Breakdown", "")
-        tooltip_html = _tooltip_icon(tooltip)
-        st.markdown(f"""
-        <div class="premium-card">
-            <div class="card-header">
-                <h3 class="card-title">📊 Exclusion Breakdown{tooltip_html}</h3>
-            </div>
-        """, unsafe_allow_html=True)
+    # Exclusion Breakdown
+    with c1:
+        tt = _tooltip(CARD_TOOLTIPS["Exclusion Breakdown"])
+        st.markdown(f'<div class="card"><div class="card-title">📊 Exclusion Breakdown{tt}</div>', unsafe_allow_html=True)
         
-        exclusion_summary = parsed.get("exclusion_summary", {})
-        rule_counts = exclusion_summary.get("rule_counts", {})
-        
-        # Also try to build from raw exclusions if summary not available
+        exc_summary = parsed.get("exclusion_summary", {})
+        rule_counts = exc_summary.get("rule_counts", {})
         if not rule_counts:
             exclusions = parsed.get("exclusions", [])
             if exclusions:
@@ -863,290 +571,309 @@ def render_charts(parsed: Dict[str, Any], dark: bool) -> None:
         
         if rule_counts and has_plotly:
             df = pd.DataFrame([
-                {"Rule": _humanize_label(rule), "Count": count}
-                for rule, count in sorted(rule_counts.items(), key=lambda x: -x[1])
+                {"Rule": _humanize_label(r), "Count": c, "Color": EXCLUSION_COLORS.get(r, "#6b7280")}
+                for r, c in sorted(rule_counts.items(), key=lambda x: -x[1])
             ])
-            
-            fig = px.bar(
-                df, x="Count", y="Rule", orientation="h",
-                color_discrete_sequence=[COLORS["danger"]],
-            )
+            fig = go.Figure(go.Bar(
+                x=df["Count"], y=df["Rule"], orientation='h',
+                marker_color=df["Color"], text=df["Count"], textposition='outside'
+            ))
             fig.update_layout(
-                height=220,
-                margin=dict(l=0, r=0, t=5, b=5),
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                font=dict(size=10, color=COLORS["text_dark"] if dark else COLORS["text_light"]),
-                showlegend=False,
-                xaxis=dict(showgrid=True, gridcolor="rgba(128,128,128,0.15)"),
-                yaxis=dict(showgrid=False),
+                height=180, margin=dict(l=0, r=20, t=5, b=5),
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(size=9, color=COLORS["text_dark"] if dark else COLORS["text_light"]),
+                showlegend=False, xaxis=dict(showgrid=True, gridcolor="rgba(128,128,128,0.1)"),
+                yaxis=dict(showgrid=False, autorange="reversed")
             )
-            st.plotly_chart(fig, use_container_width=True, key="exclusion_chart")
+            st.plotly_chart(fig, use_container_width=True, key="exc_chart")
         elif rule_counts:
-            df = pd.DataFrame([
-                {"Rule": _humanize_label(rule), "Count": count}
-                for rule, count in sorted(rule_counts.items(), key=lambda x: -x[1])
-            ])
-            st.bar_chart(df.set_index("Rule"), use_container_width=True, height=200)
+            df = pd.DataFrame([{"Rule": _humanize_label(r), "Count": c} for r, c in rule_counts.items()])
+            st.bar_chart(df.set_index("Rule"), height=160)
         else:
-            st.info("📭 No exclusion data available in this snapshot")
-        
+            st.info("📭 No exclusions")
         st.markdown('</div>', unsafe_allow_html=True)
     
-    with col2:
-        tooltip = CARD_TOOLTIPS.get("Candidate Distribution", "")
-        tooltip_html = _tooltip_icon(tooltip)
-        st.markdown(f"""
-        <div class="premium-card">
-            <div class="card-header">
-                <h3 class="card-title">📈 Candidate Distribution{tooltip_html}</h3>
-            </div>
-        """, unsafe_allow_html=True)
+    # Candidate Distribution
+    with c2:
+        tt = _tooltip(CARD_TOOLTIPS["Candidate Distribution"])
+        st.markdown(f'<div class="card"><div class="card-title">📈 Candidate Distribution{tt}</div>', unsafe_allow_html=True)
         
-        candidates = parsed.get("candidates", [])
-        scored_candidates = parsed.get("scored_candidates", [])
+        scored = parsed.get("scored_candidates", [])
+        candidates = [sc.get("candidate", {}) for sc in scored] if scored else parsed.get("candidates", [])
         
-        all_candidates = []
-        if scored_candidates:
-            for sc in scored_candidates:
-                cand = sc.get("candidate", {})
-                if cand:
-                    all_candidates.append(cand)
-        elif candidates:
-            all_candidates = candidates
-        
-        if all_candidates and has_plotly:
-            strategy_counts: Dict[str, int] = {}
-            for c in all_candidates:
-                label = _get_strategy_label(c)
-                strategy_counts[label] = strategy_counts.get(label, 0) + 1
-            
+        if candidates and has_plotly:
+            strategy_counts = Counter(_get_strategy_label(c) for c in candidates if c)
             df = pd.DataFrame([
-                {"Strategy": stype, "Count": count}
-                for stype, count in sorted(strategy_counts.items(), key=lambda x: -x[1])
+                {"Strategy": s, "Count": c, "Color": STRATEGY_COLORS.get(s, "#6b7280")}
+                for s, c in sorted(strategy_counts.items(), key=lambda x: -x[1])
             ])
-            
-            colors = {
-                "CSP": COLORS["primary"], 
-                "CC": "#7c3aed", 
-                "PUT": COLORS["danger"], 
-                "CALL": COLORS["success"], 
-                "Other": COLORS["neutral"]
-            }
-            
-            fig = px.bar(
-                df, x="Strategy", y="Count",
-                color="Strategy",
-                color_discrete_map=colors,
-            )
+            fig = go.Figure(go.Bar(
+                x=df["Count"], y=df["Strategy"], orientation='h',
+                marker_color=df["Color"], text=df["Count"], textposition='outside'
+            ))
             fig.update_layout(
-                height=220,
-                margin=dict(l=0, r=0, t=5, b=5),
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                font=dict(size=10, color=COLORS["text_dark"] if dark else COLORS["text_light"]),
-                showlegend=False,
-                xaxis=dict(showgrid=False),
-                yaxis=dict(showgrid=True, gridcolor="rgba(128,128,128,0.15)"),
+                height=180, margin=dict(l=0, r=20, t=5, b=5),
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(size=9, color=COLORS["text_dark"] if dark else COLORS["text_light"]),
+                showlegend=False, xaxis=dict(showgrid=True, gridcolor="rgba(128,128,128,0.1)"),
+                yaxis=dict(showgrid=False, autorange="reversed")
             )
-            st.plotly_chart(fig, use_container_width=True, key="distribution_chart")
-        elif all_candidates:
-            strategy_counts = Counter(_get_strategy_label(c) for c in all_candidates)
-            df = pd.DataFrame([
-                {"Strategy": s, "Count": c} for s, c in strategy_counts.items()
-            ])
-            st.bar_chart(df.set_index("Strategy"), use_container_width=True, height=200)
+            st.plotly_chart(fig, use_container_width=True, key="dist_chart")
+        elif candidates:
+            df = pd.DataFrame([{"Strategy": _get_strategy_label(c), "Count": 1} for c in candidates])
+            df = df.groupby("Strategy").sum().reset_index()
+            st.bar_chart(df.set_index("Strategy"), height=160)
         else:
-            st.info("📭 No candidate data available in this snapshot")
-        
+            st.info("📭 No candidates")
         st.markdown('</div>', unsafe_allow_html=True)
 
 
-def render_candidates_table(parsed: Dict[str, Any], dark: bool) -> None:
-    """Render the candidates table."""
+def render_candidates_table(parsed: Dict) -> None:
+    """Render candidates table with score percentage."""
     import pandas as pd
     
-    tooltip = CARD_TOOLTIPS.get("Top Candidates", "")
-    tooltip_html = _tooltip_icon(tooltip)
-    st.markdown(f"""
-    <div class="premium-card">
-        <div class="card-header">
-            <h3 class="card-title">🎯 Top Candidates{tooltip_html}</h3>
-        </div>
-    """, unsafe_allow_html=True)
+    tt = _tooltip(CARD_TOOLTIPS["Top Candidates"])
+    score_tt = _tooltip("Score based on credit, delta, IV, DTE, liquidity")
+    st.markdown(f'<div class="card"><div class="card-title">🎯 Top Candidates{tt}</div>', unsafe_allow_html=True)
     
     scored = parsed.get("scored_candidates", [])
-    selected_symbols = {
-        s.get("scored", {}).get("candidate", {}).get("symbol")
-        for s in (parsed.get("selected_signals", []) or [])
-    }
+    selected_symbols = {s.get("scored", {}).get("candidate", {}).get("symbol") 
+                        for s in (parsed.get("selected_signals", []) or [])}
     
     if scored:
         rows = []
-        for sc in scored[:15]:
-            candidate = sc.get("candidate", {})
-            score_val = sc.get("score", 0)
-            score_total = _extract_score(score_val)
-            symbol = candidate.get("symbol", "")
-            
-            strike = _safe_float(candidate.get("strike", 0))
-            mid = _safe_float(candidate.get("mid", 0))
-            delta = candidate.get("delta")
-            iv = candidate.get("iv")
+        for sc in scored[:12]:
+            cand = sc.get("candidate", {})
+            score = _extract_score(sc.get("score", 0))
+            symbol = cand.get("symbol", "")
+            strike = _safe_float(cand.get("strike", 0))
+            mid = _safe_float(cand.get("mid", 0))
+            delta = cand.get("delta")
+            iv = cand.get("iv")
             
             rows.append({
                 "Symbol": symbol,
-                "Type": _get_strategy_label(candidate),
+                "Type": _get_strategy_label(cand),
                 "Strike": f"${strike:,.2f}",
-                "Expiration": candidate.get("expiry", "") or candidate.get("expiration", ""),
+                "Exp": cand.get("expiry", "") or cand.get("expiration", ""),
                 "Premium": f"${mid:,.2f}",
-                "Delta": f"{_safe_float(delta):.2f}" if delta is not None else "—",
-                "IV": f"{_safe_float(iv) * 100:.1f}%" if iv is not None else "—",
-                "Score": f"{score_total:.2f}",
+                "Delta": f"{_safe_float(delta):.2f}" if delta else "—",
+                "IV": f"{_safe_float(iv)*100:.1f}%" if iv else "—",
+                f"Score (0-{int(SCORE_MAX)})": _format_score(score),
                 "✓": "✅" if symbol in selected_symbols else "",
             })
         
         df = pd.DataFrame(rows)
-        st.dataframe(df, use_container_width=True, hide_index=True, height=350)
+        st.dataframe(df, use_container_width=True, hide_index=True, height=300)
     else:
         candidates = parsed.get("candidates", [])
         if candidates:
-            rows = []
-            for c in candidates[:15]:
-                strike = _safe_float(c.get("strike", 0))
-                mid = _safe_float(c.get("mid", 0))
-                delta = c.get("delta")
-                iv = c.get("iv")
-                
-                rows.append({
-                    "Symbol": c.get("symbol", ""),
-                    "Type": _get_strategy_label(c),
-                    "Strike": f"${strike:,.2f}",
-                    "Expiration": c.get("expiry", "") or c.get("expiration", ""),
-                    "Premium": f"${mid:,.2f}",
-                    "Delta": f"{_safe_float(delta):.2f}" if delta is not None else "—",
-                    "IV": f"{_safe_float(iv) * 100:.1f}%" if iv is not None else "—",
-                })
-            
-            df = pd.DataFrame(rows)
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            rows = [{
+                "Symbol": c.get("symbol", ""),
+                "Type": _get_strategy_label(c),
+                "Strike": f"${_safe_float(c.get('strike', 0)):,.2f}",
+                "Exp": c.get("expiry", "") or c.get("expiration", ""),
+                "Premium": f"${_safe_float(c.get('mid', 0)):,.2f}",
+            } for c in candidates[:12]]
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
         else:
-            st.info("📭 No candidates to display. Select a data file with candidate data from the dropdown above.")
+            st.info("📭 No candidates. Select a data file.")
     
     st.markdown('</div>', unsafe_allow_html=True)
 
 
-def render_detail_panels(data: Dict[str, Any], parsed: Dict[str, Any], dark: bool) -> None:
-    """Render expandable detail panels with Slack simulation."""
-    import pandas as pd
-    
-    # Selected Signals Panel with Slack simulation
-    tooltip = CARD_TOOLTIPS.get("Selected Signals", "")
-    with st.expander(f"📌 Selected Signals & Slack Alerts", expanded=True):
-        st.caption(tooltip)
-        
+def render_signals_panel(parsed: Dict) -> None:
+    """Render selected signals with Slack messages."""
+    tt = _tooltip(CARD_TOOLTIPS["Selected Signals"])
+    with st.expander(f"📌 Selected Signals{tt}", expanded=True):
         selected = parsed.get("selected_signals", []) or []
         if selected:
-            for i, signal in enumerate(selected):
+            for signal in selected:
                 scored = signal.get("scored", {})
-                candidate = scored.get("candidate", {})
-                score_val = scored.get("score", 0)
-                score_total = _extract_score(score_val)
-                
-                strike = _safe_float(candidate.get("strike", 0))
-                mid = _safe_float(candidate.get("mid", 0))
-                delta = candidate.get("delta")
-                delta_str = f"{_safe_float(delta):.2f}" if delta is not None else "N/A"
-                strategy = _get_strategy_label(candidate)
-                
-                strategy_class = "strategy-csp" if strategy == "CSP" else ("strategy-cc" if strategy == "CC" else ("strategy-call" if strategy == "CALL" else "strategy-put"))
+                cand = scored.get("candidate", {})
+                score = _extract_score(scored.get("score", 0))
+                strike = _safe_float(cand.get("strike", 0))
+                mid = _safe_float(cand.get("mid", 0))
+                delta = cand.get("delta")
+                strategy = _get_strategy_label(cand)
+                strat_class = f"strat-{strategy.lower()}" if strategy.lower() in ["csp", "cc", "put", "call"] else "strat-csp"
                 
                 st.markdown(f"""
-                <div class="premium-card" style="margin-bottom: 0.75rem; padding: 1rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <strong style="font-size: 1.05rem;">{candidate.get('symbol', 'N/A')}</strong>
-                            <span class="strategy-badge {strategy_class}" style="margin-left: 0.5rem;">{strategy}</span>
-                        </div>
-                        <div style="text-align: right;">
-                            <span style="font-weight: 600; color: var(--success);">Score: {score_total:.2f}</span>
-                        </div>
+                <div class="card" style="padding:0.75rem;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <div><strong>{cand.get('symbol', 'N/A')}</strong>
+                        <span class="strat-badge {strat_class}">{strategy}</span></div>
+                        <span style="font-weight:600;color:var(--success);">{_format_score(score)}</span>
                     </div>
-                    <div style="margin-top: 0.4rem; font-size: 0.8rem; color: var(--text-secondary);">
-                        Strike: <strong>${strike:,.2f}</strong> | 
-                        Expiry: <strong>{candidate.get('expiry', '') or candidate.get('expiration', 'N/A')}</strong> | 
-                        Premium: <strong>${mid:.2f}</strong> |
-                        Delta: <strong>{delta_str}</strong>
+                    <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.3rem;">
+                        Strike: <b>${strike:,.2f}</b> | Exp: <b>{cand.get('expiry', '') or cand.get('expiration', 'N/A')}</b> | 
+                        Premium: <b>${mid:.2f}</b> | Delta: <b>{_safe_float(delta):.2f if delta else 'N/A'}</b>
                     </div>
-                    <div class="slack-message">
-                        {_generate_slack_message(candidate)}
-                    </div>
+                    <div class="slack-msg">{_generate_slack_message(cand)}</div>
                 </div>
                 """, unsafe_allow_html=True)
         else:
-            st.info("📭 No signals selected in this snapshot")
+            st.info("📭 No signals selected")
+
+
+def render_exclusions_panel(parsed: Dict) -> None:
+    """Render exclusions by rule."""
+    import pandas as pd
     
-    # Exclusions Panel
-    tooltip = CARD_TOOLTIPS.get("Exclusions by Rule", "")
-    with st.expander(f"🚫 Exclusions by Rule", expanded=False):
-        st.caption(tooltip)
-        
-        exclusion_summary = parsed.get("exclusion_summary", {})
-        symbols_by_rule = exclusion_summary.get("symbols_by_rule", {})
+    with st.expander("🚫 Exclusions by Rule", expanded=False):
+        exc_summary = parsed.get("exclusion_summary", {})
+        symbols_by_rule = exc_summary.get("symbols_by_rule", {})
         
         if symbols_by_rule:
             for rule, symbols in symbols_by_rule.items():
-                st.markdown(f"**{_humanize_label(rule)}** ({len(symbols)} symbols)")
-                st.markdown(f"<span style='color: var(--text-secondary); font-size: 0.8rem;'>{', '.join(symbols[:10])}{'...' if len(symbols) > 10 else ''}</span>", unsafe_allow_html=True)
-                st.markdown("<hr style='margin: 0.4rem 0; opacity: 0.2;'>", unsafe_allow_html=True)
+                st.markdown(f"**{_humanize_label(rule)}** ({len(symbols)})")
+                st.caption(", ".join(symbols[:8]) + ("..." if len(symbols) > 8 else ""))
         else:
             exclusions = parsed.get("exclusions", [])
             if exclusions:
                 df = pd.DataFrame([
-                    {"Symbol": e.get("symbol", ""), "Rule": _humanize_label(e.get("rule", "")), "Message": e.get("message", "")}
-                    for e in exclusions[:30]
+                    {"Symbol": e.get("symbol", ""), "Rule": _humanize_label(e.get("rule", ""))}
+                    for e in exclusions[:20]
                 ])
                 st.dataframe(df, use_container_width=True, hide_index=True)
             else:
-                st.info("📭 No exclusions recorded in this snapshot")
+                st.info("📭 No exclusions")
+
+
+def render_execution_panel(data: Dict) -> None:
+    """Render execution plan."""
+    import pandas as pd
     
-    # Execution Plan Panel
-    tooltip = CARD_TOOLTIPS.get("Execution Plan", "")
-    with st.expander(f"📋 Execution Plan", expanded=False):
-        st.caption(tooltip)
-        
+    with st.expander("📋 Execution Plan", expanded=False):
         plan = data.get("execution_plan", {})
         orders = plan.get("orders", [])
         
         if orders:
-            df = pd.DataFrame([
-                {
-                    "Symbol": o.get("symbol", ""),
-                    "Action": o.get("action", "").replace("_", " "),
-                    "Qty": o.get("quantity", 1),
-                    "Strike": f"${_safe_float(o.get('strike', 0)):,.2f}",
-                    "Expiry": o.get("expiry", ""),
-                    "Type": o.get("option_type", ""),
-                    "Limit": f"${_safe_float(o.get('limit_price', 0)):,.2f}",
-                }
-                for o in orders
-            ])
+            df = pd.DataFrame([{
+                "Symbol": o.get("symbol", ""),
+                "Action": o.get("action", "").replace("_", " "),
+                "Strike": f"${_safe_float(o.get('strike', 0)):,.2f}",
+                "Exp": o.get("expiry", ""),
+                "Limit": f"${_safe_float(o.get('limit_price', 0)):,.2f}",
+            } for o in orders])
             st.dataframe(df, use_container_width=True, hide_index=True)
         else:
-            blocked_reason = plan.get("blocked_reason", "No orders generated")
-            if blocked_reason:
-                st.warning(f"⚠️ Execution blocked: {_humanize_label(blocked_reason)}")
+            reason = plan.get("blocked_reason", "No orders")
+            st.warning(f"⚠️ {_humanize_label(reason)}" if reason else "📭 No orders")
+
+
+# ---------------------------------------------------------------------------
+# Test Page
+# ---------------------------------------------------------------------------
+
+
+def render_test_page() -> None:
+    """Render the Test page for single-ticker testing."""
+    st.markdown("## 🧪 Test Page")
+    st.caption("Test data fetching and Slack message generation for individual symbols. Does not run the full pipeline.")
+    
+    c1, c2 = st.columns([2, 1])
+    
+    with c1:
+        # Ticker input
+        ticker = st.selectbox("Select Symbol", TEST_SYMBOLS, index=0, key="test_ticker")
+        custom = st.text_input("Or enter custom symbol", "", key="custom_ticker", placeholder="e.g., SHOP")
+        symbol = custom.upper().strip() if custom else ticker
+        
+        st.markdown(f"**Testing symbol: `{symbol}`**")
+    
+    with c2:
+        st.markdown("### Actions")
+        fetch_btn = st.button("📥 Fetch Data", key="fetch_btn", use_container_width=True)
+        slack_btn = st.button("💬 Test Slack", key="slack_btn", use_container_width=True)
+    
+    st.markdown("---")
+    
+    # Fetch Data functionality
+    if fetch_btn:
+        with st.spinner(f"Fetching data for {symbol}..."):
+            # Simulate data fetch (in production, this would call Theta provider)
+            test_data = _simulate_fetch_data(symbol)
+            
+            if test_data.get("error"):
+                st.error(f"❌ {test_data['error']}")
             else:
-                st.info("📭 No orders in execution plan")
+                st.success(f"✅ Data fetched for {symbol}")
+                
+                # Display results
+                st.markdown('<div class="test-result">', unsafe_allow_html=True)
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Stock Price", f"${test_data['price']:.2f}")
+                with col2:
+                    st.metric("Expirations", test_data['expirations'])
+                with col3:
+                    st.metric("Options", test_data['total_options'])
+                
+                # Sample options
+                if test_data.get("options"):
+                    st.markdown("**Sample Options:**")
+                    import pandas as pd
+                    df = pd.DataFrame(test_data["options"][:5])
+                    st.dataframe(df, use_container_width=True, hide_index=True)
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Test Slack functionality
+    if slack_btn:
+        st.markdown("### Simulated Slack Message")
+        
+        # Create a mock candidate
+        mock_candidate = {
+            "symbol": symbol,
+            "signal_type": "CSP",
+            "strike": 100.0,
+            "expiry": "2026-02-14",
+            "mid": 2.50,
+            "delta": -0.25,
+        }
+        
+        slack_msg = _generate_slack_message(mock_candidate)
+        
+        st.markdown(f"""
+        <div class="card">
+            <div class="card-title">💬 Slack Alert Preview</div>
+            <div class="slack-msg">{slack_msg}</div>
+            <div style="margin-top:0.5rem;font-size:0.7rem;color:var(--text-muted);">
+                This is a simulated message. No actual Slack call was made.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Show raw message
+        with st.expander("View raw message"):
+            st.code(slack_msg.replace("*", "").replace("📊 ", ""))
 
 
-def render_footer() -> None:
-    """Render a simplified footer."""
-    st.markdown("""
-    <div class="dashboard-footer">
-        ChakraOps © 2026 — Internal Use Only
-    </div>
-    """, unsafe_allow_html=True)
+def _simulate_fetch_data(symbol: str) -> Dict[str, Any]:
+    """Simulate fetching data for a symbol."""
+    import random
+    
+    # Simulate some symbols having no data
+    if symbol in ["XYZ", "FAKE", "TEST"]:
+        return {"error": f"No data available for symbol {symbol}. Check if the symbol is valid and the data provider is accessible."}
+    
+    # Generate mock data
+    base_price = random.uniform(50, 500)
+    
+    return {
+        "symbol": symbol,
+        "price": round(base_price, 2),
+        "expirations": random.randint(4, 12),
+        "total_options": random.randint(50, 200),
+        "options": [
+            {"Strike": f"${round(base_price * (0.9 + i*0.05), 2)}", "Type": "PUT" if i % 2 == 0 else "CALL",
+             "Bid": f"${round(random.uniform(0.5, 5), 2)}", "Ask": f"${round(random.uniform(0.6, 5.5), 2)}",
+             "IV": f"{round(random.uniform(20, 60), 1)}%"}
+            for i in range(5)
+        ]
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1154,178 +881,149 @@ def render_footer() -> None:
 # ---------------------------------------------------------------------------
 
 
-def render_dashboard_page(data: Dict[str, Any], parsed: Dict[str, Any], is_sample: bool, dark: bool, loaded_file: str) -> None:
-    """Render the main dashboard page."""
-    render_hero(data, parsed, is_sample, dark, loaded_file)
-    render_charts(parsed, dark)
-    render_candidates_table(parsed, dark)
-    render_detail_panels(data, parsed, dark)
+def render_dashboard_page(data: Dict, parsed: Dict, is_sample: bool, loaded_file: str) -> None:
+    """Render main dashboard."""
+    render_hero(data, parsed, is_sample, loaded_file)
+    render_metrics(parsed)
+    render_charts(parsed, st.session_state.get("dark_mode", False))
+    render_candidates_table(parsed)
+    render_signals_panel(parsed)
+    render_exclusions_panel(parsed)
+    render_execution_panel(data)
 
 
-def render_strategies_page(data: Dict[str, Any], parsed: Dict[str, Any], dark: bool) -> None:
-    """Render the strategies page."""
+def render_strategies_page(data: Dict) -> None:
     st.markdown("## 🎯 Strategies")
-    st.info("Strategy configuration and analysis coming soon.")
-    
-    with st.expander("📊 Current Configuration"):
-        configs = data.get("decision_snapshot", {}).get("configs", {})
-        if configs:
-            st.json(configs)
-        else:
-            st.write("No configuration data available")
+    st.info("Strategy configuration coming soon.")
 
 
-def render_analytics_page(data: Dict[str, Any], parsed: Dict[str, Any], dark: bool) -> None:
-    """Render the analytics page."""
+def render_analytics_page() -> None:
     st.markdown("## 📈 Analytics")
-    st.info("Historical analytics and performance tracking coming soon.")
+    st.info("Historical analytics coming soon.")
 
 
-def render_history_page(data: Dict[str, Any], parsed: Dict[str, Any], dark: bool) -> None:
-    """Render the history page."""
+def render_history_page() -> None:
     import pandas as pd
     
     st.markdown("## 📜 History")
+    files = sorted(OUT_DIR.glob("decision_*.json"), reverse=True)[:15]
     
-    snapshot_files = sorted(OUT_DIR.glob("decision_*.json"), reverse=True)[:20]
+    rows = []
+    for f in files:
+        if f.name in ("decision_latest.json", "sample_decision.json", "sample_decision_rich.json"):
+            continue
+        try:
+            stat = f.stat()
+            rows.append({
+                "File": f.name,
+                "Size": f"{stat.st_size/1024:.1f} KB",
+                "Modified": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
+            })
+        except OSError:
+            pass
     
-    if snapshot_files:
-        rows = []
-        for f in snapshot_files:
-            if f.name in ("decision_latest.json", "sample_decision.json", "sample_decision_rich.json"):
-                continue
-            try:
-                stat = f.stat()
-                rows.append({
-                    "Filename": f.name,
-                    "Size": f"{stat.st_size / 1024:.1f} KB",
-                    "Modified": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
-                })
-            except OSError:
-                continue
-        
-        if rows:
-            df = pd.DataFrame(rows)
-            st.dataframe(df, use_container_width=True, hide_index=True)
-        else:
-            st.info("No historical snapshots found")
+    if rows:
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
     else:
-        st.info("No historical snapshots found")
+        st.info("No historical snapshots found.")
 
 
-def render_settings_page(dark: bool) -> None:
-    """Render the settings page."""
+def render_settings_page() -> None:
     st.markdown("## ⚙️ Settings")
     
-    col1, col2 = st.columns(2)
-    
-    with col1:
+    c1, c2 = st.columns(2)
+    with c1:
         st.markdown("### Display")
-        st.checkbox("Dark Mode", value=dark, disabled=True, help="Use the toggle in the header")
+        st.checkbox("Dark Mode", value=st.session_state.get("dark_mode", False), disabled=True)
         st.checkbox("Show Tooltips", value=True)
-        st.checkbox("Auto-refresh", value=False)
-    
-    with col2:
+    with c2:
         st.markdown("### Data")
         st.text_input("Output Directory", value="out/", disabled=True)
-        st.number_input("Refresh Interval (sec)", value=30, min_value=10, max_value=300)
+
+
+def render_footer() -> None:
+    st.markdown("""
+    <div class="footer">
+        ChakraOps © 2026 — Internal Use Only | 
+        <a href="https://github.com/swap2you/chakraops" target="_blank">GitHub</a>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
-# Main Entry Point
+# Main
 # ---------------------------------------------------------------------------
 
 
 def main() -> None:
-    """Main entry point for the premium dashboard."""
     st.set_page_config(
-        page_title="ChakraOps Dashboard",
+        page_title="ChakraOps",
         page_icon="⚡",
         layout="wide",
         initial_sidebar_state="expanded",
     )
     
-    # Initialize session state
-    if "dark_mode" not in st.session_state:
-        st.session_state.dark_mode = False
-    if "current_page" not in st.session_state:
-        st.session_state.current_page = "dashboard"
-    if "selected_snapshot" not in st.session_state:
-        st.session_state.selected_snapshot = None
-    if "loaded_file" not in st.session_state:
-        st.session_state.loaded_file = None
-    if "sidebar_collapsed" not in st.session_state:
-        st.session_state.sidebar_collapsed = False
-    if "load_error" not in st.session_state:
-        st.session_state.load_error = None
+    # Initialize state
+    for key, default in [
+        ("dark_mode", False), ("current_page", "dashboard"),
+        ("selected_snapshot", None), ("loaded_file", None),
+        ("sidebar_collapsed", False), ("load_error", None)
+    ]:
+        if key not in st.session_state:
+            st.session_state[key] = default
     
-    # Get available snapshot files
-    available_files = get_available_snapshots()
-    if not available_files:
-        available_files = ["No files available"]
-    
-    # Load data based on selected snapshot or auto-detect
-    data, is_sample, loaded_file, error_msg = load_decision_data(st.session_state.selected_snapshot)
+    # Get files and load data
+    files = get_available_snapshots() or ["No files"]
+    data, is_sample, loaded_file, error = load_decision_data(st.session_state.selected_snapshot)
     st.session_state.loaded_file = loaded_file
-    st.session_state.load_error = error_msg
     parsed = parse_snapshot(data)
     
-    # Inject CSS first (with sidebar state)
+    # Inject CSS
     inject_premium_css(st.session_state.dark_mode, st.session_state.sidebar_collapsed)
     
-    # Render top header and get control states
-    new_dark_mode, new_file, refresh_clicked = render_top_header(
-        is_sample, 
-        st.session_state.dark_mode, 
-        loaded_file,
-        available_files,
-        st.session_state.load_error
-    )
+    # Header
+    new_dark, new_file, refresh = render_header(is_sample, loaded_file, files)
+    if error:
+        st.warning(f"⚠️ {error}")
     
-    # Render sidebar and get current page + collapse state
+    # Sidebar
     selected_page, new_collapsed = render_sidebar(st.session_state.current_page, st.session_state.sidebar_collapsed)
     
     # Handle state changes
-    needs_rerun = False
-    
+    rerun = False
     if selected_page != st.session_state.current_page:
         st.session_state.current_page = selected_page
-        needs_rerun = True
-    
-    if new_dark_mode != st.session_state.dark_mode:
-        st.session_state.dark_mode = new_dark_mode
-        needs_rerun = True
-    
+        rerun = True
+    if new_dark != st.session_state.dark_mode:
+        st.session_state.dark_mode = new_dark
+        rerun = True
     if new_collapsed != st.session_state.sidebar_collapsed:
         st.session_state.sidebar_collapsed = new_collapsed
-        needs_rerun = True
-    
+        rerun = True
     if new_file:
         st.session_state.selected_snapshot = new_file
-        st.session_state.load_error = None  # Clear previous error
-        needs_rerun = True
+        rerun = True
+    if refresh:
+        rerun = True
     
-    if refresh_clicked:
-        # Force reload
-        st.session_state.load_error = None  # Clear previous error
-        needs_rerun = True
-    
-    if needs_rerun:
+    if rerun:
         st.rerun()
     
-    # Render current page
-    if st.session_state.current_page == "dashboard":
-        render_dashboard_page(data, parsed, is_sample, st.session_state.dark_mode, loaded_file)
-    elif st.session_state.current_page == "strategies":
-        render_strategies_page(data, parsed, st.session_state.dark_mode)
-    elif st.session_state.current_page == "analytics":
-        render_analytics_page(data, parsed, st.session_state.dark_mode)
-    elif st.session_state.current_page == "history":
-        render_history_page(data, parsed, st.session_state.dark_mode)
-    elif st.session_state.current_page == "settings":
-        render_settings_page(st.session_state.dark_mode)
+    # Render page
+    page = st.session_state.current_page
+    if page == "dashboard":
+        render_dashboard_page(data, parsed, is_sample, loaded_file)
+    elif page == "test":
+        render_test_page()
+    elif page == "strategies":
+        render_strategies_page(data)
+    elif page == "analytics":
+        render_analytics_page()
+    elif page == "history":
+        render_history_page()
+    elif page == "settings":
+        render_settings_page()
     
-    # Render footer
     render_footer()
 
 

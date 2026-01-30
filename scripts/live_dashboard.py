@@ -24,10 +24,21 @@ def main() -> int:
         default=8501,
         help="Port for Streamlit server (default: 8501)",
     )
+    parser.add_argument(
+        "--legacy",
+        action="store_true",
+        help="Use legacy dashboard instead of premium UI",
+    )
     args = parser.parse_args()
 
     repo_root = Path(__file__).parent.parent
-    app_path = repo_root / "app" / "ui" / "live_decision_dashboard.py"
+    
+    # Use premium dashboard by default, legacy with --legacy flag
+    if args.legacy:
+        app_path = repo_root / "app" / "ui" / "live_decision_dashboard.py"
+    else:
+        app_path = repo_root / "app" / "ui" / "premium_dashboard.py"
+    
     if not app_path.exists():
         print(f"ERROR: Dashboard app not found: {app_path}", file=sys.stderr)
         return 1
@@ -45,6 +56,7 @@ def main() -> int:
     print("Starting live dashboard (Streamlit)...", file=sys.stderr)
     print(f"  App: {app_path}", file=sys.stderr)
     print(f"  Port: {args.port}", file=sys.stderr)
+    print(f"  Mode: {'Legacy' if args.legacy else 'Premium'}", file=sys.stderr)
     return subprocess.call(cmd)
 
 

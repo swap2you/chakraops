@@ -31,6 +31,8 @@ class ThetaConfig:
     base_url: str
     timeout: float
     fallback_enabled: bool
+    endpoint: str  # "ohlc_per_strike", "quote_per_strike", "ohlc_bulk", "quote_bulk", "auto"
+    strike_limit: int  # Max strikes per expiration for per-strike modes
 
 
 @dataclass(frozen=True)
@@ -121,10 +123,26 @@ def load_config(*, reload: bool = False) -> ChakraOpsConfig:
     else:
         theta_fallback = theta_raw.get("fallback_enabled", True)
     
+    # Theta endpoint selection: ohlc_per_strike, quote_per_strike, ohlc_bulk, quote_bulk, auto
+    theta_endpoint = os.getenv(
+        "THETA_ENDPOINT",
+        theta_raw.get("endpoint", "ohlc_per_strike")
+    ).lower()
+    if theta_endpoint not in ("ohlc_per_strike", "quote_per_strike", "ohlc_bulk", "quote_bulk", "auto"):
+        theta_endpoint = "ohlc_per_strike"
+    
+    # Strike limit for per-strike modes
+    theta_strike_limit = int(os.getenv(
+        "THETA_STRIKE_LIMIT",
+        str(theta_raw.get("strike_limit", 30))
+    ))
+    
     theta_config = ThetaConfig(
         base_url=theta_base_url,
         timeout=theta_timeout,
         fallback_enabled=bool(theta_fallback),
+        endpoint=theta_endpoint,
+        strike_limit=theta_strike_limit,
     )
     
     # Snapshot configuration
@@ -220,6 +238,19 @@ def get_realtime_end_time() -> str:
     return load_config().realtime.end_time
 
 
+def get_theta_endpoint() -> str:
+    """Convenience: return Theta endpoint mode from config.
+    
+    Returns one of: "ohlc_per_strike", "quote_per_strike", "ohlc_bulk", "quote_bulk", "auto"
+    """
+    return load_config().theta.endpoint
+
+
+def get_theta_strike_limit() -> int:
+    """Convenience: return Theta strike limit from config."""
+    return load_config().theta.strike_limit
+
+
 __all__ = [
     "ChakraOpsConfig",
     "ThetaConfig",
@@ -229,6 +260,8 @@ __all__ = [
     "get_theta_base_url",
     "get_theta_timeout",
     "is_fallback_enabled",
+    "get_theta_endpoint",
+    "get_theta_strike_limit",
     "get_snapshot_retention_days",
     "get_snapshot_max_files",
     "get_output_dir",

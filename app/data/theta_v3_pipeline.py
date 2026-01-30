@@ -207,6 +207,158 @@ def snapshot_ohlc(
         return None
 
 
+def snapshot_quote(
+    symbol: str,
+    expiration: str,
+    strike: float,
+    right: str,
+    base_url: Optional[str] = None,
+    timeout: Optional[float] = None,
+) -> Optional[Dict[str, Any]]:
+    """Fetch quote snapshot for a single option contract.
+    
+    GET /option/snapshot/quote?symbol={symbol}&expiration={exp}&strike={strike}&right={right}
+    
+    This is an alternative to snapshot_ohlc that may work with different subscriptions.
+    """
+    symbol = (symbol or "").upper()
+    if not symbol or not expiration:
+        return None
+    
+    url = (base_url or get_theta_base_url()).rstrip("/")
+    tout = timeout if timeout is not None else DEFAULT_TIMEOUT
+    exp_normalized = _normalize_expiration(expiration)
+    right_normalized = right.upper() if right else "C"
+    
+    if right_normalized not in ("C", "P"):
+        right_normalized = "C"
+    
+    strike_int = int(strike * 1000)
+    
+    try:
+        with httpx.Client(timeout=tout) as client:
+            response = client.get(
+                f"{url}/option/snapshot/quote",
+                params={
+                    "symbol": symbol,
+                    "expiration": exp_normalized,
+                    "strike": strike_int,
+                    "right": right_normalized,
+                    "format": "json",
+                },
+            )
+            
+            if response.status_code in (204, 404):
+                return None
+            
+            if response.status_code != 200:
+                logger.debug("snapshot_quote HTTP %d for %s %s %s %s", 
+                           response.status_code, symbol, expiration, strike, right)
+                return None
+            
+            data = response.json()
+            return _parse_quote_response(data, symbol, expiration, strike, right_normalized)
+            
+    except Exception as e:
+        logger.debug("snapshot_quote failed for %s %s %s %s: %s", 
+                    symbol, expiration, strike, right, e)
+        return None
+
+
+def snapshot_ohlc_bulk(
+    symbol: str,
+    expiration: str,
+    base_url: Optional[str] = None,
+    timeout: Optional[float] = None,
+) -> List[Dict[str, Any]]:
+    """Fetch OHLC for ALL contracts at an expiration (bulk, no strike param).
+    
+    GET /option/snapshot/ohlc?symbol={symbol}&expiration={exp}
+    
+    This may return all strikes at once if the API supports it.
+    """
+    symbol = (symbol or "").upper()
+    if not symbol or not expiration:
+        return []
+    
+    url = (base_url or get_theta_base_url()).rstrip("/")
+    tout = timeout if timeout is not None else DEFAULT_TIMEOUT
+    exp_normalized = _normalize_expiration(expiration)
+    
+    try:
+        with httpx.Client(timeout=tout) as client:
+            response = client.get(
+                f"{url}/option/snapshot/ohlc",
+                params={
+                    "symbol": symbol,
+                    "expiration": exp_normalized,
+                    "format": "json",
+                },
+            )
+            
+            if response.status_code in (204, 404, 400):
+                return []
+            
+            if response.status_code != 200:
+                logger.debug("snapshot_ohlc_bulk HTTP %d for %s %s", 
+                           response.status_code, symbol, expiration)
+                return []
+            
+            data = response.json()
+            return _parse_bulk_response(data, symbol, expiration)
+            
+    except Exception as e:
+        logger.debug("snapshot_ohlc_bulk failed for %s %s: %s", symbol, expiration, e)
+        return []
+
+
+def snapshot_quote_bulk(
+    symbol: str,
+    expiration: str,
+    base_url: Optional[str] = None,
+    timeout: Optional[float] = None,
+) -> List[Dict[str, Any]]:
+    """Fetch quote for ALL contracts at an expiration (bulk, no strike param).
+    
+    GET /option/snapshot/quote?symbol={symbol}&expiration={exp}
+    
+    This may return all strikes at once if the API supports it.
+    """
+    symbol = (symbol or "").upper()
+    if not symbol or not expiration:
+        return []
+    
+    url = (base_url or get_theta_base_url()).rstrip("/")
+    tout = timeout if timeout is not None else DEFAULT_TIMEOUT
+    exp_normalized = _normalize_expiration(expiration)
+    
+    try:
+        with httpx.Client(timeout=tout) as client:
+            response = client.get(
+                f"{url}/option/snapshot/quote",
+                params={
+                    "symbol": symbol,
+                    "expiration": exp_normalized,
+                    "format": "json",
+                },
+            )
+            
+            if response.status_code in (204, 404, 400):
+                return []
+            
+            if response.status_code != 200:
+                logger.debug("snapshot_quote_bulk HTTP %d for %s %s", 
+                           response.status_code, symbol, expiration)
+                return []
+            
+            data = response.json()
+            return _parse_bulk_response(data, symbol, expiration)
+            
+    except Exception as e:
+        logger.debug("snapshot_quote_bulk failed for %s %s: %s", symbol, expiration, e)
+        return []
+
+
 # =============================================================================
 # Async versions for concurrent fetching (based on concurrent_requests.html)
 # =============================================================================
@@ -375,17 +527,20 @@ def fetch_chain(
     dte_max: int = 45,
     strike_limit: int = 30,
     underlying_price: Optional[float] = None,
+    endpoint: Optional[str] = None,
     base_url: Optional[str] = None,
     timeout: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
-    """Fetch complete option chain using the basic pipeline pattern.
+    """Fetch complete option chain with configurable endpoint selection.
     
-    Pipeline:
-    1. list_expirations(symbol) - get all expirations
-    2. Filter by DTE window
-    3. For each expiration: list_strikes(symbol, expiration)
-    4. Filter strikes to near-ATM (strike_limit per expiration)
-    5. For each strike: snapshot_ohlc for both call and put
+    Supports multiple endpoint modes based on your Theta subscription:
+    - "ohlc_bulk": Try /option/snapshot/ohlc without strike param (fastest if supported)
+    - "quote_bulk": Try /option/snapshot/quote without strike param
+    - "ohlc_per_strike": Call /option/snapshot/ohlc for each strike (default)
+    - "quote_per_strike": Call /option/snapshot/quote for each strike
+    - "auto": Try bulk first, fall back to per-strike
+    
+    Run `python scripts/test_theta_chain.py AAPL` to determine which works for your subscription.
     
     Parameters
     ----------
@@ -396,18 +551,25 @@ def fetch_chain(
     dte_max : int
         Maximum days to expiration (default: 45)
     strike_limit : int
-        Max strikes per expiration, centered on ATM (default: 30)
+        Max strikes per expiration for per-strike modes (default: 30)
     underlying_price : float, optional
         Current stock price for ATM centering
-    
-    This is the synchronous version - use fetch_chain_async for production.
+    endpoint : str, optional
+        Endpoint mode. If None, reads from config.yaml or env var THETA_ENDPOINT.
     """
+    from app.core.settings import get_theta_endpoint, get_theta_strike_limit
+    
     symbol = (symbol or "").upper()
     if not symbol:
         return []
     
     url = base_url or get_theta_base_url()
     tout = timeout if timeout is not None else DEFAULT_TIMEOUT
+    endpoint_mode = endpoint or get_theta_endpoint()
+    
+    # Use config strike limit if not specified
+    if strike_limit == 30:  # Default value
+        strike_limit = get_theta_strike_limit()
     
     # Step 1: Get all expirations
     expirations = list_expirations(symbol, base_url=url, timeout=tout)
@@ -430,11 +592,44 @@ def fetch_chain(
                    dte_min, dte_max, symbol, len(expirations))
         return []
     
-    logger.info("fetch_chain: %s has %d expirations in DTE [%d-%d]", 
-               symbol, len(valid_expirations), dte_min, dte_max)
+    logger.info("fetch_chain: %s has %d expirations in DTE [%d-%d], mode=%s", 
+               symbol, len(valid_expirations), dte_min, dte_max, endpoint_mode)
     
-    # Step 3 & 4: For each expiration, get strikes and quotes
     all_contracts: List[Dict[str, Any]] = []
+    
+    # Try bulk endpoints first if configured
+    if endpoint_mode in ("ohlc_bulk", "auto"):
+        for exp in valid_expirations:
+            contracts = snapshot_ohlc_bulk(symbol, exp, base_url=url, timeout=tout)
+            if contracts:
+                all_contracts.extend(contracts)
+        
+        if all_contracts:
+            logger.info("fetch_chain: %s returned %d contracts via ohlc_bulk", symbol, len(all_contracts))
+            return all_contracts
+        elif endpoint_mode == "ohlc_bulk":
+            logger.warning("fetch_chain: ohlc_bulk returned no data for %s", symbol)
+            return []
+        # If auto mode, fall through to try quote_bulk
+    
+    if endpoint_mode in ("quote_bulk", "auto"):
+        for exp in valid_expirations:
+            contracts = snapshot_quote_bulk(symbol, exp, base_url=url, timeout=tout)
+            if contracts:
+                all_contracts.extend(contracts)
+        
+        if all_contracts:
+            logger.info("fetch_chain: %s returned %d contracts via quote_bulk", symbol, len(all_contracts))
+            return all_contracts
+        elif endpoint_mode == "quote_bulk":
+            logger.warning("fetch_chain: quote_bulk returned no data for %s", symbol)
+            return []
+        # If auto mode, fall through to per-strike
+    
+    # Per-strike mode (default or fallback)
+    use_quote = endpoint_mode == "quote_per_strike"
+    fetch_func = snapshot_quote if use_quote else snapshot_ohlc
+    func_name = "quote" if use_quote else "ohlc"
     
     for exp in valid_expirations:
         strikes = list_strikes(symbol, exp, base_url=url, timeout=tout)
@@ -448,16 +643,16 @@ def fetch_chain(
         
         for strike in filtered_strikes:
             # Fetch call
-            call_data = snapshot_ohlc(symbol, exp, strike, "C", base_url=url, timeout=tout)
+            call_data = fetch_func(symbol, exp, strike, "C", base_url=url, timeout=tout)
             if call_data:
                 all_contracts.append(call_data)
             
             # Fetch put
-            put_data = snapshot_ohlc(symbol, exp, strike, "P", base_url=url, timeout=tout)
+            put_data = fetch_func(symbol, exp, strike, "P", base_url=url, timeout=tout)
             if put_data:
                 all_contracts.append(put_data)
     
-    logger.info("fetch_chain: %s returned %d contracts", symbol, len(all_contracts))
+    logger.info("fetch_chain: %s returned %d contracts via %s_per_strike", symbol, len(all_contracts), func_name)
     return all_contracts
 
 
@@ -727,6 +922,141 @@ def _parse_ohlc_response(
     }
 
 
+def _parse_quote_response(
+    data: Any,
+    symbol: str,
+    expiration: str,
+    strike: float,
+    right: str,
+) -> Optional[Dict[str, Any]]:
+    """Parse quote snapshot response into contract dict.
+    
+    Similar to OHLC but quote endpoint may have different field names.
+    """
+    if isinstance(data, dict) and "response" in data:
+        rows = data["response"]
+        if isinstance(rows, list) and rows:
+            row = rows[0] if isinstance(rows[0], dict) else {}
+        else:
+            return None
+    elif isinstance(data, dict):
+        row = data
+    elif isinstance(data, list) and data:
+        row = data[0] if isinstance(data[0], dict) else {}
+    else:
+        return None
+    
+    if not isinstance(row, dict):
+        return None
+    
+    bid = _extract_float(row, ["bid", "bid_price", "bidPrice"])
+    ask = _extract_float(row, ["ask", "ask_price", "askPrice"])
+    mid = None
+    if bid is not None and ask is not None and bid > 0 and ask > 0:
+        mid = (bid + ask) / 2
+    
+    exp_date = _parse_date(expiration)
+    dte = (exp_date - date.today()).days if exp_date else None
+    
+    return {
+        "symbol": symbol,
+        "expiration": _format_expiration(expiration),
+        "strike": strike,
+        "right": right,
+        "option_type": "PUT" if right == "P" else "CALL",
+        "bid": bid,
+        "ask": ask,
+        "mid": mid,
+        "open": _extract_float(row, ["open"]),
+        "high": _extract_float(row, ["high"]),
+        "low": _extract_float(row, ["low"]),
+        "close": _extract_float(row, ["close", "last", "price"]),
+        "iv": _extract_float(row, ["implied_vol", "iv", "implied_volatility", "impliedVol"]),
+        "delta": _extract_float(row, ["delta"]),
+        "gamma": _extract_float(row, ["gamma"]),
+        "theta": _extract_float(row, ["theta"]),
+        "vega": _extract_float(row, ["vega"]),
+        "volume": _extract_int(row, ["volume", "vol"]),
+        "open_interest": _extract_int(row, ["open_interest", "oi", "openInterest"]),
+        "dte": dte,
+    }
+
+
+def _parse_bulk_response(
+    data: Any,
+    symbol: str,
+    expiration: str,
+) -> List[Dict[str, Any]]:
+    """Parse bulk response (multiple contracts) into list of contract dicts."""
+    contracts: List[Dict[str, Any]] = []
+    
+    if isinstance(data, dict) and "response" in data:
+        rows = data["response"]
+    elif isinstance(data, list):
+        rows = data
+    else:
+        return []
+    
+    if not isinstance(rows, list):
+        return []
+    
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        
+        # Extract strike - may be in millis
+        strike = _extract_float(row, ["strike"])
+        if strike is None:
+            continue
+        if strike > 10000:  # Likely in millis
+            strike = strike / 1000
+        
+        # Get right (C/P)
+        right = str(row.get("right", "") or row.get("option_type", "")).upper()
+        if right not in ("P", "C", "PUT", "CALL"):
+            continue
+        right = "P" if right in ("P", "PUT") else "C"
+        
+        # Get expiration from row if available
+        exp = row.get("expiration") or row.get("exp") or row.get("date") or expiration
+        if exp:
+            exp = _format_expiration(str(exp))
+        
+        bid = _extract_float(row, ["bid", "bid_price", "bidPrice"])
+        ask = _extract_float(row, ["ask", "ask_price", "askPrice"])
+        mid = None
+        if bid is not None and ask is not None and bid > 0 and ask > 0:
+            mid = (bid + ask) / 2
+        
+        exp_date = _parse_date(exp)
+        dte = (exp_date - date.today()).days if exp_date else None
+        
+        contracts.append({
+            "symbol": symbol,
+            "expiration": exp,
+            "strike": strike,
+            "right": right,
+            "option_type": "PUT" if right == "P" else "CALL",
+            "bid": bid,
+            "ask": ask,
+            "mid": mid,
+            "open": _extract_float(row, ["open"]),
+            "high": _extract_float(row, ["high"]),
+            "low": _extract_float(row, ["low"]),
+            "close": _extract_float(row, ["close", "last", "price"]),
+            "iv": _extract_float(row, ["implied_vol", "iv", "implied_volatility", "impliedVol"]),
+            "delta": _extract_float(row, ["delta"]),
+            "gamma": _extract_float(row, ["gamma"]),
+            "theta": _extract_float(row, ["theta"]),
+            "vega": _extract_float(row, ["vega"]),
+            "volume": _extract_int(row, ["volume", "vol"]),
+            "open_interest": _extract_int(row, ["open_interest", "oi", "openInterest"]),
+            "dte": dte,
+        })
+    
+    return contracts
+
+
 def _extract_float(row: Dict[str, Any], keys: List[str]) -> Optional[float]:
     """Extract first valid float from row."""
     for key in keys:
@@ -801,6 +1131,9 @@ __all__ = [
     "list_expirations",
     "list_strikes",
     "snapshot_ohlc",
+    "snapshot_quote",
+    "snapshot_ohlc_bulk",
+    "snapshot_quote_bulk",
     # Async versions
     "list_expirations_async",
     "list_strikes_async",
@@ -808,6 +1141,8 @@ __all__ = [
     # High-level chain fetching
     "fetch_chain",
     "fetch_chain_async",
+    # ATM filtering
+    "_filter_strikes_near_atm",
     # Health check
     "check_theta_health",
     "ThetaHealthStatus",

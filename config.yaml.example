@@ -20,6 +20,20 @@ theta:
   # When true: if Theta Terminal is unreachable, load latest decision JSON from out/
   # When false: fail immediately if live data is unavailable
   fallback_enabled: true
+  
+  # Endpoint selection for options data:
+  # - "ohlc_per_strike": Call /option/snapshot/ohlc for each strike (default, most compatible)
+  # - "quote_per_strike": Call /option/snapshot/quote for each strike
+  # - "ohlc_bulk": Call /option/snapshot/ohlc without strike param (all strikes at once, faster)
+  # - "quote_bulk": Call /option/snapshot/quote without strike param (all strikes at once)
+  # - "auto": Try bulk first, fall back to per-strike if bulk returns no data
+  # Run `python scripts/test_theta_chain.py AAPL` to determine which works for your subscription.
+  endpoint: "ohlc_per_strike"
+  
+  # Maximum strikes per expiration when using per-strike modes
+  # Limits to near-the-money strikes to avoid slow API calls
+  # Set higher for more coverage, lower for faster execution
+  strike_limit: 30
 
 # Snapshot retention settings
 snapshots:

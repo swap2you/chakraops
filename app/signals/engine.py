@@ -231,17 +231,17 @@ def run_signal_engine(
                 print(f"[TIMEOUT] symbol {symbol} after {elapsed_ms} ms", flush=True)
                 break
 
-            # Fetch PUT chain
+            # Fetch PUT chain via pipeline (list_strikes → snapshot_ohlc per strike)
             try:
                 put_start = perf_counter()
                 print(
-                    f"  [timing] fetch_put_chain start for {symbol} {expiry}",
+                    f"  [timing] get_chain PUT start for {symbol} {expiry}",
                     flush=True,
                 )
                 put_chain = options_chain_provider.get_chain(symbol, expiry, "PUT")
                 put_elapsed_ms = int((perf_counter() - put_start) * 1000)
                 print(
-                    f"  [timing] fetch_put_chain done for {symbol} {expiry} in {put_elapsed_ms} ms",
+                    f"  [timing] get_chain PUT done for {symbol} {expiry} in {put_elapsed_ms} ms ({len(put_chain) if put_chain else 0} contracts)",
                     flush=True,
                 )
                 if put_chain:
@@ -265,7 +265,7 @@ def run_signal_engine(
                 if options_availability_recorder:
                     options_availability_recorder.record_reason(symbol, "CHAIN_FETCH_ERROR")
                 print(
-                    f"  [timing] fetch_put_chain error for {symbol} {expiry}: {e}",
+                    f"  [timing] get_chain PUT error for {symbol} {expiry}: {e}",
                     flush=True,
                 )
                 symbol_exclusions.append(
@@ -281,17 +281,17 @@ def run_signal_engine(
                     )
                 )
 
-            # Fetch CALL chain
+            # Fetch CALL chain via pipeline (list_strikes → snapshot_ohlc per strike)
             try:
                 call_start = perf_counter()
                 print(
-                    f"  [timing] fetch_call_chain start for {symbol} {expiry}",
+                    f"  [timing] get_chain CALL start for {symbol} {expiry}",
                     flush=True,
                 )
                 call_chain = options_chain_provider.get_chain(symbol, expiry, "CALL")
                 call_elapsed_ms = int((perf_counter() - call_start) * 1000)
                 print(
-                    f"  [timing] fetch_call_chain done for {symbol} {expiry} in {call_elapsed_ms} ms",
+                    f"  [timing] get_chain CALL done for {symbol} {expiry} in {call_elapsed_ms} ms ({len(call_chain) if call_chain else 0} contracts)",
                     flush=True,
                 )
                 if call_chain:
@@ -315,7 +315,7 @@ def run_signal_engine(
                 if options_availability_recorder:
                     options_availability_recorder.record_reason(symbol, "CHAIN_FETCH_ERROR")
                 print(
-                    f"  [timing] fetch_call_chain error for {symbol} {expiry}: {e}",
+                    f"  [timing] get_chain CALL error for {symbol} {expiry}: {e}",
                     flush=True,
                 )
                 symbol_exclusions.append(

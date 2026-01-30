@@ -50,17 +50,21 @@ class ThetaDataOptionsChainProvider(OptionsChainProvider):
     Uses theta_v3_pipeline functions:
     - list_expirations() for get_expirations()
     - list_strikes() + snapshot_ohlc() for get_chain()
+    
+    Includes strike limiting to focus on near-ATM options for efficiency.
     """
 
     def __init__(
         self,
         base_url: Optional[str] = None,
         timeout: float = CHAIN_REQUEST_TIMEOUT,
+        strike_limit: int = 30,
     ) -> None:
         from app.core.settings import get_theta_base_url
         
         self.base_url = (base_url or get_theta_base_url()).rstrip("/")
         self.timeout = timeout
+        self.strike_limit = strike_limit  # Max strikes per expiration (centered on ATM)
         # Cache expirations to avoid redundant API calls
         self._expiration_cache: Dict[str, List[str]] = {}
 
@@ -110,9 +114,10 @@ class ThetaDataOptionsChainProvider(OptionsChainProvider):
         
         Steps:
         1. list_strikes(symbol, expiration)
-        2. For each strike: snapshot_ohlc(symbol, expiration, strike, right)
+        2. Filter strikes to near-ATM (strike_limit)
+        3. For each strike: snapshot_ohlc(symbol, expiration, strike, right)
         """
-        from app.data.theta_v3_pipeline import list_strikes, snapshot_ohlc
+        from app.data.theta_v3_pipeline import list_strikes, snapshot_ohlc, _filter_strikes_near_atm
         
         symbol = (symbol or "").upper()
         right_upper = (right or "P").upper()
@@ -124,18 +129,21 @@ class ThetaDataOptionsChainProvider(OptionsChainProvider):
         
         try:
             # Get all strikes for this expiration
-            strikes = list_strikes(
+            all_strikes = list_strikes(
                 symbol,
                 exp_str,
                 base_url=self.base_url,
                 timeout=self.timeout,
             )
             
-            if not strikes:
+            if not all_strikes:
                 logger.debug("[OptionsChain] No strikes for %s %s", symbol, exp_str)
                 return []
             
-            logger.debug("[OptionsChain] %s %s has %d strikes", symbol, exp_str, len(strikes))
+            # Filter to near-ATM strikes for efficiency
+            strikes = _filter_strikes_near_atm(all_strikes, None, self.strike_limit)
+            logger.debug("[OptionsChain] %s %s: %d strikes (filtered from %d)", 
+                        symbol, exp_str, len(strikes), len(all_strikes))
             
             # Fetch OHLC for each strike
             out: List[Dict[str, Any]] = []
@@ -183,7 +191,7 @@ class ThetaDataOptionsChainProvider(OptionsChainProvider):
         dte_min: int = 7,
         dte_max: int = 45,
     ) -> Dict[str, Any]:
-        """Get full chain with DTE filtering using async pipeline."""
+        """Get full chain with DTE filtering using pipeline."""
         from app.data.theta_v3_pipeline import fetch_chain
         
         try:
@@ -191,6 +199,7 @@ class ThetaDataOptionsChainProvider(OptionsChainProvider):
                 symbol,
                 dte_min=dte_min,
                 dte_max=dte_max,
+                strike_limit=self.strike_limit,
                 base_url=self.base_url,
                 timeout=self.timeout,
             )

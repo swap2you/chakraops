@@ -321,10 +321,60 @@ async def snapshot_ohlc_async(
 # =============================================================================
 
 
+def _filter_strikes_near_atm(
+    strikes: List[float],
+    underlying_price: Optional[float] = None,
+    strike_limit: int = 30,
+) -> List[float]:
+    """Filter strikes to focus on near-the-money options.
+    
+    If underlying_price is provided, center the window around ATM.
+    Otherwise, take strikes from the middle of the range.
+    """
+    if not strikes or strike_limit <= 0:
+        return strikes
+    
+    if len(strikes) <= strike_limit:
+        return strikes
+    
+    sorted_strikes = sorted(strikes)
+    
+    if underlying_price and underlying_price > 0:
+        # Find strikes closest to underlying price
+        # Center the window around ATM
+        atm_idx = 0
+        min_diff = float('inf')
+        for i, s in enumerate(sorted_strikes):
+            diff = abs(s - underlying_price)
+            if diff < min_diff:
+                min_diff = diff
+                atm_idx = i
+        
+        # Take strike_limit/2 on each side of ATM
+        half = strike_limit // 2
+        start_idx = max(0, atm_idx - half)
+        end_idx = min(len(sorted_strikes), start_idx + strike_limit)
+        
+        # Adjust if we hit the end
+        if end_idx - start_idx < strike_limit:
+            start_idx = max(0, end_idx - strike_limit)
+        
+        return sorted_strikes[start_idx:end_idx]
+    else:
+        # No underlying price - take from the middle
+        mid = len(sorted_strikes) // 2
+        half = strike_limit // 2
+        start_idx = max(0, mid - half)
+        end_idx = min(len(sorted_strikes), start_idx + strike_limit)
+        return sorted_strikes[start_idx:end_idx]
+
+
 def fetch_chain(
     symbol: str,
     dte_min: int = 7,
     dte_max: int = 45,
+    strike_limit: int = 30,
+    underlying_price: Optional[float] = None,
     base_url: Optional[str] = None,
     timeout: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
@@ -334,7 +384,21 @@ def fetch_chain(
     1. list_expirations(symbol) - get all expirations
     2. Filter by DTE window
     3. For each expiration: list_strikes(symbol, expiration)
-    4. For each strike: snapshot_ohlc for both call and put
+    4. Filter strikes to near-ATM (strike_limit per expiration)
+    5. For each strike: snapshot_ohlc for both call and put
+    
+    Parameters
+    ----------
+    symbol : str
+        Underlying ticker
+    dte_min : int
+        Minimum days to expiration (default: 7)
+    dte_max : int
+        Maximum days to expiration (default: 45)
+    strike_limit : int
+        Max strikes per expiration, centered on ATM (default: 30)
+    underlying_price : float, optional
+        Current stock price for ATM centering
     
     This is the synchronous version - use fetch_chain_async for production.
     """
@@ -377,9 +441,12 @@ def fetch_chain(
         if not strikes:
             continue
         
-        logger.debug("fetch_chain: %s %s has %d strikes", symbol, exp, len(strikes))
+        # Filter to near-ATM strikes
+        filtered_strikes = _filter_strikes_near_atm(strikes, underlying_price, strike_limit)
+        logger.debug("fetch_chain: %s %s: %d strikes (filtered from %d)", 
+                    symbol, exp, len(filtered_strikes), len(strikes))
         
-        for strike in strikes:
+        for strike in filtered_strikes:
             # Fetch call
             call_data = snapshot_ohlc(symbol, exp, strike, "C", base_url=url, timeout=tout)
             if call_data:
@@ -398,6 +465,8 @@ async def fetch_chain_async(
     symbol: str,
     dte_min: int = 7,
     dte_max: int = 45,
+    strike_limit: int = 30,
+    underlying_price: Optional[float] = None,
     base_url: Optional[str] = None,
     timeout: Optional[float] = None,
     max_concurrent: int = MAX_CONCURRENT_REQUESTS,
@@ -406,6 +475,21 @@ async def fetch_chain_async(
     
     Uses asyncio.gather() to parallelize strike-level fetches
     while respecting concurrency limit via semaphore.
+    
+    Parameters
+    ----------
+    symbol : str
+        Underlying ticker
+    dte_min : int
+        Minimum days to expiration (default: 7)
+    dte_max : int
+        Maximum days to expiration (default: 45)
+    strike_limit : int
+        Max strikes per expiration, centered on ATM (default: 30)
+    underlying_price : float, optional
+        Current stock price for ATM centering
+    max_concurrent : int
+        Max concurrent API requests (default: 4)
     """
     symbol = (symbol or "").upper()
     if not symbol:
@@ -442,13 +526,15 @@ async def fetch_chain_async(
         ]
         strike_results = await asyncio.gather(*strike_tasks, return_exceptions=True)
         
-        # Build list of (expiration, strike) pairs
+        # Build list of (expiration, strike) pairs with ATM filtering
         quote_requests: List[Tuple[str, float, str]] = []
         for i, result in enumerate(strike_results):
             if isinstance(result, Exception):
                 continue
             exp = valid_expirations[i]
-            for strike in result:
+            # Filter to near-ATM strikes
+            filtered_strikes = _filter_strikes_near_atm(result, underlying_price, strike_limit)
+            for strike in filtered_strikes:
                 quote_requests.append((exp, strike, "C"))
                 quote_requests.append((exp, strike, "P"))
         

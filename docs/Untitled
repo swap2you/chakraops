@@ -1,0 +1,87 @@
+Phase 8.3 — Production Live Feed + Provider Fallback + Market-Hours Polling + Universe Import + Slack Reliability
+
+Goal:
+Make ChakraOps actually run with real-time market data in production-like local mode.
+Primary provider must be ThetaTerminal v3 over HTTP (localhost:25503). Fallback to yfinance for stock-only. If both fail, run snapshot-only mode with clear UI warnings.
+Add scheduled polling during market hours and reliable Slack alerts for drift + gate status changes.
+
+Requirements:
+1) Market data providers
+- Implement a MarketDataProvider interface with:
+  - health_check() -> (ok: bool, detail: str)
+  - fetch_underlying_prices(symbols) -> dict[symbol, price]
+  - fetch_option_chain_availability(symbols) -> dict[symbol, bool]
+  - (optional) fetch_iv_greeks(...) if chain data supported
+- Providers:
+  A) ThetaTerminalHttpProvider (PRIMARY)
+     - Base URL: http://127.0.0.1:25503
+     - Use existing ThetaTerminal endpoints. Add a robust health check (any simple endpoint returning 200).
+     - If ThetaTerminal is not reachable, return structured errors; do not crash.
+  B) YFinanceProvider (FALLBACK)
+     - Install/use yfinance only for underlying prices.
+     - Mark option_chain_available=False and never claim Greeks/IV are available.
+  C) SnapshotOnlyProvider (LAST RESORT)
+     - Uses latest stored snapshot prices only.
+
+- Update app/market/live_market_adapter.py to select provider in this order:
+  ThetaTerminalHttpProvider -> YFinanceProvider -> SnapshotOnlyProvider
+  Record which provider is active in LiveMarketData.data_source and include errors list.
+
+2) Market-hours polling + UI refresh
+- Add a small market-hours utility:
+  - Use US/Eastern time.
+  - If you can, use a market calendar lib; if not, implement a pragmatic weekday 9:30–16:00 ET check (ok for now).
+- Polling cadence:
+  - Market open: every 30 seconds
+  - Market closed: disable polling OR poll every 5 minutes max in “snapshot-only mode”
+- Ensure Streamlit autorefresh uses these intervals and clearly shows mode:
+  - “LIVE (ThetaTerminal)” or “LIVE (yfinance, stocks-only)” or “SNAPSHOT ONLY (market closed / provider down)”
+
+3) Drift detector improvements
+- Keep drift read-only.
+- Add configurable thresholds:
+  - price_drift_warn_pct default 0.75%
+  - iv_drift_abs default 0.03, iv_drift_rel default 0.15
+  - spread_widened_mult default 1.5 or spread/mid > 0.20
+- Severity:
+  - CHAIN_UNAVAILABLE => BLOCK
+  - SPREAD_WIDENED / IV_DRIFT => WARN
+  - PRICE_DRIFT => INFO or WARN if above threshold
+- Update Slack formatting to include severity and top items.
+
+4) Slack alert reliability
+- Ensure send_decision_alert is called on schedule during market hours (not only on manual runs).
+- Only post when:
+  - gate status changes OR
+  - drift severity is WARN/BLOCK OR
+  - once per day “heartbeat” summary (optional, behind a flag)
+- Add config/env validation at startup: if Slack webhook missing, show warning in UI and log once.
+
+5) Universe import from CSV
+- Add a small import utility that reads ChakraOps_Core_Watchlist.csv (path configurable) and upserts into symbol_universe table:
+  - enabled = true
+  - notes = "core_watchlist"
+- Add symbol normalization mapping for providers (e.g., BRK.B to BRK-B where needed), but store canonical symbol in DB.
+
+6) UI cleanup
+- Remove hardcoded “v7 step 1” strings.
+- Title should be “ChakraOps – Live Decision Monitor”.
+- Show active provider + last update + mode warnings prominently.
+
+Tests:
+- Unit tests for provider selection logic (Theta ok -> pick Theta; Theta down -> yfinance; all down -> snapshot-only)
+- Unit tests for market-hours function and polling interval choice
+- Drift threshold tests (warn vs info classification)
+- CSV import upsert test (idempotent)
+
+Deliverables:
+- Code changes in:
+  app/market/live_market_adapter.py
+  app/market/providers/thetaterminal_http.py (new)
+  app/market/providers/yfinance_provider.py (new)
+  app/market/market_hours.py (new)
+  app/ui/live_decision_dashboard.py
+  app/notifications/slack_notifier.py
+  app/db/universe_import.py (or similar)
+- All tests passing.
+- Clear logging and UI messaging.

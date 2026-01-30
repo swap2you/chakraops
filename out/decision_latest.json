@@ -1,0 +1,140 @@
+{
+  "decision_snapshot": {
+    "as_of": "2026-01-30T01:13:07.075122",
+    "universe_id_or_hash": "sample_universe",
+    "stats": {
+      "total_symbols": 10,
+      "symbols_evaluated": 10,
+      "total_candidates": 5,
+      "csp_candidates": 3,
+      "cc_candidates": 2,
+      "total_exclusions": 2,
+      "unique_exclusion_codes": 2
+    },
+    "candidates": [
+      {
+        "symbol": "AAPL",
+        "option_type": "PUT",
+        "strike": 150,
+        "expiration": "2026-03-01",
+        "premium": 1.2,
+        "delta": 0.25,
+        "score": 0.8
+      },
+      {
+        "symbol": "MSFT",
+        "option_type": "PUT",
+        "strike": 280,
+        "expiration": "2026-03-01",
+        "premium": 1.4,
+        "delta": 0.28,
+        "score": 0.75
+      },
+      {
+        "symbol": "NVDA",
+        "option_type": "CALL",
+        "strike": 600,
+        "expiration": "2026-03-01",
+        "premium": 2.0,
+        "delta": -0.35,
+        "score": 0.7
+      },
+      {
+        "symbol": "AMZN",
+        "option_type": "PUT",
+        "strike": 3000,
+        "expiration": "2026-03-01",
+        "premium": 2.5,
+        "delta": 0.3,
+        "score": 0.72
+      },
+      {
+        "symbol": "TSLA",
+        "option_type": "CALL",
+        "strike": 900,
+        "expiration": "2026-03-01",
+        "premium": 3.0,
+        "delta": -0.4,
+        "score": 0.68
+      }
+    ],
+    "scored_candidates": [
+      {
+        "symbol": "AAPL",
+        "score": 0.8
+      },
+      {
+        "symbol": "MSFT",
+        "score": 0.75
+      },
+      {
+        "symbol": "NVDA",
+        "score": 0.7
+      },
+      {
+        "symbol": "AMZN",
+        "score": 0.72
+      },
+      {
+        "symbol": "TSLA",
+        "score": 0.68
+      }
+    ],
+    "selected_signals": [
+      {
+        "symbol": "AAPL",
+        "strategy": "Cash Secured Put",
+        "premium": 1.2,
+        "strike": 150,
+        "expiration": "2026-03-01"
+      }
+    ],
+    "explanations": null,
+    "exclusions": [
+      {
+        "symbol": "BRK.B",
+        "rule": "NO_EXPIRATIONS",
+        "message": "No expirations found for BRK.B",
+        "stage": "CHAIN_FETCH",
+        "metadata": {
+          "symbol": "BRK.B"
+        }
+      }
+    ],
+    "near_misses": null,
+    "symbols_with_options": [
+      "AAPL",
+      "MSFT",
+      "NVDA",
+      "AMZN",
+      "TSLA"
+    ],
+    "symbols_without_options": {
+      "BRK.B": "NO_EXPIRATIONS",
+      "GS": "empty_chain",
+      "IBM": "empty_chain",
+      "ORCL": "empty_chain",
+      "DIS": "empty_chain"
+    }
+  },
+  "execution_gate": {
+    "allowed": false,
+    "reasons": [
+      "GATE_BLOCKED"
+    ]
+  },
+  "execution_plan": {
+    "allowed": false,
+    "blocked_reason": "NO_SELECTED_SIGNALS",
+    "orders": []
+  },
+  "dry_run_result": {
+    "allowed": false,
+    "blocked_reason": "NO_SELECTED_SIGNALS",
+    "orders": []
+  },
+  "metadata": {
+    "data_source": "sample",
+    "fallback_enabled": false
+  }
+}

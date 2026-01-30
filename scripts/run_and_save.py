@@ -1,25 +1,28 @@
 #!/usr/bin/env python3
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""Run signal engine pipeline and save decision data for dashboard (Phase 6A).
+"""Run signal engine pipeline and save decision data for dashboard.
 
 Features:
 - Pre-run health check for Theta Terminal
 - Fallback to latest snapshot when live data unavailable
 - Data source annotation in output JSON
 - Snapshot cleanup (retention policy)
-- decision_latest.json symlink/copy for easy access
+- decision_latest.json copy for easy access
 - Test mode (--test) for diagnostics
+- Realtime mode (--realtime) for continuous updates during market hours
+- Daily retention policy to keep only latest snapshot per day
 """
 
 import argparse
 import json
 import shutil
 import sys
+import time
 from dataclasses import asdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 
 # Add project root to path
 repo_root = Path(__file__).parent.parent
@@ -49,7 +52,6 @@ from app.data.theta_v3_provider import (
     DATA_SOURCE_LIVE,
     DATA_SOURCE_SNAPSHOT,
     DATA_SOURCE_UNAVAILABLE,
-    OptionChainResult,
 )
 from app.execution.dry_run_executor import execute_dry_run
 from app.execution.execution_gate import evaluate_execution_gate, ExecutionGateResult
@@ -60,6 +62,65 @@ from app.signals.scoring import ScoringConfig
 from app.signals.selection import SelectionConfig
 
 
+def enforce_daily_retention(output_dir: Path, max_days: int = 7) -> Tuple[int, List[str]]:
+    """Enforce daily retention policy.
+    
+    Keeps only:
+    - decision_latest.json (always)
+    - sample_decision*.json (always)
+    - One snapshot per day for the last max_days
+    - Deletes duplicates for the same day, keeping newest
+    
+    Returns (deleted_count, deleted_filenames).
+    """
+    deleted: List[str] = []
+    
+    # Find all decision files (exclude special files)
+    special_files = {"decision_latest.json", "sample_decision.json", "sample_decision_rich.json"}
+    decision_files = sorted(
+        [f for f in output_dir.glob("decision_*.json") if f.name not in special_files],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,  # Newest first
+    )
+    
+    if not decision_files:
+        return 0, []
+    
+    # Group files by date
+    files_by_date: Dict[str, List[Path]] = {}
+    for f in decision_files:
+        try:
+            file_date = datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d")
+            if file_date not in files_by_date:
+                files_by_date[file_date] = []
+            files_by_date[file_date].append(f)
+        except OSError:
+            continue
+    
+    # Determine cutoff date
+    cutoff_date = (date.today() - timedelta(days=max_days)).strftime("%Y-%m-%d")
+    
+    files_to_delete: List[Path] = []
+    
+    for file_date, files in files_by_date.items():
+        if file_date < cutoff_date:
+            # Delete all files older than retention period
+            files_to_delete.extend(files)
+        else:
+            # Keep only the newest file for each day (first in sorted list)
+            if len(files) > 1:
+                files_to_delete.extend(files[1:])  # Delete all except newest
+    
+    for f in files_to_delete:
+        try:
+            f.unlink()
+            deleted.append(f.name)
+        except Exception as e:
+            print(f"  Warning: Failed to delete {f.name}: {e}", file=sys.stderr)
+    
+    return len(deleted), deleted
+
+
 def _cleanup_old_snapshots(output_dir: Path, retention_days: int, max_files: int) -> Tuple[int, List[str]]:
     """Delete old decision_*.json files based on retention policy.
     
@@ -67,11 +128,11 @@ def _cleanup_old_snapshots(output_dir: Path, retention_days: int, max_files: int
     """
     deleted: List[str] = []
     
-    # Find all decision files (exclude decision_latest.json)
+    special_files = {"decision_latest.json", "sample_decision.json", "sample_decision_rich.json"}
     decision_files = sorted(
-        [f for f in output_dir.glob("decision_*.json") if f.name != "decision_latest.json"],
+        [f for f in output_dir.glob("decision_*.json") if f.name not in special_files],
         key=lambda p: p.stat().st_mtime,
-        reverse=True,  # Newest first
+        reverse=True,
     )
     
     if not decision_files:
@@ -80,17 +141,14 @@ def _cleanup_old_snapshots(output_dir: Path, retention_days: int, max_files: int
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=retention_days) if retention_days > 0 else None
     
-    # Keep at most max_files (if set) and files newer than cutoff
     files_to_delete: List[Path] = []
     
     for i, f in enumerate(decision_files):
         keep = True
         
-        # Check max_files limit
         if max_files > 0 and i >= max_files:
             keep = False
         
-        # Check retention_days cutoff
         if cutoff and keep:
             file_mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
             if file_mtime < cutoff:
@@ -110,10 +168,7 @@ def _cleanup_old_snapshots(output_dir: Path, retention_days: int, max_files: int
 
 
 def _create_latest_copy(output_file: Path) -> Optional[Path]:
-    """Create decision_latest.json as a copy of the latest decision file.
-    
-    Returns the path to decision_latest.json or None on failure.
-    """
+    """Create decision_latest.json as a copy of the latest decision file."""
     latest_path = output_file.parent / "decision_latest.json"
     try:
         shutil.copy2(output_file, latest_path)
@@ -127,7 +182,6 @@ def _run_health_check(test_mode: bool = False) -> Tuple[bool, str, Optional[str]
     """Run Theta Terminal health check.
     
     Returns (healthy, message, data_source).
-    data_source is None if healthy, or "snapshot" if fallback should be used.
     """
     provider = ThetaV3Provider()
     status = provider.health_check()
@@ -147,141 +201,84 @@ def _run_health_check(test_mode: bool = False) -> Tuple[bool, str, Optional[str]
     return False, status.message, None
 
 
-def main() -> int:
-    """Main entry point."""
-    parser = argparse.ArgumentParser(
-        description="Run full decision pipeline and save unified decision artifact"
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Limit number of symbols to process (default: all)",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=str,
-        default=None,
-        help="Output directory for decision JSON (default: from config.yaml)",
-    )
-    parser.add_argument(
-        "--test",
-        action="store_true",
-        help="Test mode: print diagnostics (endpoints hit, fallback status, symbol summary)",
-    )
-    parser.add_argument(
-        "--no-fallback",
-        action="store_true",
-        help="Disable fallback to snapshot even if enabled in config",
-    )
-    parser.add_argument(
-        "--skip-cleanup",
-        action="store_true",
-        help="Skip cleanup of old decision files",
-    )
-    args = parser.parse_args()
-
-    # Load configuration
-    config = load_config()
+def run_pipeline(
+    args: argparse.Namespace,
+    config: Any,
+    test_mode: bool = False,
+    realtime_mode: bool = False,
+) -> Tuple[int, Optional[Path]]:
+    """Run a single pipeline iteration.
+    
+    Returns (exit_code, output_file_path).
+    """
     output_dir_str = args.output_dir or config.snapshots.output_dir
-    test_mode = args.test
     
     if test_mode:
-        print("=" * 60)
-        print("ChakraOps Decision Pipeline - TEST MODE")
-        print("=" * 60)
+        print("-" * 60)
         print(f"  Theta Base URL: {config.theta.base_url}")
         print(f"  Fallback enabled: {config.theta.fallback_enabled and not args.no_fallback}")
         print(f"  Output dir: {output_dir_str}")
-        print(f"  Retention: {config.snapshots.retention_days} days, max {config.snapshots.max_files} files")
         print("-" * 60)
-
-    # Pre-run health check
-    print("Checking Theta Terminal connectivity...")
-    healthy, health_msg, fallback_data_source = _run_health_check(test_mode)
     
-    # Track data source for output annotation
+    # Health check
+    healthy, health_msg, fallback_data_source = _run_health_check(test_mode)
     data_source = DATA_SOURCE_LIVE
     
     if not healthy:
         print(f"  Theta Terminal: {health_msg}")
         if args.no_fallback or not is_fallback_enabled():
-            print("ERROR: Theta Terminal not reachable and fallback is disabled.")
-            print("  Start Theta Terminal or enable fallback_enabled in config.yaml")
-            return 1
-        print("  Fallback: Will use latest snapshot from disk")
+            print("ERROR: Theta Terminal not reachable and fallback disabled.")
+            return 1, None
+        print("  Fallback: Using latest snapshot")
         data_source = DATA_SOURCE_SNAPSHOT
     else:
-        print(f"  Theta Terminal: OK")
-
-    # Initialize providers (optional fallback: OPTIONS_FALLBACK_WEEKLY_EXPIRATIONS=1)
+        if not realtime_mode:
+            print("  Theta Terminal: OK")
+    
+    # Initialize providers
     snapshot_provider = StockSnapshotProvider()
     options_provider_inner = ThetaDataOptionsChainProvider()
     options_provider_inner = FallbackWeeklyExpirationsProvider(options_provider_inner)
     options_recorder = OptionsAvailabilityRecorder()
     options_provider = DiagnosticsOptionsChainProvider(options_provider_inner, options_recorder)
-
-    # Load universe from DB (symbol_universe where enabled=1). Fail loudly if empty.
+    
+    # Load universe
     enabled_symbols = get_enabled_symbols()
     if not enabled_symbols:
-        print("ERROR: Zero enabled symbols in symbol_universe. Import universe from CSV first.")
-        print("  Example: python -c \"from app.db.universe_import import import_universe_from_csv; import_universe_from_csv()\"")
-        return 1
-    print(f"Symbols from DB (enabled=1): {len(enabled_symbols)}")
-
+        print("ERROR: Zero enabled symbols in symbol_universe.")
+        return 1, None
+    
+    if not realtime_mode:
+        print(f"Symbols from DB: {len(enabled_symbols)}")
+    
     universe_manager = StockUniverseManager(snapshot_provider, symbols_from_db=enabled_symbols)
     eligible_stocks = universe_manager.get_eligible_stocks()
-
-    # Apply limit if specified
+    
     if args.limit:
-        eligible_stocks = eligible_stocks[: args.limit]
-
-    print(f"Processing {len(eligible_stocks)} symbols (from DB universe, after filters)...")
-
-    # Scoring configuration
+        eligible_stocks = eligible_stocks[:args.limit]
+    
+    if not realtime_mode:
+        print(f"Processing {len(eligible_stocks)} symbols...")
+    
+    # Configuration
     scoring_config = ScoringConfig(
-        premium_weight=1.0,
-        dte_weight=1.0,
-        spread_weight=1.0,
-        otm_weight=1.0,
-        liquidity_weight=1.0,
+        premium_weight=1.0, dte_weight=1.0, spread_weight=1.0,
+        otm_weight=1.0, liquidity_weight=1.0,
     )
-
-    # Selection configuration
+    
     selection_config = SelectionConfig(
-        max_total=10,
-        max_per_symbol=2,
-        max_per_signal_type=None,
-        min_score=0.0,
+        max_total=10, max_per_symbol=2, max_per_signal_type=None, min_score=0.0,
     )
-
-    # Base engine configuration
+    
     base_config = SignalEngineConfig(
-        dte_min=30,
-        dte_max=45,
-        min_bid=0.01,
-        min_open_interest=100,
-        max_spread_pct=20.0,
-        scoring_config=scoring_config,
-        selection_config=selection_config,
+        dte_min=30, dte_max=45, min_bid=0.01, min_open_interest=100,
+        max_spread_pct=20.0, scoring_config=scoring_config, selection_config=selection_config,
     )
-
-    csp_config = CSPConfig(
-        otm_pct_min=0.05,
-        otm_pct_max=0.15,
-        delta_min=None,
-        delta_max=None,
-    )
-
-    cc_config = CCConfig(
-        otm_pct_min=0.02,
-        otm_pct_max=0.10,
-        delta_min=None,
-        delta_max=None,
-    )
-
-    # Run signal engine (with options diagnostics recorder)
-    print("Running signal engine...")
+    
+    csp_config = CSPConfig(otm_pct_min=0.05, otm_pct_max=0.15)
+    cc_config = CCConfig(otm_pct_min=0.02, otm_pct_max=0.10)
+    
+    # Run engine
     result = run_signal_engine(
         stock_snapshots=eligible_stocks,
         options_chain_provider=options_provider,
@@ -291,42 +288,38 @@ def main() -> int:
         universe_id_or_hash="db_universe",
         options_availability_recorder=options_recorder,
     )
-
-    # Extract decision snapshot
+    
     decision_snapshot = result.decision_snapshot
     if decision_snapshot is None:
         print("ERROR: Decision snapshot is None")
-        return 1
-
-    # Options data health gate: block only if zero symbols have valid options
+        return 1, None
+    
+    # Options health gate
     symbols_with_options = list(decision_snapshot.symbols_with_options or [])
     symbols_without_options = dict(decision_snapshot.symbols_without_options or {})
     options_health = evaluate_options_data_health(symbols_with_options, symbols_without_options)
-    if options_health.allowed:
-        print(f"  Partial universe: {options_health.valid_symbols_count} eligible, {options_health.excluded_count} excluded (missing options)")
-    else:
-        print(f"  Options data health: BLOCKED (0 symbols with options, {options_health.excluded_count} excluded)")
-
-    # Evaluate execution gate
+    
+    if not realtime_mode:
+        if options_health.allowed:
+            print(f"  Partial universe: {options_health.valid_symbols_count} eligible, {options_health.excluded_count} excluded")
+        else:
+            print(f"  Options health: BLOCKED (0 symbols with options)")
+    
+    # Execution gate
     gate_result = evaluate_execution_gate(decision_snapshot)
-
-    # Merge options data health: if options health blocks, gate is blocked with clear reason
+    
     if not options_health.allowed:
         combined_reasons = list(gate_result.reasons or []) + options_health.reasons
         gate_result = ExecutionGateResult(allowed=False, reasons=combined_reasons)
-
-    # Build execution plan
+    
     execution_plan = build_execution_plan(decision_snapshot, gate_result)
-
-    # Execute dry-run
     dry_run_result = execute_dry_run(execution_plan)
-
-    # Add data source annotation to snapshot
+    
+    # Prepare output
     decision_snapshot_dict = asdict(decision_snapshot)
     decision_snapshot_dict["data_source"] = data_source
     decision_snapshot_dict["pipeline_timestamp"] = datetime.now(timezone.utc).isoformat()
-
-    # Prepare output data (preserve key ordering)
+    
     output_data = {
         "decision_snapshot": decision_snapshot_dict,
         "execution_gate": asdict(gate_result),
@@ -339,159 +332,216 @@ def main() -> int:
             "fallback_enabled": config.theta.fallback_enabled,
         },
     }
-
-    # Output file: out/decision_<ISO_TIMESTAMP>.json
-    # Note: Windows filenames cannot contain ":" so we make the ISO timestamp
-    # filename-safe while keeping it human-readable.
+    
+    # Save file
     output_dir = Path(output_dir_str)
     output_dir.mkdir(parents=True, exist_ok=True)
-
+    
     iso_ts = output_data["decision_snapshot"].get("as_of") or "unknown"
     safe_iso_ts = str(iso_ts).replace(":", "-")
     output_file = output_dir / f"decision_{safe_iso_ts}.json"
-
-    # Write JSON file
+    
     with open(output_file, "w") as f:
         json.dump(output_data, f, indent=2)
     
-    # Create decision_latest.json copy
+    # Create latest copy
     latest_path = _create_latest_copy(output_file)
-    if latest_path:
-        print(f"  Latest: {latest_path}")
     
-    # Cleanup old snapshots
+    # Cleanup
     if not args.skip_cleanup:
         retention_days = get_snapshot_retention_days()
         max_files = get_snapshot_max_files()
-        deleted_count, deleted_names = _cleanup_old_snapshots(output_dir, retention_days, max_files)
-        if deleted_count > 0:
-            print(f"  Cleanup: Deleted {deleted_count} old decision file(s)")
-            if test_mode:
-                for name in deleted_names[:5]:
-                    print(f"    - {name}")
-                if len(deleted_names) > 5:
-                    print(f"    ... and {len(deleted_names) - 5} more")
-
-    print(f"\nDecision pipeline complete:")
-    print(f"  Data source: {data_source}")
-    print(f"  Candidates: {result.stats['total_candidates']}")
-    print(f"  Selected: {len(result.selected_signals) if result.selected_signals else 0}")
-    print(f"  Gate allowed: {gate_result.allowed}")
-    print(f"  Orders: {len(execution_plan.orders)}")
-    print(f"  Output: {output_file}")
+        deleted_count, _ = _cleanup_old_snapshots(output_dir, retention_days, max_files)
+        
+        # Also enforce daily retention
+        daily_deleted, _ = enforce_daily_retention(output_dir, max_days=retention_days)
+        
+        if not realtime_mode and (deleted_count > 0 or daily_deleted > 0):
+            print(f"  Cleanup: Deleted {deleted_count + daily_deleted} old file(s)")
     
-    # Test mode: additional diagnostics
-    if test_mode:
-        print("-" * 60)
-        print("TEST MODE SUMMARY")
-        print("-" * 60)
-        
-        # Symbol chain summary
-        symbols_with = list(decision_snapshot.symbols_with_options or [])
-        symbols_without = dict(decision_snapshot.symbols_without_options or {})
-        print(f"\n[CHAIN INFO]")
-        print(f"  Symbols with options: {len(symbols_with)}")
-        print(f"  Symbols without options: {len(symbols_without)}")
-        if symbols_with[:5]:
-            print(f"    With chains: {', '.join(symbols_with[:5])}{'...' if len(symbols_with) > 5 else ''}")
-        if list(symbols_without.keys())[:5]:
-            reasons = [f"{k}({v})" for k, v in list(symbols_without.items())[:5]]
-            print(f"    Missing chains: {', '.join(reasons)}{'...' if len(symbols_without) > 5 else ''}")
-        
-        # Candidate scoring summary
-        scored = result.scored_candidates or []
-        selected = result.selected_signals or []
-        print(f"\n[SCORING INFO]")
-        print(f"  Total candidates: {len(result.candidates)}")
-        print(f"  Scored candidates: {len(scored)}")
-        print(f"  Selected candidates: {len(selected)}")
-        
-        # Show top 5 candidates with scores
-        if scored[:5]:
-            print(f"\n  Top 5 Scored Candidates:")
-            for sc in scored[:5]:
-                c = sc.candidate
-                s = sc.score
-                premium = c.mid or ((c.bid or 0) + (c.ask or 0)) / 2 if c.bid and c.ask else 0
-                print(f"    #{sc.rank}: {c.symbol} {c.signal_type.value} ${c.strike} exp={c.expiry}")
-                print(f"        Premium: ${premium:.2f}  DTE: {(c.expiry.toordinal() - datetime.now().date().toordinal()) if hasattr(c.expiry, 'toordinal') else 'N/A'}")
-                print(f"        Score: {s.total:.4f}")
-                # Show score components
-                comp_str = ", ".join([f"{comp.name.replace('_score', '')}={comp.value:.2f}*{comp.weight}" for comp in s.components])
-                print(f"        Components: {comp_str}")
-        
-        # Show selected signals
-        if selected[:5]:
-            print(f"\n  Selected Signals (passed gate):")
-            for sel in selected[:5]:
-                c = sel.scored.candidate
-                s = sel.scored.score
-                print(f"    {c.symbol} {c.signal_type.value} ${c.strike} exp={c.expiry} score={s.total:.4f} reason={sel.selection_reason}")
-        
-        # Show rejection reasons from exclusions
-        exclusion_codes = {}
-        for excl in result.exclusions:
-            code = excl.code
-            exclusion_codes[code] = exclusion_codes.get(code, 0) + 1
-        
-        if exclusion_codes:
-            print(f"\n[REJECTION SUMMARY]")
-            print(f"  Total exclusions: {len(result.exclusions)}")
-            for code, count in sorted(exclusion_codes.items(), key=lambda x: -x[1])[:10]:
-                print(f"    {code}: {count}")
-        
-        # Data source
-        print(f"\n[DATA SOURCE]")
-        print(f"  Source: {data_source}")
-        if data_source == DATA_SOURCE_SNAPSHOT:
-            print("    (Live data unavailable, used fallback snapshot)")
-        
-        print("=" * 60)
+    if not realtime_mode:
+        print(f"\nPipeline complete:")
+        print(f"  Data source: {data_source}")
+        print(f"  Candidates: {result.stats['total_candidates']}")
+        print(f"  Selected: {len(result.selected_signals) if result.selected_signals else 0}")
+        print(f"  Gate: {'ALLOWED' if gate_result.allowed else 'BLOCKED'}")
+        print(f"  Orders: {len(execution_plan.orders)}")
+        print(f"  Output: {output_file}")
+    else:
+        ts = datetime.now().strftime("%H:%M:%S")
+        candidates = result.stats['total_candidates']
+        selected = len(result.selected_signals) if result.selected_signals else 0
+        print(f"[{ts}] Candidates: {candidates}, Selected: {selected}, Gate: {'✓' if gate_result.allowed else '✗'}")
+    
+    return 0, output_file
 
-    # Slack: only notify on gate state change, advisory severity change, or manual send (UX requirement).
-    # Persist last state next to output dir so we do not fire on every refresh/run.
-    slack_state_path = output_dir / ".slack_state.json"
-    last_gate_allowed = None
-    last_drift_severity = None
-    if slack_state_path.exists():
-        try:
-            with open(slack_state_path) as f:
-                state = json.load(f)
-            last_gate_allowed = state.get("last_gate_allowed")
-            last_drift_severity = state.get("last_drift_severity")
-        except (json.JSONDecodeError, OSError):
-            pass
+
+def run_realtime_loop(args: argparse.Namespace, config: Any) -> int:
+    """Run pipeline in realtime mode until market close.
+    
+    Continuously refreshes data at the specified interval.
+    """
+    # Get realtime settings from config
+    refresh_interval = getattr(config, 'refresh_interval', 60)  # Default 60 seconds
+    if hasattr(config, 'realtime') and hasattr(config.realtime, 'refresh_interval'):
+        refresh_interval = config.realtime.refresh_interval
+    
+    end_time_str = "16:00:00"  # Default market close EST
+    if hasattr(config, 'realtime') and hasattr(config.realtime, 'end_time'):
+        end_time_str = config.realtime.end_time
+    
+    print("=" * 60)
+    print("ChakraOps Decision Pipeline - REALTIME MODE")
+    print("=" * 60)
+    print(f"  Refresh interval: {refresh_interval}s")
+    print(f"  End time: {end_time_str}")
+    print(f"  Press Ctrl+C to stop")
+    print("=" * 60)
+    
+    iteration = 0
+    last_output_file: Optional[Path] = None
+    
     try:
-        from app.notifications.slack_notifier import send_decision_alert
-        sent = send_decision_alert(
-            snapshot=decision_snapshot,
-            gate_result=gate_result,
-            execution_plan=execution_plan,
-            decision_file_path=output_file,
-            last_gate_allowed=last_gate_allowed,
-            last_drift_severity=last_drift_severity,
-        )
-        # Persist current state so next run only notifies on change
+        while True:
+            iteration += 1
+            
+            # Check end time
+            now = datetime.now()
+            try:
+                end_h, end_m, end_s = map(int, end_time_str.split(":"))
+                end_time = now.replace(hour=end_h, minute=end_m, second=end_s, microsecond=0)
+                if now >= end_time:
+                    print(f"\n[{now.strftime('%H:%M:%S')}] Market close reached, stopping realtime mode")
+                    break
+            except ValueError:
+                pass  # Invalid end_time format, continue indefinitely
+            
+            # Run pipeline
+            exit_code, output_file = run_pipeline(args, config, test_mode=False, realtime_mode=True)
+            
+            if exit_code != 0:
+                print(f"  Pipeline iteration {iteration} failed with code {exit_code}")
+            else:
+                last_output_file = output_file
+            
+            # Sleep until next iteration
+            time.sleep(refresh_interval)
+    
+    except KeyboardInterrupt:
+        print("\n\nRealtime mode interrupted by user")
+    
+    # Write final snapshot with _end suffix
+    if last_output_file:
+        final_name = f"decision_{date.today().isoformat()}_end.json"
+        final_path = last_output_file.parent / final_name
         try:
-            with open(slack_state_path, "w") as f:
-                json.dump(
-                    {
-                        "last_gate_allowed": gate_result.allowed,
-                        "last_drift_severity": last_drift_severity,
-                    },
-                    f,
-                    indent=2,
-                )
-        except OSError:
-            pass
-        if sent:
-            print(f"  Slack alert sent")
-        else:
-            print(f"  Slack skipped (no gate/severity change)")
-    except Exception as e:
-        # Slack failure must NOT break pipeline
-        print(f"  Slack alert failed (non-blocking): {e}")
+            shutil.copy2(last_output_file, final_path)
+            print(f"Final snapshot: {final_path}")
+        except Exception as e:
+            print(f"Warning: Failed to create final snapshot: {e}")
+    
+    print("Realtime mode ended")
+    return 0
 
+
+def main() -> int:
+    """Main entry point."""
+    parser = argparse.ArgumentParser(
+        description="Run full decision pipeline and save unified decision artifact"
+    )
+    parser.add_argument("--limit", type=int, default=None, help="Limit symbols")
+    parser.add_argument("--output-dir", type=str, default=None, help="Output directory")
+    parser.add_argument("--test", action="store_true", help="Test mode with diagnostics")
+    parser.add_argument("--no-fallback", action="store_true", help="Disable fallback")
+    parser.add_argument("--skip-cleanup", action="store_true", help="Skip cleanup")
+    parser.add_argument(
+        "--realtime",
+        action="store_true",
+        help="Realtime mode: continuously update until market close"
+    )
+    parser.add_argument(
+        "--interval",
+        type=int,
+        default=60,
+        help="Refresh interval in seconds for realtime mode (default: 60)"
+    )
+    args = parser.parse_args()
+    
+    # Load configuration
+    config = load_config()
+    
+    # Override refresh interval from command line
+    if args.interval:
+        if not hasattr(config, 'realtime'):
+            class RealtimeConfig:
+                pass
+            config.realtime = RealtimeConfig()
+        config.realtime.refresh_interval = args.interval
+    
+    if args.realtime:
+        return run_realtime_loop(args, config)
+    
+    if args.test:
+        print("=" * 60)
+        print("ChakraOps Decision Pipeline - TEST MODE")
+        print("=" * 60)
+    
+    print("Checking Theta Terminal connectivity...")
+    
+    exit_code, output_file = run_pipeline(args, config, test_mode=args.test)
+    
+    if exit_code != 0:
+        return exit_code
+    
+    # Test mode diagnostics
+    if args.test and output_file:
+        print("-" * 60)
+        print("TEST MODE COMPLETE")
+        print("-" * 60)
+    
+    # Slack notification (only on gate state change)
+    output_dir = Path(args.output_dir or config.snapshots.output_dir)
+    slack_state_path = output_dir / ".slack_state.json"
+    
+    if output_file:
+        with open(output_file, "r") as f:
+            output_data = json.load(f)
+        
+        gate_result = output_data.get("execution_gate", {})
+        decision_snapshot = output_data.get("decision_snapshot", {})
+        
+        last_gate_allowed = None
+        if slack_state_path.exists():
+            try:
+                with open(slack_state_path) as f:
+                    state = json.load(f)
+                last_gate_allowed = state.get("last_gate_allowed")
+            except (json.JSONDecodeError, OSError):
+                pass
+        
+        try:
+            from app.notifications.slack_notifier import send_decision_alert
+            sent = send_decision_alert(
+                snapshot=decision_snapshot,
+                gate_result=gate_result,
+                execution_plan=output_data.get("execution_plan", {}),
+                decision_file_path=output_file,
+                last_gate_allowed=last_gate_allowed,
+            )
+            
+            try:
+                with open(slack_state_path, "w") as f:
+                    json.dump({"last_gate_allowed": gate_result.get("allowed")}, f)
+            except OSError:
+                pass
+            
+            if sent:
+                print("  Slack alert sent")
+            else:
+                print("  Slack skipped (no change)")
+        except Exception as e:
+            print(f"  Slack failed: {e}")
+    
     return 0
 
 

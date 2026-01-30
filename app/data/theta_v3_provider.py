@@ -1,23 +1,24 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""Unified ThetaData v3 provider with fallback mechanism.
+"""Unified ThetaData v3 provider with reliable chain retrieval.
 
-This module provides a single entry point for all ThetaData v3 API interactions:
+This module provides comprehensive Theta v3 API interactions:
 - Health check before any data fetching
-- Stock and option snapshot fetching
+- Efficient chain retrieval using snapshot endpoints
+- list_expirations, list_strikes, snapshot_ohlc for full chains
+- fetch_full_chain for DTE-filtered chain retrieval
 - Automatic fallback to latest decision JSON when live data unavailable
 - Data source annotation for dashboard display
-
-All requests use the centralized config (config.yaml / environment variables).
-No v2 or hardcoded URLs.
+- Async support with semaphore for concurrency control
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, date, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -32,11 +33,13 @@ from app.core.settings import (
 
 logger = logging.getLogger(__name__)
 
-
-# Data source constants for annotation
+# Data source constants
 DATA_SOURCE_LIVE = "live"
 DATA_SOURCE_SNAPSHOT = "snapshot"
 DATA_SOURCE_UNAVAILABLE = "unavailable"
+
+# Concurrency limit for Theta API (respect subscription limits)
+MAX_CONCURRENT_REQUESTS = 5
 
 
 @dataclass
@@ -63,15 +66,39 @@ class StockSnapshotResult:
 
 
 @dataclass
-class OptionSnapshotResult:
-    """Result of option snapshot fetch."""
+class OptionContract:
+    """Single option contract with quotes and Greeks."""
     symbol: str
     expiration: str
+    strike: float
+    option_type: str  # "PUT" or "CALL"
+    right: str  # "P" or "C"
+    bid: Optional[float] = None
+    ask: Optional[float] = None
+    mid: Optional[float] = None
+    iv: Optional[float] = None
+    delta: Optional[float] = None
+    gamma: Optional[float] = None
+    theta: Optional[float] = None
+    vega: Optional[float] = None
+    volume: Optional[int] = None
+    open_interest: Optional[int] = None
+
+
+@dataclass
+class OptionChainResult:
+    """Result of fetching a full option chain."""
+    symbol: str
+    expirations: List[str] = field(default_factory=list)
     contracts: List[Dict[str, Any]] = field(default_factory=list)
-    greeks_available: bool = False
+    puts: List[Dict[str, Any]] = field(default_factory=list)
+    calls: List[Dict[str, Any]] = field(default_factory=list)
+    expiration_count: int = 0
+    contract_count: int = 0
     timestamp: Optional[str] = None
     data_source: str = DATA_SOURCE_LIVE
     error: Optional[str] = None
+    chain_status: str = "ok"  # "ok", "empty_chain", "no_options_for_symbol"
 
 
 @dataclass
@@ -84,40 +111,20 @@ class FallbackResult:
     error: Optional[str] = None
 
 
-@dataclass
-class OptionChainResult:
-    """Result of fetching a full option chain for a symbol/expiration."""
-    symbol: str
-    expiration: str
-    contracts: List[Dict[str, Any]] = field(default_factory=list)
-    puts: List[Dict[str, Any]] = field(default_factory=list)
-    calls: List[Dict[str, Any]] = field(default_factory=list)
-    strike_count: int = 0
-    greeks_available: bool = False
-    timestamp: Optional[str] = None
-    data_source: str = DATA_SOURCE_LIVE
-    error: Optional[str] = None
-    chain_status: str = "ok"  # "ok", "empty_chain", "no_options_for_symbol"
-
-
 class ThetaV3Provider:
-    """Unified ThetaData v3 provider with health check and fallback.
+    """Unified ThetaData v3 provider with health check, chain retrieval, and fallback.
     
     Usage:
         provider = ThetaV3Provider()
         
-        # Check health before fetching
+        # Health check
         health = provider.health_check()
-        if not health.healthy and not is_fallback_enabled():
-            sys.exit("Theta Terminal not reachable and fallback disabled")
         
-        # Fetch stock snapshot
-        result = provider.get_stock_snapshot("AAPL")
-        if result.data_source == "snapshot":
-            print("Using cached data")
+        # List expirations
+        expirations = provider.list_expirations("AAPL")
         
-        # Fetch option snapshot
-        option_result = provider.get_option_snapshot("SPY", "2026-02-21")
+        # Fetch full chain for DTE window
+        chain = provider.fetch_full_chain("AAPL", dte_min=30, dte_max=45)
     """
     
     def __init__(
@@ -127,39 +134,32 @@ class ThetaV3Provider:
         fallback_enabled: Optional[bool] = None,
         output_dir: Optional[str] = None,
     ) -> None:
-        """Initialize the provider.
-        
-        Parameters
-        ----------
-        base_url : str, optional
-            Override Theta base URL (default: from config)
-        timeout : float, optional
-            Override request timeout (default: from config)
-        fallback_enabled : bool, optional
-            Override fallback setting (default: from config)
-        output_dir : str, optional
-            Override output directory for fallback (default: from config)
-        """
         self.base_url = (base_url or get_theta_base_url()).rstrip("/")
         self.timeout = timeout if timeout is not None else get_theta_timeout()
         self.fallback_enabled = fallback_enabled if fallback_enabled is not None else is_fallback_enabled()
         self.output_dir = Path(output_dir or get_output_dir())
         
         self._client: Optional[httpx.Client] = None
+        self._async_client: Optional[httpx.AsyncClient] = None
+        self._semaphore: Optional[asyncio.Semaphore] = None
         self._is_healthy: Optional[bool] = None
-        self._last_health_check: Optional[datetime] = None
     
     def _get_client(self) -> httpx.Client:
-        """Get or create HTTP client."""
+        """Get or create sync HTTP client."""
         if self._client is None:
-            self._client = httpx.Client(
-                base_url=self.base_url,
-                timeout=self.timeout,
-            )
+            self._client = httpx.Client(base_url=self.base_url, timeout=self.timeout)
         return self._client
     
+    async def _get_async_client(self) -> httpx.AsyncClient:
+        """Get or create async HTTP client."""
+        if self._async_client is None:
+            self._async_client = httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout)
+        if self._semaphore is None:
+            self._semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+        return self._async_client
+    
     def close(self) -> None:
-        """Close HTTP client."""
+        """Close HTTP clients."""
         if self._client is not None:
             try:
                 self._client.close()
@@ -167,33 +167,34 @@ class ThetaV3Provider:
                 pass
             self._client = None
     
+    async def aclose(self) -> None:
+        """Close async HTTP client."""
+        if self._async_client is not None:
+            try:
+                await self._async_client.aclose()
+            except Exception:
+                pass
+            self._async_client = None
+    
     def __del__(self):
         self.close()
     
+    # -------------------------------------------------------------------------
+    # Health Check
+    # -------------------------------------------------------------------------
+    
     def health_check(self) -> ThetaHealthStatus:
-        """Check if Theta Terminal is reachable.
-        
-        Sends a lightweight GET request to verify the terminal is running.
-        This should be called before any data fetching.
-        
-        Returns
-        -------
-        ThetaHealthStatus
-            Health status with healthy flag, message, and response time.
-        """
+        """Check if Theta Terminal is reachable."""
         import time
         
         start = time.monotonic()
         try:
             client = self._get_client()
-            # Use /stock/list/symbols as a lightweight health check endpoint
-            # It's fast and doesn't require any specific symbol
             response = client.get("/stock/list/symbols", params={"format": "json"})
             elapsed_ms = (time.monotonic() - start) * 1000
             
             if response.status_code == 200:
                 self._is_healthy = True
-                self._last_health_check = datetime.now(timezone.utc)
                 return ThetaHealthStatus(
                     healthy=True,
                     message=f"Theta Terminal OK at {self.base_url}",
@@ -203,108 +204,431 @@ class ThetaV3Provider:
                 self._is_healthy = False
                 return ThetaHealthStatus(
                     healthy=False,
-                    message=f"Theta Terminal returned HTTP {response.status_code}",
+                    message=f"HTTP {response.status_code}",
                     response_time_ms=elapsed_ms,
                 )
         except httpx.ConnectError as e:
             self._is_healthy = False
-            return ThetaHealthStatus(
-                healthy=False,
-                message=f"Cannot connect to Theta Terminal at {self.base_url}: {e}",
-            )
-        except httpx.TimeoutException as e:
+            return ThetaHealthStatus(healthy=False, message=f"Cannot connect: {e}")
+        except httpx.TimeoutException:
             self._is_healthy = False
-            return ThetaHealthStatus(
-                healthy=False,
-                message=f"Theta Terminal timeout: {e}",
-            )
+            return ThetaHealthStatus(healthy=False, message="Timeout")
         except Exception as e:
             self._is_healthy = False
-            return ThetaHealthStatus(
-                healthy=False,
-                message=f"Theta Terminal health check failed: {e}",
-            )
+            return ThetaHealthStatus(healthy=False, message=str(e))
     
-    def get_stock_snapshot(
+    # -------------------------------------------------------------------------
+    # Expiration and Strike Listing
+    # -------------------------------------------------------------------------
+    
+    def list_expirations(self, symbol: str) -> List[str]:
+        """List all available expirations for a symbol.
+        
+        GET /option/list/expirations?symbol={symbol}
+        
+        Returns list of expiration strings (YYYY-MM-DD format).
+        """
+        symbol = (symbol or "").upper()
+        if not symbol:
+            return []
+        
+        try:
+            client = self._get_client()
+            response = client.get(
+                "/option/list/expirations",
+                params={"symbol": symbol, "format": "json"}
+            )
+            
+            if response.status_code != 200:
+                logger.warning("list_expirations HTTP %d for %s", response.status_code, symbol)
+                return []
+            
+            data = response.json()
+            expirations = self._parse_expiration_list(data)
+            return expirations
+            
+        except Exception as e:
+            logger.warning("list_expirations failed for %s: %s", symbol, e)
+            return []
+    
+    async def list_expirations_async(self, symbol: str) -> List[str]:
+        """Async version of list_expirations."""
+        symbol = (symbol or "").upper()
+        if not symbol:
+            return []
+        
+        try:
+            client = await self._get_async_client()
+            async with self._semaphore:
+                response = await client.get(
+                    "/option/list/expirations",
+                    params={"symbol": symbol, "format": "json"}
+                )
+            
+            if response.status_code != 200:
+                return []
+            
+            data = response.json()
+            return self._parse_expiration_list(data)
+            
+        except Exception as e:
+            logger.warning("list_expirations_async failed for %s: %s", symbol, e)
+            return []
+    
+    def list_strikes(self, symbol: str, expiration: str) -> List[float]:
+        """List all strikes for a symbol/expiration.
+        
+        GET /option/list/strikes?symbol={symbol}&expiration={expiration}
+        
+        Returns list of strike prices.
+        """
+        symbol = (symbol or "").upper()
+        exp_normalized = self._normalize_expiration(expiration)
+        if not symbol or not exp_normalized:
+            return []
+        
+        try:
+            client = self._get_client()
+            response = client.get(
+                "/option/list/strikes",
+                params={"symbol": symbol, "expiration": exp_normalized, "format": "json"}
+            )
+            
+            if response.status_code != 200:
+                return []
+            
+            data = response.json()
+            return self._parse_strike_list(data)
+            
+        except Exception as e:
+            logger.warning("list_strikes failed for %s %s: %s", symbol, expiration, e)
+            return []
+    
+    # -------------------------------------------------------------------------
+    # Snapshot OHLC - Efficient bulk fetch
+    # -------------------------------------------------------------------------
+    
+    def snapshot_ohlc(self, symbol: str, expiration: str) -> List[Dict[str, Any]]:
+        """Fetch OHLC snapshot for all contracts at an expiration.
+        
+        GET /option/snapshot/ohlc?symbol={symbol}&expiration={expiration}
+        
+        Returns list of contract dicts with bid, ask, IV, Greeks.
+        This is more efficient than fetching each strike individually.
+        """
+        symbol = (symbol or "").upper()
+        exp_normalized = self._normalize_expiration(expiration)
+        if not symbol or not exp_normalized:
+            return []
+        
+        try:
+            client = self._get_client()
+            response = client.get(
+                "/option/snapshot/ohlc",
+                params={"symbol": symbol, "expiration": exp_normalized, "format": "json"}
+            )
+            
+            if response.status_code in (404, 204):
+                logger.debug("snapshot_ohlc no data for %s %s", symbol, expiration)
+                return []
+            
+            if response.status_code != 200:
+                logger.warning("snapshot_ohlc HTTP %d for %s %s", response.status_code, symbol, expiration)
+                return []
+            
+            data = response.json()
+            return self._parse_ohlc_response(data, symbol, expiration)
+            
+        except Exception as e:
+            logger.warning("snapshot_ohlc failed for %s %s: %s", symbol, expiration, e)
+            return []
+    
+    async def snapshot_ohlc_async(self, symbol: str, expiration: str) -> List[Dict[str, Any]]:
+        """Async version of snapshot_ohlc."""
+        symbol = (symbol or "").upper()
+        exp_normalized = self._normalize_expiration(expiration)
+        if not symbol or not exp_normalized:
+            return []
+        
+        try:
+            client = await self._get_async_client()
+            async with self._semaphore:
+                response = await client.get(
+                    "/option/snapshot/ohlc",
+                    params={"symbol": symbol, "expiration": exp_normalized, "format": "json"}
+                )
+            
+            if response.status_code not in (200,):
+                return []
+            
+            data = response.json()
+            return self._parse_ohlc_response(data, symbol, expiration)
+            
+        except Exception as e:
+            logger.warning("snapshot_ohlc_async failed for %s %s: %s", symbol, expiration, e)
+            return []
+    
+    def snapshot_quote(self, symbol: str, expiration: str) -> List[Dict[str, Any]]:
+        """Alternative: fetch quote snapshot for an expiration.
+        
+        GET /option/snapshot/quote?symbol={symbol}&expiration={expiration}
+        
+        Use this if snapshot_ohlc is not available in subscription.
+        """
+        symbol = (symbol or "").upper()
+        exp_normalized = self._normalize_expiration(expiration)
+        if not symbol or not exp_normalized:
+            return []
+        
+        try:
+            client = self._get_client()
+            response = client.get(
+                "/option/snapshot/quote",
+                params={"symbol": symbol, "expiration": exp_normalized, "format": "json"}
+            )
+            
+            if response.status_code not in (200,):
+                return []
+            
+            data = response.json()
+            return self._parse_quote_response(data, symbol, expiration)
+            
+        except Exception as e:
+            logger.warning("snapshot_quote failed for %s %s: %s", symbol, expiration, e)
+            return []
+    
+    # -------------------------------------------------------------------------
+    # Full Chain Fetch - Main entry point
+    # -------------------------------------------------------------------------
+    
+    def fetch_full_chain(
         self,
         symbol: str,
-        fields: Optional[List[str]] = None,
-    ) -> StockSnapshotResult:
-        """Fetch real-time stock snapshot from /stock/snapshot/quote.
+        dte_min: int = 30,
+        dte_max: int = 45,
+    ) -> OptionChainResult:
+        """Fetch full option chain for a symbol within DTE window.
+        
+        1. Get all expirations via list_expirations()
+        2. Filter by DTE between dte_min and dte_max
+        3. For each expiration, call snapshot_ohlc() or snapshot_quote()
+        4. Collect all puts and calls into result
         
         Parameters
         ----------
         symbol : str
-            Stock symbol (e.g., "AAPL")
-        fields : list[str], optional
-            Fields to request (not used in v3, included for API compatibility)
+            Underlying symbol
+        dte_min : int
+            Minimum days to expiration (default: 30)
+        dte_max : int
+            Maximum days to expiration (default: 45)
         
         Returns
         -------
-        StockSnapshotResult
-            Snapshot result with price, bid, ask, volume, data_source, etc.
-            data_source will be "snapshot" if fallback was used.
+        OptionChainResult
+            Full chain with contracts, expirations, and status
         """
+        symbol = (symbol or "").upper()
+        now_utc = datetime.now(timezone.utc).isoformat()
+        
+        if not symbol:
+            return OptionChainResult(
+                symbol="",
+                timestamp=now_utc,
+                error="Invalid symbol",
+                chain_status="no_options_for_symbol",
+            )
+        
+        # Step 1: Get expirations
+        expirations = self.list_expirations(symbol)
+        
+        if not expirations:
+            logger.warning("No expirations found for %s", symbol)
+            return OptionChainResult(
+                symbol=symbol,
+                timestamp=now_utc,
+                data_source=DATA_SOURCE_LIVE,
+                chain_status="no_options_for_symbol",
+                error="No expirations available",
+            )
+        
+        # Step 2: Filter by DTE
+        today = date.today()
+        valid_expirations: List[str] = []
+        
+        for exp_str in expirations:
+            try:
+                # Parse expiration (handle YYYYMMDD or YYYY-MM-DD)
+                exp_clean = exp_str.replace("-", "")
+                if len(exp_clean) == 8:
+                    exp_date = date(int(exp_clean[:4]), int(exp_clean[4:6]), int(exp_clean[6:8]))
+                else:
+                    continue
+                
+                dte = (exp_date - today).days
+                if dte_min <= dte <= dte_max:
+                    valid_expirations.append(exp_str)
+            except (ValueError, TypeError):
+                continue
+        
+        if not valid_expirations:
+            logger.info("No expirations in DTE window [%d-%d] for %s", dte_min, dte_max, symbol)
+            return OptionChainResult(
+                symbol=symbol,
+                expirations=expirations,
+                expiration_count=len(expirations),
+                timestamp=now_utc,
+                data_source=DATA_SOURCE_LIVE,
+                chain_status="empty_chain",
+                error=f"No expirations in DTE window [{dte_min}-{dte_max}]",
+            )
+        
+        # Step 3: Fetch contracts for each valid expiration
+        all_contracts: List[Dict[str, Any]] = []
+        puts: List[Dict[str, Any]] = []
+        calls: List[Dict[str, Any]] = []
+        
+        for exp in valid_expirations:
+            # Try snapshot_ohlc first (more complete), fall back to snapshot_quote
+            contracts = self.snapshot_ohlc(symbol, exp)
+            if not contracts:
+                contracts = self.snapshot_quote(symbol, exp)
+            
+            for contract in contracts:
+                all_contracts.append(contract)
+                right = contract.get("right", "").upper()
+                if right == "P":
+                    puts.append(contract)
+                elif right == "C":
+                    calls.append(contract)
+        
+        if not all_contracts:
+            return OptionChainResult(
+                symbol=symbol,
+                expirations=valid_expirations,
+                expiration_count=len(valid_expirations),
+                timestamp=now_utc,
+                data_source=DATA_SOURCE_LIVE,
+                chain_status="empty_chain",
+                error="No contracts returned from snapshot endpoints",
+            )
+        
+        return OptionChainResult(
+            symbol=symbol,
+            expirations=valid_expirations,
+            contracts=all_contracts,
+            puts=puts,
+            calls=calls,
+            expiration_count=len(valid_expirations),
+            contract_count=len(all_contracts),
+            timestamp=now_utc,
+            data_source=DATA_SOURCE_LIVE,
+            chain_status="ok",
+        )
+    
+    async def fetch_full_chain_async(
+        self,
+        symbol: str,
+        dte_min: int = 30,
+        dte_max: int = 45,
+    ) -> OptionChainResult:
+        """Async version of fetch_full_chain for concurrent fetching."""
+        symbol = (symbol or "").upper()
+        now_utc = datetime.now(timezone.utc).isoformat()
+        
+        if not symbol:
+            return OptionChainResult(symbol="", timestamp=now_utc, error="Invalid symbol", chain_status="no_options_for_symbol")
+        
+        # Get expirations
+        expirations = await self.list_expirations_async(symbol)
+        if not expirations:
+            return OptionChainResult(symbol=symbol, timestamp=now_utc, chain_status="no_options_for_symbol", error="No expirations")
+        
+        # Filter by DTE
+        today = date.today()
+        valid_expirations: List[str] = []
+        for exp_str in expirations:
+            try:
+                exp_clean = exp_str.replace("-", "")
+                if len(exp_clean) == 8:
+                    exp_date = date(int(exp_clean[:4]), int(exp_clean[4:6]), int(exp_clean[6:8]))
+                    dte = (exp_date - today).days
+                    if dte_min <= dte <= dte_max:
+                        valid_expirations.append(exp_str)
+            except (ValueError, TypeError):
+                continue
+        
+        if not valid_expirations:
+            return OptionChainResult(symbol=symbol, expirations=expirations, timestamp=now_utc, chain_status="empty_chain", error=f"No expirations in DTE [{dte_min}-{dte_max}]")
+        
+        # Fetch all expirations concurrently
+        tasks = [self.snapshot_ohlc_async(symbol, exp) for exp in valid_expirations]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        all_contracts: List[Dict[str, Any]] = []
+        puts: List[Dict[str, Any]] = []
+        calls: List[Dict[str, Any]] = []
+        
+        for result in results:
+            if isinstance(result, Exception):
+                continue
+            for contract in result:
+                all_contracts.append(contract)
+                right = contract.get("right", "").upper()
+                if right == "P":
+                    puts.append(contract)
+                elif right == "C":
+                    calls.append(contract)
+        
+        return OptionChainResult(
+            symbol=symbol,
+            expirations=valid_expirations,
+            contracts=all_contracts,
+            puts=puts,
+            calls=calls,
+            expiration_count=len(valid_expirations),
+            contract_count=len(all_contracts),
+            timestamp=now_utc,
+            data_source=DATA_SOURCE_LIVE,
+            chain_status="ok" if all_contracts else "empty_chain",
+        )
+    
+    # -------------------------------------------------------------------------
+    # Stock Snapshot
+    # -------------------------------------------------------------------------
+    
+    def get_stock_snapshot(self, symbol: str) -> StockSnapshotResult:
+        """Fetch real-time stock snapshot."""
         symbol = (symbol or "").upper()
         if not symbol:
             return StockSnapshotResult(symbol="", error="Invalid symbol")
         
         now_utc = datetime.now(timezone.utc).isoformat()
         
-        # Try live data first
         try:
             client = self._get_client()
-            
-            # Try /stock/snapshot/quote first (works with Value plan)
             response = client.get(
                 "/stock/snapshot/quote",
                 params={"symbol": symbol, "format": "json", "venue": "utp_cta"},
             )
             
-            # Handle 404/204 as "data unavailable" (market closed, symbol halted)
             if response.status_code in (404, 204):
-                logger.warning(
-                    "Stock snapshot unavailable for %s (HTTP %d), will try fallback",
-                    symbol, response.status_code
-                )
                 if self.fallback_enabled:
                     return self._fallback_stock_snapshot(symbol)
-                return StockSnapshotResult(
-                    symbol=symbol,
-                    timestamp=now_utc,
-                    data_source=DATA_SOURCE_UNAVAILABLE,
-                    error=f"Data unavailable (HTTP {response.status_code})",
-                )
+                return StockSnapshotResult(symbol=symbol, timestamp=now_utc, data_source=DATA_SOURCE_UNAVAILABLE, error="Data unavailable")
             
-            # Handle other errors
             if response.status_code != 200:
-                logger.warning(
-                    "Stock snapshot HTTP %d for %s",
-                    response.status_code, symbol
-                )
                 if self.fallback_enabled:
                     return self._fallback_stock_snapshot(symbol)
-                return StockSnapshotResult(
-                    symbol=symbol,
-                    timestamp=now_utc,
-                    data_source=DATA_SOURCE_UNAVAILABLE,
-                    error=f"HTTP {response.status_code}",
-                )
+                return StockSnapshotResult(symbol=symbol, timestamp=now_utc, data_source=DATA_SOURCE_UNAVAILABLE, error=f"HTTP {response.status_code}")
             
-            # Parse response
             data = response.json()
             row = self._extract_response_row(data)
             
             if not row:
-                logger.warning("Empty stock snapshot response for %s", symbol)
                 if self.fallback_enabled:
                     return self._fallback_stock_snapshot(symbol)
-                return StockSnapshotResult(
-                    symbol=symbol,
-                    timestamp=now_utc,
-                    data_source=DATA_SOURCE_UNAVAILABLE,
-                    error="Empty response",
-                )
+                return StockSnapshotResult(symbol=symbol, timestamp=now_utc, data_source=DATA_SOURCE_UNAVAILABLE, error="Empty response")
             
             return StockSnapshotResult(
                 symbol=symbol,
@@ -312,394 +636,26 @@ class ThetaV3Provider:
                 bid=self._extract_float(row, ["bid", "bid_price"]),
                 ask=self._extract_float(row, ["ask", "ask_price"]),
                 volume=self._extract_int(row, ["volume", "vol"]),
-                avg_volume=self._extract_int(row, ["avg_volume", "avgVol", "avg_volume_30d"]),
                 timestamp=now_utc,
                 data_source=DATA_SOURCE_LIVE,
                 raw_response=row,
             )
             
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code in (404, 204):
-                logger.warning("Stock snapshot not found for %s", symbol)
-                if self.fallback_enabled:
-                    return self._fallback_stock_snapshot(symbol)
-            return StockSnapshotResult(
-                symbol=symbol,
-                timestamp=now_utc,
-                data_source=DATA_SOURCE_UNAVAILABLE,
-                error=f"HTTP {e.response.status_code}",
-            )
         except Exception as e:
             logger.warning("Stock snapshot failed for %s: %s", symbol, e)
             if self.fallback_enabled:
                 return self._fallback_stock_snapshot(symbol)
-            return StockSnapshotResult(
-                symbol=symbol,
-                timestamp=now_utc,
-                data_source=DATA_SOURCE_UNAVAILABLE,
-                error=str(e),
-            )
+            return StockSnapshotResult(symbol=symbol, timestamp=now_utc, data_source=DATA_SOURCE_UNAVAILABLE, error=str(e))
     
-    def get_option_snapshot(
-        self,
-        symbol: str,
-        expiration: str,
-        fields: Optional[List[str]] = None,
-        right: str = "*",
-    ) -> OptionSnapshotResult:
-        """Fetch real-time option snapshot with quotes and greeks.
-        
-        Hits /option/snapshot/quote for quotes and optionally /option/snapshot/all_greeks.
-        
-        Parameters
-        ----------
-        symbol : str
-            Underlying symbol (e.g., "SPY")
-        expiration : str
-            Expiration date (YYYY-MM-DD or YYYYMMDD or "*" for all)
-        fields : list[str], optional
-            Fields to request (for future use)
-        right : str
-            Option right: "P", "C", or "*" for both
-        
-        Returns
-        -------
-        OptionSnapshotResult
-            Snapshot result with contracts, greeks availability, data_source, etc.
-        """
-        symbol = (symbol or "").upper()
-        if not symbol:
-            return OptionSnapshotResult(symbol="", expiration="", error="Invalid symbol")
-        
-        # Normalize expiration format
-        exp_normalized = self._normalize_expiration(expiration)
-        now_utc = datetime.now(timezone.utc).isoformat()
-        
-        try:
-            client = self._get_client()
-            contracts: List[Dict[str, Any]] = []
-            greeks_available = False
-            
-            # Build params
-            params: Dict[str, Any] = {
-                "symbol": symbol,
-                "format": "json",
-            }
-            if exp_normalized and exp_normalized != "*":
-                params["expiration"] = exp_normalized
-            if right and right != "*":
-                params["right"] = right.upper()
-            
-            # Fetch quote snapshot
-            response = client.get("/option/snapshot/quote", params=params)
-            
-            if response.status_code in (404, 204):
-                logger.warning(
-                    "Option snapshot unavailable for %s exp=%s (HTTP %d)",
-                    symbol, expiration, response.status_code
-                )
-                if self.fallback_enabled:
-                    return self._fallback_option_snapshot(symbol, expiration)
-                return OptionSnapshotResult(
-                    symbol=symbol,
-                    expiration=expiration,
-                    timestamp=now_utc,
-                    data_source=DATA_SOURCE_UNAVAILABLE,
-                    error=f"Data unavailable (HTTP {response.status_code})",
-                )
-            
-            if response.status_code != 200:
-                logger.warning("Option snapshot HTTP %d for %s", response.status_code, symbol)
-                if self.fallback_enabled:
-                    return self._fallback_option_snapshot(symbol, expiration)
-                return OptionSnapshotResult(
-                    symbol=symbol,
-                    expiration=expiration,
-                    timestamp=now_utc,
-                    data_source=DATA_SOURCE_UNAVAILABLE,
-                    error=f"HTTP {response.status_code}",
-                )
-            
-            # Parse quote response
-            data = response.json()
-            rows = self._extract_response_list(data)
-            
-            for row in rows:
-                if not isinstance(row, dict):
-                    continue
-                contract = {
-                    "symbol": symbol,
-                    "strike": self._extract_float(row, ["strike"]),
-                    "expiration": row.get("expiration") or exp_normalized,
-                    "right": row.get("right", right),
-                    "bid": self._extract_float(row, ["bid", "bid_price"]),
-                    "ask": self._extract_float(row, ["ask", "ask_price"]),
-                    "volume": self._extract_int(row, ["volume", "vol"]),
-                    "open_interest": self._extract_int(row, ["open_interest", "oi"]),
-                    "delta": self._extract_float(row, ["delta"]),
-                    "gamma": self._extract_float(row, ["gamma"]),
-                    "theta": self._extract_float(row, ["theta"]),
-                    "vega": self._extract_float(row, ["vega"]),
-                    "iv": self._extract_float(row, ["implied_vol", "iv", "implied_volatility"]),
-                }
-                # Check if greeks are present
-                if contract.get("delta") is not None or contract.get("iv") is not None:
-                    greeks_available = True
-                contracts.append(contract)
-            
-            # Try to fetch additional greeks if not in quote response
-            if contracts and not greeks_available:
-                try:
-                    greeks_response = client.get("/option/snapshot/all_greeks", params=params)
-                    if greeks_response.status_code == 200:
-                        greeks_data = greeks_response.json()
-                        greeks_rows = self._extract_response_list(greeks_data)
-                        greeks_by_key = {}
-                        for gr in greeks_rows:
-                            if not isinstance(gr, dict):
-                                continue
-                            key = (gr.get("strike"), gr.get("right", "").upper())
-                            greeks_by_key[key] = gr
-                        
-                        for contract in contracts:
-                            key = (contract.get("strike"), (contract.get("right") or "").upper())
-                            if key in greeks_by_key:
-                                gr = greeks_by_key[key]
-                                contract["delta"] = contract.get("delta") or self._extract_float(gr, ["delta"])
-                                contract["gamma"] = contract.get("gamma") or self._extract_float(gr, ["gamma"])
-                                contract["theta"] = contract.get("theta") or self._extract_float(gr, ["theta"])
-                                contract["vega"] = contract.get("vega") or self._extract_float(gr, ["vega"])
-                                contract["iv"] = contract.get("iv") or self._extract_float(gr, ["implied_vol", "iv"])
-                                greeks_available = True
-                except Exception as e:
-                    logger.debug("Failed to fetch additional greeks for %s: %s", symbol, e)
-            
-            return OptionSnapshotResult(
-                symbol=symbol,
-                expiration=expiration,
-                contracts=contracts,
-                greeks_available=greeks_available,
-                timestamp=now_utc,
-                data_source=DATA_SOURCE_LIVE,
-            )
-            
-        except Exception as e:
-            logger.warning("Option snapshot failed for %s: %s", symbol, e)
-            if self.fallback_enabled:
-                return self._fallback_option_snapshot(symbol, expiration)
-            return OptionSnapshotResult(
-                symbol=symbol,
-                expiration=expiration,
-                timestamp=now_utc,
-                data_source=DATA_SOURCE_UNAVAILABLE,
-                error=str(e),
-            )
+    # -------------------------------------------------------------------------
+    # Fallback Loading
+    # -------------------------------------------------------------------------
     
-    def get_option_chain(
-        self,
-        symbol: str,
-        expiration: str,
-        include_greeks: bool = True,
-    ) -> OptionChainResult:
-        """Fetch full option chain for a symbol/expiration using /option/list/strikes.
-        
-        This method retrieves all strikes for an expiration and fetches quotes/greeks
-        for each contract. It returns both puts and calls.
-        
-        Parameters
-        ----------
-        symbol : str
-            Underlying symbol (e.g., "SPY")
-        expiration : str
-            Expiration date (YYYY-MM-DD or YYYYMMDD)
-        include_greeks : bool
-            Whether to fetch Greeks (default: True)
-        
-        Returns
-        -------
-        OptionChainResult
-            Full chain with puts, calls, strike count, and status.
-        """
-        symbol = (symbol or "").upper()
-        if not symbol:
-            return OptionChainResult(
-                symbol="", expiration="", error="Invalid symbol",
-                chain_status="no_options_for_symbol"
-            )
-        
-        exp_normalized = self._normalize_expiration(expiration)
-        now_utc = datetime.now(timezone.utc).isoformat()
-        
-        try:
-            client = self._get_client()
-            
-            # Step 1: Fetch strikes for this expiration
-            strikes_params: Dict[str, Any] = {
-                "symbol": symbol,
-                "expiration": exp_normalized,
-                "format": "json",
-            }
-            
-            strikes_response = client.get("/option/list/strikes", params=strikes_params)
-            
-            if strikes_response.status_code in (404, 204):
-                logger.warning(
-                    "Option chain unavailable for %s exp=%s (HTTP %d)",
-                    symbol, expiration, strikes_response.status_code
-                )
-                return OptionChainResult(
-                    symbol=symbol,
-                    expiration=expiration,
-                    timestamp=now_utc,
-                    data_source=DATA_SOURCE_UNAVAILABLE,
-                    error=f"No strikes available (HTTP {strikes_response.status_code})",
-                    chain_status="empty_chain",
-                )
-            
-            if strikes_response.status_code != 200:
-                logger.warning(
-                    "Option chain HTTP %d for %s exp=%s",
-                    strikes_response.status_code, symbol, expiration
-                )
-                return OptionChainResult(
-                    symbol=symbol,
-                    expiration=expiration,
-                    timestamp=now_utc,
-                    data_source=DATA_SOURCE_UNAVAILABLE,
-                    error=f"HTTP {strikes_response.status_code}",
-                    chain_status="empty_chain",
-                )
-            
-            # Parse strikes
-            strikes_data = strikes_response.json()
-            strikes: List[float] = []
-            
-            if isinstance(strikes_data, list):
-                for s in strikes_data:
-                    try:
-                        strikes.append(float(s))
-                    except (TypeError, ValueError):
-                        continue
-            elif isinstance(strikes_data, dict):
-                strikes_list = strikes_data.get("strikes") or strikes_data.get("response") or []
-                for s in strikes_list:
-                    try:
-                        strikes.append(float(s))
-                    except (TypeError, ValueError):
-                        continue
-            
-            if not strikes:
-                return OptionChainResult(
-                    symbol=symbol,
-                    expiration=expiration,
-                    timestamp=now_utc,
-                    data_source=DATA_SOURCE_LIVE,
-                    chain_status="empty_chain",
-                    error="No strikes found for expiration",
-                )
-            
-            strikes = sorted(strikes)
-            
-            # Step 2: Fetch quotes for puts and calls
-            puts: List[Dict[str, Any]] = []
-            calls: List[Dict[str, Any]] = []
-            greeks_available = False
-            
-            for right in ["P", "C"]:
-                for strike in strikes:
-                    try:
-                        quote_params: Dict[str, Any] = {
-                            "symbol": symbol,
-                            "expiration": exp_normalized,
-                            "strike": strike,
-                            "right": right,
-                            "format": "json",
-                        }
-                        
-                        quote_response = client.get("/option/snapshot/quote", params=quote_params)
-                        
-                        if quote_response.status_code != 200:
-                            continue
-                        
-                        quote_data = quote_response.json()
-                        row = self._extract_response_row(quote_data)
-                        
-                        if not row:
-                            continue
-                        
-                        contract = {
-                            "symbol": symbol,
-                            "strike": strike,
-                            "expiration": expiration,
-                            "right": right,
-                            "option_type": "PUT" if right == "P" else "CALL",
-                            "bid": self._extract_float(row, ["bid", "bid_price"]),
-                            "ask": self._extract_float(row, ["ask", "ask_price"]),
-                            "volume": self._extract_int(row, ["volume", "vol"]),
-                            "open_interest": self._extract_int(row, ["open_interest", "oi"]),
-                            "delta": self._extract_float(row, ["delta"]),
-                            "gamma": self._extract_float(row, ["gamma"]),
-                            "theta": self._extract_float(row, ["theta"]),
-                            "vega": self._extract_float(row, ["vega"]),
-                            "iv": self._extract_float(row, ["implied_vol", "iv", "implied_volatility"]),
-                        }
-                        
-                        if contract.get("delta") is not None or contract.get("iv") is not None:
-                            greeks_available = True
-                        
-                        if right == "P":
-                            puts.append(contract)
-                        else:
-                            calls.append(contract)
-                    
-                    except Exception as e:
-                        logger.debug(
-                            "Failed to fetch quote for %s %s %s %s: %s",
-                            symbol, expiration, strike, right, e
-                        )
-                        continue
-            
-            all_contracts = puts + calls
-            
-            return OptionChainResult(
-                symbol=symbol,
-                expiration=expiration,
-                contracts=all_contracts,
-                puts=puts,
-                calls=calls,
-                strike_count=len(strikes),
-                greeks_available=greeks_available,
-                timestamp=now_utc,
-                data_source=DATA_SOURCE_LIVE,
-                chain_status="ok" if all_contracts else "empty_chain",
-            )
-        
-        except Exception as e:
-            logger.warning("Option chain failed for %s exp=%s: %s", symbol, expiration, e)
-            return OptionChainResult(
-                symbol=symbol,
-                expiration=expiration,
-                timestamp=now_utc,
-                data_source=DATA_SOURCE_UNAVAILABLE,
-                error=str(e),
-                chain_status="empty_chain",
-            )
-
     def load_fallback_snapshot(self) -> FallbackResult:
-        """Load the most recent decision snapshot from disk.
-        
-        Returns
-        -------
-        FallbackResult
-            Result with loaded flag, file path, timestamp, and snapshot data.
-        """
+        """Load the most recent decision snapshot from disk."""
         try:
-            # Find decision_*.json files in output directory
             if not self.output_dir.exists():
-                return FallbackResult(
-                    loaded=False,
-                    error=f"Output directory does not exist: {self.output_dir}",
-                )
+                return FallbackResult(loaded=False, error=f"Directory not found: {self.output_dir}")
             
             decision_files = sorted(
                 self.output_dir.glob("decision_*.json"),
@@ -708,126 +664,138 @@ class ThetaV3Provider:
             )
             
             if not decision_files:
-                return FallbackResult(
-                    loaded=False,
-                    error=f"No decision files found in {self.output_dir}",
-                )
+                return FallbackResult(loaded=False, error="No decision files found")
             
-            # Load the most recent file
             latest_file = decision_files[0]
             with open(latest_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
             
-            file_mtime = datetime.fromtimestamp(
-                latest_file.stat().st_mtime, tz=timezone.utc
-            ).isoformat()
+            file_mtime = datetime.fromtimestamp(latest_file.stat().st_mtime, tz=timezone.utc).isoformat()
+            logger.warning("Using fallback: %s", latest_file.name)
             
-            logger.warning(
-                "Using fallback snapshot from %s (modified %s)",
-                latest_file.name, file_mtime
-            )
-            
-            return FallbackResult(
-                loaded=True,
-                file_path=latest_file,
-                file_timestamp=file_mtime,
-                snapshot_data=data,
-            )
+            return FallbackResult(loaded=True, file_path=latest_file, file_timestamp=file_mtime, snapshot_data=data)
             
         except Exception as e:
-            return FallbackResult(
-                loaded=False,
-                error=f"Failed to load fallback snapshot: {e}",
-            )
+            return FallbackResult(loaded=False, error=str(e))
     
     def _fallback_stock_snapshot(self, symbol: str) -> StockSnapshotResult:
-        """Load stock snapshot from fallback decision file."""
+        """Load stock snapshot from fallback."""
         fallback = self.load_fallback_snapshot()
-        
         if not fallback.loaded or not fallback.snapshot_data:
-            return StockSnapshotResult(
-                symbol=symbol,
-                timestamp=datetime.now(timezone.utc).isoformat(),
-                data_source=DATA_SOURCE_UNAVAILABLE,
-                error=fallback.error or "No fallback available",
-            )
+            return StockSnapshotResult(symbol=symbol, timestamp=datetime.now(timezone.utc).isoformat(), data_source=DATA_SOURCE_UNAVAILABLE, error=fallback.error)
         
-        # Try to extract symbol data from the decision snapshot
-        # The structure is: decision_snapshot.candidates or scored_candidates
         snapshot = fallback.snapshot_data.get("decision_snapshot", {})
-        
-        # Look for price in various places
         price = None
-        scored_candidates = snapshot.get("scored_candidates") or []
-        for sc in scored_candidates:
-            if not isinstance(sc, dict):
-                continue
-            candidate = sc.get("candidate", {})
-            if isinstance(candidate, dict) and candidate.get("symbol") == symbol:
-                # Found the symbol in candidates
-                price = candidate.get("underlying_price")
-                break
+        for sc in snapshot.get("scored_candidates", []):
+            if isinstance(sc, dict):
+                cand = sc.get("candidate", {})
+                if isinstance(cand, dict) and cand.get("symbol") == symbol:
+                    price = cand.get("underlying_price")
+                    break
         
-        return StockSnapshotResult(
-            symbol=symbol,
-            price=price,
-            timestamp=fallback.file_timestamp,
-            data_source=DATA_SOURCE_SNAPSHOT,
-            error=None if price else f"Symbol {symbol} not found in fallback",
-        )
+        return StockSnapshotResult(symbol=symbol, price=price, timestamp=fallback.file_timestamp, data_source=DATA_SOURCE_SNAPSHOT)
     
-    def _fallback_option_snapshot(self, symbol: str, expiration: str) -> OptionSnapshotResult:
-        """Load option snapshot from fallback decision file."""
-        fallback = self.load_fallback_snapshot()
+    # -------------------------------------------------------------------------
+    # Response Parsing Helpers
+    # -------------------------------------------------------------------------
+    
+    def _parse_expiration_list(self, data: Any) -> List[str]:
+        """Parse expiration list from API response."""
+        expirations: List[str] = []
         
-        if not fallback.loaded or not fallback.snapshot_data:
-            return OptionSnapshotResult(
-                symbol=symbol,
-                expiration=expiration,
-                timestamp=datetime.now(timezone.utc).isoformat(),
-                data_source=DATA_SOURCE_UNAVAILABLE,
-                error=fallback.error or "No fallback available",
-            )
+        if isinstance(data, dict):
+            data = data.get("response") or data.get("expirations") or []
         
-        # Extract option data from the decision snapshot
-        snapshot = fallback.snapshot_data.get("decision_snapshot", {})
+        if isinstance(data, list):
+            for item in data:
+                if isinstance(item, str):
+                    expirations.append(item)
+                elif isinstance(item, dict):
+                    exp = item.get("expiration") or item.get("exp")
+                    if exp:
+                        expirations.append(str(exp))
+                elif isinstance(item, int):
+                    # YYYYMMDD integer format
+                    expirations.append(str(item))
+        
+        # Normalize to YYYY-MM-DD format
+        normalized = []
+        for exp in expirations:
+            exp_str = str(exp).replace("-", "")
+            if len(exp_str) == 8 and exp_str.isdigit():
+                normalized.append(f"{exp_str[:4]}-{exp_str[4:6]}-{exp_str[6:8]}")
+            elif "-" in str(exp) and len(str(exp)) == 10:
+                normalized.append(str(exp))
+        
+        return sorted(set(normalized))
+    
+    def _parse_strike_list(self, data: Any) -> List[float]:
+        """Parse strike list from API response."""
+        strikes: List[float] = []
+        
+        if isinstance(data, dict):
+            data = data.get("response") or data.get("strikes") or []
+        
+        if isinstance(data, list):
+            for item in data:
+                try:
+                    strikes.append(float(item))
+                except (TypeError, ValueError):
+                    continue
+        
+        return sorted(strikes)
+    
+    def _parse_ohlc_response(self, data: Any, symbol: str, expiration: str) -> List[Dict[str, Any]]:
+        """Parse OHLC snapshot response into contract dicts."""
         contracts: List[Dict[str, Any]] = []
+        rows = self._extract_response_list(data)
         
-        scored_candidates = snapshot.get("scored_candidates") or []
-        for sc in scored_candidates:
-            if not isinstance(sc, dict):
+        for row in rows:
+            if not isinstance(row, dict):
                 continue
-            candidate = sc.get("candidate", {})
-            if not isinstance(candidate, dict):
+            
+            strike = self._extract_float(row, ["strike"])
+            if strike is None:
                 continue
-            if candidate.get("symbol") != symbol:
+            
+            right = str(row.get("right", "") or row.get("option_type", "")).upper()
+            if right not in ("P", "C", "PUT", "CALL"):
                 continue
-            # Include this contract if expiration matches or we want all
-            cand_exp = candidate.get("expiry") or candidate.get("expiration")
-            if expiration == "*" or self._normalize_expiration(cand_exp) == self._normalize_expiration(expiration):
-                contracts.append({
-                    "symbol": symbol,
-                    "strike": candidate.get("strike"),
-                    "expiration": cand_exp,
-                    "right": candidate.get("signal_type", "").replace("CSP", "P").replace("CC", "C")[:1] or "P",
-                    "bid": candidate.get("bid"),
-                    "ask": candidate.get("ask"),
-                    "delta": candidate.get("delta"),
-                    "iv": candidate.get("iv"),
-                })
+            right = "P" if right in ("P", "PUT") else "C"
+            
+            bid = self._extract_float(row, ["bid", "bid_price"])
+            ask = self._extract_float(row, ["ask", "ask_price"])
+            mid = None
+            if bid is not None and ask is not None:
+                mid = (bid + ask) / 2
+            
+            contracts.append({
+                "symbol": symbol,
+                "expiration": expiration,
+                "strike": strike,
+                "right": right,
+                "option_type": "PUT" if right == "P" else "CALL",
+                "bid": bid,
+                "ask": ask,
+                "mid": mid,
+                "iv": self._extract_float(row, ["implied_vol", "iv", "implied_volatility"]),
+                "delta": self._extract_float(row, ["delta"]),
+                "gamma": self._extract_float(row, ["gamma"]),
+                "theta": self._extract_float(row, ["theta"]),
+                "vega": self._extract_float(row, ["vega"]),
+                "volume": self._extract_int(row, ["volume", "vol"]),
+                "open_interest": self._extract_int(row, ["open_interest", "oi"]),
+            })
         
-        return OptionSnapshotResult(
-            symbol=symbol,
-            expiration=expiration,
-            contracts=contracts,
-            greeks_available=any(c.get("delta") is not None for c in contracts),
-            timestamp=fallback.file_timestamp,
-            data_source=DATA_SOURCE_SNAPSHOT,
-        )
+        return contracts
+    
+    def _parse_quote_response(self, data: Any, symbol: str, expiration: str) -> List[Dict[str, Any]]:
+        """Parse quote snapshot response into contract dicts."""
+        return self._parse_ohlc_response(data, symbol, expiration)
     
     @staticmethod
     def _extract_response_row(data: Any) -> Optional[Dict[str, Any]]:
-        """Extract single row from Theta v3 response."""
+        """Extract single row from response."""
         if isinstance(data, dict):
             if "response" in data and isinstance(data["response"], list) and data["response"]:
                 return data["response"][0] if isinstance(data["response"][0], dict) else None
@@ -838,7 +806,7 @@ class ThetaV3Provider:
     
     @staticmethod
     def _extract_response_list(data: Any) -> List[Dict[str, Any]]:
-        """Extract list of rows from Theta v3 response."""
+        """Extract list of rows from response."""
         if isinstance(data, dict) and "response" in data:
             resp = data["response"]
             if isinstance(resp, list):
@@ -849,7 +817,7 @@ class ThetaV3Provider:
     
     @staticmethod
     def _extract_float(row: Dict[str, Any], keys: List[str]) -> Optional[float]:
-        """Extract first valid float from row by trying multiple keys."""
+        """Extract first valid float from row."""
         for key in keys:
             val = row.get(key)
             if val is not None:
@@ -861,7 +829,7 @@ class ThetaV3Provider:
     
     @staticmethod
     def _extract_int(row: Dict[str, Any], keys: List[str]) -> Optional[int]:
-        """Extract first valid int from row by trying multiple keys."""
+        """Extract first valid int from row."""
         for key in keys:
             val = row.get(key)
             if val is not None:
@@ -876,36 +844,40 @@ class ThetaV3Provider:
         """Normalize expiration to YYYYMMDD format."""
         if not exp or exp == "*":
             return exp or ""
-        exp = str(exp).replace("-", "").replace("/", "")[:8]
-        # If it looks like YYYY-MM-DD, strip dashes
-        return exp
+        return str(exp).replace("-", "").replace("/", "")[:8]
 
 
-def check_theta_health(
-    base_url: Optional[str] = None,
-    timeout: Optional[float] = None,
-) -> Tuple[bool, str]:
-    """Convenience function to check Theta Terminal health.
-    
-    Returns
-    -------
-    tuple[bool, str]
-        (healthy, message)
-    """
+# -------------------------------------------------------------------------
+# Convenience Functions
+# -------------------------------------------------------------------------
+
+
+def check_theta_health(base_url: Optional[str] = None, timeout: Optional[float] = None) -> Tuple[bool, str]:
+    """Check Theta Terminal health. Returns (healthy, message)."""
     provider = ThetaV3Provider(base_url=base_url, timeout=timeout)
     status = provider.health_check()
     provider.close()
     return status.healthy, status.message
 
 
+def fetch_chain_for_symbol(symbol: str, dte_min: int = 30, dte_max: int = 60) -> OptionChainResult:
+    """Convenience function to fetch chain for a symbol."""
+    provider = ThetaV3Provider()
+    try:
+        return provider.fetch_full_chain(symbol, dte_min=dte_min, dte_max=dte_max)
+    finally:
+        provider.close()
+
+
 __all__ = [
     "ThetaV3Provider",
     "ThetaHealthStatus",
     "StockSnapshotResult",
-    "OptionSnapshotResult",
+    "OptionContract",
     "OptionChainResult",
     "FallbackResult",
     "check_theta_health",
+    "fetch_chain_for_symbol",
     "DATA_SOURCE_LIVE",
     "DATA_SOURCE_SNAPSHOT",
     "DATA_SOURCE_UNAVAILABLE",

@@ -19,6 +19,20 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# Try to import Theta provider for Test page
+try:
+    from app.data.theta_v3_provider import (
+        ThetaV3Provider,
+        check_theta_health,
+        DATA_SOURCE_LIVE,
+        DATA_SOURCE_SNAPSHOT,
+    )
+    THETA_AVAILABLE = True
+except ImportError:
+    THETA_AVAILABLE = False
+    DATA_SOURCE_LIVE = "live"
+    DATA_SOURCE_SNAPSHOT = "snapshot"
+
 import streamlit as st
 
 # ---------------------------------------------------------------------------
@@ -420,7 +434,7 @@ def inject_premium_css(dark: bool = False, sidebar_collapsed: bool = False) -> N
 # ---------------------------------------------------------------------------
 
 
-def render_header(is_sample: bool, loaded_file: str, available_files: List[str]) -> Tuple[bool, Optional[str], bool]:
+def render_header(is_sample: bool, loaded_file: str, available_files: List[str], data_source: str = "unknown") -> Tuple[bool, Optional[str], bool]:
     """Render compact header bar. Returns (new_dark, new_file, refresh_clicked)."""
     st.markdown("""
     <div class="header-bar">
@@ -444,9 +458,22 @@ def render_header(is_sample: bool, loaded_file: str, available_files: List[str])
                                  help="Select data file")
     
     with c2:
-        badge_type = "Sample" if is_sample else "Live"
-        badge_color = "#6b7280" if is_sample else "#2aa872"
-        st.markdown(f'<div style="padding-top:0.5rem;"><span class="header-badge" style="background:{badge_color};">{badge_type}: {loaded_file[:20]}</span></div>', unsafe_allow_html=True)
+        # Determine badge based on actual data_source
+        if data_source == "live":
+            badge_type = "🟢 Live"
+            badge_color = "#2aa872"
+        elif data_source == "snapshot":
+            badge_type = "🟡 Snapshot"
+            badge_color = "#d4940a"
+        elif is_sample:
+            badge_type = "⚪ Sample"
+            badge_color = "#6b7280"
+        else:
+            badge_type = "📁 File"
+            badge_color = "#6b7280"
+        
+        short_file = loaded_file[:18] + "..." if len(loaded_file) > 18 else loaded_file
+        st.markdown(f'<div style="padding-top:0.5rem;"><span class="header-badge" style="background:{badge_color};">{badge_type}</span> <span style="font-size:0.65rem;color:var(--text-muted);">{short_file}</span></div>', unsafe_allow_html=True)
     
     with c3:
         dark = st.toggle("🌙", value=st.session_state.get("dark_mode", False), key="dark_toggle")
@@ -763,14 +790,14 @@ def render_execution_panel(data: Dict) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test Page
+# Test Page - Real Theta Integration
 # ---------------------------------------------------------------------------
 
 
 def render_test_page() -> None:
-    """Render the Test page for single-ticker testing."""
+    """Render the Test page with real Theta data fetching."""
     st.markdown("## 🧪 Test Page")
-    st.caption("Test data fetching and Slack message generation for individual symbols. Does not run the full pipeline.")
+    st.caption("Test data fetching and Slack message generation for individual symbols. Uses real Theta v3 API. Does not run the full pipeline.")
     
     c1, c2 = st.columns([2, 1])
     
@@ -780,43 +807,92 @@ def render_test_page() -> None:
         custom = st.text_input("Or enter custom symbol", "", key="custom_ticker", placeholder="e.g., SHOP")
         symbol = custom.upper().strip() if custom else ticker
         
-        st.markdown(f"**Testing symbol: `{symbol}`**")
+        # DTE range
+        dte_col1, dte_col2 = st.columns(2)
+        with dte_col1:
+            dte_min = st.number_input("DTE Min", value=30, min_value=1, max_value=365, key="dte_min")
+        with dte_col2:
+            dte_max = st.number_input("DTE Max", value=60, min_value=1, max_value=365, key="dte_max")
+        
+        st.markdown(f"**Testing symbol: `{symbol}`** (DTE: {dte_min}-{dte_max} days)")
     
     with c2:
         st.markdown("### Actions")
-        fetch_btn = st.button("📥 Fetch Data", key="fetch_btn", use_container_width=True)
-        slack_btn = st.button("💬 Test Slack", key="slack_btn", use_container_width=True)
+        fetch_btn = st.button("📥 Fetch Chain", key="fetch_btn", use_container_width=True, help="Fetch real options chain from Theta API")
+        slack_btn = st.button("💬 Test Slack", key="slack_btn", use_container_width=True, help="Generate simulated Slack message")
+        health_btn = st.button("🏥 Health Check", key="health_btn", use_container_width=True, help="Check Theta Terminal connection")
     
     st.markdown("---")
     
-    # Fetch Data functionality
-    if fetch_btn:
-        with st.spinner(f"Fetching data for {symbol}..."):
-            # Simulate data fetch (in production, this would call Theta provider)
-            test_data = _simulate_fetch_data(symbol)
-            
-            if test_data.get("error"):
-                st.error(f"❌ {test_data['error']}")
+    # Health Check
+    if health_btn:
+        with st.spinner("Checking Theta Terminal..."):
+            healthy, message = _theta_health_check()
+            if healthy:
+                st.success(f"✅ {message}")
             else:
-                st.success(f"✅ Data fetched for {symbol}")
+                st.error(f"❌ {message}")
+    
+    # Fetch Chain - Real Theta Integration
+    if fetch_btn:
+        with st.spinner(f"Fetching chain for {symbol}..."):
+            chain_result = _fetch_real_chain(symbol, dte_min, dte_max)
+            
+            if chain_result.get("error"):
+                st.error(f"❌ {chain_result['error']}")
+                if chain_result.get("chain_status"):
+                    st.caption(f"Status: {chain_result['chain_status']}")
+            else:
+                st.success(f"✅ Chain fetched for {symbol}")
+                
+                # Store in session for Slack test
+                st.session_state["test_chain_data"] = chain_result
                 
                 # Display results
                 st.markdown('<div class="test-result">', unsafe_allow_html=True)
                 
-                col1, col2, col3 = st.columns(3)
+                col1, col2, col3, col4 = st.columns(4)
                 with col1:
-                    st.metric("Stock Price", f"${test_data['price']:.2f}")
+                    st.metric("Expirations", chain_result.get("expiration_count", 0))
                 with col2:
-                    st.metric("Expirations", test_data['expirations'])
+                    st.metric("Total Contracts", chain_result.get("contract_count", 0))
                 with col3:
-                    st.metric("Options", test_data['total_options'])
+                    st.metric("Puts", len(chain_result.get("puts", [])))
+                with col4:
+                    st.metric("Calls", len(chain_result.get("calls", [])))
                 
-                # Sample options
-                if test_data.get("options"):
-                    st.markdown("**Sample Options:**")
+                # Data source indicator
+                data_src = chain_result.get("data_source", "unknown")
+                src_color = "#2aa872" if data_src == "live" else "#6b7280"
+                st.markdown(f'<span style="background:{src_color};color:white;padding:0.2rem 0.5rem;border-radius:4px;font-size:0.7rem;">Data: {data_src.upper()}</span>', unsafe_allow_html=True)
+                
+                # Options table
+                contracts = chain_result.get("contracts", [])
+                if contracts:
+                    st.markdown("**Options Chain (first 15):**")
                     import pandas as pd
-                    df = pd.DataFrame(test_data["options"][:5])
-                    st.dataframe(df, use_container_width=True, hide_index=True)
+                    
+                    rows = []
+                    for c in contracts[:15]:
+                        bid = c.get("bid")
+                        ask = c.get("ask")
+                        iv = c.get("iv")
+                        delta = c.get("delta")
+                        
+                        rows.append({
+                            "Strike": f"${c.get('strike', 0):,.2f}",
+                            "Type": c.get("option_type", c.get("right", "")),
+                            "Exp": c.get("expiration", ""),
+                            "Bid": f"${bid:.2f}" if bid else "—",
+                            "Ask": f"${ask:.2f}" if ask else "—",
+                            "IV": f"{iv*100:.1f}%" if iv else "—",
+                            "Delta": f"{delta:.2f}" if delta else "—",
+                        })
+                    
+                    df = pd.DataFrame(rows)
+                    st.dataframe(df, use_container_width=True, hide_index=True, height=300)
+                else:
+                    st.info("No contracts returned. Market may be closed or no options in DTE range.")
                 
                 st.markdown('</div>', unsafe_allow_html=True)
     
@@ -824,15 +900,33 @@ def render_test_page() -> None:
     if slack_btn:
         st.markdown("### Simulated Slack Message")
         
-        # Create a mock candidate
-        mock_candidate = {
-            "symbol": symbol,
-            "signal_type": "CSP",
-            "strike": 100.0,
-            "expiry": "2026-02-14",
-            "mid": 2.50,
-            "delta": -0.25,
-        }
+        # Use real chain data if available, otherwise mock
+        chain_data = st.session_state.get("test_chain_data", {})
+        contracts = chain_data.get("contracts", [])
+        
+        if contracts:
+            # Use first contract from real data
+            first_contract = contracts[0]
+            mock_candidate = {
+                "symbol": first_contract.get("symbol", symbol),
+                "signal_type": "CSP" if first_contract.get("right") == "P" else "CC",
+                "strike": first_contract.get("strike", 100.0),
+                "expiry": first_contract.get("expiration", "2026-02-14"),
+                "mid": first_contract.get("mid") or ((first_contract.get("bid", 0) or 0) + (first_contract.get("ask", 0) or 0)) / 2,
+                "delta": first_contract.get("delta"),
+            }
+            st.caption("Using real chain data from last fetch")
+        else:
+            # Fallback to mock
+            mock_candidate = {
+                "symbol": symbol,
+                "signal_type": "CSP",
+                "strike": 100.0,
+                "expiry": "2026-02-14",
+                "mid": 2.50,
+                "delta": -0.25,
+            }
+            st.caption("Using mock data (fetch chain first for real data)")
         
         slack_msg = _generate_slack_message(mock_candidate)
         
@@ -846,34 +940,54 @@ def render_test_page() -> None:
         </div>
         """, unsafe_allow_html=True)
         
-        # Show raw message
-        with st.expander("View raw message"):
+        # Show raw message and candidate details
+        with st.expander("View details"):
             st.code(slack_msg.replace("*", "").replace("📊 ", ""))
+            st.json(mock_candidate)
 
 
-def _simulate_fetch_data(symbol: str) -> Dict[str, Any]:
-    """Simulate fetching data for a symbol."""
-    import random
+def _theta_health_check() -> Tuple[bool, str]:
+    """Check Theta Terminal health."""
+    if THETA_AVAILABLE:
+        try:
+            return check_theta_health()
+        except Exception as e:
+            return False, str(e)
+    else:
+        return False, "Theta provider not available (import failed)"
+
+
+def _fetch_real_chain(symbol: str, dte_min: int, dte_max: int) -> Dict[str, Any]:
+    """Fetch real options chain from Theta API."""
+    if not THETA_AVAILABLE:
+        return {"error": "Theta provider module not available. Ensure theta_v3_provider.py is in app/data/"}
     
-    # Simulate some symbols having no data
-    if symbol in ["XYZ", "FAKE", "TEST"]:
-        return {"error": f"No data available for symbol {symbol}. Check if the symbol is valid and the data provider is accessible."}
-    
-    # Generate mock data
-    base_price = random.uniform(50, 500)
-    
-    return {
-        "symbol": symbol,
-        "price": round(base_price, 2),
-        "expirations": random.randint(4, 12),
-        "total_options": random.randint(50, 200),
-        "options": [
-            {"Strike": f"${round(base_price * (0.9 + i*0.05), 2)}", "Type": "PUT" if i % 2 == 0 else "CALL",
-             "Bid": f"${round(random.uniform(0.5, 5), 2)}", "Ask": f"${round(random.uniform(0.6, 5.5), 2)}",
-             "IV": f"{round(random.uniform(20, 60), 1)}%"}
-            for i in range(5)
-        ]
-    }
+    try:
+        provider = ThetaV3Provider()
+        result = provider.fetch_full_chain(symbol, dte_min=dte_min, dte_max=dte_max)
+        provider.close()
+        
+        if result.chain_status != "ok":
+            return {
+                "error": result.error or f"Chain status: {result.chain_status}",
+                "chain_status": result.chain_status,
+                "data_source": result.data_source,
+            }
+        
+        return {
+            "symbol": result.symbol,
+            "expirations": result.expirations,
+            "contracts": result.contracts,
+            "puts": result.puts,
+            "calls": result.calls,
+            "expiration_count": result.expiration_count,
+            "contract_count": result.contract_count,
+            "data_source": result.data_source,
+            "timestamp": result.timestamp,
+        }
+        
+    except Exception as e:
+        return {"error": f"Failed to fetch chain: {str(e)}"}
 
 
 # ---------------------------------------------------------------------------
@@ -981,8 +1095,9 @@ def main() -> None:
     # Inject CSS
     inject_premium_css(st.session_state.dark_mode, st.session_state.sidebar_collapsed)
     
-    # Header
-    new_dark, new_file, refresh = render_header(is_sample, loaded_file, files)
+    # Header - pass actual data_source from loaded data
+    data_source = parsed.get("data_source", "unknown")
+    new_dark, new_file, refresh = render_header(is_sample, loaded_file, files, data_source)
     if error:
         st.warning(f"⚠️ {error}")
     

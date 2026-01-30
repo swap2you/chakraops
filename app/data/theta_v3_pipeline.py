@@ -529,16 +529,15 @@ def fetch_chain(
     base_url: Optional[str] = None,
     timeout: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
-    """Fetch complete option chain using bulk endpoints (one API call per expiration).
+    """Fetch complete option chain using BULK endpoints (one API call per expiration).
     
-    RECOMMENDED: Use "quote_bulk" or "ohlc_bulk" for Standard subscriptions.
-    Per-strike endpoints are deprecated and may not work.
+    This function makes ONE API call per expiration to fetch ALL contracts at once.
+    Per-strike endpoints are NOT supported (they don't work for Standard subscriptions).
     
     Endpoint modes:
-    - "quote_bulk": Fetch via /option/snapshot/quote (recommended, fastest)
+    - "quote_bulk": Fetch via /option/snapshot/quote (default, recommended)
     - "ohlc_bulk": Fetch via /option/snapshot/ohlc (includes OHLC data)
-    - "auto": Try quote_bulk first, then ohlc_bulk
-    - "ohlc_per_strike" / "quote_per_strike": Legacy per-strike (slow, may not work)
+    - "auto": Try quote_bulk first, then ohlc_bulk if no data
     
     Run `python scripts/test_theta_chain.py AAPL` to verify which endpoint works.
     
@@ -553,7 +552,7 @@ def fetch_chain(
     endpoint : str, optional
         Endpoint mode. If None, reads from config.yaml (theta.endpoint) or THETA_ENDPOINT env var.
     """
-    from app.core.settings import get_theta_endpoint, get_theta_strike_limit
+    from app.core.settings import get_theta_endpoint
     
     symbol = (symbol or "").upper()
     if not symbol:
@@ -562,6 +561,11 @@ def fetch_chain(
     url = base_url or get_theta_base_url()
     tout = timeout if timeout is not None else DEFAULT_TIMEOUT
     endpoint_mode = endpoint or get_theta_endpoint()
+    
+    # Normalize legacy endpoint names to bulk
+    if endpoint_mode in ("ohlc_per_strike", "quote_per_strike"):
+        logger.warning("fetch_chain: per-strike endpoints don't work; using bulk instead")
+        endpoint_mode = "auto"
     
     # Step 1: Get all expirations
     expirations = list_expirations(symbol, base_url=url, timeout=tout)
@@ -589,12 +593,13 @@ def fetch_chain(
     
     all_contracts: List[Dict[str, Any]] = []
     
-    # BULK ENDPOINTS (recommended)
+    # BULK ENDPOINTS - one API call per expiration
     # Try quote_bulk first (fastest and most compatible)
     if endpoint_mode in ("quote_bulk", "auto"):
         for exp in valid_expirations:
             contracts = snapshot_quote_bulk(symbol, exp, base_url=url, timeout=tout)
             if contracts:
+                logger.debug("fetch_chain: quote_bulk for %s %s returned %d contracts", symbol, exp, len(contracts))
                 all_contracts.extend(contracts)
         
         if all_contracts:
@@ -610,46 +615,14 @@ def fetch_chain(
         for exp in valid_expirations:
             contracts = snapshot_ohlc_bulk(symbol, exp, base_url=url, timeout=tout)
             if contracts:
+                logger.debug("fetch_chain: ohlc_bulk for %s %s returned %d contracts", symbol, exp, len(contracts))
                 all_contracts.extend(contracts)
         
         if all_contracts:
             logger.info("fetch_chain: %s returned %d contracts via ohlc_bulk", symbol, len(all_contracts))
             return all_contracts
-        elif endpoint_mode == "ohlc_bulk":
-            logger.warning("fetch_chain: ohlc_bulk returned no data for %s", symbol)
-            return []
-        # If auto mode, fall through to per-strike (legacy)
-    
-    # PER-STRIKE ENDPOINTS (legacy, may not work for Standard subscriptions)
-    if endpoint_mode in ("ohlc_per_strike", "quote_per_strike", "auto"):
-        use_quote = endpoint_mode == "quote_per_strike"
-        fetch_func = snapshot_quote if use_quote else snapshot_ohlc
-        func_name = "quote" if use_quote else "ohlc"
-        strike_limit = get_theta_strike_limit()
-        
-        logger.warning("fetch_chain: using legacy per-strike mode (%s) for %s - this may be slow", func_name, symbol)
-        
-        for exp in valid_expirations:
-            strikes = list_strikes(symbol, exp, base_url=url, timeout=tout)
-            if not strikes:
-                continue
-            
-            # Filter to near-ATM strikes
-            filtered_strikes = _filter_strikes_near_atm(strikes, None, strike_limit)
-            
-            for strike in filtered_strikes:
-                call_data = fetch_func(symbol, exp, strike, "C", base_url=url, timeout=tout)
-                if call_data:
-                    all_contracts.append(call_data)
-                
-                put_data = fetch_func(symbol, exp, strike, "P", base_url=url, timeout=tout)
-                if put_data:
-                    all_contracts.append(put_data)
-        
-        if all_contracts:
-            logger.info("fetch_chain: %s returned %d contracts via %s_per_strike", symbol, len(all_contracts), func_name)
         else:
-            logger.warning("fetch_chain: per-strike mode returned no data for %s", symbol)
+            logger.warning("fetch_chain: ohlc_bulk returned no data for %s", symbol)
     
     return all_contracts
 
@@ -985,14 +958,31 @@ def _parse_bulk_response(
     symbol: str,
     expiration: str,
 ) -> List[Dict[str, Any]]:
-    """Parse bulk response (multiple contracts) into list of contract dicts."""
+    """Parse bulk response (multiple contracts) into list of contract dicts.
+    
+    Theta API returns data in format:
+    {
+        "response": [
+            {
+                "contract": {"symbol": "AAPL", "strike": 247.5, "right": "CALL", "expiration": "2026-02-06"},
+                "data": [{"bid": 8.9, "ask": 9.05, "timestamp": "..."}]  # NOTE: data is a LIST
+            },
+            ...
+        ]
+    }
+    
+    The strike is in dollars (NOT millis).
+    The "data" field is a LIST with the first element containing the pricing data.
+    """
     contracts: List[Dict[str, Any]] = []
     
+    # Handle different response formats
     if isinstance(data, dict) and "response" in data:
         rows = data["response"]
     elif isinstance(data, list):
         rows = data
     else:
+        logger.debug("_parse_bulk_response: unexpected data type %s", type(data))
         return []
     
     if not isinstance(rows, list):
@@ -1002,30 +992,50 @@ def _parse_bulk_response(
         if not isinstance(row, dict):
             continue
         
-        # Extract strike - may be in millis
-        strike = _extract_float(row, ["strike"])
+        # Handle Theta's nested format: {"contract": {...}, "data": [...]}
+        contract_info = row.get("contract", {}) if "contract" in row else row
+        
+        # IMPORTANT: "data" is a LIST, take first element
+        data_field = row.get("data", {})
+        if isinstance(data_field, list) and data_field:
+            data_info = data_field[0]  # Take first element
+        elif isinstance(data_field, dict):
+            data_info = data_field
+        else:
+            data_info = row
+        
+        # Merge contract and data info
+        merged = {**contract_info, **data_info}
+        
+        # Extract strike - in dollars (e.g., 247.5)
+        strike = _extract_float(merged, ["strike"])
         if strike is None:
             continue
-        if strike > 10000:  # Likely in millis
+        # Only convert if clearly in millis (> 10000 and looks like millis pattern)
+        if strike > 10000 and strike == int(strike):
             strike = strike / 1000
         
-        # Get right (C/P)
-        right = str(row.get("right", "") or row.get("option_type", "")).upper()
+        # Get right (C/P/CALL/PUT)
+        right = str(merged.get("right", "") or merged.get("option_type", "")).upper()
         if right not in ("P", "C", "PUT", "CALL"):
             continue
         right = "P" if right in ("P", "PUT") else "C"
         
-        # Get expiration from row if available
-        exp = row.get("expiration") or row.get("exp") or row.get("date") or expiration
-        if exp:
-            exp = _format_expiration(str(exp))
+        # Get expiration from contract info or use passed-in value
+        exp_raw = merged.get("expiration") or merged.get("exp") or merged.get("date")
+        if exp_raw:
+            exp = _format_expiration(str(exp_raw))
+        else:
+            exp = expiration
         
-        bid = _extract_float(row, ["bid", "bid_price", "bidPrice"])
-        ask = _extract_float(row, ["ask", "ask_price", "askPrice"])
+        # Extract pricing data
+        bid = _extract_float(merged, ["bid", "bid_price", "bidPrice"])
+        ask = _extract_float(merged, ["ask", "ask_price", "askPrice"])
         mid = None
         if bid is not None and ask is not None and bid > 0 and ask > 0:
             mid = (bid + ask) / 2
         
+        # Calculate DTE
         exp_date = _parse_date(exp)
         dte = (exp_date - date.today()).days if exp_date else None
         
@@ -1038,19 +1048,22 @@ def _parse_bulk_response(
             "bid": bid,
             "ask": ask,
             "mid": mid,
-            "open": _extract_float(row, ["open"]),
-            "high": _extract_float(row, ["high"]),
-            "low": _extract_float(row, ["low"]),
-            "close": _extract_float(row, ["close", "last", "price"]),
-            "iv": _extract_float(row, ["implied_vol", "iv", "implied_volatility", "impliedVol"]),
-            "delta": _extract_float(row, ["delta"]),
-            "gamma": _extract_float(row, ["gamma"]),
-            "theta": _extract_float(row, ["theta"]),
-            "vega": _extract_float(row, ["vega"]),
-            "volume": _extract_int(row, ["volume", "vol"]),
-            "open_interest": _extract_int(row, ["open_interest", "oi", "openInterest"]),
+            "open": _extract_float(merged, ["open"]),
+            "high": _extract_float(merged, ["high"]),
+            "low": _extract_float(merged, ["low"]),
+            "close": _extract_float(merged, ["close", "last", "price"]),
+            "iv": _extract_float(merged, ["implied_vol", "iv", "implied_volatility", "impliedVol"]),
+            "delta": _extract_float(merged, ["delta"]),
+            "gamma": _extract_float(merged, ["gamma"]),
+            "theta": _extract_float(merged, ["theta"]),
+            "vega": _extract_float(merged, ["vega"]),
+            "volume": _extract_int(merged, ["volume", "vol"]),
+            "open_interest": _extract_int(merged, ["open_interest", "oi", "openInterest"]),
             "dte": dte,
         })
+    
+    if contracts:
+        logger.debug("_parse_bulk_response: parsed %d contracts for %s %s", len(contracts), symbol, expiration)
     
     return contracts
 

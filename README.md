@@ -139,7 +139,10 @@ realtime:
   end_time: "16:00:00"    # Market close time
 ```
 
-**Note:** Per-strike endpoints (`ohlc_per_strike`, `quote_per_strike`) are deprecated and may not return data for Standard subscriptions. Use bulk endpoints instead.
+**Notes:**
+- Per-strike endpoints (`ohlc_per_strike`, `quote_per_strike`) are deprecated and may not return data for Standard subscriptions. Use bulk endpoints instead.
+- `quote_bulk` returns bid/ask but NOT open_interest. If your strategy requires open_interest for liquidity filtering, you may need to adjust the `min_open_interest` setting or use `ohlc_bulk`.
+- Data flows through the pipeline in ~500ms per expiration (one API call each).
 
 **Requirements:**
 - Theta Terminal v3 running locally on port 25503

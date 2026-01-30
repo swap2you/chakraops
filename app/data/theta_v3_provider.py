@@ -1,15 +1,13 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""Unified ThetaData v3 provider with reliable chain retrieval.
+"""ThetaData v3 provider using snapshot_ohlc for complete chain retrieval.
 
-This module provides comprehensive Theta v3 API interactions:
-- Health check before any data fetching
-- Efficient chain retrieval using snapshot endpoints
-- list_expirations, list_strikes, snapshot_ohlc for full chains
-- fetch_full_chain for DTE-filtered chain retrieval
-- Automatic fallback to latest decision JSON when live data unavailable
-- Data source annotation for dashboard display
-- Async support with semaphore for concurrency control
+Key endpoint: /option/snapshot/ohlc
+- Called WITHOUT strike parameter to get all contracts at once
+- Use expiration='*' or omit expiration to fetch all expirations
+- Returns complete chain with bid, ask, open, high, low, close, Greeks
+
+This replaces per-strike fetching which returned empty results.
 """
 
 from __future__ import annotations
@@ -38,8 +36,8 @@ DATA_SOURCE_LIVE = "live"
 DATA_SOURCE_SNAPSHOT = "snapshot"
 DATA_SOURCE_UNAVAILABLE = "unavailable"
 
-# Concurrency limit for Theta API (respect subscription limits)
-MAX_CONCURRENT_REQUESTS = 5
+# Concurrency limit - match Theta Terminal's limit (shown in console)
+MAX_CONCURRENT_REQUESTS = 4
 
 
 @dataclass
@@ -58,31 +56,10 @@ class StockSnapshotResult:
     bid: Optional[float] = None
     ask: Optional[float] = None
     volume: Optional[int] = None
-    avg_volume: Optional[int] = None
     timestamp: Optional[str] = None
     data_source: str = DATA_SOURCE_LIVE
     error: Optional[str] = None
     raw_response: Optional[Dict[str, Any]] = None
-
-
-@dataclass
-class OptionContract:
-    """Single option contract with quotes and Greeks."""
-    symbol: str
-    expiration: str
-    strike: float
-    option_type: str  # "PUT" or "CALL"
-    right: str  # "P" or "C"
-    bid: Optional[float] = None
-    ask: Optional[float] = None
-    mid: Optional[float] = None
-    iv: Optional[float] = None
-    delta: Optional[float] = None
-    gamma: Optional[float] = None
-    theta: Optional[float] = None
-    vega: Optional[float] = None
-    volume: Optional[int] = None
-    open_interest: Optional[int] = None
 
 
 @dataclass
@@ -112,7 +89,12 @@ class FallbackResult:
 
 
 class ThetaV3Provider:
-    """Unified ThetaData v3 provider with health check, chain retrieval, and fallback.
+    """ThetaData v3 provider using snapshot_ohlc for complete chains.
+    
+    Key method: snapshot_ohlc(symbol, expiration='*')
+    - Fetches ALL contracts for a symbol in ONE call
+    - No strike parameter = returns all strikes
+    - expiration='*' = returns all expirations
     
     Usage:
         provider = ThetaV3Provider()
@@ -120,11 +102,11 @@ class ThetaV3Provider:
         # Health check
         health = provider.health_check()
         
-        # List expirations
-        expirations = provider.list_expirations("AAPL")
+        # Fetch complete chain (all expirations, all strikes)
+        contracts = provider.snapshot_ohlc("AAPL", "*")
         
-        # Fetch full chain for DTE window
-        chain = provider.fetch_full_chain("AAPL", dte_min=30, dte_max=45)
+        # Or fetch for DTE window
+        chain = provider.fetch_full_chain("AAPL", dte_min=7, dte_max=45)
     """
     
     def __init__(
@@ -184,12 +166,13 @@ class ThetaV3Provider:
     # -------------------------------------------------------------------------
     
     def health_check(self) -> ThetaHealthStatus:
-        """Check if Theta Terminal is reachable."""
+        """Check if Theta Terminal is reachable via /system/status or fallback."""
         import time
         
         start = time.monotonic()
         try:
             client = self._get_client()
+            # Try simple endpoint to verify connectivity
             response = client.get("/stock/list/symbols", params={"format": "json"})
             elapsed_ms = (time.monotonic() - start) * 1000
             
@@ -197,7 +180,7 @@ class ThetaV3Provider:
                 self._is_healthy = True
                 return ThetaHealthStatus(
                     healthy=True,
-                    message=f"Theta Terminal OK at {self.base_url}",
+                    message=f"Theta Terminal OK at {self.base_url} ({elapsed_ms:.0f}ms)",
                     response_time_ms=elapsed_ms,
                 )
             else:
@@ -209,24 +192,45 @@ class ThetaV3Provider:
                 )
         except httpx.ConnectError as e:
             self._is_healthy = False
-            return ThetaHealthStatus(healthy=False, message=f"Cannot connect: {e}")
+            return ThetaHealthStatus(healthy=False, message=f"Cannot connect to {self.base_url}: {e}")
         except httpx.TimeoutException:
             self._is_healthy = False
-            return ThetaHealthStatus(healthy=False, message="Timeout")
+            return ThetaHealthStatus(healthy=False, message=f"Timeout connecting to {self.base_url}")
         except Exception as e:
             self._is_healthy = False
             return ThetaHealthStatus(healthy=False, message=str(e))
     
     # -------------------------------------------------------------------------
-    # Expiration and Strike Listing
+    # snapshot_ohlc - THE primary endpoint for chain retrieval
     # -------------------------------------------------------------------------
     
-    def list_expirations(self, symbol: str) -> List[str]:
-        """List all available expirations for a symbol.
+    def snapshot_ohlc(
+        self,
+        symbol: str,
+        expiration: str = "*",
+        right: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Fetch complete option chain via /option/snapshot/ohlc.
         
-        GET /option/list/expirations?symbol={symbol}
+        This is THE correct endpoint for getting full chains:
+        - DO NOT pass strike parameter (returns all strikes)
+        - Pass expiration='*' to get all expirations at once
+        - Returns bid, ask, open, high, low, close, and Greeks
         
-        Returns list of expiration strings (YYYY-MM-DD format).
+        Parameters
+        ----------
+        symbol : str
+            Underlying symbol (e.g., "AAPL", "SPY")
+        expiration : str
+            Expiration date (YYYYMMDD or YYYY-MM-DD) or '*' for all expirations
+        right : str, optional
+            "C" for calls, "P" for puts, None for both
+        
+        Returns
+        -------
+        list[dict]
+            List of contract dicts with: symbol, expiration, strike, right,
+            bid, ask, open, high, low, close, iv, delta, gamma, theta, vega
         """
         symbol = (symbol or "").upper()
         if not symbol:
@@ -234,192 +238,103 @@ class ThetaV3Provider:
         
         try:
             client = self._get_client()
-            response = client.get(
-                "/option/list/expirations",
-                params={"symbol": symbol, "format": "json"}
-            )
             
-            if response.status_code != 200:
-                logger.warning("list_expirations HTTP %d for %s", response.status_code, symbol)
-                return []
+            # Build params - DO NOT include strike to get all strikes
+            params: Dict[str, Any] = {
+                "symbol": symbol,
+                "format": "json",
+            }
             
-            data = response.json()
-            expirations = self._parse_expiration_list(data)
-            return expirations
+            # Handle expiration - '*' means all expirations
+            if expiration and expiration != "*":
+                params["expiration"] = self._normalize_expiration(expiration)
+            # If expiration is '*' or empty, don't include it to get all expirations
             
-        except Exception as e:
-            logger.warning("list_expirations failed for %s: %s", symbol, e)
-            return []
-    
-    async def list_expirations_async(self, symbol: str) -> List[str]:
-        """Async version of list_expirations."""
-        symbol = (symbol or "").upper()
-        if not symbol:
-            return []
-        
-        try:
-            client = await self._get_async_client()
-            async with self._semaphore:
-                response = await client.get(
-                    "/option/list/expirations",
-                    params={"symbol": symbol, "format": "json"}
-                )
+            # Optionally filter by right (C or P)
+            if right and right.upper() in ("C", "P"):
+                params["right"] = right.upper()
             
-            if response.status_code != 200:
-                return []
+            logger.debug("snapshot_ohlc request: %s params=%s", "/option/snapshot/ohlc", params)
             
-            data = response.json()
-            return self._parse_expiration_list(data)
-            
-        except Exception as e:
-            logger.warning("list_expirations_async failed for %s: %s", symbol, e)
-            return []
-    
-    def list_strikes(self, symbol: str, expiration: str) -> List[float]:
-        """List all strikes for a symbol/expiration.
-        
-        GET /option/list/strikes?symbol={symbol}&expiration={expiration}
-        
-        Returns list of strike prices.
-        """
-        symbol = (symbol or "").upper()
-        exp_normalized = self._normalize_expiration(expiration)
-        if not symbol or not exp_normalized:
-            return []
-        
-        try:
-            client = self._get_client()
-            response = client.get(
-                "/option/list/strikes",
-                params={"symbol": symbol, "expiration": exp_normalized, "format": "json"}
-            )
-            
-            if response.status_code != 200:
-                return []
-            
-            data = response.json()
-            return self._parse_strike_list(data)
-            
-        except Exception as e:
-            logger.warning("list_strikes failed for %s %s: %s", symbol, expiration, e)
-            return []
-    
-    # -------------------------------------------------------------------------
-    # Snapshot OHLC - Efficient bulk fetch
-    # -------------------------------------------------------------------------
-    
-    def snapshot_ohlc(self, symbol: str, expiration: str) -> List[Dict[str, Any]]:
-        """Fetch OHLC snapshot for all contracts at an expiration.
-        
-        GET /option/snapshot/ohlc?symbol={symbol}&expiration={expiration}
-        
-        Returns list of contract dicts with bid, ask, IV, Greeks.
-        This is more efficient than fetching each strike individually.
-        """
-        symbol = (symbol or "").upper()
-        exp_normalized = self._normalize_expiration(expiration)
-        if not symbol or not exp_normalized:
-            return []
-        
-        try:
-            client = self._get_client()
-            response = client.get(
-                "/option/snapshot/ohlc",
-                params={"symbol": symbol, "expiration": exp_normalized, "format": "json"}
-            )
+            response = client.get("/option/snapshot/ohlc", params=params)
             
             if response.status_code in (404, 204):
-                logger.debug("snapshot_ohlc no data for %s %s", symbol, expiration)
+                logger.info("snapshot_ohlc: no data for %s (HTTP %d)", symbol, response.status_code)
+                return []
+            
+            if response.status_code == 472:
+                logger.warning("snapshot_ohlc: rate limited (HTTP 472) for %s", symbol)
                 return []
             
             if response.status_code != 200:
-                logger.warning("snapshot_ohlc HTTP %d for %s %s", response.status_code, symbol, expiration)
+                logger.warning("snapshot_ohlc: HTTP %d for %s", response.status_code, symbol)
                 return []
             
+            # Parse response
             data = response.json()
-            return self._parse_ohlc_response(data, symbol, expiration)
+            contracts = self._parse_ohlc_response(data, symbol)
+            
+            logger.info("snapshot_ohlc: %s returned %d contracts", symbol, len(contracts))
+            return contracts
             
         except Exception as e:
-            logger.warning("snapshot_ohlc failed for %s %s: %s", symbol, expiration, e)
+            logger.warning("snapshot_ohlc failed for %s: %s", symbol, e)
             return []
     
-    async def snapshot_ohlc_async(self, symbol: str, expiration: str) -> List[Dict[str, Any]]:
+    async def snapshot_ohlc_async(
+        self,
+        symbol: str,
+        expiration: str = "*",
+        right: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         """Async version of snapshot_ohlc."""
         symbol = (symbol or "").upper()
-        exp_normalized = self._normalize_expiration(expiration)
-        if not symbol or not exp_normalized:
+        if not symbol:
             return []
         
         try:
             client = await self._get_async_client()
+            
+            params: Dict[str, Any] = {"symbol": symbol, "format": "json"}
+            if expiration and expiration != "*":
+                params["expiration"] = self._normalize_expiration(expiration)
+            if right and right.upper() in ("C", "P"):
+                params["right"] = right.upper()
+            
             async with self._semaphore:
-                response = await client.get(
-                    "/option/snapshot/ohlc",
-                    params={"symbol": symbol, "expiration": exp_normalized, "format": "json"}
-                )
+                response = await client.get("/option/snapshot/ohlc", params=params)
             
             if response.status_code not in (200,):
                 return []
             
             data = response.json()
-            return self._parse_ohlc_response(data, symbol, expiration)
+            return self._parse_ohlc_response(data, symbol)
             
         except Exception as e:
-            logger.warning("snapshot_ohlc_async failed for %s %s: %s", symbol, expiration, e)
-            return []
-    
-    def snapshot_quote(self, symbol: str, expiration: str) -> List[Dict[str, Any]]:
-        """Alternative: fetch quote snapshot for an expiration.
-        
-        GET /option/snapshot/quote?symbol={symbol}&expiration={expiration}
-        
-        Use this if snapshot_ohlc is not available in subscription.
-        """
-        symbol = (symbol or "").upper()
-        exp_normalized = self._normalize_expiration(expiration)
-        if not symbol or not exp_normalized:
-            return []
-        
-        try:
-            client = self._get_client()
-            response = client.get(
-                "/option/snapshot/quote",
-                params={"symbol": symbol, "expiration": exp_normalized, "format": "json"}
-            )
-            
-            if response.status_code not in (200,):
-                return []
-            
-            data = response.json()
-            return self._parse_quote_response(data, symbol, expiration)
-            
-        except Exception as e:
-            logger.warning("snapshot_quote failed for %s %s: %s", symbol, expiration, e)
+            logger.warning("snapshot_ohlc_async failed for %s: %s", symbol, e)
             return []
     
     # -------------------------------------------------------------------------
-    # Full Chain Fetch - Main entry point
+    # fetch_full_chain - Main entry point with DTE filtering
     # -------------------------------------------------------------------------
     
     def fetch_full_chain(
         self,
         symbol: str,
-        dte_min: int = 30,
+        dte_min: int = 7,
         dte_max: int = 45,
     ) -> OptionChainResult:
-        """Fetch full option chain for a symbol within DTE window.
+        """Fetch full option chain with DTE filtering.
         
-        1. Get all expirations via list_expirations()
-        2. Filter by DTE between dte_min and dte_max
-        3. For each expiration, call snapshot_ohlc() or snapshot_quote()
-        4. Collect all puts and calls into result
+        Uses snapshot_ohlc(symbol, '*') to get ALL contracts in one call,
+        then filters by DTE window.
         
         Parameters
         ----------
         symbol : str
             Underlying symbol
         dte_min : int
-            Minimum days to expiration (default: 30)
+            Minimum days to expiration (default: 7)
         dte_max : int
             Maximum days to expiration (default: 45)
         
@@ -439,88 +354,72 @@ class ThetaV3Provider:
                 chain_status="no_options_for_symbol",
             )
         
-        # Step 1: Get expirations
-        expirations = self.list_expirations(symbol)
+        # Fetch ALL contracts in ONE call
+        all_contracts = self.snapshot_ohlc(symbol, "*")
         
-        if not expirations:
-            logger.warning("No expirations found for %s", symbol)
+        if not all_contracts:
             return OptionChainResult(
                 symbol=symbol,
                 timestamp=now_utc,
                 data_source=DATA_SOURCE_LIVE,
                 chain_status="no_options_for_symbol",
-                error="No expirations available",
+                error="No contracts returned from snapshot_ohlc",
             )
         
-        # Step 2: Filter by DTE
+        # Filter by DTE window
         today = date.today()
-        valid_expirations: List[str] = []
-        
-        for exp_str in expirations:
-            try:
-                # Parse expiration (handle YYYYMMDD or YYYY-MM-DD)
-                exp_clean = exp_str.replace("-", "")
-                if len(exp_clean) == 8:
-                    exp_date = date(int(exp_clean[:4]), int(exp_clean[4:6]), int(exp_clean[6:8]))
-                else:
-                    continue
-                
-                dte = (exp_date - today).days
-                if dte_min <= dte <= dte_max:
-                    valid_expirations.append(exp_str)
-            except (ValueError, TypeError):
-                continue
-        
-        if not valid_expirations:
-            logger.info("No expirations in DTE window [%d-%d] for %s", dte_min, dte_max, symbol)
-            return OptionChainResult(
-                symbol=symbol,
-                expirations=expirations,
-                expiration_count=len(expirations),
-                timestamp=now_utc,
-                data_source=DATA_SOURCE_LIVE,
-                chain_status="empty_chain",
-                error=f"No expirations in DTE window [{dte_min}-{dte_max}]",
-            )
-        
-        # Step 3: Fetch contracts for each valid expiration
-        all_contracts: List[Dict[str, Any]] = []
+        filtered_contracts: List[Dict[str, Any]] = []
         puts: List[Dict[str, Any]] = []
         calls: List[Dict[str, Any]] = []
+        expirations_set: set = set()
         
-        for exp in valid_expirations:
-            # Try snapshot_ohlc first (more complete), fall back to snapshot_quote
-            contracts = self.snapshot_ohlc(symbol, exp)
-            if not contracts:
-                contracts = self.snapshot_quote(symbol, exp)
+        for contract in all_contracts:
+            exp_str = contract.get("expiration", "")
+            if not exp_str:
+                continue
             
-            for contract in contracts:
-                all_contracts.append(contract)
-                right = contract.get("right", "").upper()
-                if right == "P":
-                    puts.append(contract)
-                elif right == "C":
-                    calls.append(contract)
+            try:
+                # Parse expiration
+                exp_clean = str(exp_str).replace("-", "")
+                if len(exp_clean) >= 8:
+                    exp_date = date(int(exp_clean[:4]), int(exp_clean[4:6]), int(exp_clean[6:8]))
+                    dte = (exp_date - today).days
+                    
+                    # Skip if outside DTE window
+                    if dte < dte_min or dte > dte_max:
+                        continue
+                    
+                    # Add DTE to contract
+                    contract["dte"] = dte
+                    expirations_set.add(exp_str)
+            except (ValueError, TypeError):
+                continue
+            
+            filtered_contracts.append(contract)
+            right = contract.get("right", "").upper()
+            if right == "P":
+                puts.append(contract)
+            elif right == "C":
+                calls.append(contract)
         
-        if not all_contracts:
+        if not filtered_contracts:
             return OptionChainResult(
                 symbol=symbol,
-                expirations=valid_expirations,
-                expiration_count=len(valid_expirations),
+                expirations=sorted(expirations_set),
                 timestamp=now_utc,
                 data_source=DATA_SOURCE_LIVE,
                 chain_status="empty_chain",
-                error="No contracts returned from snapshot endpoints",
+                error=f"No contracts in DTE window [{dte_min}-{dte_max}] (total fetched: {len(all_contracts)})",
             )
         
         return OptionChainResult(
             symbol=symbol,
-            expirations=valid_expirations,
-            contracts=all_contracts,
+            expirations=sorted(expirations_set),
+            contracts=filtered_contracts,
             puts=puts,
             calls=calls,
-            expiration_count=len(valid_expirations),
-            contract_count=len(all_contracts),
+            expiration_count=len(expirations_set),
+            contract_count=len(filtered_contracts),
             timestamp=now_utc,
             data_source=DATA_SOURCE_LIVE,
             chain_status="ok",
@@ -529,68 +428,61 @@ class ThetaV3Provider:
     async def fetch_full_chain_async(
         self,
         symbol: str,
-        dte_min: int = 30,
+        dte_min: int = 7,
         dte_max: int = 45,
     ) -> OptionChainResult:
-        """Async version of fetch_full_chain for concurrent fetching."""
+        """Async version of fetch_full_chain."""
         symbol = (symbol or "").upper()
         now_utc = datetime.now(timezone.utc).isoformat()
         
         if not symbol:
             return OptionChainResult(symbol="", timestamp=now_utc, error="Invalid symbol", chain_status="no_options_for_symbol")
         
-        # Get expirations
-        expirations = await self.list_expirations_async(symbol)
-        if not expirations:
-            return OptionChainResult(symbol=symbol, timestamp=now_utc, chain_status="no_options_for_symbol", error="No expirations")
+        all_contracts = await self.snapshot_ohlc_async(symbol, "*")
         
-        # Filter by DTE
+        if not all_contracts:
+            return OptionChainResult(symbol=symbol, timestamp=now_utc, chain_status="no_options_for_symbol", error="No contracts")
+        
         today = date.today()
-        valid_expirations: List[str] = []
-        for exp_str in expirations:
-            try:
-                exp_clean = exp_str.replace("-", "")
-                if len(exp_clean) == 8:
-                    exp_date = date(int(exp_clean[:4]), int(exp_clean[4:6]), int(exp_clean[6:8]))
-                    dte = (exp_date - today).days
-                    if dte_min <= dte <= dte_max:
-                        valid_expirations.append(exp_str)
-            except (ValueError, TypeError):
-                continue
-        
-        if not valid_expirations:
-            return OptionChainResult(symbol=symbol, expirations=expirations, timestamp=now_utc, chain_status="empty_chain", error=f"No expirations in DTE [{dte_min}-{dte_max}]")
-        
-        # Fetch all expirations concurrently
-        tasks = [self.snapshot_ohlc_async(symbol, exp) for exp in valid_expirations]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        all_contracts: List[Dict[str, Any]] = []
+        filtered: List[Dict[str, Any]] = []
         puts: List[Dict[str, Any]] = []
         calls: List[Dict[str, Any]] = []
+        expirations_set: set = set()
         
-        for result in results:
-            if isinstance(result, Exception):
+        for contract in all_contracts:
+            exp_str = contract.get("expiration", "")
+            if not exp_str:
                 continue
-            for contract in result:
-                all_contracts.append(contract)
-                right = contract.get("right", "").upper()
-                if right == "P":
-                    puts.append(contract)
-                elif right == "C":
-                    calls.append(contract)
+            try:
+                exp_clean = str(exp_str).replace("-", "")
+                if len(exp_clean) >= 8:
+                    exp_date = date(int(exp_clean[:4]), int(exp_clean[4:6]), int(exp_clean[6:8]))
+                    dte = (exp_date - today).days
+                    if dte < dte_min or dte > dte_max:
+                        continue
+                    contract["dte"] = dte
+                    expirations_set.add(exp_str)
+            except (ValueError, TypeError):
+                continue
+            
+            filtered.append(contract)
+            right = contract.get("right", "").upper()
+            if right == "P":
+                puts.append(contract)
+            elif right == "C":
+                calls.append(contract)
         
         return OptionChainResult(
             symbol=symbol,
-            expirations=valid_expirations,
-            contracts=all_contracts,
+            expirations=sorted(expirations_set),
+            contracts=filtered,
             puts=puts,
             calls=calls,
-            expiration_count=len(valid_expirations),
-            contract_count=len(all_contracts),
+            expiration_count=len(expirations_set),
+            contract_count=len(filtered),
             timestamp=now_utc,
             data_source=DATA_SOURCE_LIVE,
-            chain_status="ok" if all_contracts else "empty_chain",
+            chain_status="ok" if filtered else "empty_chain",
         )
     
     # -------------------------------------------------------------------------
@@ -632,7 +524,7 @@ class ThetaV3Provider:
             
             return StockSnapshotResult(
                 symbol=symbol,
-                price=self._extract_float(row, ["price", "last", "trade_price", "close"]),
+                price=self._extract_float(row, ["price", "last", "trade_price", "close", "midpoint"]),
                 bid=self._extract_float(row, ["bid", "bid_price"]),
                 ask=self._extract_float(row, ["ask", "ask_price"]),
                 volume=self._extract_int(row, ["volume", "vol"]),
@@ -648,6 +540,30 @@ class ThetaV3Provider:
             return StockSnapshotResult(symbol=symbol, timestamp=now_utc, data_source=DATA_SOURCE_UNAVAILABLE, error=str(e))
     
     # -------------------------------------------------------------------------
+    # List Expirations (for reference, not needed with snapshot_ohlc '*')
+    # -------------------------------------------------------------------------
+    
+    def list_expirations(self, symbol: str) -> List[str]:
+        """List available expirations for a symbol."""
+        symbol = (symbol or "").upper()
+        if not symbol:
+            return []
+        
+        try:
+            client = self._get_client()
+            response = client.get("/option/list/expirations", params={"symbol": symbol, "format": "json"})
+            
+            if response.status_code != 200:
+                return []
+            
+            data = response.json()
+            return self._parse_expiration_list(data)
+            
+        except Exception as e:
+            logger.warning("list_expirations failed for %s: %s", symbol, e)
+            return []
+    
+    # -------------------------------------------------------------------------
     # Fallback Loading
     # -------------------------------------------------------------------------
     
@@ -657,6 +573,15 @@ class ThetaV3Provider:
             if not self.output_dir.exists():
                 return FallbackResult(loaded=False, error=f"Directory not found: {self.output_dir}")
             
+            # Prefer decision_latest.json
+            latest = self.output_dir / "decision_latest.json"
+            if latest.exists():
+                with open(latest, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                file_mtime = datetime.fromtimestamp(latest.stat().st_mtime, tz=timezone.utc).isoformat()
+                return FallbackResult(loaded=True, file_path=latest, file_timestamp=file_mtime, snapshot_data=data)
+            
+            # Fallback to most recent decision_*.json
             decision_files = sorted(
                 self.output_dir.glob("decision_*.json"),
                 key=lambda p: p.stat().st_mtime,
@@ -671,8 +596,6 @@ class ThetaV3Provider:
                 data = json.load(f)
             
             file_mtime = datetime.fromtimestamp(latest_file.stat().st_mtime, tz=timezone.utc).isoformat()
-            logger.warning("Using fallback: %s", latest_file.name)
-            
             return FallbackResult(loaded=True, file_path=latest_file, file_timestamp=file_mtime, snapshot_data=data)
             
         except Exception as e:
@@ -696,8 +619,66 @@ class ThetaV3Provider:
         return StockSnapshotResult(symbol=symbol, price=price, timestamp=fallback.file_timestamp, data_source=DATA_SOURCE_SNAPSHOT)
     
     # -------------------------------------------------------------------------
-    # Response Parsing Helpers
+    # Response Parsing
     # -------------------------------------------------------------------------
+    
+    def _parse_ohlc_response(self, data: Any, symbol: str) -> List[Dict[str, Any]]:
+        """Parse snapshot_ohlc response into contract dicts.
+        
+        Theta v3 returns data in 'response' key as list of dicts.
+        Each row has: contract symbol, strike, right, expiration, bid, ask, etc.
+        """
+        contracts: List[Dict[str, Any]] = []
+        rows = self._extract_response_list(data)
+        
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            
+            strike = self._extract_float(row, ["strike"])
+            if strike is None:
+                continue
+            
+            # Get right (C/P)
+            right = str(row.get("right", "") or row.get("option_type", "")).upper()
+            if right not in ("P", "C", "PUT", "CALL"):
+                continue
+            right = "P" if right in ("P", "PUT") else "C"
+            
+            # Get expiration from response
+            exp = row.get("expiration") or row.get("exp") or row.get("date")
+            if exp:
+                exp = self._format_expiration(exp)
+            
+            bid = self._extract_float(row, ["bid", "bid_price"])
+            ask = self._extract_float(row, ["ask", "ask_price"])
+            mid = None
+            if bid is not None and ask is not None and bid > 0 and ask > 0:
+                mid = (bid + ask) / 2
+            
+            contracts.append({
+                "symbol": symbol,
+                "expiration": exp,
+                "strike": strike,
+                "right": right,
+                "option_type": "PUT" if right == "P" else "CALL",
+                "bid": bid,
+                "ask": ask,
+                "mid": mid,
+                "open": self._extract_float(row, ["open"]),
+                "high": self._extract_float(row, ["high"]),
+                "low": self._extract_float(row, ["low"]),
+                "close": self._extract_float(row, ["close"]),
+                "iv": self._extract_float(row, ["implied_vol", "iv", "implied_volatility"]),
+                "delta": self._extract_float(row, ["delta"]),
+                "gamma": self._extract_float(row, ["gamma"]),
+                "theta": self._extract_float(row, ["theta"]),
+                "vega": self._extract_float(row, ["vega"]),
+                "volume": self._extract_int(row, ["volume", "vol"]),
+                "open_interest": self._extract_int(row, ["open_interest", "oi"]),
+            })
+        
+        return contracts
     
     def _parse_expiration_list(self, data: Any) -> List[str]:
         """Parse expiration list from API response."""
@@ -711,87 +692,20 @@ class ThetaV3Provider:
                 if isinstance(item, str):
                     expirations.append(item)
                 elif isinstance(item, dict):
-                    exp = item.get("expiration") or item.get("exp")
+                    exp = item.get("expiration") or item.get("exp") or item.get("date")
                     if exp:
                         expirations.append(str(exp))
                 elif isinstance(item, int):
-                    # YYYYMMDD integer format
                     expirations.append(str(item))
         
-        # Normalize to YYYY-MM-DD format
+        # Normalize to YYYY-MM-DD
         normalized = []
         for exp in expirations:
-            exp_str = str(exp).replace("-", "")
-            if len(exp_str) == 8 and exp_str.isdigit():
-                normalized.append(f"{exp_str[:4]}-{exp_str[4:6]}-{exp_str[6:8]}")
-            elif "-" in str(exp) and len(str(exp)) == 10:
-                normalized.append(str(exp))
+            formatted = self._format_expiration(exp)
+            if formatted:
+                normalized.append(formatted)
         
         return sorted(set(normalized))
-    
-    def _parse_strike_list(self, data: Any) -> List[float]:
-        """Parse strike list from API response."""
-        strikes: List[float] = []
-        
-        if isinstance(data, dict):
-            data = data.get("response") or data.get("strikes") or []
-        
-        if isinstance(data, list):
-            for item in data:
-                try:
-                    strikes.append(float(item))
-                except (TypeError, ValueError):
-                    continue
-        
-        return sorted(strikes)
-    
-    def _parse_ohlc_response(self, data: Any, symbol: str, expiration: str) -> List[Dict[str, Any]]:
-        """Parse OHLC snapshot response into contract dicts."""
-        contracts: List[Dict[str, Any]] = []
-        rows = self._extract_response_list(data)
-        
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            
-            strike = self._extract_float(row, ["strike"])
-            if strike is None:
-                continue
-            
-            right = str(row.get("right", "") or row.get("option_type", "")).upper()
-            if right not in ("P", "C", "PUT", "CALL"):
-                continue
-            right = "P" if right in ("P", "PUT") else "C"
-            
-            bid = self._extract_float(row, ["bid", "bid_price"])
-            ask = self._extract_float(row, ["ask", "ask_price"])
-            mid = None
-            if bid is not None and ask is not None:
-                mid = (bid + ask) / 2
-            
-            contracts.append({
-                "symbol": symbol,
-                "expiration": expiration,
-                "strike": strike,
-                "right": right,
-                "option_type": "PUT" if right == "P" else "CALL",
-                "bid": bid,
-                "ask": ask,
-                "mid": mid,
-                "iv": self._extract_float(row, ["implied_vol", "iv", "implied_volatility"]),
-                "delta": self._extract_float(row, ["delta"]),
-                "gamma": self._extract_float(row, ["gamma"]),
-                "theta": self._extract_float(row, ["theta"]),
-                "vega": self._extract_float(row, ["vega"]),
-                "volume": self._extract_int(row, ["volume", "vol"]),
-                "open_interest": self._extract_int(row, ["open_interest", "oi"]),
-            })
-        
-        return contracts
-    
-    def _parse_quote_response(self, data: Any, symbol: str, expiration: str) -> List[Dict[str, Any]]:
-        """Parse quote snapshot response into contract dicts."""
-        return self._parse_ohlc_response(data, symbol, expiration)
     
     @staticmethod
     def _extract_response_row(data: Any) -> Optional[Dict[str, Any]]:
@@ -822,7 +736,9 @@ class ThetaV3Provider:
             val = row.get(key)
             if val is not None:
                 try:
-                    return float(val)
+                    f = float(val)
+                    if f != 0 or key in ("delta", "gamma", "theta", "vega"):
+                        return f
                 except (TypeError, ValueError):
                     continue
         return None
@@ -841,10 +757,22 @@ class ThetaV3Provider:
     
     @staticmethod
     def _normalize_expiration(exp: Optional[str]) -> str:
-        """Normalize expiration to YYYYMMDD format."""
+        """Normalize expiration to YYYYMMDD format for API calls."""
         if not exp or exp == "*":
-            return exp or ""
+            return ""
         return str(exp).replace("-", "").replace("/", "")[:8]
+    
+    @staticmethod
+    def _format_expiration(exp: Any) -> str:
+        """Format expiration to YYYY-MM-DD for display."""
+        if not exp:
+            return ""
+        exp_str = str(exp).replace("-", "").replace("/", "")
+        if len(exp_str) >= 8 and exp_str[:8].isdigit():
+            return f"{exp_str[:4]}-{exp_str[4:6]}-{exp_str[6:8]}"
+        if isinstance(exp, str) and "-" in exp and len(exp) == 10:
+            return exp
+        return str(exp)
 
 
 # -------------------------------------------------------------------------
@@ -860,7 +788,7 @@ def check_theta_health(base_url: Optional[str] = None, timeout: Optional[float] 
     return status.healthy, status.message
 
 
-def fetch_chain_for_symbol(symbol: str, dte_min: int = 30, dte_max: int = 60) -> OptionChainResult:
+def fetch_chain_for_symbol(symbol: str, dte_min: int = 7, dte_max: int = 60) -> OptionChainResult:
     """Convenience function to fetch chain for a symbol."""
     provider = ThetaV3Provider()
     try:
@@ -873,7 +801,6 @@ __all__ = [
     "ThetaV3Provider",
     "ThetaHealthStatus",
     "StockSnapshotResult",
-    "OptionContract",
     "OptionChainResult",
     "FallbackResult",
     "check_theta_health",
@@ -881,4 +808,5 @@ __all__ = [
     "DATA_SOURCE_LIVE",
     "DATA_SOURCE_SNAPSHOT",
     "DATA_SOURCE_UNAVAILABLE",
+    "MAX_CONCURRENT_REQUESTS",
 ]

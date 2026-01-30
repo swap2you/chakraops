@@ -795,9 +795,9 @@ def render_execution_panel(data: Dict) -> None:
 
 
 def render_test_page() -> None:
-    """Render the Test page with real Theta data fetching."""
+    """Render the Test page with real Theta data fetching via snapshot_ohlc."""
     st.markdown("## 🧪 Test Page")
-    st.caption("Test data fetching and Slack message generation for individual symbols. Uses real Theta v3 API. Does not run the full pipeline.")
+    st.caption("Test Theta v3 API using `/option/snapshot/ohlc` endpoint. Fetches complete chains in a single call.")
     
     c1, c2 = st.columns([2, 1])
     
@@ -807,18 +807,19 @@ def render_test_page() -> None:
         custom = st.text_input("Or enter custom symbol", "", key="custom_ticker", placeholder="e.g., SHOP")
         symbol = custom.upper().strip() if custom else ticker
         
-        # DTE range
+        # DTE range - lower defaults to ensure data exists
         dte_col1, dte_col2 = st.columns(2)
         with dte_col1:
-            dte_min = st.number_input("DTE Min", value=30, min_value=1, max_value=365, key="dte_min")
+            dte_min = st.number_input("DTE Min", value=7, min_value=0, max_value=365, key="dte_min")
         with dte_col2:
-            dte_max = st.number_input("DTE Max", value=60, min_value=1, max_value=365, key="dte_max")
+            dte_max = st.number_input("DTE Max", value=45, min_value=1, max_value=365, key="dte_max")
         
-        st.markdown(f"**Testing symbol: `{symbol}`** (DTE: {dte_min}-{dte_max} days)")
+        st.markdown(f"**Testing: `{symbol}`** (DTE: {dte_min}–{dte_max} days)")
+        st.caption("API: `GET /option/snapshot/ohlc?symbol={symbol}&format=json` (no strike param = all strikes)")
     
     with c2:
         st.markdown("### Actions")
-        fetch_btn = st.button("📥 Fetch Chain", key="fetch_btn", use_container_width=True, help="Fetch real options chain from Theta API")
+        fetch_btn = st.button("📥 Fetch Chain", key="fetch_btn", use_container_width=True, help="GET /option/snapshot/ohlc")
         slack_btn = st.button("💬 Test Slack", key="slack_btn", use_container_width=True, help="Generate simulated Slack message")
         health_btn = st.button("🏥 Health Check", key="health_btn", use_container_width=True, help="Check Theta Terminal connection")
     
@@ -833,15 +834,17 @@ def render_test_page() -> None:
             else:
                 st.error(f"❌ {message}")
     
-    # Fetch Chain - Real Theta Integration
+    # Fetch Chain - Real Theta Integration via snapshot_ohlc
     if fetch_btn:
-        with st.spinner(f"Fetching chain for {symbol}..."):
+        with st.spinner(f"Fetching chain for {symbol} via snapshot_ohlc..."):
             chain_result = _fetch_real_chain(symbol, dte_min, dte_max)
             
             if chain_result.get("error"):
                 st.error(f"❌ {chain_result['error']}")
                 if chain_result.get("chain_status"):
                     st.caption(f"Status: {chain_result['chain_status']}")
+                if chain_result.get("total_fetched"):
+                    st.caption(f"Total contracts fetched (before DTE filter): {chain_result['total_fetched']}")
             else:
                 st.success(f"✅ Chain fetched for {symbol}")
                 
@@ -861,38 +864,55 @@ def render_test_page() -> None:
                 with col4:
                     st.metric("Calls", len(chain_result.get("calls", [])))
                 
-                # Data source indicator
+                # Data source and timestamp
                 data_src = chain_result.get("data_source", "unknown")
                 src_color = "#2aa872" if data_src == "live" else "#6b7280"
-                st.markdown(f'<span style="background:{src_color};color:white;padding:0.2rem 0.5rem;border-radius:4px;font-size:0.7rem;">Data: {data_src.upper()}</span>', unsafe_allow_html=True)
+                timestamp = chain_result.get("timestamp", "")
+                st.markdown(f'<span style="background:{src_color};color:white;padding:0.2rem 0.5rem;border-radius:4px;font-size:0.7rem;">Data: {data_src.upper()}</span> <span style="font-size:0.7rem;color:gray;">{timestamp[:19] if timestamp else ""}</span>', unsafe_allow_html=True)
                 
-                # Options table
+                # Show expirations
+                expirations = chain_result.get("expirations", [])
+                if expirations:
+                    st.caption(f"Expirations: {', '.join(expirations[:5])}{'...' if len(expirations) > 5 else ''}")
+                
+                # Options table with full Greeks
                 contracts = chain_result.get("contracts", [])
                 if contracts:
-                    st.markdown("**Options Chain (first 15):**")
+                    st.markdown(f"**Options Chain ({len(contracts)} contracts, showing first 20):**")
                     import pandas as pd
                     
                     rows = []
-                    for c in contracts[:15]:
+                    for c in contracts[:20]:
                         bid = c.get("bid")
                         ask = c.get("ask")
                         iv = c.get("iv")
                         delta = c.get("delta")
+                        gamma = c.get("gamma")
+                        theta = c.get("theta")
                         
                         rows.append({
                             "Strike": f"${c.get('strike', 0):,.2f}",
                             "Type": c.get("option_type", c.get("right", "")),
-                            "Exp": c.get("expiration", ""),
+                            "Exp": c.get("expiration", "")[:10],
+                            "DTE": c.get("dte", "—"),
                             "Bid": f"${bid:.2f}" if bid else "—",
                             "Ask": f"${ask:.2f}" if ask else "—",
                             "IV": f"{iv*100:.1f}%" if iv else "—",
-                            "Delta": f"{delta:.2f}" if delta else "—",
+                            "Delta": f"{delta:.3f}" if delta else "—",
+                            "Gamma": f"{gamma:.4f}" if gamma else "—",
+                            "Theta": f"{theta:.4f}" if theta else "—",
                         })
                     
                     df = pd.DataFrame(rows)
-                    st.dataframe(df, use_container_width=True, hide_index=True, height=300)
+                    st.dataframe(df, use_container_width=True, hide_index=True, height=350)
                 else:
-                    st.info("No contracts returned. Market may be closed or no options in DTE range.")
+                    st.warning("No contracts returned. Possible causes:")
+                    st.markdown("""
+                    - Market is closed (no real-time data)
+                    - No options in the DTE range [{dte_min}-{dte_max}]
+                    - Symbol may not have options
+                    - Theta Terminal connection issue
+                    """)
                 
                 st.markdown('</div>', unsafe_allow_html=True)
     

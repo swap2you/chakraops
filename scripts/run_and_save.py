@@ -3,15 +3,14 @@
 # SPDX-License-Identifier: MIT
 """Run signal engine pipeline and save decision data for dashboard.
 
-Features:
-- Pre-run health check for Theta Terminal
-- Fallback to latest snapshot when live data unavailable
-- Data source annotation in output JSON
-- Snapshot cleanup (retention policy)
-- decision_latest.json copy for easy access
-- Test mode (--test) for diagnostics
-- Realtime mode (--realtime) for continuous updates during market hours
-- Daily retention policy to keep only latest snapshot per day
+Realtime mode (--realtime):
+- Overwrites decision_latest.json every interval (30-60s)
+- Does NOT write timestamped snapshots during market hours
+- Writes final decision_YYYY-MM-DD_end.json at market close only
+
+One-time mode (default):
+- Writes timestamped decision_*.json and decision_latest.json copy
+- Enforces retention policy
 """
 
 import argparse
@@ -65,74 +64,15 @@ from app.signals.selection import SelectionConfig
 
 
 def enforce_daily_retention(output_dir: Path, max_days: int = 7) -> Tuple[int, List[str]]:
-    """Enforce daily retention policy.
-    
-    Keeps only:
-    - decision_latest.json (always)
-    - sample_decision*.json (always)
-    - One snapshot per day for the last max_days
-    - Deletes duplicates for the same day, keeping newest
-    
-    Returns (deleted_count, deleted_filenames).
-    """
+    """Keep only decision_latest.json and last N end-of-day snapshots."""
     deleted: List[str] = []
     
-    # Find all decision files (exclude special files)
-    special_files = {"decision_latest.json", "sample_decision.json", "sample_decision_rich.json"}
+    # Files to always keep
+    keep_files = {"decision_latest.json", "sample_decision.json", "sample_decision_rich.json"}
+    
+    # Find all decision files
     decision_files = sorted(
-        [f for f in output_dir.glob("decision_*.json") if f.name not in special_files],
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,  # Newest first
-    )
-    
-    if not decision_files:
-        return 0, []
-    
-    # Group files by date
-    files_by_date: Dict[str, List[Path]] = {}
-    for f in decision_files:
-        try:
-            file_date = datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d")
-            if file_date not in files_by_date:
-                files_by_date[file_date] = []
-            files_by_date[file_date].append(f)
-        except OSError:
-            continue
-    
-    # Determine cutoff date
-    cutoff_date = (date.today() - timedelta(days=max_days)).strftime("%Y-%m-%d")
-    
-    files_to_delete: List[Path] = []
-    
-    for file_date, files in files_by_date.items():
-        if file_date < cutoff_date:
-            # Delete all files older than retention period
-            files_to_delete.extend(files)
-        else:
-            # Keep only the newest file for each day (first in sorted list)
-            if len(files) > 1:
-                files_to_delete.extend(files[1:])  # Delete all except newest
-    
-    for f in files_to_delete:
-        try:
-            f.unlink()
-            deleted.append(f.name)
-        except Exception as e:
-            print(f"  Warning: Failed to delete {f.name}: {e}", file=sys.stderr)
-    
-    return len(deleted), deleted
-
-
-def _cleanup_old_snapshots(output_dir: Path, retention_days: int, max_files: int) -> Tuple[int, List[str]]:
-    """Delete old decision_*.json files based on retention policy.
-    
-    Returns (deleted_count, deleted_filenames).
-    """
-    deleted: List[str] = []
-    
-    special_files = {"decision_latest.json", "sample_decision.json", "sample_decision_rich.json"}
-    decision_files = sorted(
-        [f for f in output_dir.glob("decision_*.json") if f.name not in special_files],
+        [f for f in output_dir.glob("decision_*.json") if f.name not in keep_files],
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
@@ -140,24 +80,27 @@ def _cleanup_old_snapshots(output_dir: Path, retention_days: int, max_files: int
     if not decision_files:
         return 0, []
     
-    now = datetime.now(timezone.utc)
-    cutoff = now - timedelta(days=retention_days) if retention_days > 0 else None
+    # Keep only _end.json files (end-of-day snapshots) within retention period
+    cutoff_date = (date.today() - timedelta(days=max_days)).strftime("%Y-%m-%d")
     
     files_to_delete: List[Path] = []
+    kept_end_files = 0
     
-    for i, f in enumerate(decision_files):
-        keep = True
+    for f in decision_files:
+        is_end_file = "_end.json" in f.name
         
-        if max_files > 0 and i >= max_files:
-            keep = False
+        try:
+            file_date = datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d")
+        except OSError:
+            file_date = "1970-01-01"
         
-        if cutoff and keep:
-            file_mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
-            if file_mtime < cutoff:
-                keep = False
+        if is_end_file and file_date >= cutoff_date:
+            # Keep end-of-day files within retention period
+            kept_end_files += 1
+            continue
         
-        if not keep:
-            files_to_delete.append(f)
+        # Delete non-end files and old end files
+        files_to_delete.append(f)
     
     for f in files_to_delete:
         try:
@@ -169,22 +112,8 @@ def _cleanup_old_snapshots(output_dir: Path, retention_days: int, max_files: int
     return len(deleted), deleted
 
 
-def _create_latest_copy(output_file: Path) -> Optional[Path]:
-    """Create decision_latest.json as a copy of the latest decision file."""
-    latest_path = output_file.parent / "decision_latest.json"
-    try:
-        shutil.copy2(output_file, latest_path)
-        return latest_path
-    except Exception as e:
-        print(f"  Warning: Failed to create decision_latest.json: {e}", file=sys.stderr)
-        return None
-
-
 def _run_health_check(test_mode: bool = False) -> Tuple[bool, str, Optional[str]]:
-    """Run Theta Terminal health check.
-    
-    Returns (healthy, message, data_source).
-    """
+    """Run Theta Terminal health check."""
     provider = ThetaV3Provider()
     status = provider.health_check()
     provider.close()
@@ -208,10 +137,10 @@ def run_pipeline(
     config: Any,
     test_mode: bool = False,
     realtime_mode: bool = False,
-) -> Tuple[int, Optional[Path]]:
+) -> Tuple[int, Optional[Dict[str, Any]]]:
     """Run a single pipeline iteration.
     
-    Returns (exit_code, output_file_path).
+    Returns (exit_code, output_data).
     """
     output_dir_str = args.output_dir or config.snapshots.output_dir
     
@@ -262,7 +191,7 @@ def run_pipeline(
     if not realtime_mode:
         print(f"Processing {len(eligible_stocks)} symbols...")
     
-    # Configuration
+    # Configuration - use lower DTE window to ensure data exists
     scoring_config = ScoringConfig(
         premium_weight=1.0, dte_weight=1.0, spread_weight=1.0,
         otm_weight=1.0, liquidity_weight=1.0,
@@ -272,13 +201,14 @@ def run_pipeline(
         max_total=10, max_per_symbol=2, max_per_signal_type=None, min_score=0.0,
     )
     
+    # Lower DTE window: 7-45 days to catch more expirations
     base_config = SignalEngineConfig(
-        dte_min=30, dte_max=45, min_bid=0.01, min_open_interest=100,
-        max_spread_pct=20.0, scoring_config=scoring_config, selection_config=selection_config,
+        dte_min=7, dte_max=45, min_bid=0.01, min_open_interest=50,
+        max_spread_pct=25.0, scoring_config=scoring_config, selection_config=selection_config,
     )
     
-    csp_config = CSPConfig(otm_pct_min=0.05, otm_pct_max=0.15)
-    cc_config = CCConfig(otm_pct_min=0.02, otm_pct_max=0.10)
+    csp_config = CSPConfig(otm_pct_min=0.03, otm_pct_max=0.20)
+    cc_config = CCConfig(otm_pct_min=0.02, otm_pct_max=0.15)
     
     # Run engine
     result = run_signal_engine(
@@ -303,9 +233,9 @@ def run_pipeline(
     
     if not realtime_mode:
         if options_health.allowed:
-            print(f"  Partial universe: {options_health.valid_symbols_count} eligible, {options_health.excluded_count} excluded")
+            print(f"  Options: {options_health.valid_symbols_count} with chains, {options_health.excluded_count} without")
         else:
-            print(f"  Options health: BLOCKED (0 symbols with options)")
+            print(f"  Options: BLOCKED (0 symbols with options)")
     
     # Execution gate
     gate_result = evaluate_execution_gate(decision_snapshot)
@@ -332,71 +262,65 @@ def run_pipeline(
             "pipeline_timestamp": decision_snapshot_dict["pipeline_timestamp"],
             "theta_base_url": config.theta.base_url,
             "fallback_enabled": config.theta.fallback_enabled,
+            "symbols_with_options": len(symbols_with_options),
+            "symbols_without_options": len(symbols_without_options),
         },
     }
     
-    # Save file
-    output_dir = Path(output_dir_str)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    iso_ts = output_data["decision_snapshot"].get("as_of") or "unknown"
-    safe_iso_ts = str(iso_ts).replace(":", "-")
-    output_file = output_dir / f"decision_{safe_iso_ts}.json"
-    
-    with open(output_file, "w") as f:
-        json.dump(output_data, f, indent=2)
-    
-    # Create latest copy
-    latest_path = _create_latest_copy(output_file)
-    
-    # Cleanup
-    if not args.skip_cleanup:
-        retention_days = get_snapshot_retention_days()
-        max_files = get_snapshot_max_files()
-        deleted_count, _ = _cleanup_old_snapshots(output_dir, retention_days, max_files)
-        
-        # Also enforce daily retention
-        daily_deleted, _ = enforce_daily_retention(output_dir, max_days=retention_days)
-        
-        if not realtime_mode and (deleted_count > 0 or daily_deleted > 0):
-            print(f"  Cleanup: Deleted {deleted_count + daily_deleted} old file(s)")
-    
+    # Log summary
     if not realtime_mode:
         print(f"\nPipeline complete:")
         print(f"  Data source: {data_source}")
+        print(f"  Symbols with options: {len(symbols_with_options)}")
         print(f"  Candidates: {result.stats['total_candidates']}")
         print(f"  Selected: {len(result.selected_signals) if result.selected_signals else 0}")
         print(f"  Gate: {'ALLOWED' if gate_result.allowed else 'BLOCKED'}")
-        print(f"  Orders: {len(execution_plan.orders)}")
-        print(f"  Output: {output_file}")
     else:
         ts = datetime.now().strftime("%H:%M:%S")
         candidates = result.stats['total_candidates']
         selected = len(result.selected_signals) if result.selected_signals else 0
-        print(f"[{ts}] Candidates: {candidates}, Selected: {selected}, Gate: {'✓' if gate_result.allowed else '✗'}")
+        with_opts = len(symbols_with_options)
+        print(f"[{ts}] Options:{with_opts} Candidates:{candidates} Selected:{selected} Gate:{'✓' if gate_result.allowed else '✗'}")
     
-    return 0, output_file
+    return 0, output_data
+
+
+def write_decision_file(output_data: Dict[str, Any], output_dir: Path, filename: str) -> Optional[Path]:
+    """Write decision data to file."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / filename
+    
+    try:
+        with open(output_path, "w") as f:
+            json.dump(output_data, f, indent=2)
+        return output_path
+    except Exception as e:
+        print(f"  Error writing {filename}: {e}", file=sys.stderr)
+        return None
 
 
 def run_realtime_loop(args: argparse.Namespace, config: Any) -> int:
-    """Run pipeline in realtime mode until market close.
+    """Run pipeline in realtime mode.
     
-    Continuously refreshes data at the specified interval.
+    - Overwrites decision_latest.json every interval
+    - Does NOT write timestamped snapshots during market hours
+    - Writes final end-of-day snapshot at market close
     """
-    # Get realtime settings - command line overrides config
     refresh_interval = args.interval if args.interval else get_realtime_refresh_interval()
     end_time_str = get_realtime_end_time()
+    output_dir = Path(args.output_dir or config.snapshots.output_dir)
     
     print("=" * 60)
     print("ChakraOps Decision Pipeline - REALTIME MODE")
     print("=" * 60)
     print(f"  Refresh interval: {refresh_interval}s")
     print(f"  End time: {end_time_str}")
+    print(f"  Output: {output_dir / 'decision_latest.json'}")
     print(f"  Press Ctrl+C to stop")
     print("=" * 60)
     
     iteration = 0
-    last_output_file: Optional[Path] = None
+    last_output_data: Optional[Dict[str, Any]] = None
     
     try:
         while True:
@@ -408,18 +332,20 @@ def run_realtime_loop(args: argparse.Namespace, config: Any) -> int:
                 end_h, end_m, end_s = map(int, end_time_str.split(":"))
                 end_time = now.replace(hour=end_h, minute=end_m, second=end_s, microsecond=0)
                 if now >= end_time:
-                    print(f"\n[{now.strftime('%H:%M:%S')}] Market close reached, stopping realtime mode")
+                    print(f"\n[{now.strftime('%H:%M:%S')}] Market close reached")
                     break
             except ValueError:
                 pass  # Invalid end_time format, continue indefinitely
             
             # Run pipeline
-            exit_code, output_file = run_pipeline(args, config, test_mode=False, realtime_mode=True)
+            exit_code, output_data = run_pipeline(args, config, test_mode=False, realtime_mode=True)
             
             if exit_code != 0:
-                print(f"  Pipeline iteration {iteration} failed with code {exit_code}")
-            else:
-                last_output_file = output_file
+                print(f"  Pipeline iteration {iteration} failed")
+            elif output_data:
+                # Write ONLY decision_latest.json (no timestamped file in realtime mode)
+                write_decision_file(output_data, output_dir, "decision_latest.json")
+                last_output_data = output_data
             
             # Sleep until next iteration
             time.sleep(refresh_interval)
@@ -427,15 +353,17 @@ def run_realtime_loop(args: argparse.Namespace, config: Any) -> int:
     except KeyboardInterrupt:
         print("\n\nRealtime mode interrupted by user")
     
-    # Write final snapshot with _end suffix
-    if last_output_file:
+    # Write final end-of-day snapshot
+    if last_output_data:
         final_name = f"decision_{date.today().isoformat()}_end.json"
-        final_path = last_output_file.parent / final_name
-        try:
-            shutil.copy2(last_output_file, final_path)
+        final_path = write_decision_file(last_output_data, output_dir, final_name)
+        if final_path:
             print(f"Final snapshot: {final_path}")
-        except Exception as e:
-            print(f"Warning: Failed to create final snapshot: {e}")
+        
+        # Cleanup old files
+        deleted, _ = enforce_daily_retention(output_dir, max_days=get_snapshot_retention_days())
+        if deleted > 0:
+            print(f"Cleanup: Deleted {deleted} old file(s)")
     
     print("Realtime mode ended")
     return 0
@@ -444,32 +372,23 @@ def run_realtime_loop(args: argparse.Namespace, config: Any) -> int:
 def main() -> int:
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="Run full decision pipeline and save unified decision artifact"
+        description="Run decision pipeline and save to JSON"
     )
     parser.add_argument("--limit", type=int, default=None, help="Limit symbols")
     parser.add_argument("--output-dir", type=str, default=None, help="Output directory")
     parser.add_argument("--test", action="store_true", help="Test mode with diagnostics")
     parser.add_argument("--no-fallback", action="store_true", help="Disable fallback")
     parser.add_argument("--skip-cleanup", action="store_true", help="Skip cleanup")
-    parser.add_argument(
-        "--realtime",
-        action="store_true",
-        help="Realtime mode: continuously update until market close"
-    )
-    parser.add_argument(
-        "--interval",
-        type=int,
-        default=60,
-        help="Refresh interval in seconds for realtime mode (default: 60)"
-    )
+    parser.add_argument("--realtime", action="store_true", help="Realtime mode: update every interval")
+    parser.add_argument("--interval", type=int, default=30, help="Refresh interval (seconds, default: 30)")
     args = parser.parse_args()
     
-    # Load configuration
     config = load_config()
     
     if args.realtime:
         return run_realtime_loop(args, config)
     
+    # One-time mode
     if args.test:
         print("=" * 60)
         print("ChakraOps Decision Pipeline - TEST MODE")
@@ -477,59 +396,69 @@ def main() -> int:
     
     print("Checking Theta Terminal connectivity...")
     
-    exit_code, output_file = run_pipeline(args, config, test_mode=args.test)
+    exit_code, output_data = run_pipeline(args, config, test_mode=args.test)
     
     if exit_code != 0:
         return exit_code
     
-    # Test mode diagnostics
-    if args.test and output_file:
-        print("-" * 60)
-        print("TEST MODE COMPLETE")
-        print("-" * 60)
+    if not output_data:
+        return 1
+    
+    # Save files
+    output_dir = Path(args.output_dir or config.snapshots.output_dir)
+    
+    # Write timestamped file
+    iso_ts = output_data["decision_snapshot"].get("as_of") or "unknown"
+    safe_iso_ts = str(iso_ts).replace(":", "-")
+    timestamped_file = write_decision_file(output_data, output_dir, f"decision_{safe_iso_ts}.json")
+    
+    # Write latest file
+    latest_file = write_decision_file(output_data, output_dir, "decision_latest.json")
+    
+    if timestamped_file:
+        print(f"  Output: {timestamped_file}")
+    if latest_file:
+        print(f"  Latest: {latest_file}")
+    
+    # Cleanup
+    if not args.skip_cleanup:
+        deleted, _ = enforce_daily_retention(output_dir, max_days=get_snapshot_retention_days())
+        if deleted > 0:
+            print(f"  Cleanup: Deleted {deleted} old file(s)")
     
     # Slack notification (only on gate state change)
-    output_dir = Path(args.output_dir or config.snapshots.output_dir)
     slack_state_path = output_dir / ".slack_state.json"
+    gate_result = output_data.get("execution_gate", {})
     
-    if output_file:
-        with open(output_file, "r") as f:
-            output_data = json.load(f)
-        
-        gate_result = output_data.get("execution_gate", {})
-        decision_snapshot = output_data.get("decision_snapshot", {})
-        
-        last_gate_allowed = None
-        if slack_state_path.exists():
-            try:
-                with open(slack_state_path) as f:
-                    state = json.load(f)
-                last_gate_allowed = state.get("last_gate_allowed")
-            except (json.JSONDecodeError, OSError):
-                pass
+    last_gate_allowed = None
+    if slack_state_path.exists():
+        try:
+            with open(slack_state_path) as f:
+                state = json.load(f)
+            last_gate_allowed = state.get("last_gate_allowed")
+        except (json.JSONDecodeError, OSError):
+            pass
+    
+    try:
+        from app.notifications.slack_notifier import send_decision_alert
+        sent = send_decision_alert(
+            snapshot=output_data.get("decision_snapshot", {}),
+            gate_result=gate_result,
+            execution_plan=output_data.get("execution_plan", {}),
+            decision_file_path=timestamped_file,
+            last_gate_allowed=last_gate_allowed,
+        )
         
         try:
-            from app.notifications.slack_notifier import send_decision_alert
-            sent = send_decision_alert(
-                snapshot=decision_snapshot,
-                gate_result=gate_result,
-                execution_plan=output_data.get("execution_plan", {}),
-                decision_file_path=output_file,
-                last_gate_allowed=last_gate_allowed,
-            )
-            
-            try:
-                with open(slack_state_path, "w") as f:
-                    json.dump({"last_gate_allowed": gate_result.get("allowed")}, f)
-            except OSError:
-                pass
-            
-            if sent:
-                print("  Slack alert sent")
-            else:
-                print("  Slack skipped (no change)")
-        except Exception as e:
-            print(f"  Slack failed: {e}")
+            with open(slack_state_path, "w") as f:
+                json.dump({"last_gate_allowed": gate_result.get("allowed")}, f)
+        except OSError:
+            pass
+        
+        if sent:
+            print("  Slack alert sent")
+    except Exception as e:
+        print(f"  Slack: {e}")
     
     return 0
 

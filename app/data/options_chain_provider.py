@@ -1,6 +1,10 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""Options chain provider abstraction (Phase 5). Uses efficient Theta v3 bulk endpoints."""
+"""Options chain provider using Theta v3 snapshot_ohlc for complete chains.
+
+Key change: Uses snapshot_ohlc(symbol, '*') to get ALL contracts in ONE call.
+No more per-strike or per-expiration fetching.
+"""
 
 from __future__ import annotations
 
@@ -12,8 +16,8 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# Timeout for all provider calls
-CHAIN_REQUEST_TIMEOUT = 10.0
+# Timeout for provider calls
+CHAIN_REQUEST_TIMEOUT = 15.0
 
 # Fallback weekly expirations: OFF by default
 OPTIONS_FALLBACK_WEEKLY_ENV = "OPTIONS_FALLBACK_WEEKLY_EXPIRATIONS"
@@ -22,11 +26,11 @@ DEFAULT_FALLBACK_DAYS = 14
 
 
 class OptionsChainProvider(ABC):
-    """Interface for options expirations and chain data. Implementations must fail fast."""
+    """Interface for options chain data."""
 
     @abstractmethod
     def get_expirations(self, symbol: str) -> List[date]:
-        """Return expiration dates for symbol. Empty list on failure -> chain_unavailable."""
+        """Return expiration dates for symbol."""
         ...
 
     @abstractmethod
@@ -36,19 +40,15 @@ class OptionsChainProvider(ABC):
         expiry: date,
         right: str,
     ) -> List[Dict[str, Any]]:
-        """Return list of contract records for symbol/expiry/right.
-
-        Each record must have: strike, bid, ask, delta, iv (or None).
-        Optional: volume, open_interest. Empty list on failure.
-        """
+        """Return contracts for symbol/expiry/right."""
         ...
 
 
 class ThetaDataOptionsChainProvider(OptionsChainProvider):
-    """Theta REST (localhost:25503/v3) using efficient bulk snapshot endpoints.
+    """Theta v3 provider using snapshot_ohlc for complete chain retrieval.
     
-    Uses snapshot_ohlc or snapshot_quote to fetch all contracts for an expiration
-    in a single call, instead of querying each strike individually.
+    Uses snapshot_ohlc(symbol, '*') to get ALL contracts in ONE call,
+    then filters by expiration and right as needed.
     """
 
     def __init__(
@@ -60,7 +60,10 @@ class ThetaDataOptionsChainProvider(OptionsChainProvider):
 
         self.base_url = (base_url or get_theta_base_url()).rstrip("/")
         self.timeout = timeout
-        self._provider = None  # Lazy-loaded ThetaV3Provider
+        self._provider = None
+        self._chain_cache: Dict[str, List[Dict[str, Any]]] = {}
+        self._cache_time: Dict[str, datetime] = {}
+        self._cache_ttl = timedelta(seconds=30)  # Cache for 30 seconds
 
     def _get_provider(self):
         """Lazy load ThetaV3Provider."""
@@ -69,28 +72,51 @@ class ThetaDataOptionsChainProvider(OptionsChainProvider):
             self._provider = ThetaV3Provider(
                 base_url=self.base_url,
                 timeout=self.timeout,
-                fallback_enabled=False,  # Don't use fallback in chain provider
+                fallback_enabled=False,
             )
         return self._provider
 
+    def _get_full_chain(self, symbol: str) -> List[Dict[str, Any]]:
+        """Get full chain for symbol, using cache if fresh."""
+        symbol = symbol.upper()
+        now = datetime.now()
+        
+        # Check cache
+        if symbol in self._chain_cache:
+            cache_age = now - self._cache_time.get(symbol, datetime.min)
+            if cache_age < self._cache_ttl:
+                return self._chain_cache[symbol]
+        
+        # Fetch fresh data using snapshot_ohlc with '*' for all expirations
+        provider = self._get_provider()
+        contracts = provider.snapshot_ohlc(symbol, "*")
+        
+        # Update cache
+        self._chain_cache[symbol] = contracts
+        self._cache_time[symbol] = now
+        
+        return contracts
+
     def get_expirations(self, symbol: str) -> List[date]:
-        """Fetch expirations using ThetaV3Provider.list_expirations."""
+        """Get expirations from the full chain."""
         try:
-            provider = self._get_provider()
-            exp_strings = provider.list_expirations(symbol)
+            contracts = self._get_full_chain(symbol)
             
-            if not exp_strings:
-                logger.debug("[OptionsChain] get_expirations empty for %s", symbol)
+            if not contracts:
+                logger.debug("[OptionsChain] No contracts for %s", symbol)
                 return []
             
-            out: List[date] = []
-            for exp_str in exp_strings:
-                d = _parse_date_any(exp_str)
-                if d is not None:
-                    out.append(d)
+            # Extract unique expirations
+            expirations_set: set = set()
+            for contract in contracts:
+                exp_str = contract.get("expiration", "")
+                if exp_str:
+                    d = _parse_date_any(exp_str)
+                    if d:
+                        expirations_set.add(d)
             
-            out.sort()
-            return out
+            return sorted(expirations_set)
+            
         except Exception as e:
             logger.debug("[OptionsChain] get_expirations failed for %s: %s", symbol, e)
             return []
@@ -101,51 +127,46 @@ class ThetaDataOptionsChainProvider(OptionsChainProvider):
         expiry: date,
         right: str,
     ) -> List[Dict[str, Any]]:
-        """Fetch chain using efficient bulk snapshot endpoint.
-        
-        Uses snapshot_ohlc to get all contracts for an expiration in a single call,
-        then filters by right (PUT/CALL).
-        """
+        """Get chain filtered by expiration and right from the full chain."""
         try:
-            provider = self._get_provider()
-            symbol_upper = (symbol or "").upper()
-            exp_str = expiry.strftime("%Y-%m-%d")
-            right_upper = (right or "P").upper()
-            
-            # Fetch all contracts for this expiration in one call
-            contracts = provider.snapshot_ohlc(symbol_upper, exp_str)
-            
-            # Fall back to snapshot_quote if snapshot_ohlc returns empty
-            if not contracts:
-                contracts = provider.snapshot_quote(symbol_upper, exp_str)
+            contracts = self._get_full_chain(symbol)
             
             if not contracts:
-                logger.debug("[OptionsChain] get_chain no contracts for %s %s", symbol_upper, exp_str)
                 return []
             
-            # Filter by right and normalize to expected format
+            symbol_upper = symbol.upper()
+            right_upper = (right or "P").upper()
+            expiry_str = expiry.strftime("%Y-%m-%d")
+            
+            # Filter contracts
             out: List[Dict[str, Any]] = []
             for contract in contracts:
+                # Filter by right
                 contract_right = contract.get("right", "").upper()
-                
-                # Map option_type if right not present
-                if not contract_right:
-                    opt_type = contract.get("option_type", "").upper()
-                    if opt_type in ("PUT", "P"):
-                        contract_right = "P"
-                    elif opt_type in ("CALL", "C"):
-                        contract_right = "C"
-                
-                # Skip if doesn't match requested right
                 if contract_right != right_upper:
                     continue
                 
-                # Normalize to expected format
+                # Filter by expiration
+                contract_exp = contract.get("expiration", "")
+                if not contract_exp:
+                    continue
+                
+                # Normalize and compare expiration
+                contract_exp_normalized = contract_exp.replace("-", "")[:8]
+                expiry_normalized = expiry_str.replace("-", "")[:8]
+                if contract_exp_normalized != expiry_normalized:
+                    continue
+                
+                # Normalize output format
                 out.append({
                     "strike": contract.get("strike"),
                     "bid": contract.get("bid"),
                     "ask": contract.get("ask"),
+                    "mid": contract.get("mid"),
                     "delta": contract.get("delta"),
+                    "gamma": contract.get("gamma"),
+                    "theta": contract.get("theta"),
+                    "vega": contract.get("vega"),
                     "iv": contract.get("iv"),
                     "open_interest": contract.get("open_interest"),
                     "volume": contract.get("volume"),
@@ -154,6 +175,7 @@ class ThetaDataOptionsChainProvider(OptionsChainProvider):
                 })
             
             return out
+            
         except Exception as e:
             logger.debug("[OptionsChain] get_chain failed for %s %s %s: %s", symbol, expiry, right, e)
             return []
@@ -161,14 +183,10 @@ class ThetaDataOptionsChainProvider(OptionsChainProvider):
     def get_full_chain(
         self,
         symbol: str,
-        dte_min: int = 30,
+        dte_min: int = 7,
         dte_max: int = 45,
     ) -> Dict[str, Any]:
-        """Fetch full chain for a symbol within DTE window.
-        
-        Returns dict with 'contracts', 'puts', 'calls', 'chain_status', etc.
-        This is a convenience method that wraps ThetaV3Provider.fetch_full_chain.
-        """
+        """Get full chain with DTE filtering via ThetaV3Provider."""
         try:
             provider = self._get_provider()
             result = provider.fetch_full_chain(symbol, dte_min=dte_min, dte_max=dte_max)
@@ -194,7 +212,7 @@ class ThetaDataOptionsChainProvider(OptionsChainProvider):
 
 
 def _next_weekly_expirations_within_days(days: int) -> List[date]:
-    """Return next weekly (Friday) expirations within the given number of days from today."""
+    """Return next weekly (Friday) expirations within N days."""
     today = date.today()
     out: List[date] = []
     d = today
@@ -204,15 +222,11 @@ def _next_weekly_expirations_within_days(days: int) -> List[date]:
         d += timedelta(days=1)
         if (d - today).days > days:
             break
-    return sorted(out)[:4]  # Cap at 4 expirations
+    return sorted(out)[:4]
 
 
 class FallbackWeeklyExpirationsProvider(OptionsChainProvider):
-    """Wrapper that when inner returns zero expirations, optionally returns nearest weekly expirations.
-
-    OFF by default. Set OPTIONS_FALLBACK_WEEKLY_EXPIRATIONS=1 to enable.
-    OPTIONS_FALLBACK_DAYS (default 14) limits how many days ahead to look.
-    """
+    """Wrapper that falls back to weekly expirations if inner returns none."""
 
     def __init__(self, inner: OptionsChainProvider) -> None:
         self._inner = inner
@@ -229,10 +243,7 @@ class FallbackWeeklyExpirationsProvider(OptionsChainProvider):
         if self._enabled and self._days > 0:
             fallback = _next_weekly_expirations_within_days(self._days)
             if fallback:
-                logger.info(
-                    "[OptionsChain] Fallback: using %d weekly expiration(s) for %s",
-                    len(fallback), symbol,
-                )
+                logger.info("[OptionsChain] Using %d weekly fallback expiration(s) for %s", len(fallback), symbol)
                 return fallback
         return []
 
@@ -253,8 +264,8 @@ def _parse_date_any(x: Any) -> Optional[date]:
     if isinstance(x, datetime):
         return x.date()
     s = str(x).strip()
-    if len(s) >= 8 and s.replace("-", "").isdigit():
-        clean = s.replace("-", "")
+    if len(s) >= 8 and s.replace("-", "").replace("/", "")[:8].isdigit():
+        clean = s.replace("-", "").replace("/", "")[:8]
         try:
             return date(int(clean[:4]), int(clean[4:6]), int(clean[6:8]))
         except ValueError:
@@ -272,8 +283,3 @@ __all__ = [
     "FallbackWeeklyExpirationsProvider",
     "CHAIN_REQUEST_TIMEOUT",
 ]
-
-# Theta v3 endpoints used (via ThetaV3Provider):
-# - GET /v3/option/list/expirations?symbol=SYMBOL&format=json
-# - GET /v3/option/snapshot/ohlc?symbol=SYMBOL&expiration=YYYYMMDD&format=json (bulk fetch)
-# - GET /v3/option/snapshot/quote?symbol=SYMBOL&expiration=YYYYMMDD&format=json (fallback)

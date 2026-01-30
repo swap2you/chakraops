@@ -3,13 +3,13 @@
 """Premium ChakraOps Dashboard — Option Alpha-style trading platform UI.
 
 A modern, professional trading dashboard with:
-- Top header bar with logo, controls, and data source selector
-- Streamlined sidebar navigation (icons visible when collapsed)
+- Fixed sidebar toggle that remains visible when collapsed
+- Sidebar shows icons only when collapsed, full text when expanded
+- Working tooltips on all info icons
+- Reliable data source selection and refresh functionality
 - Hero section with decision status and key metrics
 - Plotly charts for exclusion analysis and candidate distribution
-- Detailed tables with proper formatting
 - Simulated Slack messages for selected signals
-- Functional data loading from selected snapshot files
 """
 
 from __future__ import annotations
@@ -31,6 +31,10 @@ DECISION_LATEST = OUT_DIR / "decision_latest.json"
 SAMPLE_DECISION_RICH = OUT_DIR / "sample_decision_rich.json"
 SAMPLE_DECISION = OUT_DIR / "sample_decision.json"
 
+# Sidebar widths
+SIDEBAR_EXPANDED_WIDTH = 220
+SIDEBAR_COLLAPSED_WIDTH = 70
+
 NAV_ITEMS = [
     ("Dashboard", "dashboard", "📊"),
     ("Strategies", "strategies", "🎯"),
@@ -41,12 +45,12 @@ NAV_ITEMS = [
 
 # Color palette - refined with better contrast
 COLORS = {
-    "primary": "#005ea6",      # Slightly lighter accent for header
-    "primary_dark": "#004580",
+    "primary": "#0066b8",       # Increased contrast header
+    "primary_dark": "#004d8c",
     "success": "#2aa872",
     "success_border": "#1e8a5e",
-    "warning": "#e0a800",
-    "warning_border": "#c49300",
+    "warning": "#d4940a",       # Slightly darker for better contrast
+    "warning_border": "#b37d08",
     "danger": "#d9534f",
     "danger_border": "#c9302c",
     "neutral": "#6c757d",
@@ -56,7 +60,7 @@ COLORS = {
     "bg_dark": "#0d1117",
     "text_light": "#24292f",
     "text_dark": "#e6edf3",
-    "border_light": "#e1e4e8",
+    "border_light": "#d0d7de",   # Slightly darker border
     "border_dark": "#30363d",
 }
 
@@ -92,42 +96,50 @@ def get_available_snapshots() -> List[str]:
         return []
     
     files = []
-    # Add sample files first (if they exist)
+    # Add decision_latest first if it exists
+    if DECISION_LATEST.exists():
+        files.append(DECISION_LATEST.name)
+    
+    # Add sample files
     if SAMPLE_DECISION_RICH.exists():
         files.append(SAMPLE_DECISION_RICH.name)
     if SAMPLE_DECISION.exists():
         files.append(SAMPLE_DECISION.name)
-    if DECISION_LATEST.exists():
-        files.insert(0, DECISION_LATEST.name)  # Latest at top
     
     # Add timestamped decision files
     for f in sorted(OUT_DIR.glob("decision_*.json"), reverse=True):
-        if f.name not in files and f.name not in ("decision_latest.json", "sample_decision.json", "sample_decision_rich.json"):
+        if f.name not in files:
             files.append(f.name)
     
     return files[:20]  # Limit to 20 files
 
 
-def load_decision_data(filename: Optional[str] = None) -> Tuple[Dict[str, Any], bool, str]:
+def load_decision_data(filename: Optional[str] = None) -> Tuple[Dict[str, Any], bool, str, Optional[str]]:
     """Load decision data from specified file or auto-detect.
     
     Args:
         filename: Specific file to load, or None to auto-detect
         
     Returns:
-        Tuple of (data dict, is_sample_data boolean, loaded_filename)
+        Tuple of (data dict, is_sample_data boolean, loaded_filename, error_message)
     """
+    error_msg = None
+    
     # If specific file requested
-    if filename:
+    if filename and filename != "No files available":
         filepath = OUT_DIR / filename
         if filepath.exists():
             try:
                 with open(filepath, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 is_sample = "sample" in filename.lower()
-                return data, is_sample, filename
-            except (json.JSONDecodeError, IOError):
-                pass
+                return data, is_sample, filename, None
+            except json.JSONDecodeError as e:
+                error_msg = f"Invalid JSON in {filename}: {e}"
+            except IOError as e:
+                error_msg = f"Cannot read {filename}: {e}"
+        else:
+            error_msg = f"File not found: {filename}"
     
     # Auto-detect: Try decision_latest.json first
     if DECISION_LATEST.exists():
@@ -136,7 +148,7 @@ def load_decision_data(filename: Optional[str] = None) -> Tuple[Dict[str, Any], 
                 data = json.load(f)
             snapshot = data.get("decision_snapshot", {})
             if snapshot.get("stats", {}).get("total_symbols", 0) > 0:
-                return data, False, DECISION_LATEST.name
+                return data, False, DECISION_LATEST.name, error_msg
         except (json.JSONDecodeError, IOError):
             pass
     
@@ -145,7 +157,7 @@ def load_decision_data(filename: Optional[str] = None) -> Tuple[Dict[str, Any], 
         try:
             with open(SAMPLE_DECISION_RICH, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            return data, True, SAMPLE_DECISION_RICH.name
+            return data, True, SAMPLE_DECISION_RICH.name, error_msg
         except (json.JSONDecodeError, IOError):
             pass
     
@@ -154,7 +166,7 @@ def load_decision_data(filename: Optional[str] = None) -> Tuple[Dict[str, Any], 
         try:
             with open(SAMPLE_DECISION, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            return data, True, SAMPLE_DECISION.name
+            return data, True, SAMPLE_DECISION.name, error_msg
         except (json.JSONDecodeError, IOError):
             pass
     
@@ -172,7 +184,7 @@ def load_decision_data(filename: Optional[str] = None) -> Tuple[Dict[str, Any], 
         "execution_gate": {"allowed": False, "reasons": ["No data available"]},
         "execution_plan": {"orders": []},
         "metadata": {},
-    }, True, "none"
+    }, True, "none", error_msg or "No data files found in out/ directory"
 
 
 def parse_snapshot(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -264,18 +276,26 @@ def _generate_slack_message(candidate: Dict[str, Any]) -> str:
     return f"📊 *SELL 1 {symbol} ${strike:.0f}{option_char}* expiring {expiry} @ *${mid:.2f}* credit"
 
 
+def _tooltip_icon(tooltip_text: str) -> str:
+    """Generate a working tooltip using abbr tag for native browser support."""
+    escaped = tooltip_text.replace('"', '&quot;').replace("'", "&#39;")
+    return f'<abbr title="{escaped}" style="cursor:help;text-decoration:none;border:none;"><span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:rgba(0,102,184,0.1);color:#0066b8;font-size:0.65rem;font-weight:600;margin-left:4px;">?</span></abbr>'
+
+
 # ---------------------------------------------------------------------------
 # Theme CSS Injection
 # ---------------------------------------------------------------------------
 
 
-def inject_premium_css(dark: bool = False) -> None:
+def inject_premium_css(dark: bool = False, sidebar_collapsed: bool = False) -> None:
     """Inject premium dashboard CSS with modern styling."""
     bg = COLORS["bg_dark"] if dark else COLORS["bg_light"]
     surface = COLORS["surface_dark"] if dark else COLORS["surface_light"]
     text = COLORS["text_dark"] if dark else COLORS["text_light"]
     text_muted = "#8b949e" if dark else "#57606a"
     border = COLORS["border_dark"] if dark else COLORS["border_light"]
+    
+    sidebar_width = SIDEBAR_COLLAPSED_WIDTH if sidebar_collapsed else SIDEBAR_EXPANDED_WIDTH
     
     st.markdown(f"""
     <style>
@@ -305,33 +325,47 @@ def inject_premium_css(dark: bool = False) -> None:
     #MainMenu, footer {{ visibility: hidden; }}
     header[data-testid="stHeader"] {{ display: none; }}
     
-    /* Sidebar toggle fix - ALWAYS visible at fixed position */
+    /* CRITICAL: Sidebar toggle - ALWAYS visible as floating button */
     [data-testid="collapsedControl"] {{
         position: fixed !important;
-        left: 10px !important;
-        top: 50px !important;
+        left: 8px !important;
+        top: 12px !important;
         z-index: 999999 !important;
         background: {'#1e293b' if dark else '#ffffff'} !important;
-        border: 1px solid {'#30363d' if dark else '#e1e4e8'} !important;
-        border-radius: 8px !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
-        padding: 4px !important;
+        border: 2px solid {'#3b82f6' if dark else '#0066b8'} !important;
+        border-radius: 10px !important;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.25) !important;
+        padding: 6px !important;
+        width: 36px !important;
+        height: 36px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }}
+    
+    [data-testid="collapsedControl"]:hover {{
+        background: {'#2d3a4f' if dark else '#f0f4f8'} !important;
+        transform: scale(1.05);
     }}
     
     [data-testid="collapsedControl"] svg {{
-        color: {'#e6edf3' if dark else '#24292f'} !important;
+        color: {'#60a5fa' if dark else '#0066b8'} !important;
+        width: 20px !important;
+        height: 20px !important;
     }}
     
-    /* Sidebar styling - narrower */
+    /* Sidebar styling with dynamic width */
     [data-testid="stSidebar"] {{
-        width: 220px !important;
-        min-width: 220px !important;
+        width: {sidebar_width}px !important;
+        min-width: {sidebar_width}px !important;
+        max-width: {sidebar_width}px !important;
         background: {'#0f172a' if dark else '#1e293b'} !important;
+        transition: width 0.2s ease !important;
     }}
     
     [data-testid="stSidebar"] > div:first-child {{
-        padding-top: 0.75rem;
-        width: 220px !important;
+        padding-top: 3.5rem;
+        width: {sidebar_width}px !important;
     }}
     
     [data-testid="stSidebar"] .stMarkdown {{
@@ -343,10 +377,11 @@ def inject_premium_css(dark: bool = False) -> None:
         background: transparent !important;
         color: #94a3b8 !important;
         border: none !important;
-        text-align: left !important;
-        padding: 0.5rem 0.75rem !important;
-        font-size: 0.85rem !important;
+        text-align: {'center' if sidebar_collapsed else 'left'} !important;
+        padding: {'0.6rem' if sidebar_collapsed else '0.5rem 0.75rem'} !important;
+        font-size: {'1.2rem' if sidebar_collapsed else '0.85rem'} !important;
         transition: all 0.15s ease !important;
+        min-height: 40px !important;
     }}
     
     [data-testid="stSidebar"] .stButton > button:hover {{
@@ -355,12 +390,12 @@ def inject_premium_css(dark: bool = False) -> None:
     }}
     
     [data-testid="stSidebar"] .stButton > button[kind="primary"] {{
-        background: rgba(0,94,166,0.3) !important;
+        background: rgba(0,102,184,0.3) !important;
         color: #60a5fa !important;
-        border-left: 3px solid #3b82f6 !important;
+        border-left: {'none' if sidebar_collapsed else '3px solid #3b82f6'} !important;
     }}
     
-    /* Top header bar - refined gradient */
+    /* Top header bar - increased contrast */
     .top-header {{
         background: linear-gradient(135deg, {COLORS['primary']} 0%, {COLORS['primary_dark']} 100%);
         padding: 0.75rem 1.25rem;
@@ -368,8 +403,8 @@ def inject_premium_css(dark: bool = False) -> None:
         display: flex;
         align-items: center;
         justify-content: space-between;
-        box-shadow: 0 2px 12px rgba(0,0,0,0.12);
-        border-bottom: 1px solid rgba(255,255,255,0.1);
+        box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+        border-bottom: 2px solid rgba(255,255,255,0.15);
     }}
     
     .header-brand {{
@@ -379,26 +414,27 @@ def inject_premium_css(dark: bool = False) -> None:
     }}
     
     .header-logo {{
-        width: 38px;
-        height: 38px;
-        background: rgba(255,255,255,0.15);
+        width: 40px;
+        height: 40px;
+        background: rgba(255,255,255,0.2);
         border-radius: 10px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 1.3rem;
+        font-size: 1.4rem;
     }}
     
     .header-title {{
         color: white;
-        font-size: 1.35rem;
+        font-size: 1.4rem;
         font-weight: 700;
         margin: 0;
         letter-spacing: -0.02em;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.1);
     }}
     
     .header-subtitle {{
-        color: rgba(255,255,255,0.65);
+        color: rgba(255,255,255,0.75);
         font-size: 0.7rem;
         margin: 0;
         text-transform: uppercase;
@@ -412,35 +448,14 @@ def inject_premium_css(dark: bool = False) -> None:
     }}
     
     .header-badge {{
-        background: rgba(255,255,255,0.15);
+        background: rgba(255,255,255,0.2);
         color: white;
-        padding: 0.35rem 0.75rem;
+        padding: 0.4rem 0.8rem;
         border-radius: 6px;
         font-size: 0.75rem;
-        font-weight: 500;
-        backdrop-filter: blur(4px);
-    }}
-    
-    /* Info icon styling */
-    .info-icon {{
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 18px;
-        height: 18px;
-        border-radius: 50%;
-        background: {'rgba(255,255,255,0.1)' if dark else 'rgba(0,94,166,0.1)'};
-        color: {COLORS['primary']};
-        font-size: 0.7rem;
         font-weight: 600;
-        cursor: help;
-        margin-left: 6px;
-        transition: all 0.15s ease;
-    }}
-    
-    .info-icon:hover {{
-        background: {'rgba(255,255,255,0.2)' if dark else 'rgba(0,94,166,0.2)'};
-        transform: scale(1.1);
+        backdrop-filter: blur(4px);
+        border: 1px solid rgba(255,255,255,0.2);
     }}
     
     /* Premium card styling with better shadows */
@@ -495,13 +510,13 @@ def inject_premium_css(dark: bool = False) -> None:
         font-size: 0.8rem;
     }}
     
-    .status-allowed {{ background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }}
-    .status-blocked {{ background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }}
-    .status-live {{ background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }}
-    .status-snapshot {{ background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }}
-    .status-sample {{ background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }}
+    .status-allowed {{ background: #dcfce7; color: #166534; border: 2px solid #86efac; }}
+    .status-blocked {{ background: #fee2e2; color: #991b1b; border: 2px solid #fca5a5; }}
+    .status-live {{ background: #dbeafe; color: #1e40af; border: 2px solid #93c5fd; }}
+    .status-snapshot {{ background: #fef3c7; color: #92400e; border: 2px solid #fcd34d; }}
+    .status-sample {{ background: #f3f4f6; color: #374151; border: 2px solid #d1d5db; }}
     
-    /* Metrics with colored borders */
+    /* Metrics with colored borders - increased contrast */
     .metric-tile {{
         background: var(--bg-surface);
         border: 1px solid var(--border-color);
@@ -517,9 +532,9 @@ def inject_premium_css(dark: bool = False) -> None:
         box-shadow: 0 4px 12px rgba(0,0,0,0.08);
     }}
     
-    .metric-tile.success {{ border-left: 4px solid var(--success-border); }}
-    .metric-tile.warning {{ border-left: 4px solid var(--warning-border); }}
-    .metric-tile.danger {{ border-left: 4px solid var(--danger-border); }}
+    .metric-tile.success {{ border-left: 5px solid {COLORS['success_border']}; }}
+    .metric-tile.warning {{ border-left: 5px solid {COLORS['warning_border']}; }}
+    .metric-tile.danger {{ border-left: 5px solid {COLORS['danger_border']}; }}
     
     .metric-value {{
         font-size: 1.6rem;
@@ -528,9 +543,9 @@ def inject_premium_css(dark: bool = False) -> None:
         line-height: 1.2;
     }}
     
-    .metric-value.success {{ color: var(--success); }}
-    .metric-value.warning {{ color: var(--warning); }}
-    .metric-value.danger {{ color: var(--danger); }}
+    .metric-value.success {{ color: {COLORS['success']}; }}
+    .metric-value.warning {{ color: {COLORS['warning']}; }}
+    .metric-value.danger {{ color: {COLORS['danger']}; }}
     
     .metric-label {{
         font-size: 0.65rem;
@@ -546,7 +561,7 @@ def inject_premium_css(dark: bool = False) -> None:
     
     /* Slack message simulation - monospace font */
     .slack-message {{
-        background: {'#2d333b' if dark else '#f8f9fa'};
+        background: {'#2d333b' if dark else '#f1f5f9'};
         border-left: 4px solid {COLORS['primary']};
         padding: 0.75rem 1rem;
         margin-top: 0.5rem;
@@ -557,20 +572,20 @@ def inject_premium_css(dark: bool = False) -> None:
         line-height: 1.5;
     }}
     
-    /* Strategy badges */
+    /* Strategy badges with better colors */
     .strategy-badge {{
         display: inline-block;
-        padding: 0.2rem 0.5rem;
+        padding: 0.25rem 0.6rem;
         border-radius: 6px;
         font-size: 0.7rem;
         font-weight: 600;
         letter-spacing: 0.02em;
     }}
     
-    .strategy-csp {{ background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }}
-    .strategy-cc {{ background: #f3e8ff; color: #7c3aed; border: 1px solid #e9d5ff; }}
-    .strategy-put {{ background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }}
-    .strategy-call {{ background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }}
+    .strategy-csp {{ background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }}
+    .strategy-cc {{ background: #f3e8ff; color: #7c3aed; border: 1px solid #d8b4fe; }}
+    .strategy-put {{ background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }}
+    .strategy-call {{ background: #dcfce7; color: #166534; border: 1px solid #86efac; }}
     
     /* Tables */
     .stDataFrame {{
@@ -600,15 +615,19 @@ def inject_premium_css(dark: bool = False) -> None:
         font-size: 0.7rem;
     }}
     
-    /* Selectbox in header styling */
-    .header-select {{
-        background: rgba(255,255,255,0.1);
-        border: 1px solid rgba(255,255,255,0.2);
-        border-radius: 6px;
-        color: white;
-        padding: 0.35rem 0.5rem;
-        font-size: 0.75rem;
-        min-width: 140px;
+    /* Loading spinner */
+    .loading-indicator {{
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+    }}
+    
+    /* Native tooltip styling for abbr */
+    abbr[title] {{
+        text-decoration: none !important;
+        border-bottom: none !important;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -619,7 +638,7 @@ def inject_premium_css(dark: bool = False) -> None:
 # ---------------------------------------------------------------------------
 
 
-def render_top_header(is_sample: bool, dark: bool, current_file: str, available_files: List[str]) -> Tuple[bool, Optional[str], bool]:
+def render_top_header(is_sample: bool, dark: bool, current_file: str, available_files: List[str], error_msg: Optional[str] = None) -> Tuple[bool, Optional[str], bool]:
     """Render the top header bar with controls.
     
     Returns tuple of (new_dark_mode, selected_file_if_changed, refresh_clicked)
@@ -637,8 +656,12 @@ def render_top_header(is_sample: bool, dark: bool, current_file: str, available_
     </div>
     """, unsafe_allow_html=True)
     
+    # Show error message if any
+    if error_msg:
+        st.warning(f"⚠️ {error_msg}")
+    
     # Controls row
-    col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
+    col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
     
     with col1:
         # Data source selector
@@ -648,70 +671,96 @@ def render_top_header(is_sample: bool, dark: bool, current_file: str, available_
         
         selected_file = st.selectbox(
             "📁 Data Source",
-            available_files,
-            index=current_idx,
+            available_files if available_files else ["No files available"],
+            index=current_idx if available_files else 0,
             key="header_file_selector",
-            label_visibility="collapsed",
-            help="Select a snapshot file to load"
+            help="Select a snapshot file to load. Changes take effect immediately."
         )
     
     with col2:
         if is_sample:
-            st.markdown('<span class="header-badge" style="background: #6b7280;">📊 Sample</span>', unsafe_allow_html=True)
+            st.markdown('<div style="padding-top:1.5rem;"><span class="header-badge" style="background:#6b7280;">📊 Sample</span></div>', unsafe_allow_html=True)
         else:
-            st.markdown('<span class="header-badge" style="background: #2aa872;">✓ Live</span>', unsafe_allow_html=True)
+            st.markdown('<div style="padding-top:1.5rem;"><span class="header-badge" style="background:#2aa872;">✓ Live</span></div>', unsafe_allow_html=True)
     
     with col3:
-        new_dark = st.toggle("🌙", value=dark, key="header_dark_toggle", help="Toggle dark mode")
+        st.write("")  # Spacer
+        new_dark = st.toggle("🌙 Dark", value=dark, key="header_dark_toggle", help="Toggle dark mode")
     
     with col4:
-        refresh_clicked = st.button("🔄 Refresh", key="header_refresh", help="Reload data from selected file")
+        st.write("")  # Spacer
+        refresh_clicked = st.button("🔄 Refresh", key="header_refresh", help="Reload data from selected file", use_container_width=True)
     
     # Determine if file changed
-    file_changed = selected_file != current_file
+    file_changed = selected_file != current_file and selected_file != "No files available"
     
     return new_dark, selected_file if file_changed else None, refresh_clicked
 
 
-def render_sidebar(current_page: str, collapsed: bool = False) -> str:
-    """Render the streamlined sidebar with navigation only.
+def render_sidebar(current_page: str, sidebar_collapsed: bool) -> Tuple[str, bool]:
+    """Render the sidebar with navigation.
     
-    Returns the selected page.
+    Returns tuple of (selected_page, toggle_collapsed).
     """
     with st.sidebar:
-        st.markdown("""
-        <div style="padding: 0.25rem 0.5rem; margin-bottom: 0.75rem;">
-            <h2 style="color: white; font-size: 1.1rem; font-weight: 700; margin: 0;">
-                ⚡ ChakraOps
-            </h2>
-        </div>
-        """, unsafe_allow_html=True)
+        # Toggle button for collapse/expand
+        toggle_col1, toggle_col2 = st.columns([1, 1] if not sidebar_collapsed else [1, 0.01])
         
-        st.markdown('<p style="color: #64748b; font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.4rem; padding-left: 0.5rem;">Navigation</p>', unsafe_allow_html=True)
+        with toggle_col1:
+            if not sidebar_collapsed:
+                st.markdown("""
+                <div style="padding: 0.25rem 0.5rem; margin-bottom: 0.5rem;">
+                    <h2 style="color: white; font-size: 1rem; font-weight: 700; margin: 0;">
+                        ⚡ ChakraOps
+                    </h2>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div style="text-align: center; padding: 0.25rem; margin-bottom: 0.5rem;">
+                    <span style="font-size: 1.5rem;">⚡</span>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        # Collapse/expand toggle
+        new_collapsed = st.checkbox(
+            "◀" if not sidebar_collapsed else "▶",
+            value=sidebar_collapsed,
+            key="sidebar_collapse_toggle",
+            help="Collapse/expand sidebar"
+        )
+        
+        if not sidebar_collapsed:
+            st.markdown('<p style="color: #64748b; font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.3rem; padding-left: 0.5rem;">Navigation</p>', unsafe_allow_html=True)
         
         selected_page = current_page
         for label, page_id, icon in NAV_ITEMS:
             is_active = page_id == current_page
+            # Show only icon when collapsed, icon + label when expanded
+            button_label = icon if sidebar_collapsed else f"{icon}  {label}"
+            
             if st.button(
-                f"{icon}  {label}",
+                button_label,
                 key=f"nav_{page_id}",
                 use_container_width=True,
                 type="primary" if is_active else "secondary",
+                help=label if sidebar_collapsed else None,
             ):
                 selected_page = page_id
         
-        st.markdown("<hr style='border-color: rgba(255,255,255,0.1); margin: 0.75rem 0;'>", unsafe_allow_html=True)
-        
-        # Quick stats
-        st.markdown('<p style="color: #64748b; font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.4rem; padding-left: 0.5rem;">Status</p>', unsafe_allow_html=True)
-        st.markdown(f"""
-        <div style="padding: 0.5rem; background: rgba(255,255,255,0.05); border-radius: 8px; font-size: 0.75rem; color: #94a3b8;">
-            <div style="margin-bottom: 0.25rem;">🕐 Last refresh: just now</div>
-            <div>📡 Connection: Active</div>
-        </div>
-        """, unsafe_allow_html=True)
+        if not sidebar_collapsed:
+            st.markdown("<hr style='border-color: rgba(255,255,255,0.1); margin: 0.5rem 0;'>", unsafe_allow_html=True)
+            
+            # Quick stats
+            st.markdown('<p style="color: #64748b; font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.3rem; padding-left: 0.5rem;">Status</p>', unsafe_allow_html=True)
+            st.markdown(f"""
+            <div style="padding: 0.4rem; background: rgba(255,255,255,0.05); border-radius: 8px; font-size: 0.7rem; color: #94a3b8;">
+                <div style="margin-bottom: 0.2rem;">🕐 Last refresh: now</div>
+                <div>📡 Active</div>
+            </div>
+            """, unsafe_allow_html=True)
     
-    return selected_page
+    return selected_page, new_collapsed
 
 
 def render_hero(data: Dict[str, Any], parsed: Dict[str, Any], is_sample: bool, dark: bool, loaded_file: str) -> None:
@@ -743,8 +792,8 @@ def render_hero(data: Dict[str, Any], parsed: Dict[str, Any], is_sample: bool, d
             <span style="color: var(--text-secondary); font-size: 0.8rem;">
                 📅 {formatted_time}
             </span>
-            <span style="color: var(--text-secondary); font-size: 0.75rem; opacity: 0.7;">
-                | File: {loaded_file}
+            <span style="color: var(--text-secondary); font-size: 0.72rem; opacity: 0.8;">
+                | 📁 {loaded_file}
             </span>
         </div>
     </div>
@@ -770,12 +819,12 @@ def render_hero(data: Dict[str, Any], parsed: Dict[str, Any], is_sample: bool, d
     for col, (label, value, color_class, border_class) in zip(cols, metrics):
         with col:
             tooltip = METRIC_TOOLTIPS.get(label, "")
+            tooltip_html = _tooltip_icon(tooltip)
             st.markdown(f"""
-            <div class="metric-tile {border_class}" title="{tooltip}">
+            <div class="metric-tile {border_class}">
                 <div class="metric-value {color_class}">{value}</div>
                 <div class="metric-label">
-                    {label}
-                    <span class="info-icon" title="{tooltip}">?</span>
+                    {label}{tooltip_html}
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -795,11 +844,11 @@ def render_charts(parsed: Dict[str, Any], dark: bool) -> None:
     
     with col1:
         tooltip = CARD_TOOLTIPS.get("Exclusion Breakdown", "")
+        tooltip_html = _tooltip_icon(tooltip)
         st.markdown(f"""
         <div class="premium-card">
             <div class="card-header">
-                <h3 class="card-title">📊 Exclusion Breakdown</h3>
-                <span class="info-icon" title="{tooltip}">?</span>
+                <h3 class="card-title">📊 Exclusion Breakdown{tooltip_html}</h3>
             </div>
         """, unsafe_allow_html=True)
         
@@ -810,7 +859,7 @@ def render_charts(parsed: Dict[str, Any], dark: bool) -> None:
         if not rule_counts:
             exclusions = parsed.get("exclusions", [])
             if exclusions:
-                rule_counts = Counter(e.get("rule", "UNKNOWN") for e in exclusions)
+                rule_counts = dict(Counter(e.get("rule", "UNKNOWN") for e in exclusions))
         
         if rule_counts and has_plotly:
             df = pd.DataFrame([
@@ -840,17 +889,17 @@ def render_charts(parsed: Dict[str, Any], dark: bool) -> None:
             ])
             st.bar_chart(df.set_index("Rule"), use_container_width=True, height=200)
         else:
-            st.info("No exclusion data available")
+            st.info("📭 No exclusion data available in this snapshot")
         
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
         tooltip = CARD_TOOLTIPS.get("Candidate Distribution", "")
+        tooltip_html = _tooltip_icon(tooltip)
         st.markdown(f"""
         <div class="premium-card">
             <div class="card-header">
-                <h3 class="card-title">📈 Candidate Distribution</h3>
-                <span class="info-icon" title="{tooltip}">?</span>
+                <h3 class="card-title">📈 Candidate Distribution{tooltip_html}</h3>
             </div>
         """, unsafe_allow_html=True)
         
@@ -908,7 +957,7 @@ def render_charts(parsed: Dict[str, Any], dark: bool) -> None:
             ])
             st.bar_chart(df.set_index("Strategy"), use_container_width=True, height=200)
         else:
-            st.info("No candidate data available")
+            st.info("📭 No candidate data available in this snapshot")
         
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -918,11 +967,11 @@ def render_candidates_table(parsed: Dict[str, Any], dark: bool) -> None:
     import pandas as pd
     
     tooltip = CARD_TOOLTIPS.get("Top Candidates", "")
+    tooltip_html = _tooltip_icon(tooltip)
     st.markdown(f"""
     <div class="premium-card">
         <div class="card-header">
-            <h3 class="card-title">🎯 Top Candidates</h3>
-            <span class="info-icon" title="{tooltip}">?</span>
+            <h3 class="card-title">🎯 Top Candidates{tooltip_html}</h3>
         </div>
     """, unsafe_allow_html=True)
     
@@ -982,7 +1031,7 @@ def render_candidates_table(parsed: Dict[str, Any], dark: bool) -> None:
             df = pd.DataFrame(rows)
             st.dataframe(df, use_container_width=True, hide_index=True)
         else:
-            st.info("No candidates to display. Select a data file with candidate data.")
+            st.info("📭 No candidates to display. Select a data file with candidate data from the dropdown above.")
     
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -994,7 +1043,7 @@ def render_detail_panels(data: Dict[str, Any], parsed: Dict[str, Any], dark: boo
     # Selected Signals Panel with Slack simulation
     tooltip = CARD_TOOLTIPS.get("Selected Signals", "")
     with st.expander(f"📌 Selected Signals & Slack Alerts", expanded=True):
-        st.markdown(f'<small style="color: var(--text-secondary);">{tooltip}</small>', unsafe_allow_html=True)
+        st.caption(tooltip)
         
         selected = parsed.get("selected_signals", []) or []
         if selected:
@@ -1010,7 +1059,7 @@ def render_detail_panels(data: Dict[str, Any], parsed: Dict[str, Any], dark: boo
                 delta_str = f"{_safe_float(delta):.2f}" if delta is not None else "N/A"
                 strategy = _get_strategy_label(candidate)
                 
-                strategy_class = "strategy-csp" if strategy == "CSP" else ("strategy-cc" if strategy == "CC" else "strategy-put")
+                strategy_class = "strategy-csp" if strategy == "CSP" else ("strategy-cc" if strategy == "CC" else ("strategy-call" if strategy == "CALL" else "strategy-put"))
                 
                 st.markdown(f"""
                 <div class="premium-card" style="margin-bottom: 0.75rem; padding: 1rem;">
@@ -1035,12 +1084,12 @@ def render_detail_panels(data: Dict[str, Any], parsed: Dict[str, Any], dark: boo
                 </div>
                 """, unsafe_allow_html=True)
         else:
-            st.info("No signals selected in this snapshot")
+            st.info("📭 No signals selected in this snapshot")
     
     # Exclusions Panel
     tooltip = CARD_TOOLTIPS.get("Exclusions by Rule", "")
     with st.expander(f"🚫 Exclusions by Rule", expanded=False):
-        st.markdown(f'<small style="color: var(--text-secondary);">{tooltip}</small>', unsafe_allow_html=True)
+        st.caption(tooltip)
         
         exclusion_summary = parsed.get("exclusion_summary", {})
         symbols_by_rule = exclusion_summary.get("symbols_by_rule", {})
@@ -1059,12 +1108,12 @@ def render_detail_panels(data: Dict[str, Any], parsed: Dict[str, Any], dark: boo
                 ])
                 st.dataframe(df, use_container_width=True, hide_index=True)
             else:
-                st.info("No exclusions recorded in this snapshot")
+                st.info("📭 No exclusions recorded in this snapshot")
     
     # Execution Plan Panel
     tooltip = CARD_TOOLTIPS.get("Execution Plan", "")
     with st.expander(f"📋 Execution Plan", expanded=False):
-        st.markdown(f'<small style="color: var(--text-secondary);">{tooltip}</small>', unsafe_allow_html=True)
+        st.caption(tooltip)
         
         plan = data.get("execution_plan", {})
         orders = plan.get("orders", [])
@@ -1086,9 +1135,9 @@ def render_detail_panels(data: Dict[str, Any], parsed: Dict[str, Any], dark: boo
         else:
             blocked_reason = plan.get("blocked_reason", "No orders generated")
             if blocked_reason:
-                st.warning(f"Execution blocked: {_humanize_label(blocked_reason)}")
+                st.warning(f"⚠️ Execution blocked: {_humanize_label(blocked_reason)}")
             else:
-                st.info("No orders in execution plan")
+                st.info("📭 No orders in execution plan")
 
 
 def render_footer() -> None:
@@ -1205,6 +1254,10 @@ def main() -> None:
         st.session_state.selected_snapshot = None
     if "loaded_file" not in st.session_state:
         st.session_state.loaded_file = None
+    if "sidebar_collapsed" not in st.session_state:
+        st.session_state.sidebar_collapsed = False
+    if "load_error" not in st.session_state:
+        st.session_state.load_error = None
     
     # Get available snapshot files
     available_files = get_available_snapshots()
@@ -1212,23 +1265,25 @@ def main() -> None:
         available_files = ["No files available"]
     
     # Load data based on selected snapshot or auto-detect
-    data, is_sample, loaded_file = load_decision_data(st.session_state.selected_snapshot)
+    data, is_sample, loaded_file, error_msg = load_decision_data(st.session_state.selected_snapshot)
     st.session_state.loaded_file = loaded_file
+    st.session_state.load_error = error_msg
     parsed = parse_snapshot(data)
     
-    # Inject CSS first
-    inject_premium_css(st.session_state.dark_mode)
+    # Inject CSS first (with sidebar state)
+    inject_premium_css(st.session_state.dark_mode, st.session_state.sidebar_collapsed)
     
     # Render top header and get control states
     new_dark_mode, new_file, refresh_clicked = render_top_header(
         is_sample, 
         st.session_state.dark_mode, 
         loaded_file,
-        available_files
+        available_files,
+        st.session_state.load_error
     )
     
-    # Render sidebar and get current page
-    selected_page = render_sidebar(st.session_state.current_page)
+    # Render sidebar and get current page + collapse state
+    selected_page, new_collapsed = render_sidebar(st.session_state.current_page, st.session_state.sidebar_collapsed)
     
     # Handle state changes
     needs_rerun = False
@@ -1241,13 +1296,18 @@ def main() -> None:
         st.session_state.dark_mode = new_dark_mode
         needs_rerun = True
     
+    if new_collapsed != st.session_state.sidebar_collapsed:
+        st.session_state.sidebar_collapsed = new_collapsed
+        needs_rerun = True
+    
     if new_file:
         st.session_state.selected_snapshot = new_file
+        st.session_state.load_error = None  # Clear previous error
         needs_rerun = True
     
     if refresh_clicked:
-        # Force reload by clearing cache-like behavior
-        st.session_state.selected_snapshot = st.session_state.selected_snapshot  # Keep same file
+        # Force reload
+        st.session_state.load_error = None  # Clear previous error
         needs_rerun = True
     
     if needs_rerun:

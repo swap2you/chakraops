@@ -15,21 +15,25 @@ import streamlit as st
 # Design tokens (Stripe/GitHub-ish: calm, spacious, high contrast for status)
 # ---------------------------------------------------------------------------
 
+# Sidebar dimensions
+SIDEBAR_EXPANDED_WIDTH = 220  # px - icons + text
+SIDEBAR_COLLAPSED_WIDTH = 70   # px - icons only
+
 # Colors - Premium professional palette with refined contrast
 COLORS = {
     "bg": "#f5f7fa",
     "card_bg": "#ffffff",
-    "border": "#e1e4e8",
-    "border_light": "#eaeef2",
+    "border": "#d0d7de",      # Slightly darker for better visibility
+    "border_light": "#e1e4e8",
     "text_primary": "#24292f",
     "text_muted": "#57606a",
-    "accent": "#005ea6",      # Slightly lighter primary blue for headers
-    "primary": "#005ea6",     # Alias for accent
-    "primary_dark": "#004580",  # Darker variant for gradients
+    "accent": "#0066b8",      # Increased contrast primary blue
+    "primary": "#0066b8",     # Alias for accent
+    "primary_dark": "#004d8c",  # Darker variant for gradients
     "success": "#2aa872",     # Green for positive metrics
     "success_border": "#1e8a5e",  # Darker green for borders
-    "warning": "#e0a800",     # Amber for caution
-    "warning_border": "#c49300",  # Darker amber for borders
+    "warning": "#d4940a",     # Slightly darker amber for better contrast
+    "warning_border": "#b37d08",  # Darker amber for borders
     "danger": "#d9534f",      # Red for negative metrics
     "danger_border": "#c9302c",  # Darker red for borders
     "neutral": "#6c757d",     # Grey for neutral

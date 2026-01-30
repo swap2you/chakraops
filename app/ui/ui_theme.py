@@ -15,19 +15,21 @@ import streamlit as st
 # Design tokens (Stripe/GitHub-ish: calm, spacious, high contrast for status)
 # ---------------------------------------------------------------------------
 
-# Colors - Muted, professional palette
+# Colors - Premium professional palette
 COLORS = {
-    "bg": "#f6f8fa",
+    "bg": "#f5f7fa",
     "card_bg": "#ffffff",
-    "border": "#d0d7de",
+    "border": "#e1e4e8",
     "border_light": "#eaeef2",
-    "text_primary": "#1f2328",
-    "text_muted": "#656d76",
-    "accent": "#007acc",  # More muted blue
-    "success": "#1a7f37",
-    "warning": "#9a6700",
-    "danger": "#cf222e",
-    "nav_bg": "#1f2328",
+    "text_primary": "#24292f",
+    "text_muted": "#57606a",
+    "accent": "#007acc",      # Primary blue
+    "primary": "#007acc",     # Alias for accent
+    "success": "#2aa872",     # Green for positive metrics
+    "warning": "#e0a800",     # Amber for caution
+    "danger": "#d9534f",      # Red for negative metrics
+    "neutral": "#6c757d",     # Grey for neutral
+    "nav_bg": "#1e293b",
     "nav_text": "#e6edf3",
     "nav_text_muted": "#8b949e",
 }
@@ -74,18 +76,20 @@ STATUS_TONE = {
     "FAIL": "danger",
 }
 
-# Option Alpha–style palette: light greys, muted blues, red/green accents
+# Premium palette: professional trading platform aesthetic
 PALETTE_LIGHT = {
-    "bg": "#f5f6f8",
+    "bg": "#f5f7fa",
     "surface": "#ffffff",
     "border": "#e1e4e8",
     "text_primary": "#24292f",
     "text_secondary": "#57606a",
-    "accent": "#007acc",      # More muted blue
+    "accent": "#007acc",
     "accent_muted": "#4da6d9",
-    "success": "#1a7f37",
-    "danger": "#cf222e",
-    "warning": "#b08800",     # Slightly warmer warning
+    "primary": "#007acc",
+    "success": "#2aa872",
+    "danger": "#d9534f",
+    "warning": "#e0a800",
+    "neutral": "#6c757d",
 }
 
 PALETTE_DARK = {
@@ -94,11 +98,13 @@ PALETTE_DARK = {
     "border": "#30363d",
     "text_primary": "#e6edf3",
     "text_secondary": "#8b949e",
-    "accent": "#4da6d9",      # More muted blue for dark mode
-    "accent_muted": "#3d8fc2",
+    "accent": "#58a6ff",
+    "accent_muted": "#388bfd",
+    "primary": "#58a6ff",
     "success": "#3fb950",
     "danger": "#f85149",
     "warning": "#d29922",
+    "neutral": "#8b949e",
 }
 
 

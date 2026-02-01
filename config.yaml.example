@@ -65,10 +65,10 @@ guardrails:
   min_stock_price: 10.0
   # Max trades per sector for diversification (advisory; sector data required).
   max_trades_per_sector: 3
-  # Advisory stop-loss: exit if underlying drops this % below strike (manual/broker).
-  stop_loss_pct: null
-  # Advisory profit target: close at this % of max profit (e.g. 0.50 = 50%).
-  profit_target_pct: null
+  # Stop-loss: exit if underlying drops this % below CSP strike (e.g. 20 = 20%). Advisory; call send_exit_alert when hit.
+  stop_loss_percent: 20.0
+  # Take-profit: close at this % of max profit (e.g. 50 = 50%). Advisory; call send_exit_alert when hit.
+  take_profit_percent: 50.0
 
 # Logging configuration
 logging:

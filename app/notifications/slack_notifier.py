@@ -6,11 +6,14 @@ It does NOT execute trades or call brokers.
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 from app.execution.execution_gate import ExecutionGateResult
 from app.execution.execution_plan import ExecutionPlan
@@ -121,18 +124,21 @@ def send_decision_alert(
         last_drift_severity: Previous max drift severity (for optional filtering)
         heartbeat: If True, always post (e.g. once-per-day summary)
 
+    Returns:
+        True if message was sent, False if webhook not configured or alert skipped.
+
     Raises:
-        ValueError: If webhook URL is not provided and not found in environment.
-        requests.RequestException: If HTTP request fails.
+        requests.RequestException: If HTTP request fails (only when webhook is configured).
     """
     if webhook_url is None:
         webhook_url = os.getenv("SLACK_WEBHOOK_URL")
     
-    if not webhook_url:
-        raise ValueError(
-            "SLACK_WEBHOOK_URL is not set. "
-            "Slack alerts are optional. Set SLACK_WEBHOOK_URL to enable alerts."
+    if not webhook_url or not str(webhook_url).strip():
+        logger.warning(
+            "SLACK_WEBHOOK_URL is not set. Slack alerts disabled. "
+            "Set SLACK_WEBHOOK_URL to enable alerts."
         )
+        return False
 
     if not should_post_slack_alert(
         gate_result.allowed,
@@ -337,8 +343,59 @@ def send_decision_alert(
         raise ValueError(f"Failed to send Slack message: {exc}") from exc
 
 
+def send_exit_alert(
+    symbol: str,
+    strike: float,
+    reason: str,
+    detail: Optional[str] = None,
+    webhook_url: Optional[str] = None,
+) -> bool:
+    """Send a STOP or EXIT notification to Slack when a trade hits stop-loss or profit-target.
+
+    Call this from a monitor or manual process when a position satisfies exit criteria.
+    Does nothing if SLACK_WEBHOOK_URL is not set (logs warning and returns False).
+
+    Args:
+        symbol: Underlying symbol (e.g. AAPL).
+        strike: Option strike price.
+        reason: "STOP" (stop-loss) or "EXIT" (profit target).
+        detail: Optional detail (e.g. "Underlying -20% below strike").
+        webhook_url: Optional webhook URL (defaults to SLACK_WEBHOOK_URL).
+
+    Returns:
+        True if message was sent, False if webhook not set or send failed.
+    """
+    url = webhook_url or os.getenv("SLACK_WEBHOOK_URL")
+    if not url or not str(url).strip():
+        logger.warning("SLACK_WEBHOOK_URL not set. Exit alert not sent.")
+        return False
+    lines = [
+        "*ChakraOps Exit Alert*",
+        "",
+        f"*{reason}* | *{symbol}* ${strike:.0f}",
+    ]
+    if detail:
+        lines.append(detail)
+    lines.append("")
+    lines.append("_Manual execution only. No trades are auto-executed._")
+    message = "\n".join(lines)
+    try:
+        response = requests.post(
+            url,
+            json={"text": message},
+            headers={"Content-Type": "application/json"},
+            timeout=10,
+        )
+        response.raise_for_status()
+        return True
+    except requests.RequestException as e:
+        logger.warning("Failed to send exit alert to Slack: %s", e)
+        return False
+
+
 __all__ = [
     "send_decision_alert",
+    "send_exit_alert",
     "should_post_slack_alert",
     "slack_webhook_available",
 ]

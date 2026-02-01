@@ -203,9 +203,9 @@ def load_config(*, reload: bool = False) -> ChakraOpsConfig:
         "GUARDRAILS_MAX_TRADES_PER_SECTOR",
         str(guardrails_raw.get("max_trades_per_sector", 3))
     ))
-    stop_loss_raw = guardrails_raw.get("stop_loss_pct")
+    stop_loss_raw = guardrails_raw.get("stop_loss_percent") or guardrails_raw.get("stop_loss_pct")
     stop_loss_pct = float(stop_loss_raw) if stop_loss_raw is not None else None
-    profit_target_raw = guardrails_raw.get("profit_target_pct")
+    profit_target_raw = guardrails_raw.get("take_profit_percent") or guardrails_raw.get("profit_target_pct")
     profit_target_pct = float(profit_target_raw) if profit_target_raw is not None else None
     guardrails_config = GuardrailsConfig(
         min_stock_price=min_stock_price,

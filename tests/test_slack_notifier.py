@@ -9,13 +9,13 @@ import pytest
 
 from app.execution.execution_gate import ExecutionGateResult
 from app.execution.execution_plan import ExecutionPlan, ExecutionOrder
-from app.notifications.slack_notifier import send_decision_alert
+from app.notifications.slack_notifier import send_decision_alert, send_exit_alert
 from app.signals.decision_snapshot import DecisionSnapshot
 from app.market.drift_detector import DriftReason, DriftStatus, DriftItem
 
 
 def test_send_decision_alert_blocked_no_webhook() -> None:
-    """Test that missing webhook URL raises ValueError."""
+    """Test that missing webhook URL returns False (graceful; no exception)."""
     snapshot = DecisionSnapshot(
         as_of="2026-01-28T10:00:00",
         universe_id_or_hash="test",
@@ -29,8 +29,8 @@ def test_send_decision_alert_blocked_no_webhook() -> None:
     execution_plan = ExecutionPlan(allowed=False, blocked_reason="NO_SELECTED_SIGNALS", orders=[])
 
     with patch.dict("os.environ", {}, clear=True):
-        with pytest.raises(ValueError, match="SLACK_WEBHOOK_URL is not set"):
-            send_decision_alert(snapshot, gate_result, execution_plan)
+        result = send_decision_alert(snapshot, gate_result, execution_plan)
+    assert result is False
 
 
 @patch("app.notifications.slack_notifier.requests.post")
@@ -263,3 +263,32 @@ def test_send_decision_alert_with_drift_status(mock_post: MagicMock) -> None:
     assert "WARN" in message or "BLOCK" in message or "INFO" in message
     assert "PRICE_DRIFT" in message
     assert "AAPL" in message
+
+
+def test_send_exit_alert_no_webhook() -> None:
+    """When webhook is not set, send_exit_alert returns False (no exception)."""
+    with patch.dict("os.environ", {}, clear=True):
+        result = send_exit_alert("AAPL", 150.0, "STOP", detail="Underlying -20% below strike")
+    assert result is False
+
+
+@patch("app.notifications.slack_notifier.requests.post")
+def test_send_exit_alert_sent(mock_post: MagicMock) -> None:
+    """When webhook is set, send_exit_alert posts and returns True."""
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.raise_for_status = MagicMock()
+    mock_post.return_value = mock_response
+
+    with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/test"}):
+        result = send_exit_alert("AAPL", 150.0, "EXIT", detail="50% of max profit")
+
+    assert result is True
+    mock_post.assert_called_once()
+    payload = mock_post.call_args[1]["json"]
+    message = payload["text"]
+    assert "ChakraOps Exit Alert" in message
+    assert "EXIT" in message
+    assert "AAPL" in message
+    assert "150" in message
+    assert "50% of max profit" in message

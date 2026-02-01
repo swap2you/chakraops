@@ -59,6 +59,17 @@ realtime:
   # Uses local time. Default is 16:00:00 EST (US market close)
   end_time: "16:00:00"
 
+# Optional guardrails
+guardrails:
+  # Minimum stock price to avoid penny stocks (enforced in universe filter).
+  min_stock_price: 10.0
+  # Max trades per sector for diversification (advisory; sector data required).
+  max_trades_per_sector: 3
+  # Advisory stop-loss: exit if underlying drops this % below strike (manual/broker).
+  stop_loss_pct: null
+  # Advisory profit target: close at this % of max profit (e.g. 0.50 = 50%).
+  profit_target_pct: null
+
 # Logging configuration
 logging:
   level: INFO

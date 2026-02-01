@@ -48,6 +48,14 @@ Pipeline complete:
 
 ## 3. CSP/CC Selection Logic
 
+### Selection Logic Summary
+
+- **DTE range:** 7–45 days to expiration.
+- **OTM%:** CSP 3–20%, CC 2–15% (by underlying price).
+- **Min credit / bid:** Bid ≥ $0.01; effective min credit ~$0.10.
+- **Max spread:** Bid-ask spread ≤ 25%.
+- **Delta and open interest:** Not available for Standard subscriptions (`quote_bulk`); selection uses OTM% only; OI filter is skipped when OI is N/A.
+
 ### Base Configuration (All Strategies)
 
 | Parameter           | Value   | Description |
@@ -183,29 +191,19 @@ Before executing any signals, manually verify:
 
 ### Scoring Weights (Phase 4A)
 
-The current scoring configuration:
+Scoring uses premium (credit), DTE, spread, OTM, and liquidity. For Standard subscriptions, delta and IV are not available from `quote_bulk`, so the configured weights emphasize credit, DTE, and liquidity:
 
 ```python
 ScoringConfig(
-    credit_weight=0.35,     # Premium received
-    delta_weight=0.25,      # Risk level (0 if delta unavailable)
-    iv_weight=0.20,         # Implied volatility value (0 if IV unavailable)
-    dte_weight=0.10,        # Time value
-    liquidity_weight=0.10,  # Volume/OI quality
+    premium_weight=0.50,    # Credit / premium received (50%)
+    dte_weight=0.25,        # Time value (25%)
+    liquidity_weight=0.25,   # Liquidity (25%)
+    spread_weight=0.0,     # Spread (0 when not differentiating)
+    otm_weight=0.0,         # OTM (0 when using OTM% for selection only)
 )
 ```
 
-**Recommendation:** Since delta and IV are not available from `quote_bulk`, consider adjusting weights:
-
-```python
-ScoringConfig(
-    credit_weight=0.50,     # Increase credit importance
-    delta_weight=0.00,      # Disable (data not available)
-    iv_weight=0.00,         # Disable (data not available)
-    dte_weight=0.25,        # Increase time value importance
-    liquidity_weight=0.25,  # Increase liquidity importance
-)
-```
+**Note:** Delta and open interest are unavailable for Standard subscriptions; selection is OTM%-based and OI filtering is skipped.
 
 ---
 

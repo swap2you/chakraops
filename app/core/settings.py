@@ -51,11 +51,21 @@ class RealtimeConfig:
 
 
 @dataclass(frozen=True)
+class GuardrailsConfig:
+    """Optional guardrails (min price enforced; sector/stop-loss/profit advisory)."""
+    min_stock_price: float
+    max_trades_per_sector: int
+    stop_loss_pct: Optional[float]
+    profit_target_pct: Optional[float]
+
+
+@dataclass(frozen=True)
 class ChakraOpsConfig:
     """Root configuration object."""
     theta: ThetaConfig
     snapshots: SnapshotConfig
     realtime: RealtimeConfig
+    guardrails: GuardrailsConfig
     debug: bool
 
 
@@ -183,6 +193,27 @@ def load_config(*, reload: bool = False) -> ChakraOpsConfig:
         end_time=realtime_end_time,
     )
     
+    # Guardrails (min_stock_price enforced; sector/stop-loss/profit advisory)
+    guardrails_raw = raw.get("guardrails", {}) or {}
+    min_stock_price = float(os.getenv(
+        "GUARDRAILS_MIN_STOCK_PRICE",
+        str(guardrails_raw.get("min_stock_price", 10.0))
+    ))
+    max_trades_per_sector = int(os.getenv(
+        "GUARDRAILS_MAX_TRADES_PER_SECTOR",
+        str(guardrails_raw.get("max_trades_per_sector", 3))
+    ))
+    stop_loss_raw = guardrails_raw.get("stop_loss_pct")
+    stop_loss_pct = float(stop_loss_raw) if stop_loss_raw is not None else None
+    profit_target_raw = guardrails_raw.get("profit_target_pct")
+    profit_target_pct = float(profit_target_raw) if profit_target_raw is not None else None
+    guardrails_config = GuardrailsConfig(
+        min_stock_price=min_stock_price,
+        max_trades_per_sector=max_trades_per_sector,
+        stop_loss_pct=stop_loss_pct,
+        profit_target_pct=profit_target_pct,
+    )
+    
     # App-level settings
     app_raw = raw.get("app", {}) or {}
     debug = os.getenv("CHAKRAOPS_DEBUG", "").lower() in ("true", "1", "yes") or \
@@ -192,6 +223,7 @@ def load_config(*, reload: bool = False) -> ChakraOpsConfig:
         theta=theta_config,
         snapshots=snapshot_config,
         realtime=realtime_config,
+        guardrails=guardrails_config,
         debug=bool(debug),
     )
     
@@ -253,6 +285,16 @@ def get_theta_strike_limit() -> int:
     return load_config().theta.strike_limit
 
 
+def get_min_stock_price() -> float:
+    """Convenience: return minimum stock price guardrail (e.g. avoid penny stocks)."""
+    return load_config().guardrails.min_stock_price
+
+
+def get_max_trades_per_sector() -> int:
+    """Convenience: return max trades per sector (advisory diversification)."""
+    return load_config().guardrails.max_trades_per_sector
+
+
 __all__ = [
     "ChakraOpsConfig",
     "ThetaConfig",
@@ -269,4 +311,6 @@ __all__ = [
     "get_output_dir",
     "get_realtime_refresh_interval",
     "get_realtime_end_time",
+    "get_min_stock_price",
+    "get_max_trades_per_sector",
 ]

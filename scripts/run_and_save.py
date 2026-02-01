@@ -28,6 +28,7 @@ repo_root = Path(__file__).parent.parent
 sys.path.insert(0, str(repo_root))
 
 from app.core.settings import (
+    get_min_stock_price,
     get_output_dir,
     get_snapshot_max_files,
     get_snapshot_retention_days,
@@ -183,7 +184,10 @@ def run_pipeline(
     if not realtime_mode:
         print(f"Symbols from DB: {len(enabled_symbols)}")
     
-    universe_manager = StockUniverseManager(snapshot_provider, symbols_from_db=enabled_symbols)
+    min_price = get_min_stock_price()
+    universe_manager = StockUniverseManager(
+        snapshot_provider, symbols_from_db=enabled_symbols, min_price=min_price
+    )
     eligible_stocks = universe_manager.get_eligible_stocks()
     
     if args.limit:
@@ -192,10 +196,13 @@ def run_pipeline(
     if not realtime_mode:
         print(f"Processing {len(eligible_stocks)} symbols...")
     
-    # Configuration - use lower DTE window to ensure data exists
+    # Configuration - credit 50%, DTE 25%, liquidity 25% (delta/IV unavailable for Standard)
     scoring_config = ScoringConfig(
-        premium_weight=1.0, dte_weight=1.0, spread_weight=1.0,
-        otm_weight=1.0, liquidity_weight=1.0,
+        premium_weight=0.50,
+        dte_weight=0.25,
+        liquidity_weight=0.25,
+        spread_weight=0.0,
+        otm_weight=0.0,
     )
     
     selection_config = SelectionConfig(
@@ -429,7 +436,9 @@ def main() -> int:
     
     # Slack notification (only on gate state change)
     slack_state_path = output_dir / ".slack_state.json"
-    gate_result = output_data.get("execution_gate", {})
+    gate_result_dict = output_data.get("execution_gate", {})
+    plan_dict = output_data.get("execution_plan", {})
+    snapshot_dict = output_data.get("decision_snapshot", {})
     
     last_gate_allowed = None
     if slack_state_path.exists():
@@ -441,21 +450,47 @@ def main() -> int:
             pass
     
     try:
+        from types import SimpleNamespace
+        from app.execution.execution_gate import ExecutionGateResult
+        from app.execution.execution_plan import ExecutionPlan, ExecutionOrder
         from app.notifications.slack_notifier import send_decision_alert
+
+        gate_result = ExecutionGateResult(
+            allowed=bool(gate_result_dict.get("allowed", False)),
+            reasons=list(gate_result_dict.get("reasons") or []),
+        )
+        orders = []
+        for o in plan_dict.get("orders") or []:
+            orders.append(ExecutionOrder(
+                symbol=o.get("symbol", ""),
+                action=o.get("action", "SELL_TO_OPEN"),
+                strike=float(o.get("strike", 0)),
+                expiry=o.get("expiry", ""),
+                option_right=o.get("option_right", "PUT"),
+                quantity=int(o.get("quantity", 1)),
+                limit_price=float(o.get("limit_price", 0)),
+            ))
+        execution_plan = ExecutionPlan(
+            allowed=bool(plan_dict.get("allowed", False)),
+            blocked_reason=plan_dict.get("blocked_reason"),
+            orders=orders,
+        )
+        snapshot = SimpleNamespace(**snapshot_dict) if snapshot_dict else SimpleNamespace()
+
         sent = send_decision_alert(
-            snapshot=output_data.get("decision_snapshot", {}),
+            snapshot=snapshot,
             gate_result=gate_result,
-            execution_plan=output_data.get("execution_plan", {}),
+            execution_plan=execution_plan,
             decision_file_path=timestamped_file,
             last_gate_allowed=last_gate_allowed,
         )
-        
+
         try:
             with open(slack_state_path, "w") as f:
-                json.dump({"last_gate_allowed": gate_result.get("allowed")}, f)
+                json.dump({"last_gate_allowed": gate_result.allowed}, f)
         except OSError:
             pass
-        
+
         if sent:
             print("  Slack alert sent")
     except Exception as e:

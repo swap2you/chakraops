@@ -14,10 +14,20 @@ A modern, professional trading dashboard with:
 from __future__ import annotations
 
 import json
+import os
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+# Try to import Slack notifier for Test page
+try:
+    from app.notifications.slack_notifier import slack_webhook_available
+    SLACK_AVAILABLE = True
+except ImportError:
+    SLACK_AVAILABLE = False
+    def slack_webhook_available() -> Tuple[bool, str]:
+        return False, "Slack notifier not available"
 
 # Try to import Theta pipeline for Test page
 try:
@@ -721,19 +731,16 @@ def render_candidates_table(parsed: Dict) -> None:
             cand = sc.get("candidate", {})
             score = _extract_score(sc.get("score", 0))
             symbol = cand.get("symbol", "")
-            strike = _safe_float(cand.get("strike", 0))
-            mid = _safe_float(cand.get("mid", 0))
             delta = cand.get("delta")
             iv = cand.get("iv")
-            
             rows.append({
                 "Symbol": symbol,
                 "Type": _get_strategy_label(cand),
-                "Strike": f"${strike:,.2f}",
+                "Strike": safe_currency(cand.get("strike"), "—"),
                 "Exp": cand.get("expiry", "") or cand.get("expiration", ""),
-                "Premium": f"${mid:,.2f}",
+                "Premium": safe_currency(cand.get("mid"), "—"),
                 "Delta": safe_delta(delta, "—"),
-                "IV": safe_percent(iv, "—") if iv else "—",
+                "IV": safe_percent(iv, "—"),
                 f"Score (0-{int(SCORE_MAX)})": _format_score(score),
                 "Selected": "Yes" if symbol in selected_symbols else "",
             })
@@ -759,20 +766,21 @@ def render_candidates_table(parsed: Dict) -> None:
 
 def render_signals_panel(parsed: Dict) -> None:
     """Render selected signals with Slack messages."""
-    tt = _tooltip(CARD_TOOLTIPS["Selected Signals"])
-    with st.expander(f"📌 Selected Signals{tt}", expanded=True):
+    with st.expander("📌 Selected Signals", expanded=True):
         selected = parsed.get("selected_signals", []) or []
         if selected:
             for signal in selected:
                 scored = signal.get("scored", {})
                 cand = scored.get("candidate", {})
                 score = _extract_score(scored.get("score", 0))
-                strike = _safe_float(cand.get("strike", 0))
-                mid = _safe_float(cand.get("mid", 0))
+                strike_raw = cand.get("strike")
+                mid_raw = cand.get("mid")
                 delta = cand.get("delta")
                 strategy = _get_strategy_label(cand)
                 strat_class = f"strat-{strategy.lower()}" if strategy.lower() in ["csp", "cc", "put", "call"] else "strat-csp"
-                
+                strike_str = safe_currency(strike_raw, "—") if strike_raw is None else f"${_safe_float(strike_raw):,.2f}"
+                premium_str = safe_currency(mid_raw, "—")
+                delta_str = safe_delta(delta, "—")
                 st.markdown(f"""
                 <div class="card" style="padding:0.75rem;">
                     <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -781,8 +789,8 @@ def render_signals_panel(parsed: Dict) -> None:
                         <span style="font-weight:600;color:var(--success);">{_format_score(score)}</span>
                     </div>
                     <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.3rem;">
-                        Strike: <b>${strike:,.2f}</b> | Exp: <b>{cand.get('expiry', '') or cand.get('expiration', 'N/A')}</b> | 
-                        Premium: <b>${mid:.2f}</b> | Delta: <b>{safe_delta(delta)}</b>
+                        Strike: <b>{strike_str}</b> | Exp: <b>{cand.get('expiry', '') or cand.get('expiration', 'N/A')}</b> |
+                        Premium: <b>{premium_str}</b> | Delta: <b>{delta_str}</b>
                     </div>
                     <div class="slack-msg">{_generate_slack_message(cand)}</div>
                 </div>
@@ -827,9 +835,9 @@ def render_execution_panel(data: Dict) -> None:
             df = pd.DataFrame([{
                 "Symbol": o.get("symbol", ""),
                 "Action": o.get("action", "").replace("_", " "),
-                "Strike": f"${_safe_float(o.get('strike', 0)):,.2f}",
+                "Strike": safe_currency(o.get("strike"), "—"),
                 "Exp": o.get("expiry", ""),
-                "Limit": f"${_safe_float(o.get('limit_price', 0)):,.2f}",
+                "Limit": safe_currency(o.get("limit_price"), "—"),
             } for o in orders])
             st.dataframe(df, use_container_width=True, hide_index=True)
         else:
@@ -867,8 +875,10 @@ def render_test_page() -> None:
     
     with c2:
         st.markdown("### Actions")
+        webhook_ok, webhook_msg = slack_webhook_available() if SLACK_AVAILABLE else (False, "Slack not configured")
+        slack_help = "Send a real test message to Slack" if webhook_ok else "Set SLACK_WEBHOOK_URL to enable Slack alerts"
         fetch_btn = st.button("📥 Fetch Chain", key="fetch_btn", use_container_width=True, help="Fetch via bulk endpoint")
-        slack_btn = st.button("💬 Test Slack", key="slack_btn", use_container_width=True, help="Generate simulated Slack message")
+        slack_btn = st.button("💬 Test Slack", key="slack_btn", use_container_width=True, help=slack_help)
         health_btn = st.button("🏥 Health Check", key="health_btn", use_container_width=True, help="Check Theta Terminal connection")
     
     st.markdown("---")
@@ -931,24 +941,19 @@ def render_test_page() -> None:
                     
                     rows = []
                     for c in contracts[:20]:
-                        bid = c.get("bid")
-                        ask = c.get("ask")
-                        iv = c.get("iv")
-                        delta = c.get("delta")
-                        gamma = c.get("gamma")
-                        theta = c.get("theta")
-                        
+                        dte_val = c.get("dte")
+                        dte_str = str(dte_val) if dte_val is not None else "—"
                         rows.append({
-                            "Strike": f"${c.get('strike', 0):,.2f}",
+                            "Strike": safe_currency(c.get("strike"), "—"),
                             "Type": c.get("option_type", c.get("right", "")),
-                            "Exp": c.get("expiration", "")[:10],
-                            "DTE": c.get("dte", "—"),
-                            "Bid": f"${bid:.2f}" if bid else "—",
-                            "Ask": f"${ask:.2f}" if ask else "—",
-                            "IV": f"{iv*100:.1f}%" if iv else "—",
-                            "Delta": f"{delta:.3f}" if delta else "—",
-                            "Gamma": f"{gamma:.4f}" if gamma else "—",
-                            "Theta": f"{theta:.4f}" if theta else "—",
+                            "Exp": (c.get("expiration") or "")[:10],
+                            "DTE": dte_str,
+                            "Bid": safe_currency(c.get("bid"), "—"),
+                            "Ask": safe_currency(c.get("ask"), "—"),
+                            "IV": safe_percent(c.get("iv"), "—"),
+                            "Delta": safe_delta(c.get("delta"), "—"),
+                            "Gamma": safe_format(c.get("gamma"), ".4f", "—"),
+                            "Theta": safe_format(c.get("theta"), ".4f", "—"),
                         })
                     
                     df = pd.DataFrame(rows)
@@ -966,52 +971,58 @@ def render_test_page() -> None:
     
     # Test Slack functionality
     if slack_btn:
-        st.markdown("### Simulated Slack Message")
-        
-        # Use real chain data if available, otherwise mock
-        chain_data = st.session_state.get("test_chain_data", {})
-        contracts = chain_data.get("contracts", [])
-        
-        if contracts:
-            # Use first contract from real data
-            first_contract = contracts[0]
-            mock_candidate = {
-                "symbol": first_contract.get("symbol", symbol),
-                "signal_type": "CSP" if first_contract.get("right") == "P" else "CC",
-                "strike": first_contract.get("strike", 100.0),
-                "expiry": first_contract.get("expiration", "2026-02-14"),
-                "mid": first_contract.get("mid") or ((first_contract.get("bid", 0) or 0) + (first_contract.get("ask", 0) or 0)) / 2,
-                "delta": first_contract.get("delta"),
-            }
-            st.caption("Using real chain data from last fetch")
+        webhook_ok, webhook_msg = slack_webhook_available() if SLACK_AVAILABLE else (False, "Slack not configured")
+        if not webhook_ok:
+            st.warning("Slack is not configured. Set the **SLACK_WEBHOOK_URL** environment variable to enable alerts, then use **Test Slack** to send a real test message.")
+            st.caption(webhook_msg)
         else:
-            # Fallback to mock
-            mock_candidate = {
-                "symbol": symbol,
-                "signal_type": "CSP",
-                "strike": 100.0,
-                "expiry": "2026-02-14",
-                "mid": 2.50,
-                "delta": -0.25,
-            }
-            st.caption("Using mock data (fetch chain first for real data)")
-        
-        slack_msg = _generate_slack_message(mock_candidate)
-        
-        st.markdown(f"""
-        <div class="card">
-            <div class="card-title">💬 Slack Alert Preview</div>
-            <div class="slack-msg">{slack_msg}</div>
-            <div style="margin-top:0.5rem;font-size:0.7rem;color:var(--text-muted);">
-                This is a simulated message. No actual Slack call was made.
+            st.markdown("### Slack Test")
+            chain_data = st.session_state.get("test_chain_data", {})
+            contracts = chain_data.get("contracts", [])
+            if contracts:
+                first_contract = contracts[0]
+                mock_candidate = {
+                    "symbol": first_contract.get("symbol", symbol),
+                    "signal_type": "CSP" if first_contract.get("right") == "P" else "CC",
+                    "strike": first_contract.get("strike", 100.0),
+                    "expiry": first_contract.get("expiration", "2026-02-14"),
+                    "mid": first_contract.get("mid") or ((first_contract.get("bid", 0) or 0) + (first_contract.get("ask", 0) or 0)) / 2,
+                    "delta": first_contract.get("delta"),
+                }
+                st.caption("Using real chain data from last fetch")
+            else:
+                mock_candidate = {
+                    "symbol": symbol,
+                    "signal_type": "CSP",
+                    "strike": 100.0,
+                    "expiry": "2026-02-14",
+                    "mid": 2.50,
+                    "delta": -0.25,
+                }
+                st.caption("Using mock data (fetch chain first for real data)")
+            slack_msg = _generate_slack_message(mock_candidate)
+            try:
+                import requests
+                url = os.getenv("SLACK_WEBHOOK_URL")
+                resp = requests.post(
+                    url,
+                    json={"text": f"*[ChakraOps Test]* {slack_msg}"},
+                    headers={"Content-Type": "application/json"},
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                st.success("✅ Test message sent to Slack.")
+            except Exception as e:
+                st.error(f"Failed to send to Slack: {e}")
+            st.markdown(f"""
+            <div class="card">
+                <div class="card-title">💬 Message sent</div>
+                <div class="slack-msg">{slack_msg}</div>
             </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Show raw message and candidate details
-        with st.expander("View details"):
-            st.code(slack_msg.replace("*", "").replace("📊 ", ""))
-            st.json(mock_candidate)
+            """, unsafe_allow_html=True)
+            with st.expander("View details"):
+                st.code(slack_msg.replace("*", "").replace("📊 ", ""))
+                st.json(mock_candidate)
 
 
 def _theta_health_check() -> Tuple[bool, str]:

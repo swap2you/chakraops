@@ -92,7 +92,19 @@ snapshots:
 realtime:
   refresh_interval: 30  # Seconds between updates (30-60 recommended)
   end_time: "16:00:00"  # Market close (local time)
+
+guardrails:
+  min_stock_price: 10.0       # Exclude penny stocks (enforced)
+  max_trades_per_sector: 3   # Sector diversification (advisory)
+  stop_loss_pct: null        # Advisory: exit if underlying drops % below strike
+  profit_target_pct: null    # Advisory: close at % of max profit (e.g. 0.50 = 50%)
 ```
+
+### Guardrails
+
+- **min_stock_price** (default 10): Minimum underlying price; symbols below this are excluded from the universe. Helps avoid penny stocks.
+- **max_trades_per_sector** (default 3): Advisory limit on trades per sector; requires sector data for enforcement.
+- **stop_loss_pct** / **profit_target_pct**: Advisory only; implement via manual monitoring or broker automation.
 
 ### Theta v3 API Integration
 

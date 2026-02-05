@@ -1,0 +1,5279 @@
+{
+  "run_id": "eval_20260204_040317_ca7b3fb2",
+  "started_at": "2026-02-04T04:03:17.294455+00:00",
+  "completed_at": "2026-02-04T04:06:12.897470+00:00",
+  "status": "COMPLETED",
+  "duration_seconds": 165.54,
+  "total": 53,
+  "evaluated": 53,
+  "eligible": 0,
+  "shortlisted": 0,
+  "stage1_pass": 0,
+  "stage2_pass": 0,
+  "holds": 0,
+  "blocks": 0,
+  "regime": "UNKNOWN",
+  "risk_posture": "UNKNOWN",
+  "market_phase": "POST",
+  "source": "manual",
+  "symbols": [
+    {
+      "symbol": "AAPL",
+      "source": "ORATS",
+      "price": 269.57,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $269.57"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:03:27.359390+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "ABNB",
+      "source": "ORATS",
+      "price": 122.1,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $122.10"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:03:30.433213+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "ADBE",
+      "source": "ORATS",
+      "price": 271.99,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $271.99"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:03:33.247395+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "AMD",
+      "source": "ORATS",
+      "price": 242.36,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $242.36"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:03:36.047989+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "AMZN",
+      "source": "ORATS",
+      "price": 238.66,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $238.66"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:03:38.768415+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "ARM",
+      "source": "ORATS",
+      "price": 104.58,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $104.58"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:03:41.419063+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "ASML",
+      "source": "ORATS",
+      "price": 1397.41,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $1397.41"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:03:43.862047+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "AVGO",
+      "source": "ORATS",
+      "price": 320.89,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $320.89"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:03:48.929684+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "AXP",
+      "source": "ORATS",
+      "price": 349.68,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $349.68"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:03:51.589206+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "BKNG",
+      "source": "ORATS",
+      "price": 4643.64,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $4643.64"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:03:55.394250+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "COIN",
+      "source": "ORATS",
+      "price": 179.84,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $179.84"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:04:00.389340+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "COST",
+      "source": "ORATS",
+      "price": 978.02,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $978.02"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:04:04.124309+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "CRM",
+      "source": "ORATS",
+      "price": 196.45,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $196.45"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:04:06.930718+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "CRWD",
+      "source": "ORATS",
+      "price": 421.56,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $421.56"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:04:09.428903+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "DDOG",
+      "source": "ORATS",
+      "price": 119.66,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $119.66"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:04:12.015953+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "DIS",
+      "source": "ORATS",
+      "price": 104.21,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $104.21"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:04:14.336105+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "GOOGL",
+      "source": "ORATS",
+      "price": 339.86,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $339.86"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:04:16.642240+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "HD",
+      "source": "ORATS",
+      "price": 380.99,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $380.99"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:04:19.582332+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "INTC",
+      "source": "ORATS",
+      "price": 49.28,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $49.28"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:04:22.244999+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "IWM",
+      "source": "ORATS",
+      "price": 262.99,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $262.99"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:04:24.614336+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "JPM",
+      "source": "ORATS",
+      "price": 314.65,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $314.65"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:04:27.563917+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "LOW",
+      "source": "ORATS",
+      "price": 274.71,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $274.71"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:04:30.003601+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "MA",
+      "source": "ORATS",
+      "price": 550.82,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $550.82"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:04:33.951775+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "MCD",
+      "source": "ORATS",
+      "price": 319.68,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $319.68"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:04:36.400758+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "MDB",
+      "source": "ORATS",
+      "price": 346.26,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $346.26"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:04:38.615173+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "META",
+      "source": "ORATS",
+      "price": 691.7,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $691.70"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:04:43.665448+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "MRVL",
+      "source": "ORATS",
+      "price": 75.56,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $75.56"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:04:48.370661+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "MSFT",
+      "source": "ORATS",
+      "price": 411.38,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $411.38"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:04:53.151524+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "MU",
+      "source": "ORATS",
+      "price": 419.71,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $419.71"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:04:56.322735+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "NKE",
+      "source": "ORATS",
+      "price": 60.95,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $60.95"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:04:59.301279+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "NOW",
+      "source": "ORATS",
+      "price": 109.78,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $109.78"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:05:01.796707+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "NVDA",
+      "source": "ORATS",
+      "price": 180.38,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $180.38"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:05:06.070174+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "ORCL",
+      "source": "ORATS",
+      "price": 154.69,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $154.69"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:05:08.840857+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "PANW",
+      "source": "ORATS",
+      "price": 166.25,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $166.25"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:05:11.243679+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "PLTR",
+      "source": "ORATS",
+      "price": 157.99,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $157.99"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:05:13.580842+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "PYPL",
+      "source": "ORATS",
+      "price": 41.91,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $41.91"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:05:16.186183+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "QCOM",
+      "source": "ORATS",
+      "price": 147.27,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $147.27"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:05:18.640766+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "QQQ",
+      "source": "ORATS",
+      "price": 616.68,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $616.68"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:05:20.822373+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "SBUX",
+      "source": "ORATS",
+      "price": 93.08,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $93.08"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:05:25.358319+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "SMCI",
+      "source": "ORATS",
+      "price": 29.78,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $29.78"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:05:27.425342+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "SMH",
+      "source": "ORATS",
+      "price": 397.65,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $397.65"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:05:29.562047+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "SNOW",
+      "source": "ORATS",
+      "price": 172.53,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $172.53"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:05:32.248226+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "SOFI",
+      "source": "ORATS",
+      "price": 21.74,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $21.74"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:05:34.896640+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "SOXX",
+      "source": "ORATS",
+      "price": 345.7,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $345.70"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:05:38.695582+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "SPY",
+      "source": "ORATS",
+      "price": 689.48,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $689.48"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:05:43.411779+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "SQ",
+      "source": "ORATS",
+      "price": 87.07,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $87.07"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:05:48.363742+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "TSLA",
+      "source": "ORATS",
+      "price": 422.05,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $422.05"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:05:53.251018+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "TSM",
+      "source": "ORATS",
+      "price": 335.8,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $335.80"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:05:58.567214+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "V",
+      "source": "ORATS",
+      "price": 329.04,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $329.04"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:06:01.190374+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "WMT",
+      "source": "ORATS",
+      "price": 127.81,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $127.81"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:06:03.841838+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "XLF",
+      "source": "ORATS",
+      "price": 53.5,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $53.50"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:06:05.997569+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "XLK",
+      "source": "ORATS",
+      "price": 142.0,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $142.00"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:06:08.223245+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    },
+    {
+      "symbol": "XLY",
+      "source": "ORATS",
+      "price": 121.75,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE - missing: volume, bid, ask",
+      "confidence": 0.08333333333333333,
+      "score": 54,
+      "regime": "UNKNOWN",
+      "risk": "UNKNOWN",
+      "liquidity_ok": false,
+      "liquidity_reason": "Liquidity data incomplete - no valid OI, volume in strikes",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "ORATS data available",
+      "gates": [
+        {
+          "name": "ORATS Summary",
+          "status": "PASS",
+          "reason": "Stock price: $121.75"
+        },
+        {
+          "name": "Options Liquidity",
+          "status": "FAIL",
+          "reason": "Liquidity data incomplete - no valid OI, volume in strikes"
+        },
+        {
+          "name": "Earnings Check",
+          "status": "PASS",
+          "reason": "No earnings conflict detected"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-04T04:06:10.639882+00:00",
+      "error": null,
+      "data_completeness": 0.16666666666666666,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "iv_rank"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "MISSING"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": null
+    }
+  ],
+  "top_candidates": [],
+  "top_holds": [],
+  "alerts": [
+    {
+      "id": "AAPL_1770177810_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "AAPL",
+      "message": "AAPL - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:03:30.432966+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "AAPL_1770177810_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "AAPL",
+      "message": "AAPL has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:03:30.432966+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "ABNB_1770177813_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "ABNB",
+      "message": "ABNB - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:03:33.247307+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "ABNB_1770177813_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "ABNB",
+      "message": "ABNB has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:03:33.247307+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "ADBE_1770177816_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "ADBE",
+      "message": "ADBE - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:03:36.047929+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "ADBE_1770177816_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "ADBE",
+      "message": "ADBE has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:03:36.047929+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "AMD_1770177818_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "AMD",
+      "message": "AMD - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:03:38.768314+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "AMD_1770177818_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "AMD",
+      "message": "AMD has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:03:38.768314+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "AMZN_1770177821_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "AMZN",
+      "message": "AMZN - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:03:41.418988+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "AMZN_1770177821_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "AMZN",
+      "message": "AMZN has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:03:41.418988+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "ARM_1770177823_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "ARM",
+      "message": "ARM - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:03:43.861867+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "ARM_1770177823_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "ARM",
+      "message": "ARM has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:03:43.861867+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "ASML_1770177828_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "ASML",
+      "message": "ASML - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:03:48.929590+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "ASML_1770177828_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "ASML",
+      "message": "ASML has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:03:48.929590+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "AVGO_1770177831_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "AVGO",
+      "message": "AVGO - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:03:51.589144+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "AVGO_1770177831_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "AVGO",
+      "message": "AVGO has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:03:51.589144+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "AXP_1770177835_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "AXP",
+      "message": "AXP - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:03:55.394188+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "AXP_1770177835_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "AXP",
+      "message": "AXP has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:03:55.394188+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "BKNG_1770177840_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "BKNG",
+      "message": "BKNG - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:04:00.389191+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "BKNG_1770177840_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "BKNG",
+      "message": "BKNG has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:04:00.389191+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "COIN_1770177844_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "COIN",
+      "message": "COIN - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:04:04.124219+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "COIN_1770177844_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "COIN",
+      "message": "COIN has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:04:04.124219+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "COST_1770177846_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "COST",
+      "message": "COST - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:04:06.930652+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "COST_1770177846_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "COST",
+      "message": "COST has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:04:06.930652+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "CRM_1770177849_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "CRM",
+      "message": "CRM - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:04:09.428819+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "CRM_1770177849_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "CRM",
+      "message": "CRM has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:04:09.428819+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "CRWD_1770177852_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "CRWD",
+      "message": "CRWD - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:04:12.015894+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "CRWD_1770177852_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "CRWD",
+      "message": "CRWD has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:04:12.015894+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "DDOG_1770177854_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "DDOG",
+      "message": "DDOG - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:04:14.336031+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "DDOG_1770177854_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "DDOG",
+      "message": "DDOG has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:04:14.336031+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "DIS_1770177856_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "DIS",
+      "message": "DIS - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:04:16.642168+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "DIS_1770177856_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "DIS",
+      "message": "DIS has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:04:16.642168+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "GOOGL_1770177859_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "GOOGL",
+      "message": "GOOGL - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:04:19.582241+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "GOOGL_1770177859_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "GOOGL",
+      "message": "GOOGL has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:04:19.582241+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "HD_1770177862_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "HD",
+      "message": "HD - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:04:22.244931+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "HD_1770177862_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "HD",
+      "message": "HD has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:04:22.244931+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "INTC_1770177864_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "INTC",
+      "message": "INTC - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:04:24.614263+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "INTC_1770177864_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "INTC",
+      "message": "INTC has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:04:24.614263+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "IWM_1770177867_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "IWM",
+      "message": "IWM - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:04:27.563852+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "IWM_1770177867_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "IWM",
+      "message": "IWM has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:04:27.563852+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "JPM_1770177870_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "JPM",
+      "message": "JPM - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:04:30.003529+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "JPM_1770177870_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "JPM",
+      "message": "JPM has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:04:30.003529+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "LOW_1770177873_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "LOW",
+      "message": "LOW - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:04:33.951700+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "LOW_1770177873_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "LOW",
+      "message": "LOW has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:04:33.951700+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "MA_1770177876_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "MA",
+      "message": "MA - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:04:36.400686+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "MA_1770177876_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "MA",
+      "message": "MA has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:04:36.400686+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "MCD_1770177878_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "MCD",
+      "message": "MCD - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:04:38.615105+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "MCD_1770177878_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "MCD",
+      "message": "MCD has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:04:38.615105+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "MDB_1770177883_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "MDB",
+      "message": "MDB - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:04:43.665374+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "MDB_1770177883_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "MDB",
+      "message": "MDB has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:04:43.665374+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "META_1770177888_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "META",
+      "message": "META - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:04:48.370497+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "META_1770177888_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "META",
+      "message": "META has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:04:48.370497+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "MRVL_1770177893_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "MRVL",
+      "message": "MRVL - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:04:53.151333+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "MRVL_1770177893_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "MRVL",
+      "message": "MRVL has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:04:53.151333+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "MSFT_1770177896_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "MSFT",
+      "message": "MSFT - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:04:56.322646+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "MSFT_1770177896_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "MSFT",
+      "message": "MSFT has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:04:56.322646+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "MU_1770177899_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "MU",
+      "message": "MU - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:04:59.301192+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "MU_1770177899_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "MU",
+      "message": "MU has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:04:59.301192+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "NKE_1770177901_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "NKE",
+      "message": "NKE - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:05:01.796533+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "NKE_1770177901_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "NKE",
+      "message": "NKE has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:05:01.796533+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "NOW_1770177906_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "NOW",
+      "message": "NOW - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:05:06.070097+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "NOW_1770177906_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "NOW",
+      "message": "NOW has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:05:06.070097+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "NVDA_1770177908_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "NVDA",
+      "message": "NVDA - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:05:08.840773+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "NVDA_1770177908_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "NVDA",
+      "message": "NVDA has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:05:08.840773+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "ORCL_1770177911_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "ORCL",
+      "message": "ORCL - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:05:11.243602+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "ORCL_1770177911_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "ORCL",
+      "message": "ORCL has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:05:11.243602+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "PANW_1770177913_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "PANW",
+      "message": "PANW - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:05:13.580766+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "PANW_1770177913_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "PANW",
+      "message": "PANW has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:05:13.580766+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "PLTR_1770177916_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "PLTR",
+      "message": "PLTR - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:05:16.185980+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "PLTR_1770177916_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "PLTR",
+      "message": "PLTR has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:05:16.185980+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "PYPL_1770177918_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "PYPL",
+      "message": "PYPL - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:05:18.640690+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "PYPL_1770177918_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "PYPL",
+      "message": "PYPL has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:05:18.640690+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "QCOM_1770177920_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "QCOM",
+      "message": "QCOM - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:05:20.822289+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "QCOM_1770177920_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "QCOM",
+      "message": "QCOM has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:05:20.822289+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "QQQ_1770177925_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "QQQ",
+      "message": "QQQ - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:05:25.358215+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "QQQ_1770177925_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "QQQ",
+      "message": "QQQ has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:05:25.358215+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "SBUX_1770177927_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SBUX",
+      "message": "SBUX - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:05:27.425281+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "SBUX_1770177927_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SBUX",
+      "message": "SBUX has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:05:27.425281+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "SMCI_1770177929_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SMCI",
+      "message": "SMCI - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:05:29.561970+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "SMCI_1770177929_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SMCI",
+      "message": "SMCI has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:05:29.561970+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "SMH_1770177932_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SMH",
+      "message": "SMH - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:05:32.248142+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "SMH_1770177932_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SMH",
+      "message": "SMH has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:05:32.248142+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "SNOW_1770177934_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SNOW",
+      "message": "SNOW - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:05:34.896510+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "SNOW_1770177934_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SNOW",
+      "message": "SNOW has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:05:34.896510+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "SOFI_1770177938_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SOFI",
+      "message": "SOFI - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:05:38.695414+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "SOFI_1770177938_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SOFI",
+      "message": "SOFI has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:05:38.695414+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "SOXX_1770177943_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SOXX",
+      "message": "SOXX - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:05:43.411702+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "SOXX_1770177943_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SOXX",
+      "message": "SOXX has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:05:43.411702+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "SPY_1770177948_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SPY",
+      "message": "SPY - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:05:48.363623+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "SPY_1770177948_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SPY",
+      "message": "SPY has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:05:48.363623+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "SQ_1770177953_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SQ",
+      "message": "SQ - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:05:53.250860+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "SQ_1770177953_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SQ",
+      "message": "SQ has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:05:53.250860+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "TSLA_1770177958_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "TSLA",
+      "message": "TSLA - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:05:58.567143+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "TSLA_1770177958_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "TSLA",
+      "message": "TSLA has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:05:58.567143+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "TSM_1770177961_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "TSM",
+      "message": "TSM - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:06:01.190307+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "TSM_1770177961_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "TSM",
+      "message": "TSM has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:06:01.190307+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "V_1770177963_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "V",
+      "message": "V - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:06:03.841762+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "V_1770177963_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "V",
+      "message": "V has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:06:03.841762+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "WMT_1770177965_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "WMT",
+      "message": "WMT - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:06:05.997498+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "WMT_1770177965_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "WMT",
+      "message": "WMT has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:06:05.997498+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "XLF_1770177968_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "XLF",
+      "message": "XLF - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:06:08.223177+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "XLF_1770177968_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "XLF",
+      "message": "XLF has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:06:08.223177+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "XLK_1770177970_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "XLK",
+      "message": "XLK - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:06:10.639820+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "XLK_1770177970_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "XLK",
+      "message": "XLK has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:06:10.639820+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    },
+    {
+      "id": "XLY_1770177972_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "XLY",
+      "message": "XLY - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-04T04:06:12.897342+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "iv_rank"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "XLY_1770177972_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "XLY",
+      "message": "XLY has incomplete data - missing: avg_volume, iv_rank",
+      "severity": "INFO",
+      "created_at": "2026-02-04T04:06:12.897342+00:00",
+      "meta": {
+        "completeness": 0.16666666666666666,
+        "missing_fields": [
+          "avg_volume",
+          "iv_rank"
+        ]
+      }
+    }
+  ],
+  "alerts_count": 106,
+  "errors": [],
+  "error_summary": null,
+  "exposure_summary": null,
+  "run_version": 1,
+  "checksum": "bb31a5ce489bbeb04e5c1fe3125ded7ba12b7d08b65959dbd543e3739b8f5db3",
+  "correlation_id": "eval_20260204_040317_ca7b3fb2"
+}

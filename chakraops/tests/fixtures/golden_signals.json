@@ -1,0 +1,75 @@
+{
+  "universe_id_or_hash": "test_universe",
+  "configs": {
+    "base": {
+      "dte_min": 25,
+      "dte_max": 60,
+      "min_bid": 1.0,
+      "min_open_interest": 1000,
+      "max_spread_pct": 10.0
+    },
+    "csp": {
+      "delta_min": 0.15,
+      "delta_max": 0.25,
+      "prob_otm_min": 0.7
+    },
+    "cc": {
+      "delta_min": 0.15,
+      "delta_max": 0.35,
+      "prob_otm_min": 0.7
+    }
+  },
+  "candidates": [
+    {
+      "symbol": "AAPL",
+      "signal_type": "CC",
+      "underlying_price": 150.0,
+      "expiry": "2026-03-20",
+      "strike": 155.0,
+      "option_right": "CALL",
+      "bid": 4.0,
+      "ask": 4.2,
+      "mid": 4.1,
+      "volume": 600,
+      "open_interest": 4000,
+      "delta": 0.3,
+      "iv": 0.3
+    },
+    {
+      "symbol": "AAPL",
+      "signal_type": "CSP",
+      "underlying_price": 150.0,
+      "expiry": "2026-03-20",
+      "strike": 145.0,
+      "option_right": "PUT",
+      "bid": 4.0,
+      "ask": 4.2,
+      "mid": 4.1,
+      "volume": 600,
+      "open_interest": 4000,
+      "delta": -0.3,
+      "iv": 0.3
+    }
+  ],
+  "exclusions": [
+    {
+      "code": "NO_EXPIRY_IN_DTE_WINDOW",
+      "message": "No expirations for MSFT within DTE window [25, 60]",
+      "data": {
+        "symbol": "MSFT",
+        "dte_min": 25,
+        "dte_max": 60,
+        "total_expirations": 1
+      }
+    }
+  ],
+  "stats": {
+    "total_symbols": 2,
+    "symbols_evaluated": 2,
+    "total_candidates": 2,
+    "csp_candidates": 1,
+    "cc_candidates": 1,
+    "total_exclusions": 1,
+    "unique_exclusion_codes": 1
+  }
+}

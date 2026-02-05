@@ -1,0 +1,197 @@
+# ChakraOps
+
+A Python application for managing operations.
+
+## Setup
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/swap2you/chakraops.git
+   cd chakraops
+   ```
+
+2. Create a virtual environment:
+   ```bash
+   python -m venv .venv
+   ```
+
+3. Activate the virtual environment:
+   - Windows:
+     ```bash
+     .venv\Scripts\activate
+     ```
+   - Linux/Mac:
+     ```bash
+     source .venv/bin/activate
+     ```
+
+4. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+5. Configure the application (optional):
+   - Copy `.env.example` to `.env` and fill in your values
+   - Copy `config.yaml.example` to `config.yaml` and customize as needed
+
+## Run
+
+### Phase 7: Decision Intelligence Pipeline (Recommended)
+
+**Generate Decision Snapshot (One-time):**
+```bash
+python scripts/run_and_save.py
+```
+Output: `out/decision_<timestamp>.json` and `out/decision_latest.json`
+
+**Realtime Mode (Continuous updates during market hours):**
+```bash
+python scripts/run_and_save.py --realtime
+```
+- Refreshes every 30-60 seconds (configurable via `config.yaml` → `realtime.refresh_interval`)
+- Automatically stops at market close (16:00 by default, configurable via `realtime.end_time`)
+- Overwrites `decision_latest.json` on each refresh
+- Creates single `decision_YYYY-MM-DD_end.json` at close
+- Keeps only end-of-day snapshots (last 7 days by default)
+
+**Test Mode (Diagnostics):**
+```bash
+python scripts/run_and_save.py --test
+```
+Shows detailed scoring, chain info, and rejection summaries.
+
+**Launch Live Dashboard:**
+```bash
+python scripts/live_dashboard.py
+```
+Open: http://localhost:8501
+
+The dashboard includes:
+- Real-time metrics and charts
+- Test page for individual symbol chain fetching
+- Live/Snapshot data source indicator
+- Exclusion breakdown and candidate distribution
+
+**See:** `docs/PHASE7_QUICK_REFERENCE.md` for details
+
+### Configuration
+
+Copy `config.yaml.example` to `config.yaml` and customize:
+
+```yaml
+# Options: ORATS Live Data. Set ORATS_API_TOKEN in env (see docs/RUNBOOK_EXECUTION.md).
+orats:
+  timeout: 30.0
+
+snapshots:
+  retention_days: 7  # Keep snapshots for 7 days
+  max_files: 30      # Max files to keep
+  output_dir: "out"
+
+realtime:
+  refresh_interval: 30  # Seconds between updates (30-60 recommended)
+  end_time: "16:00:00"  # Market close (local time)
+
+guardrails:
+  min_stock_price: 10.0         # Exclude penny stocks (enforced)
+  max_trades_per_sector: 3     # Sector diversification (advisory)
+  stop_loss_percent: 20.0       # Advisory: exit if underlying drops % below strike; use send_exit_alert when hit
+  take_profit_percent: 50.0     # Advisory: close at % of max profit; use send_exit_alert when hit
+```
+
+### Guardrails
+
+- **min_stock_price** (default 10): Minimum underlying price; symbols below this are excluded from the universe. Helps avoid penny stocks.
+- **max_trades_per_sector** (default 3): Advisory limit on trades per sector; requires sector data for enforcement.
+- **stop_loss_percent** / **take_profit_percent**: Advisory exit rules. When a position hits stop or target, call `send_exit_alert(symbol, strike, reason="STOP"|"EXIT", detail=...)` to send a Slack notification.
+
+### ORATS Live Data (Options)
+
+ChakraOps uses **ORATS Live Data** (api.orats.io/datav2) for options expirations, strikes, and chains. No ThetaData terminal or process is required.
+
+**Required:** Set `ORATS_API_TOKEN` in your environment (get token from [ORATS](https://orats.com)). Never commit the token.
+
+**Sanity check:**
+```bash
+python scripts/smoke_orats.py
+```
+
+**Strategy validation (CSP criteria):**
+```bash
+python scripts/test_orats_chain.py AAPL --validate-strategy
+```
+
+**Modules:**
+- `app/core/options/providers/orats_client.py` – ORATS API client (token from env only)
+- `app/core/options/providers/orats_provider.py` – Options chain provider (expirations, strikes, chain)
+- `app/data/options_chain_provider.py` – Public interface: `OratsOptionsChainProvider`
+
+**Runbook:** See `docs/RUNBOOK_EXECUTION.md` for env vars, running locally without Theta, and ORATS troubleshooting.
+
+#### Phase 7.1: Slack Alerts (Optional)
+
+After generating a decision snapshot, the pipeline can send alerts to Slack:
+
+1. **Set environment variable:**
+   ```bash
+   set SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+   ```
+   (Windows) or
+   ```bash
+   export SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+   ```
+   (Linux/Mac)
+
+2. **Run pipeline:** Slack alerts are sent automatically after decision artifact is written
+   ```bash
+   python scripts/run_and_save.py
+   ```
+
+**Note:** Slack alerts are optional. If `SLACK_WEBHOOK_URL` is not set, the pipeline continues normally without alerts.
+
+**See:** `docs/PHASE7_OPERATOR_RUNBOOK.md` for detailed operator guide
+
+### Legacy: Full Orchestrator
+
+```bash
+python main.py
+```
+
+The application should print "ChakraOps boot OK" and exit successfully.
+
+**Note:** `main.py` is the legacy orchestrator (regime detection, position monitoring, Slack alerts). Phase 7 uses the snapshot-driven pipeline above.
+
+## Development
+
+- Application code is in the `app/` directory
+- Tests are in the `tests/` directory
+- Scripts are in the `scripts/` directory
+
+### Smoke Tests
+
+Run individual component smoke tests to validate functionality:
+
+```bash
+# Test state machine transitions
+python scripts/smoke_state_machine.py
+
+# Test regime detection
+python scripts/smoke_regime.py
+
+# Test price providers
+python scripts/smoke_prices.py
+
+# Test wheel engine
+python scripts/smoke_wheel.py
+
+# Test Slack notifications
+python scripts/smoke_slack.py
+```
+
+### Running Tests
+
+Run the full test suite with pytest:
+
+```bash
+pytest tests/
+```

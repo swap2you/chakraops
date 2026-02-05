@@ -1,0 +1,88 @@
+{
+  "universe_id_or_hash": "test_universe",
+  "configs": {
+    "base": {
+      "dte_min": 25,
+      "dte_max": 60,
+      "min_bid": 1.0,
+      "min_open_interest": 1000,
+      "max_spread_pct": 10.0
+    },
+    "csp": {
+      "delta_min": 0.15,
+      "delta_max": 0.25,
+      "prob_otm_min": 0.7
+    },
+    "cc": {
+      "delta_min": 0.15,
+      "delta_max": 0.35,
+      "prob_otm_min": 0.7
+    }
+  },
+  "candidates": [
+    {
+      "symbol": "AAPL",
+      "signal_type": "CSP",
+      "underlying_price": 150.0,
+      "expiry": "2026-02-20",
+      "strike": 145.0,
+      "option_right": "PUT",
+      "bid": 2.6,
+      "ask": 2.7,
+      "mid": 2.65,
+      "volume": 1200,
+      "open_interest": 5500,
+      "delta": -0.26,
+      "iv": 0.29
+    },
+    {
+      "symbol": "AAPL",
+      "signal_type": "CC",
+      "underlying_price": 150.0,
+      "expiry": "2026-02-20",
+      "strike": 155.0,
+      "option_right": "CALL",
+      "bid": 2.5,
+      "ask": 2.6,
+      "mid": 2.55,
+      "volume": 1000,
+      "open_interest": 5000,
+      "delta": 0.25,
+      "iv": 0.28
+    },
+    {
+      "symbol": "MSFT",
+      "signal_type": "CSP",
+      "underlying_price": 400.0,
+      "expiry": "2026-02-20",
+      "strike": 390.0,
+      "option_right": "PUT",
+      "bid": 5.0,
+      "ask": 5.2,
+      "mid": 5.1,
+      "volume": 2000,
+      "open_interest": 8000,
+      "delta": -0.25,
+      "iv": 0.25
+    }
+  ],
+  "exclusions": [
+    {
+      "code": "NO_STRIKES_IN_OTM_RANGE",
+      "message": "MSFT: No strikes in range for MSFT expiry 2026-02-20",
+      "data": {
+        "symbol": "MSFT",
+        "expiry": "2026-02-20"
+      }
+    }
+  ],
+  "stats": {
+    "total_symbols": 2,
+    "symbols_evaluated": 2,
+    "total_candidates": 3,
+    "csp_candidates": 2,
+    "cc_candidates": 1,
+    "total_exclusions": 1,
+    "unique_exclusion_codes": 1
+  }
+}

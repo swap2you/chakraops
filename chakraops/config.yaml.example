@@ -1,0 +1,114 @@
+# ChakraOps Configuration Example
+# Copy this file to config.yaml and customize as needed
+# Central configuration for all pipeline and data provider settings
+
+app:
+  name: ChakraOps
+  env: development
+  debug: true
+
+# Options data: ORATS Live Data (api.orats.io/datav2). Token from env ORATS_API_TOKEN only.
+# No ThetaData terminal required. See docs/RUNBOOK_EXECUTION.md.
+orats:
+  # Request timeout in seconds (used by ORATS client)
+  timeout: 30.0
+
+# Legacy theta block (optional; not used for options)
+theta:
+  base_url: "http://127.0.0.1:25503/v3"
+  timeout: 10.0
+  fallback_enabled: true
+  endpoint: "quote_bulk"
+  strike_limit: 30
+
+# Snapshot retention settings
+snapshots:
+  # Number of days to retain decision_*.json files
+  # Files older than this will be deleted during cleanup
+  # Only one file per day is kept (newest)
+  retention_days: 7
+  
+  # Maximum number of decision files to keep regardless of age
+  # Set to 0 to disable (only use retention_days)
+  max_files: 30
+  
+  # Output directory for decision files
+  output_dir: "out"
+
+# Realtime mode settings (--realtime flag in run_and_save.py)
+realtime:
+  # Refresh interval in seconds between pipeline runs
+  # Recommended: 60 for production, 300 for testing
+  refresh_interval: 60
+  
+  # Market close time (HH:MM:SS) when realtime mode should stop
+  # Uses local time. Default is 16:00:00 EST (US market close)
+  end_time: "16:00:00"
+
+# Signal selection: delta and prob_otm (no OTM%). Env overrides: CSP_DELTA_MIN, CSP_DELTA_MAX, CSP_PROB_OTM_MIN, CC_*.
+signals:
+  csp:
+    delta_min: 0.15   # Put delta absolute (e.g. -0.25)
+    delta_max: 0.25   # Put delta absolute (e.g. -0.15)
+    prob_otm_min: 0.70 # Min probability OTM (70%)
+  cc:
+    delta_min: 0.15
+    delta_max: 0.35
+    prob_otm_min: 0.70
+
+# Confidence gating: block trade candidates below minimum confidence (Phase 2.4)
+confidence:
+  min_confidence_threshold: 40   # Candidates with confidence score < this are excluded (0-100)
+
+# Options context gating (Phase 3.2): IV rank, expected move, event proximity
+options_context:
+  iv_rank_min_sell_pct: 10.0    # Block selling (CSP/credit) when IV rank below this (options cheap)
+  iv_rank_max_sell_pct: 90.0    # Block selling when IV rank above this (extreme risk)
+  iv_rank_max_buy_pct: 70.0     # Block buying when IV rank above this (for later phases)
+  dte_event_window: 7          # Block if earnings or macro event within this many days
+  expected_move_gate: true      # Block if expected 1sd move > distance to short strike
+  # Strategy selection (Phase 3.3): prefer credit when IV high, debit when low (later)
+  strategy_iv_rank_high_pct: 60.0   # Prefer credit spreads when IV rank above this
+  strategy_iv_rank_low_pct: 20.0    # Prefer debit spreads when IV rank below (implemented later)
+  strategy_term_slope_backwardation_min: 0.0   # Term slope above this favours credit (backwardation)
+  strategy_term_slope_contango_max: 0.0        # Term slope below this reduces credit preference
+  strategy_preference_weight: 0.15  # Weight for strategy_preference score in total (0 = off)
+
+# Environment gates: earnings, macro events, market calendar, risk posture (Phase 4.5.1–4.5.5)
+environment:
+  earnings_block_window_days: 7   # Block when days_to_earnings <= this (execution gate)
+  macro_event_block_window_days: 2  # Block when FOMC/CPI/JOBS/NFP/FED within this many days
+  min_trading_days_to_expiry: 5    # Block when trading days until expiry < this
+  block_short_sessions: true       # Block new trades on early-close days (e.g. Christmas Eve)
+  risk_posture: CONSERVATIVE       # CONSERVATIVE | BALANCED | AGGRESSIVE (Phase 4.5.5; locked to CONSERVATIVE)
+
+# Volatility kill switch: halt new openings when VIX or SPY range exceeds thresholds (Phase 2.2)
+volatility:
+  vix_threshold: 20.0       # VIX close above this triggers Risk-Off
+  vix_change_pct: 20.0     # VIX 3-day change above this % triggers Risk-Off
+  range_multiplier: 2.0    # SPY day range > this × 20-day ATR triggers Risk-Off
+
+# Portfolio-level risk caps (Phase 2.5): prevent hidden leverage
+portfolio:
+  max_active_positions: 5      # Block new trades if open positions >= this
+  max_risk_per_trade_pct: 1.0 # Block if trade max loss > this % of account
+  max_sector_positions: 2     # Block if open positions in same sector >= this
+  max_total_delta_exposure: 0.30  # Block if (sum |deltas|) / account_value > this
+  # account_balance: set in config or env PORTFOLIO_ACCOUNT_BALANCE (default 100000)
+  account_balance: 100000.0
+
+# Optional guardrails
+guardrails:
+  # Minimum stock price to avoid penny stocks (enforced in universe filter).
+  min_stock_price: 10.0
+  # Max trades per sector for diversification (advisory; sector data required).
+  max_trades_per_sector: 3
+  # Stop-loss: exit if underlying drops this % below CSP strike (e.g. 20 = 20%). Advisory; call send_exit_alert when hit.
+  stop_loss_percent: 20.0
+  # Take-profit: close at this % of max profit (e.g. 50 = 50%). Advisory; call send_exit_alert when hit.
+  take_profit_percent: 50.0
+
+# Logging configuration
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

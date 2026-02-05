@@ -1,0 +1,156 @@
+[
+  {
+    "date": "2026-02-01",
+    "evaluated_at": "2026-02-01T14:00:00Z",
+    "outcome": "TRADE",
+    "rationale": "1 safe trade available (SPY CSP). Regime allowed, risk posture aligned.",
+    "overview": {
+      "date": "2026-02-01",
+      "run_mode": "DRY_RUN",
+      "config_frozen": true,
+      "freeze_violation_changed_keys": [],
+      "regime": "NEUTRAL",
+      "regime_reason": "VIX in range",
+      "symbols_evaluated": 52,
+      "selected_signals": 1,
+      "trades_ready": 1,
+      "no_trade": false,
+      "why_summary": "1 safe trade available (SPY CSP).",
+      "top_blockers": [],
+      "risk_posture": "CONSERVATIVE",
+      "links": { "latest_decision_ts": "2026-02-01T14:00:00Z" }
+    },
+    "trade_plan": {
+      "decision_ts": "2026-02-01T14:00:00Z",
+      "symbol": "SPY",
+      "strategy_type": "CSP",
+      "proposal": { "symbol": "SPY", "strategy_type": "CSP", "expiry": "2026-04-18", "strikes": [450], "contracts": 1, "credit_estimate": 260, "max_loss": 520 },
+      "execution_status": "READY",
+      "user_acknowledged": false,
+      "execution_notes": "",
+      "exit_plan": {},
+      "computed_targets": { "t1": 104, "t2": 78, "t3": 39 },
+      "blockers": []
+    },
+    "positions": [
+      { "position_id": "pos-1", "symbol": "SPY", "strategy_type": "CSP", "lifecycle_state": "OPEN", "opened": "2026-01-15", "expiry": "2026-03-21", "strike": 450, "contracts": 1, "entry_credit": 250, "last_mark": null, "dte": 45, "unrealized_pnl": null, "realized_pnl": 0, "max_loss_estimate": 500, "profit_targets": { "t1": 100, "t2": 75, "t3": 37.5 }, "notes": "", "needs_attention": false, "attention_reasons": [] },
+      { "position_id": "pos-2", "symbol": "QQQ", "strategy_type": "CSP", "lifecycle_state": "OPEN", "opened": "2026-01-20", "expiry": "2026-03-20", "strike": 380, "contracts": 1, "entry_credit": 180, "last_mark": 72, "dte": 25, "unrealized_pnl": null, "realized_pnl": 0, "max_loss_estimate": 360, "profit_targets": { "t1": 72, "t2": 54, "t3": 27 }, "notes": "Near T1", "needs_attention": true, "attention_reasons": ["TARGET_1_HIT"] }
+    ]
+  },
+  {
+    "date": "2026-01-31",
+    "evaluated_at": "2026-01-31T13:30:00Z",
+    "outcome": "NO_TRADE",
+    "rationale": "No READY setup met criteria. Capital remains protected.",
+    "overview": {
+      "date": "2026-01-31",
+      "run_mode": "DRY_RUN",
+      "config_frozen": true,
+      "freeze_violation_changed_keys": [],
+      "regime": "NEUTRAL",
+      "regime_reason": "VIX in range",
+      "symbols_evaluated": 48,
+      "selected_signals": 0,
+      "trades_ready": 0,
+      "no_trade": true,
+      "why_summary": "No READY setup met criteria. Capital remains protected.",
+      "top_blockers": [{ "code": "NO_SIGNAL", "count": 1 }, { "code": "CREDIT_THRESHOLD", "count": 1 }],
+      "risk_posture": "CONSERVATIVE",
+      "links": { "latest_decision_ts": "2026-01-31T13:30:00Z" }
+    },
+    "trade_plan": null,
+    "positions": [
+      { "position_id": "pos-1", "symbol": "SPY", "strategy_type": "CSP", "lifecycle_state": "OPEN", "opened": "2026-01-15", "expiry": "2026-03-21", "strike": 450, "contracts": 1, "entry_credit": 250, "last_mark": null, "dte": 46, "unrealized_pnl": null, "realized_pnl": 0, "max_loss_estimate": 500, "profit_targets": { "t1": 100, "t2": 75, "t3": 37.5 }, "notes": "", "needs_attention": false, "attention_reasons": [] }
+    ]
+  },
+  {
+    "date": "2026-01-30",
+    "evaluated_at": "2026-01-30T14:00:00Z",
+    "outcome": "RISK_HOLD",
+    "rationale": "Regime or risk posture indicates holding. Review positions and constraints.",
+    "overview": {
+      "date": "2026-01-30",
+      "run_mode": "DRY_RUN",
+      "config_frozen": true,
+      "freeze_violation_changed_keys": [],
+      "regime": "RISK_OFF",
+      "regime_reason": "VIX elevated",
+      "symbols_evaluated": 52,
+      "selected_signals": 2,
+      "trades_ready": 0,
+      "no_trade": true,
+      "why_summary": "Regime or risk posture indicates holding.",
+      "top_blockers": [{ "code": "REGIME_RISK_OFF", "count": 1 }],
+      "risk_posture": "DEFENSIVE",
+      "links": { "latest_decision_ts": "2026-01-30T14:00:00Z" }
+    },
+    "trade_plan": null,
+    "positions": [
+      { "position_id": "pos-1", "symbol": "SPY", "strategy_type": "CSP", "lifecycle_state": "OPEN", "opened": "2026-01-15", "expiry": "2026-03-21", "strike": 450, "contracts": 1, "entry_credit": 250, "last_mark": null, "dte": 47, "unrealized_pnl": null, "realized_pnl": 0, "max_loss_estimate": 500, "profit_targets": { "t1": 100, "t2": 75, "t3": 37.5 }, "notes": "", "needs_attention": false, "attention_reasons": [] },
+      { "position_id": "pos-2", "symbol": "QQQ", "strategy_type": "CSP", "lifecycle_state": "OPEN", "opened": "2026-01-20", "expiry": "2026-03-20", "strike": 380, "contracts": 1, "entry_credit": 180, "last_mark": 68, "dte": 26, "unrealized_pnl": null, "realized_pnl": 0, "max_loss_estimate": 360, "profit_targets": { "t1": 72, "t2": 54, "t3": 27 }, "notes": "", "needs_attention": false, "attention_reasons": [] }
+    ]
+  },
+  {
+    "date": "2026-01-29",
+    "evaluated_at": "2026-01-29T14:00:00Z",
+    "outcome": "TRADE",
+    "rationale": "1 safe trade available (QQQ CSP). Regime allowed.",
+    "overview": {
+      "date": "2026-01-29",
+      "run_mode": "DRY_RUN",
+      "config_frozen": true,
+      "freeze_violation_changed_keys": [],
+      "regime": "NEUTRAL",
+      "regime_reason": "VIX in range",
+      "symbols_evaluated": 52,
+      "selected_signals": 1,
+      "trades_ready": 1,
+      "no_trade": false,
+      "why_summary": "1 safe trade available (QQQ CSP).",
+      "top_blockers": [],
+      "risk_posture": "CONSERVATIVE",
+      "links": { "latest_decision_ts": "2026-01-29T14:00:00Z" }
+    },
+    "trade_plan": {
+      "decision_ts": "2026-01-29T14:00:00Z",
+      "symbol": "QQQ",
+      "strategy_type": "CSP",
+      "proposal": { "symbol": "QQQ", "strategy_type": "CSP", "expiry": "2026-03-20", "strikes": [380], "contracts": 1, "credit_estimate": 185, "max_loss": 370 },
+      "execution_status": "READY",
+      "user_acknowledged": false,
+      "execution_notes": "",
+      "exit_plan": {},
+      "computed_targets": { "t1": 74, "t2": 56, "t3": 28 },
+      "blockers": []
+    },
+    "positions": [
+      { "position_id": "pos-1", "symbol": "SPY", "strategy_type": "CSP", "lifecycle_state": "OPEN", "opened": "2026-01-15", "expiry": "2026-03-21", "strike": 450, "contracts": 1, "entry_credit": 250, "last_mark": null, "dte": 48, "unrealized_pnl": null, "realized_pnl": 0, "max_loss_estimate": 500, "profit_targets": { "t1": 100, "t2": 75, "t3": 37.5 }, "notes": "", "needs_attention": false, "attention_reasons": [] }
+    ]
+  },
+  {
+    "date": "2026-01-28",
+    "evaluated_at": "2026-01-28T13:00:00Z",
+    "outcome": "NO_TRADE",
+    "rationale": "No READY setup met criteria. Capital remains protected.",
+    "overview": {
+      "date": "2026-01-28",
+      "run_mode": "DRY_RUN",
+      "config_frozen": true,
+      "freeze_violation_changed_keys": [],
+      "regime": "NEUTRAL",
+      "regime_reason": "VIX in range",
+      "symbols_evaluated": 50,
+      "selected_signals": 0,
+      "trades_ready": 0,
+      "no_trade": true,
+      "why_summary": "No READY setup met criteria.",
+      "top_blockers": [{ "code": "NO_SIGNAL", "count": 1 }],
+      "risk_posture": "CONSERVATIVE",
+      "links": { "latest_decision_ts": "2026-01-28T13:00:00Z" }
+    },
+    "trade_plan": null,
+    "positions": [
+      { "position_id": "pos-1", "symbol": "SPY", "strategy_type": "CSP", "lifecycle_state": "OPEN", "opened": "2026-01-15", "expiry": "2026-03-21", "strike": 450, "contracts": 1, "entry_credit": 250, "last_mark": null, "dte": 49, "unrealized_pnl": null, "realized_pnl": 0, "max_loss_estimate": 500, "profit_targets": { "t1": 100, "t2": 75, "t3": 37.5 }, "notes": "", "needs_attention": false, "attention_reasons": [] }
+    ]
+  }
+]

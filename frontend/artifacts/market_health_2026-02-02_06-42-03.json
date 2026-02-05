@@ -1,0 +1,70 @@
+{
+  "timestamp": "2026-02-02T06:42:03.027Z",
+  "marketPhase": "unknown",
+  "endpointStatus": {
+    "/api/healthz": {
+      "path": "/api/healthz",
+      "status": 0,
+      "ok": false,
+      "parseable": false,
+      "schemaValid": false,
+      "warnings": [
+        "fetch failed"
+      ],
+      "durationMs": 58
+    },
+    "/api/view/daily-overview": {
+      "path": "/api/view/daily-overview",
+      "status": 0,
+      "ok": false,
+      "parseable": false,
+      "schemaValid": false,
+      "warnings": [
+        "fetch failed"
+      ],
+      "durationMs": 3
+    },
+    "/api/view/positions": {
+      "path": "/api/view/positions",
+      "status": 0,
+      "ok": false,
+      "parseable": false,
+      "schemaValid": false,
+      "warnings": [
+        "fetch failed"
+      ],
+      "durationMs": 3
+    },
+    "/api/view/alerts": {
+      "path": "/api/view/alerts",
+      "status": 0,
+      "ok": false,
+      "parseable": false,
+      "schemaValid": false,
+      "warnings": [
+        "fetch failed"
+      ],
+      "durationMs": 2
+    },
+    "/api/view/decision-history": {
+      "path": "/api/view/decision-history",
+      "status": 0,
+      "ok": false,
+      "parseable": false,
+      "schemaValid": false,
+      "warnings": [
+        "fetch failed"
+      ],
+      "durationMs": 2
+    }
+  },
+  "validationWarnings": [
+    "/api/healthz: ok=false parseable=false schemaValid=false fetch failed",
+    "/api/view/daily-overview: ok=false parseable=false schemaValid=false fetch failed",
+    "/api/view/positions: ok=false parseable=false schemaValid=false fetch failed",
+    "/api/view/alerts: ok=false parseable=false schemaValid=false fetch failed",
+    "/api/view/decision-history: ok=false parseable=false schemaValid=false fetch failed"
+  ],
+  "executionDurationMs": 69,
+  "success": false
+}

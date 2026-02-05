@@ -1,0 +1,19 @@
+{
+  "as_of": "2026-02-01T14:00:00Z",
+  "items": [
+    {
+      "level": "info",
+      "code": "TARGET_1_HIT",
+      "message": "QQQ CSP near T1 — consider closing",
+      "symbol": "QQQ",
+      "position_id": "pos-2"
+    },
+    {
+      "level": "warning",
+      "code": "NO_TRADE",
+      "message": "No READY trade today — capital protected",
+      "symbol": null,
+      "position_id": null
+    }
+  ]
+}

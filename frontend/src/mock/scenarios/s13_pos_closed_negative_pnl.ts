@@ -1,0 +1,6 @@
+import type { ScenarioBundle } from "@/types/views";
+const dailyOverview = { date: "2026-02-10", run_mode: "DRY_RUN", config_frozen: true, freeze_violation_changed_keys: [], regime: "NEUTRAL", regime_reason: "VIX in range", symbols_evaluated: 52, selected_signals: 0, trades_ready: 0, no_trade: true, why_summary: "No READY setup.", top_blockers: [], risk_posture: "CONSERVATIVE", links: { latest_decision_ts: "2026-02-10T14:00:00Z" } };
+const pos = { position_id: "pos-closed-neg", symbol: "NVDA", strategy_type: "CSP", lifecycle_state: "CLOSED", opened: "2025-11-15", expiry: "2026-01-17", strike: 120, contracts: 1, entry_credit: 220, last_mark: null, dte: null, unrealized_pnl: null, realized_pnl: -45, max_loss_estimate: 440, profit_targets: { t1: 88, t2: 66, t3: 33 }, notes: "Closed at loss", needs_attention: false, attention_reasons: [] };
+const positions: ScenarioBundle["positions"] = [pos];
+const decisionHistory: ScenarioBundle["decisionHistory"] = [{ date: "2026-02-10", evaluated_at: "2026-02-10T14:00:00Z", outcome: "NO_TRADE", rationale: "No READY setup.", overview: dailyOverview, trade_plan: null, positions }];
+export const bundle: ScenarioBundle = { dailyOverview, tradePlan: null, positions, alerts: { as_of: "2026-02-10T14:00:00Z", items: [] }, decisionHistory };

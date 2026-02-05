@@ -1,0 +1,5 @@
+# ChakraOps runtime config (required for app startup).
+# Replace 89041e02-da33-46ec-a0c4-d499744b0911 with your ORATS API token from https://orats.com
+
+orats:
+  api_token: "89041e02-da33-46ec-a0c4-d499744b0911"

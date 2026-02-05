@@ -1,0 +1,3144 @@
+{
+  "run_id": "eval_20260205_172734_3366029b",
+  "started_at": "2026-02-05T17:27:34.772496+00:00",
+  "completed_at": "2026-02-05T17:28:20.257676+00:00",
+  "status": "COMPLETED",
+  "duration_seconds": 45.48,
+  "total": 32,
+  "evaluated": 32,
+  "eligible": 18,
+  "shortlisted": 0,
+  "stage1_pass": 0,
+  "stage2_pass": 0,
+  "holds": 0,
+  "blocks": 0,
+  "regime": "NEUTRAL",
+  "risk_posture": "HIGH",
+  "market_phase": null,
+  "source": "manual",
+  "symbols": [
+    {
+      "symbol": "ABNB",
+      "source": "ORATS",
+      "price": 122.69,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "Stock qualified (score: 16)",
+      "confidence": 0.0,
+      "score": 16,
+      "regime": "NEUTRAL",
+      "risk": "HIGH",
+      "liquidity_ok": false,
+      "liquidity_reason": "",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": false,
+      "options_reason": "Not in top K candidates",
+      "gates": [],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": null,
+      "error": null,
+      "data_completeness": 0.3333333333333333,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": null
+    },
+    {
+      "symbol": "PLTR",
+      "source": "ORATS",
+      "price": 133.46,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "Stock qualified (score: 23)",
+      "confidence": 0.0,
+      "score": 23,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": false,
+      "liquidity_reason": "",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": false,
+      "options_reason": "Not in top K candidates",
+      "gates": [],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": null,
+      "error": null,
+      "data_completeness": 0.3333333333333333,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": null
+    },
+    {
+      "symbol": "QCOM",
+      "source": "ORATS",
+      "price": 139.26,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "Stock qualified (score: 23)",
+      "confidence": 0.0,
+      "score": 23,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": false,
+      "liquidity_reason": "",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": false,
+      "options_reason": "Not in top K candidates",
+      "gates": [],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": null,
+      "error": null,
+      "data_completeness": 0.3333333333333333,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": null
+    },
+    {
+      "symbol": "SNOW",
+      "source": "ORATS",
+      "price": 163.46,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "Stock qualified (score: 16)",
+      "confidence": 0.0,
+      "score": 16,
+      "regime": "NEUTRAL",
+      "risk": "HIGH",
+      "liquidity_ok": false,
+      "liquidity_reason": "",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": false,
+      "options_reason": "Not in top K candidates",
+      "gates": [],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": null,
+      "error": null,
+      "data_completeness": 0.3333333333333333,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": null
+    },
+    {
+      "symbol": "SOFI",
+      "source": "ORATS",
+      "price": 19.98,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "Stock qualified (score: 23)",
+      "confidence": 0.0,
+      "score": 23,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": false,
+      "liquidity_reason": "",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": false,
+      "options_reason": "Not in top K candidates",
+      "gates": [],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": null,
+      "error": null,
+      "data_completeness": 0.3333333333333333,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": null
+    },
+    {
+      "symbol": "SQ",
+      "source": "ORATS",
+      "price": 87.07,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "Stock qualified (score: 23)",
+      "confidence": 0.0,
+      "score": 23,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": false,
+      "liquidity_reason": "",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": false,
+      "options_reason": "Not in top K candidates",
+      "gates": [],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": null,
+      "error": null,
+      "data_completeness": 0.3333333333333333,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": null
+    },
+    {
+      "symbol": "TSM",
+      "source": "ORATS",
+      "price": 332.63,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "Stock qualified (score: 23)",
+      "confidence": 0.0,
+      "score": 23,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": false,
+      "liquidity_reason": "",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": false,
+      "options_reason": "Not in top K candidates",
+      "gates": [],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": null,
+      "error": null,
+      "data_completeness": 0.3333333333333333,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": null
+    },
+    {
+      "symbol": "QQQ",
+      "source": "ORATS",
+      "price": 602.11,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "Stock qualified (score: 23)",
+      "confidence": 0.0,
+      "score": 23,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": false,
+      "liquidity_reason": "",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": false,
+      "options_reason": "Not in top K candidates",
+      "gates": [],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": null,
+      "error": null,
+      "data_completeness": 0.3333333333333333,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": null
+    },
+    {
+      "symbol": "SPY",
+      "source": "ORATS",
+      "price": 681.63,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "Stock qualified (score: 23)",
+      "confidence": 0.0,
+      "score": 23,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": false,
+      "liquidity_reason": "",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": false,
+      "options_reason": "Not in top K candidates",
+      "gates": [],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": null,
+      "error": null,
+      "data_completeness": 0.3333333333333333,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": null
+    },
+    {
+      "symbol": "TSLA",
+      "source": "ORATS",
+      "price": 400.04,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "Stock qualified (score: 23)",
+      "confidence": 0.0,
+      "score": 23,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": false,
+      "liquidity_reason": "",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": false,
+      "options_reason": "Not in top K candidates",
+      "gates": [],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": null,
+      "error": null,
+      "data_completeness": 0.3333333333333333,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": null
+    },
+    {
+      "symbol": "V",
+      "source": "ORATS",
+      "price": 332.85,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "Stock qualified (score: 23)",
+      "confidence": 0.0,
+      "score": 23,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": false,
+      "liquidity_reason": "",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": false,
+      "options_reason": "Not in top K candidates",
+      "gates": [],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": null,
+      "error": null,
+      "data_completeness": 0.3333333333333333,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": null
+    },
+    {
+      "symbol": "WMT",
+      "source": "ORATS",
+      "price": 127.18,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "Stock qualified (score: 23)",
+      "confidence": 0.0,
+      "score": 23,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": false,
+      "liquidity_reason": "",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": false,
+      "options_reason": "Not in top K candidates",
+      "gates": [],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": null,
+      "error": null,
+      "data_completeness": 0.3333333333333333,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": null
+    },
+    {
+      "symbol": "DIS",
+      "source": "ORATS",
+      "price": 105.6,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.34, DTE=23, OI=200, bid=$1.48, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.34, DTE=23, OI=200, bid=$1.48, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.34, DTE=23, OI=200, bid=$1.48, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:39.088303+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "AMZN",
+      "source": "ORATS",
+      "price": 224.89,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.34, DTE=23, OI=1192, bid=$7.25, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.34, DTE=23, OI=1192, bid=$7.25, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.34, DTE=23, OI=1192, bid=$7.25, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:39.085636+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "CRM",
+      "source": "ORATS",
+      "price": 194.15,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.36, DTE=23, OI=223, bid=$7.30, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.36, DTE=23, OI=223, bid=$7.30, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.36, DTE=23, OI=223, bid=$7.30, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:39.087414+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "CRWD",
+      "source": "ORATS",
+      "price": 412.9,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.38, DTE=23, OI=204, bid=$14.10, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.38, DTE=23, OI=204, bid=$14.10, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.38, DTE=23, OI=204, bid=$14.10, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:39.089619+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "COST",
+      "source": "ORATS",
+      "price": 991.14,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.39, DTE=23, OI=25, bid=$15.95, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.39, DTE=23, OI=25, bid=$15.95, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.39, DTE=23, OI=25, bid=$15.95, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:39.086457+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "AVGO",
+      "source": "ORATS",
+      "price": 320.78,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.39, DTE=23, OI=739, bid=$12.80, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.39, DTE=23, OI=739, bid=$12.80, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.39, DTE=23, OI=739, bid=$12.80, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:47.383213+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "AMD",
+      "source": "ORATS",
+      "price": 195.3,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.34, DTE=23, OI=479, bid=$7.20, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.34, DTE=23, OI=479, bid=$7.20, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.34, DTE=23, OI=479, bid=$7.20, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:48.499652+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "COIN",
+      "source": "ORATS",
+      "price": 154.34,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.36, DTE=30, OI=45, bid=$10.50, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.36, DTE=30, OI=45, bid=$10.50, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.36, DTE=30, OI=45, bid=$10.50, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:48.970706+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "AAPL",
+      "source": "ORATS",
+      "price": 274.92,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.31, DTE=30, OI=503, bid=$4.55, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.31, DTE=30, OI=503, bid=$4.55, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.31, DTE=30, OI=503, bid=$4.55, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:49.509990+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "MRVL",
+      "source": "ORATS",
+      "price": 74.22,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.38, DTE=23, OI=1548, bid=$2.96, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.38, DTE=23, OI=1548, bid=$2.96, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.38, DTE=23, OI=1548, bid=$2.96, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:49.965394+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "NKE",
+      "source": "ORATS",
+      "price": 62.74,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.35, DTE=23, OI=756, bid=$1.23, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.35, DTE=23, OI=756, bid=$1.23, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.35, DTE=23, OI=756, bid=$1.23, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:56.041355+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "JPM",
+      "source": "ORATS",
+      "price": 308.58,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.34, DTE=30, OI=119, bid=$5.80, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.34, DTE=30, OI=119, bid=$5.80, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.34, DTE=30, OI=119, bid=$5.80, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:57.702026+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "HD",
+      "source": "ORATS",
+      "price": 383.17,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.38, DTE=30, OI=8, bid=$9.05, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.38, DTE=30, OI=8, bid=$9.05, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.38, DTE=30, OI=8, bid=$9.05, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:58.166130+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "GOOGL",
+      "source": "ORATS",
+      "price": 322.28,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.31, DTE=23, OI=637, bid=$6.00, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.31, DTE=23, OI=637, bid=$6.00, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.31, DTE=23, OI=637, bid=$6.00, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:58.822518+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "MU",
+      "source": "ORATS",
+      "price": 383.21,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.39, DTE=23, OI=307, bid=$21.70, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.39, DTE=23, OI=307, bid=$21.70, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.39, DTE=23, OI=307, bid=$21.70, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:59.234965+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "NVDA",
+      "source": "ORATS",
+      "price": 175.6,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "POSITION_ALREADY_OPEN",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.31, DTE=23, OI=12247, bid=$5.00, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.31, DTE=23, OI=12247, bid=$5.00, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:28:04.408488+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": true,
+      "position_reason": "POSITION_ALREADY_OPEN",
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "ORCL",
+      "source": "ORATS",
+      "price": 140.95,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.37, DTE=23, OI=834, bid=$6.25, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.37, DTE=23, OI=834, bid=$6.25, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.37, DTE=23, OI=834, bid=$6.25, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:28:07.640705+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "PYPL",
+      "source": "ORATS",
+      "price": 40.02,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.35, DTE=30, OI=80, bid=$1.14, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.35, DTE=30, OI=80, bid=$1.14, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.35, DTE=30, OI=80, bid=$1.14, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:28:09.764034+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "MSFT",
+      "source": "ORATS",
+      "price": 406.08,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.36, DTE=23, OI=1244, bid=$7.65, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.36, DTE=23, OI=1244, bid=$7.65, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.36, DTE=23, OI=1244, bid=$7.65, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:28:09.046879+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "META",
+      "source": "ORATS",
+      "price": 678.57,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE: missing ask, bid, open_interest",
+      "confidence": 0.43333333333333335,
+      "score": 13,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": false,
+      "liquidity_reason": "DATA_INCOMPLETE: missing ask, bid, open_interest",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "FAIL",
+          "reason": "DATA_INCOMPLETE: missing ask, bid, open_interest"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:28:07.207448+00:00",
+      "error": null,
+      "data_completeness": 0.3333333333333333,
+      "missing_fields": [
+        "bid",
+        "ask",
+        "volume",
+        "avg_volume",
+        "ask",
+        "bid",
+        "open_interest"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": null
+    }
+  ],
+  "top_candidates": [
+    {
+      "symbol": "DIS",
+      "source": "ORATS",
+      "price": 105.6,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.34, DTE=23, OI=200, bid=$1.48, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.34, DTE=23, OI=200, bid=$1.48, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.34, DTE=23, OI=200, bid=$1.48, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:39.088303+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "AMZN",
+      "source": "ORATS",
+      "price": 224.89,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.34, DTE=23, OI=1192, bid=$7.25, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.34, DTE=23, OI=1192, bid=$7.25, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.34, DTE=23, OI=1192, bid=$7.25, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:39.085636+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "CRM",
+      "source": "ORATS",
+      "price": 194.15,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.36, DTE=23, OI=223, bid=$7.30, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.36, DTE=23, OI=223, bid=$7.30, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.36, DTE=23, OI=223, bid=$7.30, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:39.087414+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "CRWD",
+      "source": "ORATS",
+      "price": 412.9,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.38, DTE=23, OI=204, bid=$14.10, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.38, DTE=23, OI=204, bid=$14.10, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.38, DTE=23, OI=204, bid=$14.10, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:39.089619+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "COST",
+      "source": "ORATS",
+      "price": 991.14,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.39, DTE=23, OI=25, bid=$15.95, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.39, DTE=23, OI=25, bid=$15.95, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.39, DTE=23, OI=25, bid=$15.95, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:39.086457+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "AVGO",
+      "source": "ORATS",
+      "price": 320.78,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.39, DTE=23, OI=739, bid=$12.80, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.39, DTE=23, OI=739, bid=$12.80, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.39, DTE=23, OI=739, bid=$12.80, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:47.383213+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "AMD",
+      "source": "ORATS",
+      "price": 195.3,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.34, DTE=23, OI=479, bid=$7.20, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.34, DTE=23, OI=479, bid=$7.20, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.34, DTE=23, OI=479, bid=$7.20, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:48.499652+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "COIN",
+      "source": "ORATS",
+      "price": 154.34,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.36, DTE=30, OI=45, bid=$10.50, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.36, DTE=30, OI=45, bid=$10.50, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.36, DTE=30, OI=45, bid=$10.50, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:48.970706+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "AAPL",
+      "source": "ORATS",
+      "price": 274.92,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.31, DTE=30, OI=503, bid=$4.55, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.31, DTE=30, OI=503, bid=$4.55, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.31, DTE=30, OI=503, bid=$4.55, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:49.509990+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    },
+    {
+      "symbol": "MRVL",
+      "source": "ORATS",
+      "price": 74.22,
+      "bid": null,
+      "ask": null,
+      "volume": null,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.38, DTE=23, OI=1548, bid=$2.96, (enhanced)",
+      "confidence": 0.6941666666666667,
+      "score": 38,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.38, DTE=23, OI=1548, bid=$2.96, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 23)"
+        },
+        {
+          "name": "EOD Strategy Data Waiver",
+          "status": "WAIVED",
+          "reason": "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.38, DTE=23, OI=1548, bid=$2.96, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-05T17:27:49.965394+00:00",
+      "error": null,
+      "data_completeness": 0.6333333333333333,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "MISSING",
+        "ask": "MISSING",
+        "volume": "MISSING",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA"
+    }
+  ],
+  "top_holds": [],
+  "alerts": [
+    {
+      "id": "ABNB_1770312500_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "ABNB",
+      "message": "ABNB - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-05T17:28:20.256865+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "ABNB_1770312500_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "ABNB",
+      "message": "ABNB has incomplete data - missing: avg_volume",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.256865+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "avg_volume"
+        ]
+      }
+    },
+    {
+      "id": "PLTR_1770312500_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "PLTR",
+      "message": "PLTR - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-05T17:28:20.256937+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "PLTR_1770312500_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "PLTR",
+      "message": "PLTR has incomplete data - missing: avg_volume",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.256937+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "avg_volume"
+        ]
+      }
+    },
+    {
+      "id": "QCOM_1770312500_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "QCOM",
+      "message": "QCOM - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-05T17:28:20.256980+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "QCOM_1770312500_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "QCOM",
+      "message": "QCOM has incomplete data - missing: avg_volume",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.256980+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "avg_volume"
+        ]
+      }
+    },
+    {
+      "id": "SNOW_1770312500_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SNOW",
+      "message": "SNOW - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-05T17:28:20.257011+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "SNOW_1770312500_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SNOW",
+      "message": "SNOW has incomplete data - missing: avg_volume",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257011+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "avg_volume"
+        ]
+      }
+    },
+    {
+      "id": "SOFI_1770312500_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SOFI",
+      "message": "SOFI - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-05T17:28:20.257045+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "SOFI_1770312500_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SOFI",
+      "message": "SOFI has incomplete data - missing: avg_volume",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257045+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "avg_volume"
+        ]
+      }
+    },
+    {
+      "id": "SQ_1770312500_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SQ",
+      "message": "SQ - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-05T17:28:20.257074+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "SQ_1770312500_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SQ",
+      "message": "SQ has incomplete data - missing: avg_volume",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257074+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "avg_volume"
+        ]
+      }
+    },
+    {
+      "id": "TSM_1770312500_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "TSM",
+      "message": "TSM - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-05T17:28:20.257100+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "TSM_1770312500_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "TSM",
+      "message": "TSM has incomplete data - missing: avg_volume",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257100+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "avg_volume"
+        ]
+      }
+    },
+    {
+      "id": "QQQ_1770312500_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "QQQ",
+      "message": "QQQ - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-05T17:28:20.257128+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "QQQ_1770312500_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "QQQ",
+      "message": "QQQ has incomplete data - missing: avg_volume",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257128+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "avg_volume"
+        ]
+      }
+    },
+    {
+      "id": "SPY_1770312500_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SPY",
+      "message": "SPY - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-05T17:28:20.257158+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "SPY_1770312500_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SPY",
+      "message": "SPY has incomplete data - missing: avg_volume",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257158+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "avg_volume"
+        ]
+      }
+    },
+    {
+      "id": "TSLA_1770312500_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "TSLA",
+      "message": "TSLA - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-05T17:28:20.257185+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "TSLA_1770312500_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "TSLA",
+      "message": "TSLA has incomplete data - missing: avg_volume",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257185+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "avg_volume"
+        ]
+      }
+    },
+    {
+      "id": "V_1770312500_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "V",
+      "message": "V - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-05T17:28:20.257202+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "V_1770312500_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "V",
+      "message": "V has incomplete data - missing: avg_volume",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257202+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "avg_volume"
+        ]
+      }
+    },
+    {
+      "id": "WMT_1770312500_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "WMT",
+      "message": "WMT - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-05T17:28:20.257220+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "WMT_1770312500_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "WMT",
+      "message": "WMT has incomplete data - missing: avg_volume",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257220+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "avg_volume"
+        ]
+      }
+    },
+    {
+      "id": "DIS_1770312500_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "DIS",
+      "message": "DIS is eligible for trading (score: 38)",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257246+00:00",
+      "meta": {
+        "score": 38,
+        "price": 105.6
+      }
+    },
+    {
+      "id": "AMZN_1770312500_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "AMZN",
+      "message": "AMZN is eligible for trading (score: 38)",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257272+00:00",
+      "meta": {
+        "score": 38,
+        "price": 224.89
+      }
+    },
+    {
+      "id": "CRM_1770312500_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "CRM",
+      "message": "CRM is eligible for trading (score: 38)",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257289+00:00",
+      "meta": {
+        "score": 38,
+        "price": 194.15
+      }
+    },
+    {
+      "id": "CRWD_1770312500_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "CRWD",
+      "message": "CRWD is eligible for trading (score: 38)",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257304+00:00",
+      "meta": {
+        "score": 38,
+        "price": 412.9
+      }
+    },
+    {
+      "id": "COST_1770312500_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "COST",
+      "message": "COST is eligible for trading (score: 38)",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257318+00:00",
+      "meta": {
+        "score": 38,
+        "price": 991.14
+      }
+    },
+    {
+      "id": "AVGO_1770312500_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "AVGO",
+      "message": "AVGO is eligible for trading (score: 38)",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257332+00:00",
+      "meta": {
+        "score": 38,
+        "price": 320.78
+      }
+    },
+    {
+      "id": "AMD_1770312500_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "AMD",
+      "message": "AMD is eligible for trading (score: 38)",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257349+00:00",
+      "meta": {
+        "score": 38,
+        "price": 195.3
+      }
+    },
+    {
+      "id": "COIN_1770312500_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "COIN",
+      "message": "COIN is eligible for trading (score: 38)",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257370+00:00",
+      "meta": {
+        "score": 38,
+        "price": 154.34
+      }
+    },
+    {
+      "id": "AAPL_1770312500_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "AAPL",
+      "message": "AAPL is eligible for trading (score: 38)",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257392+00:00",
+      "meta": {
+        "score": 38,
+        "price": 274.92
+      }
+    },
+    {
+      "id": "MRVL_1770312500_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "MRVL",
+      "message": "MRVL is eligible for trading (score: 38)",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257421+00:00",
+      "meta": {
+        "score": 38,
+        "price": 74.22
+      }
+    },
+    {
+      "id": "NKE_1770312500_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "NKE",
+      "message": "NKE is eligible for trading (score: 38)",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257452+00:00",
+      "meta": {
+        "score": 38,
+        "price": 62.74
+      }
+    },
+    {
+      "id": "JPM_1770312500_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "JPM",
+      "message": "JPM is eligible for trading (score: 38)",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257471+00:00",
+      "meta": {
+        "score": 38,
+        "price": 308.58
+      }
+    },
+    {
+      "id": "HD_1770312500_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "HD",
+      "message": "HD is eligible for trading (score: 38)",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257486+00:00",
+      "meta": {
+        "score": 38,
+        "price": 383.17
+      }
+    },
+    {
+      "id": "GOOGL_1770312500_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "GOOGL",
+      "message": "GOOGL is eligible for trading (score: 38)",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257499+00:00",
+      "meta": {
+        "score": 38,
+        "price": 322.28
+      }
+    },
+    {
+      "id": "MU_1770312500_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "MU",
+      "message": "MU is eligible for trading (score: 38)",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257516+00:00",
+      "meta": {
+        "score": 38,
+        "price": 383.21
+      }
+    },
+    {
+      "id": "ORCL_1770312500_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "ORCL",
+      "message": "ORCL is eligible for trading (score: 38)",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257554+00:00",
+      "meta": {
+        "score": 38,
+        "price": 140.95
+      }
+    },
+    {
+      "id": "PYPL_1770312500_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "PYPL",
+      "message": "PYPL is eligible for trading (score: 38)",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257577+00:00",
+      "meta": {
+        "score": 38,
+        "price": 40.02
+      }
+    },
+    {
+      "id": "MSFT_1770312500_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "MSFT",
+      "message": "MSFT is eligible for trading (score: 38)",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257593+00:00",
+      "meta": {
+        "score": 38,
+        "price": 406.08
+      }
+    },
+    {
+      "id": "META_1770312500_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "META",
+      "message": "META - DATA_INCOMPLETE: missing volume, bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-05T17:28:20.257615+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "bid",
+          "ask",
+          "volume",
+          "avg_volume",
+          "ask",
+          "bid",
+          "open_interest"
+        ],
+        "missing_liquidity_fields": [
+          "volume",
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "META_1770312500_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "META",
+      "message": "META has incomplete data - missing: avg_volume, open_interest",
+      "severity": "INFO",
+      "created_at": "2026-02-05T17:28:20.257615+00:00",
+      "meta": {
+        "completeness": 0.3333333333333333,
+        "missing_fields": [
+          "avg_volume",
+          "open_interest"
+        ]
+      }
+    }
+  ],
+  "alerts_count": 44,
+  "errors": [],
+  "error_summary": null,
+  "exposure_summary": {
+    "total_positions": 1,
+    "by_symbol": {
+      "NVDA": {
+        "position_count": 1,
+        "remaining_contracts": 3,
+        "strategies": [
+          "CSP"
+        ]
+      }
+    },
+    "max_concurrent_positions": 5,
+    "max_capital_per_ticker_pct": 0.05,
+    "at_cap": false,
+    "symbols_over_capital_cap": []
+  },
+  "run_version": 1,
+  "checksum": "002be13900a0b47c7f4ce4cf637e37d8f111a74b71c27883e25ac4594fedb245",
+  "correlation_id": "eval_20260205_172734_3366029b",
+  "engine": "staged"
+}

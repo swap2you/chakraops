@@ -1,0 +1,56 @@
+{
+  "decision_snapshot": {
+    "as_of": "2026-02-01T10:13:57.580759",
+    "universe_id_or_hash": "db_universe",
+    "stats": {
+      "total_symbols": 0,
+      "symbols_evaluated": 0,
+      "total_candidates": 0,
+      "csp_candidates": 0,
+      "cc_candidates": 0,
+      "total_exclusions": 0,
+      "unique_exclusion_codes": 0
+    },
+    "candidates": [],
+    "scored_candidates": null,
+    "selected_signals": null,
+    "explanations": null,
+    "exclusions": null,
+    "exclusion_summary": null,
+    "coverage_summary": null,
+    "near_misses": null,
+    "symbols_with_options": [],
+    "symbols_without_options": {},
+    "data_source": "live",
+    "pipeline_timestamp": "2026-02-01T15:13:57.587372+00:00",
+    "trade_proposal": null
+  },
+  "execution_gate": {
+    "allowed": false,
+    "reasons": [
+      "NO_SELECTED_SIGNALS",
+      "NO_SYMBOLS_WITH_OPTIONS"
+    ]
+  },
+  "execution_plan": {
+    "allowed": false,
+    "blocked_reason": "NO_SELECTED_SIGNALS",
+    "orders": []
+  },
+  "dry_run_result": {
+    "allowed": false,
+    "blocked_reason": "NO_SELECTED_SIGNALS",
+    "orders": [],
+    "executed_at": "2026-02-01T10:13:57.587304"
+  },
+  "regime": "RISK_ON",
+  "regime_reason": null,
+  "metadata": {
+    "data_source": "live",
+    "pipeline_timestamp": "2026-02-01T15:13:57.587372+00:00",
+    "options_provider": "orats",
+    "fallback_enabled": true,
+    "symbols_with_options": 0,
+    "symbols_without_options": 0
+  }
+}

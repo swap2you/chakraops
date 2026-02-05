@@ -1,0 +1,47 @@
+{
+  "run_id": "0d528568",
+  "total_pnl": 611.0,
+  "win_rate": 1.0,
+  "total_trades": 4,
+  "wins": 4,
+  "losses": 0,
+  "roc_mean": 0.005007606994952509,
+  "roc_std": 5.515376982068012e-06,
+  "max_drawdown": 0.0,
+  "by_symbol": {
+    "MSFT": {
+      "pnl": 200.99999999999997,
+      "trades": 1,
+      "wins": 1
+    },
+    "TSLA": {
+      "pnl": 112.99999999999999,
+      "trades": 1,
+      "wins": 1
+    },
+    "AMD": {
+      "pnl": 76.0,
+      "trades": 1,
+      "wins": 1
+    },
+    "SPY": {
+      "pnl": 221.0,
+      "trades": 1,
+      "wins": 1
+    }
+  },
+  "by_regime": {
+    "RISK_ON": {
+      "pnl": 611.0,
+      "trades": 4
+    }
+  },
+  "config_summary": {
+    "fill_model": "mid",
+    "exit_model": "hold_to_expiry",
+    "use_options_layer": true,
+    "strategies": [
+      "CSP"
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "date": "2026-02-05",
+  "regime": "NEUTRAL",
+  "inputs": {
+    "SPY": {
+      "close": null,
+      "ema20": null,
+      "ema50": null,
+      "rsi": null,
+      "atr14": null
+    },
+    "QQQ": {
+      "close": null,
+      "ema20": null,
+      "ema50": null,
+      "rsi": null,
+      "atr14": null
+    }
+  }
+}

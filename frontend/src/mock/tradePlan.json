@@ -1,0 +1,26 @@
+{
+  "decision_ts": "2026-02-01T14:00:00Z",
+  "symbol": "SPY",
+  "strategy_type": "CSP",
+  "proposal": {
+    "symbol": "SPY",
+    "strategy_type": "CSP",
+    "expiry": "2026-04-18",
+    "strikes": [450],
+    "contracts": 1,
+    "credit_estimate": 260,
+    "max_loss": 520,
+    "execution_status": "READY",
+    "rejected": false
+  },
+  "execution_status": "READY",
+  "user_acknowledged": false,
+  "execution_notes": "",
+  "exit_plan": {
+    "profit_target_pct": 0.6,
+    "max_loss_multiplier": 2,
+    "time_stop_days": 14
+  },
+  "computed_targets": { "t1": 104, "t2": 78, "t3": 39 },
+  "blockers": []
+}

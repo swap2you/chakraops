@@ -164,7 +164,7 @@ class TestNightlyConfig:
             "NIGHTLY_EVAL_TZ": "America/Chicago",
             "NIGHTLY_MAX_SYMBOLS": "25",
             "NIGHTLY_STAGE2_TOP_K": "15",
-            "SLACK_WEBHOOK_URL": "https://hooks.slack.com/test",
+            "SLACK_WEBHOOK_URL": "https://example.invalid/slack-webhook-test",
         }
         
         with patch.dict("os.environ", env, clear=True):
@@ -174,7 +174,7 @@ class TestNightlyConfig:
         assert config.timezone == "America/Chicago"
         assert config.max_symbols == 25
         assert config.stage2_top_k == 15
-        assert config.slack_webhook_url == "https://hooks.slack.com/test"
+        assert config.slack_webhook_url == "https://example.invalid/slack-webhook-test"
 
 
 # ============================================================================
@@ -197,7 +197,7 @@ class TestSlackNotification:
             eligible=5,
         )
         
-        with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/test"}):
+        with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://example.invalid/slack-webhook-test"}):
             success, msg = send_nightly_slack(summary)
         
         assert success
@@ -233,7 +233,7 @@ class TestSlackNotification:
             eligible=5,
         )
         
-        with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/test"}):
+        with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://example.invalid/slack-webhook-test"}):
             success, msg = send_nightly_slack(summary)
         
         assert not success

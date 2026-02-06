@@ -56,7 +56,7 @@
 cd c:\Development\Workspace\ChakraOps\chakraops
 
 # Optional: Set Slack webhook URL (if you want alerts)
-set SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+set SLACK_WEBHOOK_URL=<your-webhook-url>
 
 # Run pipeline (Slack alerts sent automatically if configured)
 python scripts/run_and_save.py

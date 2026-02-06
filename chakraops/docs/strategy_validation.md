@@ -210,10 +210,10 @@ Slack alerts require the `SLACK_WEBHOOK_URL` environment variable:
 
 ```bash
 # Windows
-set SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+set SLACK_WEBHOOK_URL=<your-webhook-url>
 
 # Linux/Mac
-export SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+export SLACK_WEBHOOK_URL=<your-webhook-url>
 ```
 
 When configured, alerts are sent automatically after each pipeline run.

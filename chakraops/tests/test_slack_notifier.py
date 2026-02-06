@@ -53,7 +53,7 @@ def test_send_decision_alert_blocked_with_reasons(mock_post: MagicMock) -> None:
     gate_result = ExecutionGateResult(allowed=False, reasons=["NO_SELECTED_SIGNALS", "SNAPSHOT_STALE"])
     execution_plan = ExecutionPlan(allowed=False, blocked_reason="NO_SELECTED_SIGNALS", orders=[])
 
-    with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/test"}):
+    with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://example.invalid/slack-webhook-test"}):
         send_decision_alert(snapshot, gate_result, execution_plan)
 
     # Verify request was made
@@ -61,7 +61,7 @@ def test_send_decision_alert_blocked_with_reasons(mock_post: MagicMock) -> None:
     call_args = mock_post.call_args
     
     # Verify URL
-    assert call_args[0][0] == "https://hooks.slack.com/test"
+    assert call_args[0][0] == "https://example.invalid/slack-webhook-test"
     
     # Verify payload contains blocked status and reasons
     payload = call_args[1]["json"]
@@ -147,7 +147,7 @@ def test_send_decision_alert_allowed_with_signals(mock_post: MagicMock) -> None:
         ],
     )
 
-    with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/test"}):
+    with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://example.invalid/slack-webhook-test"}):
         send_decision_alert(snapshot, gate_result, execution_plan)
 
     # Verify request was made
@@ -188,7 +188,7 @@ def test_send_decision_alert_with_file_path(mock_post: MagicMock) -> None:
     execution_plan = ExecutionPlan(allowed=False, blocked_reason="NO_SELECTED_SIGNALS", orders=[])
     decision_file = Path("out/decision_2026-01-28T10-00-00.json")
 
-    with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/test"}):
+    with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://example.invalid/slack-webhook-test"}):
         send_decision_alert(snapshot, gate_result, execution_plan, decision_file_path=decision_file)
 
     # Verify file path is in message
@@ -223,7 +223,7 @@ def test_send_decision_alert_http_error(mock_post: MagicMock) -> None:
     gate_result = ExecutionGateResult(allowed=False, reasons=["NO_SELECTED_SIGNALS"])
     execution_plan = ExecutionPlan(allowed=False, blocked_reason="NO_SELECTED_SIGNALS", orders=[])
 
-    with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/test"}):
+    with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://example.invalid/slack-webhook-test"}):
         with pytest.raises(ValueError, match="Slack webhook returned error"):
             send_decision_alert(snapshot, gate_result, execution_plan)
 
@@ -254,7 +254,7 @@ def test_send_decision_alert_with_drift_status(mock_post: MagicMock) -> None:
         ],
     )
 
-    with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/test"}):
+    with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://example.invalid/slack-webhook-test"}):
         send_decision_alert(snapshot, gate_result, execution_plan, drift_status=drift_status)
 
     payload = mock_post.call_args[1]["json"]
@@ -280,7 +280,7 @@ def test_send_exit_alert_sent(mock_post: MagicMock) -> None:
     mock_response.raise_for_status = MagicMock()
     mock_post.return_value = mock_response
 
-    with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/test"}):
+    with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://example.invalid/slack-webhook-test"}):
         result = send_exit_alert("AAPL", 150.0, "EXIT", detail="50% of max profit")
 
     assert result is True

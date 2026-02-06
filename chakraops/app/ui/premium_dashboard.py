@@ -1462,7 +1462,7 @@ def render_settings_page() -> None:
                 1. Create a Slack webhook URL at [api.slack.com/apps](https://api.slack.com/apps)
                 2. Add to your `.env` file:
                    ```
-                   SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
+                   SLACK_WEBHOOK_URL=<your-webhook-url>
                    ```
                 3. Restart the backend server
                 4. Use the **Test Slack** button on the Test page to verify

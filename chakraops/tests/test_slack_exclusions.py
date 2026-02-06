@@ -39,7 +39,7 @@ def test_slack_exclusions_summary_blocked(mock_post: MagicMock) -> None:
     gate_result = ExecutionGateResult(allowed=False, reasons=["NO_SELECTED_SIGNALS"])
     execution_plan = ExecutionPlan(allowed=False, blocked_reason="NO_SELECTED_SIGNALS", orders=[])
 
-    with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/test"}):
+    with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://example.invalid/slack-webhook-test"}):
         send_decision_alert(snapshot, gate_result, execution_plan)
 
     # Verify request was made
@@ -78,7 +78,7 @@ def test_slack_exclusions_summary_no_exclusions(mock_post: MagicMock) -> None:
     gate_result = ExecutionGateResult(allowed=False, reasons=["NO_SELECTED_SIGNALS"])
     execution_plan = ExecutionPlan(allowed=False, blocked_reason="NO_SELECTED_SIGNALS", orders=[])
 
-    with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/test"}):
+    with patch.dict("os.environ", {"SLACK_WEBHOOK_URL": "https://example.invalid/slack-webhook-test"}):
         send_decision_alert(snapshot, gate_result, execution_plan)
 
     # Verify request was made

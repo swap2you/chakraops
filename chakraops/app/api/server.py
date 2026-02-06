@@ -2456,6 +2456,144 @@ def api_trade_delete_fill(trade_id: str, fill_id: str) -> Dict[str, Any]:
 
 
 # ============================================================================
+# PHASE 1: ACCOUNTS — CAPITAL AWARENESS
+# ============================================================================
+
+
+@app.get("/api/accounts")
+def api_accounts_list() -> Dict[str, Any]:
+    """List all accounts."""
+    try:
+        from app.core.accounts.service import list_accounts
+        accounts = list_accounts()
+        return {"accounts": [a.to_dict() for a in accounts], "count": len(accounts)}
+    except Exception as e:
+        logger.exception("Error listing accounts: %s", e)
+        return {"accounts": [], "count": 0, "error": str(e)}
+
+
+@app.get("/api/accounts/default")
+def api_accounts_default() -> Dict[str, Any]:
+    """Get the default account."""
+    try:
+        from app.core.accounts.service import get_default_account
+        account = get_default_account()
+        if account is None:
+            return {"account": None, "message": "No default account set"}
+        return {"account": account.to_dict()}
+    except Exception as e:
+        logger.exception("Error getting default account: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/accounts")
+async def api_accounts_create(request: Request) -> Dict[str, Any]:
+    """Create a new account."""
+    try:
+        import asyncio
+        body = await request.json()
+        from app.core.accounts.service import create_account
+        account, errors = create_account(body)
+        if errors:
+            raise HTTPException(status_code=400, detail={"errors": errors})
+        return account.to_dict()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error creating account: %s", e)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/api/accounts/{account_id}")
+async def api_accounts_update(account_id: str, request: Request) -> Dict[str, Any]:
+    """Update an existing account."""
+    try:
+        body = await request.json()
+        from app.core.accounts.service import update_account
+        account, errors = update_account(account_id, body)
+        if errors:
+            raise HTTPException(status_code=400, detail={"errors": errors})
+        return account.to_dict()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error updating account %s: %s", account_id, e)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/accounts/{account_id}/set-default")
+def api_accounts_set_default(account_id: str) -> Dict[str, Any]:
+    """Set an account as the default."""
+    try:
+        from app.core.accounts.service import set_default
+        account, errors = set_default(account_id)
+        if errors:
+            raise HTTPException(status_code=400, detail={"errors": errors})
+        return account.to_dict()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error setting default account %s: %s", account_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/accounts/{account_id}/csp-sizing")
+def api_accounts_csp_sizing(account_id: str, strike: float = Query(..., gt=0)) -> Dict[str, Any]:
+    """Compute CSP position sizing for a given strike price and account."""
+    try:
+        from app.core.accounts.service import get_account, compute_csp_sizing
+        account = get_account(account_id)
+        if account is None:
+            raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
+        sizing = compute_csp_sizing(account, strike)
+        return sizing
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error computing CSP sizing: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# PHASE 1: POSITIONS — MANUAL EXECUTION TRACKING
+# ============================================================================
+
+
+@app.get("/api/positions/tracked")
+def api_positions_tracked(status: Optional[str] = Query(default=None)) -> Dict[str, Any]:
+    """List manually tracked positions."""
+    try:
+        from app.core.positions.service import list_positions
+        positions = list_positions(status=status)
+        return {"positions": [p.to_dict() for p in positions], "count": len(positions)}
+    except Exception as e:
+        logger.exception("Error listing tracked positions: %s", e)
+        return {"positions": [], "count": 0, "error": str(e)}
+
+
+@app.post("/api/positions/manual-execute")
+async def api_positions_manual_execute(request: Request) -> Dict[str, Any]:
+    """Record a manual execution (creates a tracked position).
+
+    IMPORTANT: This does NOT place a trade. It records the user's intention
+    to execute and creates a Position record. The user must execute the
+    actual trade in their brokerage account.
+    """
+    try:
+        body = await request.json()
+        from app.core.positions.service import manual_execute
+        position, errors = manual_execute(body)
+        if errors:
+            raise HTTPException(status_code=400, detail={"errors": errors})
+        return position.to_dict()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error recording manual execution: %s", e)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ============================================================================
 # SLACK NOTIFICATION ENDPOINT
 # ============================================================================
 

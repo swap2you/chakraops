@@ -16,6 +16,8 @@ import { AnalysisPage } from "@/pages/AnalysisPage";
 import { DiagnosticsPage } from "@/pages/DiagnosticsPage";
 import { StrategyPage } from "@/pages/StrategyPage";
 import { PipelinePage } from "@/pages/PipelinePage";
+import { AccountsPage } from "@/pages/AccountsPage";
+import { TrackedPositionsPage } from "@/pages/TrackedPositionsPage";
 import { AccessGate } from "@/components/AccessGate";
 
 const SHORTCUT_PATHS: Record<string, string> = {
@@ -28,6 +30,8 @@ const SHORTCUT_PATHS: Record<string, string> = {
   x: "/diagnostics",
   s: "/strategy",
   i: "/pipeline",
+  c: "/accounts",
+  t: "/tracked-positions",
 };
 
 function KeyboardShortcuts({ onOpenPalette }: { onOpenPalette: () => void }) {
@@ -79,6 +83,8 @@ function AppShell() {
           <Route path="/diagnostics" element={<DiagnosticsPage />} />
           <Route path="/strategy" element={<StrategyPage />} />
           <Route path="/pipeline" element={<PipelinePage />} />
+          <Route path="/accounts" element={<AccountsPage />} />
+          <Route path="/tracked-positions" element={<TrackedPositionsPage />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

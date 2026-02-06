@@ -91,4 +91,28 @@ export const ENDPOINTS = {
   alertLog: `${BASE}/api/view/alert-log`,
   /** Phase 6: Slack configured? */
   alertingStatus: `${BASE}/api/ops/alerting-status`,
+
+  // ============================================================================
+  // PHASE 1: ACCOUNTS & CAPITAL AWARENESS
+  // ============================================================================
+  /** List all accounts */
+  accountsList: `${BASE}/api/accounts`,
+  /** Get default account */
+  accountsDefault: `${BASE}/api/accounts/default`,
+  /** Create account */
+  accountsCreate: `${BASE}/api/accounts`,
+  /** Update account */
+  accountUpdate: (accountId: string) => `${BASE}/api/accounts/${accountId}`,
+  /** Set default account */
+  accountSetDefault: (accountId: string) => `${BASE}/api/accounts/${accountId}/set-default`,
+  /** CSP sizing for account + strike */
+  accountCspSizing: (accountId: string) => `${BASE}/api/accounts/${accountId}/csp-sizing`,
+
+  // ============================================================================
+  // PHASE 1: TRACKED POSITIONS (MANUAL EXECUTION)
+  // ============================================================================
+  /** List tracked positions */
+  trackedPositions: `${BASE}/api/positions/tracked`,
+  /** Manual execute (create tracked position) */
+  manualExecute: `${BASE}/api/positions/manual-execute`,
 } as const;

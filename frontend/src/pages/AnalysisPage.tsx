@@ -16,8 +16,11 @@ import { EmptyState } from "@/components/EmptyState";
 import { pushSystemNotification } from "@/lib/notifications";
 import type { SymbolDiagnosticsView, SymbolDiagnosticsCandidateTrade } from "@/types/symbolDiagnostics";
 import type { SlackNotifyResponse } from "@/types/universeEvaluation";
+import { ManualExecuteModal } from "@/components/ManualExecuteModal";
+import type { Account, AccountDefaultResponse, CspSizingResponse } from "@/types/accounts";
+import type { PositionStrategy } from "@/types/trackedPositions";
 import { cn } from "@/lib/utils";
-import { Search, ExternalLink, CheckCircle2, XCircle, HelpCircle, TrendingUp, Shield, Option, RefreshCw, Loader2, AlertTriangle, DollarSign, BarChart3, Activity, Send } from "lucide-react";
+import { Search, ExternalLink, CheckCircle2, XCircle, HelpCircle, TrendingUp, Shield, Option, RefreshCw, Loader2, AlertTriangle, DollarSign, BarChart3, Activity, Send, Target } from "lucide-react";
 
 const TRADINGVIEW_BASE = "https://www.tradingview.com/symbols";
 const FETCH_COOLDOWN_MS = 60_000;
@@ -65,10 +68,62 @@ export function AnalysisPage() {
   const [error, setError] = useState<string | null>(null);
   const [fetchCooldownRemaining, setFetchCooldownRemaining] = useState(0);
   const [slackSending, setSlackSending] = useState<string | null>(null);
+  // Phase 1: Manual execution state
+  const [executeModalOpen, setExecuteModalOpen] = useState(false);
+  const [executeTradeInfo, setExecuteTradeInfo] = useState<{
+    strategy: PositionStrategy;
+    strike?: number | null;
+    expiration?: string | null;
+    creditEstimate?: number | null;
+  } | null>(null);
+  const [defaultAccount, setDefaultAccount] = useState<Account | null>(null);
+  const [defaultSizing, setDefaultSizing] = useState<CspSizingResponse | null>(null);
   const lastFetchTs = useRef<number>(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentSymbolRef = useRef<string>("");
   const isMountedRef = useRef(true);
+
+  // Phase 1: Fetch default account for capital awareness
+  useEffect(() => {
+    if (mode !== "LIVE") return;
+    apiGet<AccountDefaultResponse>(ENDPOINTS.accountsDefault)
+      .then((res) => {
+        if (res.account) setDefaultAccount(res.account);
+      })
+      .catch(() => {
+        // No default account — that's fine
+      });
+  }, [mode]);
+
+  // Phase 1: Fetch CSP sizing when default account and data changes
+  useEffect(() => {
+    if (!defaultAccount || !data?.candidate_trades?.length) {
+      setDefaultSizing(null);
+      return;
+    }
+    // Use first CSP candidate's strike for sizing
+    const cspTrade = data.candidate_trades.find((t) => t.strategy === "CSP" && t.strike);
+    if (!cspTrade?.strike) {
+      setDefaultSizing(null);
+      return;
+    }
+    apiGet<CspSizingResponse>(
+      `${ENDPOINTS.accountCspSizing(defaultAccount.account_id)}?strike=${cspTrade.strike}`
+    )
+      .then((res) => setDefaultSizing(res))
+      .catch(() => setDefaultSizing(null));
+  }, [defaultAccount, data?.candidate_trades]);
+
+  // Phase 1: Open execute modal
+  const openExecuteModal = useCallback((trade: SymbolDiagnosticsCandidateTrade) => {
+    setExecuteTradeInfo({
+      strategy: trade.strategy as PositionStrategy,
+      strike: trade.strike,
+      expiration: trade.expiry,
+      creditEstimate: trade.credit_estimate,
+    });
+    setExecuteModalOpen(true);
+  }, []);
 
   // Send to Slack
   const sendToSlack = useCallback(async (trade: SymbolDiagnosticsCandidateTrade, sym: string) => {
@@ -789,14 +844,42 @@ export function AnalysisPage() {
             </section>
           )}
 
-          {/* 8. Candidate Trades with Slack Button */}
+          {/* 8. Candidate Trades with Slack + Execute Buttons */}
           {data.candidate_trades && data.candidate_trades.length > 0 && (
             <section className="rounded-lg border border-border bg-card p-4">
               <h2 className="text-sm font-semibold text-foreground">Candidate Trades</h2>
               {data.eligibility?.position_open && (
                 <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">Position open — no new trade suggested. Trade suggestion CTA disabled.</p>
               )}
-              <p className="text-xs text-muted-foreground">Potential trade ideas based on current analysis. Send to Slack for tracking.</p>
+              <p className="text-xs text-muted-foreground">Potential trade ideas based on current analysis. Send to Slack or record a manual execution.</p>
+
+              {/* Phase 1: Capital sizing summary */}
+              {defaultAccount && defaultSizing && (
+                <div className={cn(
+                  "mt-2 rounded-md border p-2.5 text-xs",
+                  defaultSizing.eligible
+                    ? "border-emerald-500/30 bg-emerald-500/5"
+                    : "border-amber-500/30 bg-amber-500/5"
+                )}>
+                  <div className="flex items-center gap-4">
+                    <span className="flex items-center gap-1 font-medium">
+                      <DollarSign className="h-3.5 w-3.5" />
+                      {defaultAccount.account_id}
+                    </span>
+                    <span>Capital: ${defaultAccount.total_capital.toLocaleString()}</span>
+                    <span>Max/trade: ${defaultSizing.max_capital.toLocaleString()} ({defaultAccount.max_capital_per_trade_pct}%)</span>
+                    <span className="font-medium">
+                      Recommended: {defaultSizing.recommended_contracts} contract{defaultSizing.recommended_contracts !== 1 ? "s" : ""}
+                    </span>
+                    {!defaultSizing.eligible && (
+                      <span className="text-amber-600 dark:text-amber-400 font-medium">
+                        Insufficient capital
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="mt-3 overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -813,6 +896,7 @@ export function AnalysisPage() {
                   <tbody>
                     {data.candidate_trades.map((trade, i) => {
                       const slackKey = `${symbol}-${trade.strategy}-${trade.strike}`;
+                      const isEligibleStrategy = trade.strategy === "CSP" || trade.strategy === "CC" || trade.strategy === "STOCK";
                       return (
                         <tr key={i} className="border-b border-border/50">
                           <td className="py-2 pr-4">
@@ -831,19 +915,31 @@ export function AnalysisPage() {
                             {trade.why_this_trade ?? "No rationale"}
                           </td>
                           <td className="py-2">
-                            <button
-                              onClick={() => sendToSlack(trade, symbol)}
-                              disabled={slackSending === slackKey || data.eligibility?.position_open}
-                              className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
-                              title={data.eligibility?.position_open ? "Position open — no new trade suggested" : "Send to Slack"}
-                            >
-                              {slackSending === slackKey ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <Send className="h-3 w-3" />
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => sendToSlack(trade, symbol)}
+                                disabled={slackSending === slackKey || data.eligibility?.position_open}
+                                className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                                title={data.eligibility?.position_open ? "Position open — no new trade suggested" : "Send to Slack"}
+                              >
+                                {slackSending === slackKey ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Send className="h-3 w-3" />
+                                )}
+                                Slack
+                              </button>
+                              {isEligibleStrategy && !data.eligibility?.position_open && (
+                                <button
+                                  onClick={() => openExecuteModal(trade)}
+                                  className="flex items-center gap-1 rounded bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/20"
+                                  title="Record manual execution"
+                                >
+                                  <Target className="h-3 w-3" />
+                                  Execute
+                                </button>
                               )}
-                              Slack
-                            </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -852,6 +948,28 @@ export function AnalysisPage() {
                 </table>
               </div>
             </section>
+          )}
+
+          {/* Phase 1: Manual Execute Modal */}
+          {executeModalOpen && executeTradeInfo && (
+            <ManualExecuteModal
+              symbol={symbol}
+              strategy={executeTradeInfo.strategy}
+              strike={executeTradeInfo.strike}
+              expiration={executeTradeInfo.expiration}
+              creditEstimate={executeTradeInfo.creditEstimate}
+              onClose={() => { setExecuteModalOpen(false); setExecuteTradeInfo(null); }}
+              onExecuted={() => {
+                setExecuteModalOpen(false);
+                setExecuteTradeInfo(null);
+                pushSystemNotification({
+                  source: "system",
+                  severity: "info",
+                  title: "Position recorded",
+                  message: `${symbol} position tracked. Execute in your brokerage.`,
+                });
+              }}
+            />
           )}
 
           {/* Blockers (if any) */}

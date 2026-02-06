@@ -56,13 +56,29 @@ def _load_scoring_config() -> dict:
 
 
 def get_account_equity() -> Optional[float]:
-    """Account equity for notional_pct. Env ACCOUNT_EQUITY overrides config."""
+    """Account equity for notional_pct.
+
+    Priority:
+      1. Env ACCOUNT_EQUITY (override for testing/CI)
+      2. Default account total_capital (Phase 1 accounts system)
+      3. config/scoring.yaml account_equity (legacy fallback)
+    """
+    # 1. Env override
     env_val = os.getenv("ACCOUNT_EQUITY")
     if env_val is not None:
         try:
             return float(env_val)
         except ValueError:
             pass
+    # 2. Default account (Phase 1)
+    try:
+        from app.core.accounts.service import get_account_equity_from_default
+        acct_equity = get_account_equity_from_default()
+        if acct_equity is not None:
+            return acct_equity
+    except ImportError:
+        pass
+    # 3. Legacy config fallback
     cfg = _load_scoring_config()
     val = cfg.get("account_equity")
     if val is None:

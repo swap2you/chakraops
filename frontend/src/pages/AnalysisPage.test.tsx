@@ -37,7 +37,7 @@ const mockDiagnostics = {
   liquidity: { spread_pct: 0.05 },
   earnings: { next_date: null, days_to_earnings: null, blocked: false },
   options: { has_options: true, chain_ok: true, expirations_count: 5, contracts_count: 100 },
-  recommendation: "NOT_ELIGIBLE" as const,
+  eligibility: { verdict: "UNKNOWN" as const, primary_reason: "Eligibility not determined" },
   notes: [],
 };
 
@@ -73,17 +73,18 @@ describe("AnalysisPage", () => {
     expect(await screen.findByText("Gates")).toBeInTheDocument();
     expect(screen.getByText(/no_exclusion/i)).toBeInTheDocument();
     expect(screen.getByText("Blockers")).toBeInTheDocument();
-    expect(screen.getByText("NOT_ELIGIBLE")).toBeInTheDocument();
+    expect(screen.getByText("UNKNOWN")).toBeInTheDocument();
+    expect(screen.getByText("Eligibility not determined")).toBeInTheDocument();
     expect(screen.getByText("SPREAD")).toBeInTheDocument();
   });
 
-  it("renders OUT_OF_SCOPE banner when symbol not in universe", async () => {
+  it("renders UNKNOWN status and Eligibility not determined when symbol not in universe", async () => {
     const outOfScope = {
       ...mockDiagnostics,
       symbol: "NVDA",
       in_universe: false,
       status: "OUT_OF_SCOPE",
-      reason: "Symbol not in evaluation universe",
+      eligibility: { verdict: "UNKNOWN" as const, primary_reason: "Eligibility not determined" },
       fetched_at: "2026-02-01T15:00:00Z",
       blockers: [{ code: "NOT_IN_UNIVERSE", message: "Symbol not in evaluation universe", severity: "info" }],
     };
@@ -91,8 +92,8 @@ describe("AnalysisPage", () => {
     render(<AnalysisPage />, { wrapper: LiveWrapper });
     fireEvent.change(screen.getByPlaceholderText(/e.g. NVDA/i), { target: { value: "NVDA" } });
     fireEvent.click(screen.getByRole("button", { name: /analyze/i }));
-    const banner = await screen.findByRole("status", { name: /Out of evaluation universe/i });
-    expect(banner).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Fetch latest data/i })).toBeInTheDocument();
+    expect(await screen.findByText("UNKNOWN")).toBeInTheDocument();
+    expect(screen.getByText("Eligibility not determined")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /refresh/i })).toBeInTheDocument();
   });
 });

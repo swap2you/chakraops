@@ -28,10 +28,15 @@ describe("NotificationsPage", () => {
     expect(heading != null || empty != null).toBe(true);
   });
 
-  it("shows filter by type", () => {
+  it("shows filter buttons", () => {
     render(<NotificationsPage />);
-    const select = screen.getByRole("combobox", { name: /filter by type/i });
-    expect(select).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^ALL$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^NIGHTLY$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^ELIGIBLE$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^WARN$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^DATA$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^ERRORS$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^INFO$/i })).toBeInTheDocument();
   });
 
   it("shows search input", () => {

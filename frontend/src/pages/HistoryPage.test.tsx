@@ -7,9 +7,10 @@ describe("HistoryPage", () => {
     expect(() => render(<HistoryPage />)).not.toThrow();
   });
 
-  it("shows Decision history heading", () => {
+  it("shows History heading and descriptive paragraph", () => {
     render(<HistoryPage />);
-    expect(screen.getByRole("heading", { name: /decision history/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^history$/i })).toBeInTheDocument();
+    expect(screen.getByText(/review past evaluation runs and system decisions/i)).toBeInTheDocument();
   });
 
   it("shows Filters region", () => {

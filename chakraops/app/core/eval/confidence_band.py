@@ -33,15 +33,26 @@ BAND_CAPITAL_PCT = {
 
 @dataclass
 class CapitalHint:
-    """Band and suggested capital % for display."""
+    """Band and suggested capital % for display. Phase 3: band_reason explains why (so Band C is not unexplained)."""
     band: str  # "A" | "B" | "C"
     suggested_capital_pct: float
+    band_reason: Optional[str] = None  # e.g. "Band C: data_completeness < 0.75"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "band": self.band,
             "suggested_capital_pct": self.suggested_capital_pct,
+            "band_reason": self.band_reason,
         }
+
+
+def _get_band_limits() -> tuple:
+    """Band A/B minimum scores from config (avoid circular import)."""
+    try:
+        from app.core.eval.scoring import get_band_limits
+        return get_band_limits()
+    except Exception:
+        return 78, 60
 
 
 def compute_confidence_band(
@@ -54,36 +65,50 @@ def compute_confidence_band(
 ) -> CapitalHint:
     """
     Compute confidence band and suggested capital % from evaluation result.
+    Phase 3: Band A/B/C derived from score + gates; band_reason explains why (Band C never unexplained).
 
     Rules:
-    - A: RISK_ON, no DATA_INCOMPLETE (completeness >= 0.75), liquidity strong, ELIGIBLE, not position_open.
-    - B: NEUTRAL regime OR minor data gaps OR ELIGIBLE with position open elsewhere; or ELIGIBLE with completeness < 0.9.
-    - C: HOLD that barely passed (score 50-65), or any BLOCKED/UNKNOWN; or data_completeness < 0.75.
+    - A: ELIGIBLE, score >= band_a_min (78), RISK_ON, data_completeness >= 0.75, liquidity_ok, no position_open, completeness >= 0.9.
+    - B: ELIGIBLE with score >= band_b_min (60) but any gate not meeting A; or NEUTRAL/minor gaps/position open.
+    - C: Not ELIGIBLE, or score < band_b_min, or data_completeness < 0.75; band_reason set.
     """
     verdict_upper = (verdict or "").strip().upper()
     regime_upper = (regime or "").strip().upper()
+    band_a_min, band_b_min = _get_band_limits()
 
-    # C: Low conviction
+    def make_hint(band: ConfidenceBand, reason: str) -> CapitalHint:
+        return CapitalHint(
+            band=band.value,
+            suggested_capital_pct=BAND_CAPITAL_PCT[band],
+            band_reason=reason,
+        )
+
+    # C: Not ELIGIBLE
     if verdict_upper not in ("ELIGIBLE", "GREEN"):
-        # HOLD that barely passed (score in capped range) or BLOCKED/UNKNOWN
-        if verdict_upper == "HOLD" and 50 <= score <= 65:
-            band = ConfidenceBand.C
+        if verdict_upper == "HOLD":
+            reason = f"Band C: verdict HOLD (score {score})"
         elif verdict_upper in ("BLOCKED", "UNKNOWN"):
-            band = ConfidenceBand.C
+            reason = f"Band C: verdict {verdict_upper}"
         else:
-            band = ConfidenceBand.C
-        return CapitalHint(band=band.value, suggested_capital_pct=BAND_CAPITAL_PCT[band])
+            reason = f"Band C: verdict {verdict_upper}"
+        return make_hint(ConfidenceBand.C, reason)
 
-    # ELIGIBLE path
+    # ELIGIBLE path: gates for A/B/C
     if data_completeness < 0.75:
-        return CapitalHint(band=ConfidenceBand.C.value, suggested_capital_pct=BAND_CAPITAL_PCT[ConfidenceBand.C])
-    if regime_upper != "RISK_ON":
-        return CapitalHint(band=ConfidenceBand.B.value, suggested_capital_pct=BAND_CAPITAL_PCT[ConfidenceBand.B])
-    if not liquidity_ok:
-        return CapitalHint(band=ConfidenceBand.B.value, suggested_capital_pct=BAND_CAPITAL_PCT[ConfidenceBand.B])
-    if position_open:
-        return CapitalHint(band=ConfidenceBand.B.value, suggested_capital_pct=BAND_CAPITAL_PCT[ConfidenceBand.B])
-    if data_completeness < 0.9:
-        return CapitalHint(band=ConfidenceBand.B.value, suggested_capital_pct=BAND_CAPITAL_PCT[ConfidenceBand.B])
+        return make_hint(ConfidenceBand.C, f"Band C: data_completeness {data_completeness:.2f} < 0.75")
+    if score < band_b_min:
+        return make_hint(ConfidenceBand.C, f"Band C: score {score} < {band_b_min}")
 
-    return CapitalHint(band=ConfidenceBand.A.value, suggested_capital_pct=BAND_CAPITAL_PCT[ConfidenceBand.A])
+    # B: ELIGIBLE but not A
+    if regime_upper != "RISK_ON":
+        return make_hint(ConfidenceBand.B, f"Band B: regime {regime_upper or 'unknown'} (not RISK_ON)")
+    if not liquidity_ok:
+        return make_hint(ConfidenceBand.B, "Band B: liquidity not OK")
+    if position_open:
+        return make_hint(ConfidenceBand.B, "Band B: position already open")
+    if data_completeness < 0.9:
+        return make_hint(ConfidenceBand.B, f"Band B: data_completeness {data_completeness:.2f} < 0.9")
+    if score < band_a_min:
+        return make_hint(ConfidenceBand.B, f"Band B: score {score} < {band_a_min}")
+
+    return make_hint(ConfidenceBand.A, f"Band A: score {score} >= {band_a_min}, RISK_ON, data complete, liquidity OK")

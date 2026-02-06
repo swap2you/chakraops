@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { getDailyOverview, getTradePlan, getAlerts } from "@/data/source";
 import { useDataMode } from "@/context/DataModeContext";
 import { useScenario } from "@/context/ScenarioContext";
@@ -53,39 +53,69 @@ export function DashboardPage() {
   const [universeEval, setUniverseEval] = useState<UniverseEvaluationResult | null>(null);
   const [latestRun, setLatestRun] = useState<EvaluationLatestResponse | null>(null);
   const [evalRunning, setEvalRunning] = useState(false);
-  const [, setCurrentRunId] = useState<string | null>(null);
+  const [currentRunId, setCurrentRunId] = useState<string | null>(null);
   const [slackSending, setSlackSending] = useState<string | null>(null);
+  const [searchParams] = useSearchParams();
+  const runIdParam = searchParams.get("run_id");
 
-  // Single source of truth: only evaluation/latest (no live recompute from universe-evaluation).
+  // Single source of truth: evaluation/latest or a specific run_id from History (Phase 5).
   const fetchLatestRun = useCallback(async () => {
     if (mode !== "LIVE") return;
     try {
-      const data = await apiGet<EvaluationLatestResponse>(ENDPOINTS.evaluationLatest);
-      setLatestRun(data);
-      if (data.has_completed_run && data.symbols) {
+      if (runIdParam) {
+        const data = await apiGet<{ found: boolean; run_id?: string; symbols?: SymbolEvaluationResult[]; counts?: { total: number; evaluated: number; eligible: number; shortlisted: number }; completed_at?: string | null; duration_seconds?: number; alerts_count?: number; status?: string }>(ENDPOINTS.evaluationRun(runIdParam));
+        if (data.found === false || !data.symbols) {
+          setUniverseEval(null);
+          setLatestRun(null);
+          return;
+        }
+        setLatestRun({
+          has_completed_run: data.status === "COMPLETED",
+          run_id: data.run_id ?? runIdParam,
+          completed_at: data.completed_at ?? null,
+          status: data.status ?? "COMPLETED",
+          counts: data.counts ?? { total: 0, evaluated: 0, eligible: 0, shortlisted: 0 },
+          symbols: data.symbols,
+          alerts_count: data.alerts_count ?? 0,
+        } as EvaluationLatestResponse);
         setUniverseEval({
           evaluation_state: "COMPLETED",
-          evaluation_state_reason: "From persisted run",
+          evaluation_state_reason: "Prior run",
           last_evaluated_at: data.completed_at ?? null,
           duration_seconds: data.duration_seconds ?? 0,
-          counts: {
-            total: data.counts?.total ?? 0,
-            evaluated: data.counts?.evaluated ?? 0,
-            eligible: data.counts?.eligible ?? 0,
-            shortlisted: data.counts?.shortlisted ?? 0,
-          },
-          symbols: data.symbols as SymbolEvaluationResult[],
+          counts: data.counts ?? { total: 0, evaluated: 0, eligible: 0, shortlisted: 0 },
+          symbols: data.symbols,
           alerts_count: data.alerts_count ?? 0,
           errors: [],
         });
       } else {
-        setUniverseEval(null);
+        const data = await apiGet<EvaluationLatestResponse>(ENDPOINTS.evaluationLatest);
+        setLatestRun(data);
+        if (data.has_completed_run && data.symbols) {
+          setUniverseEval({
+            evaluation_state: "COMPLETED",
+            evaluation_state_reason: "From persisted run",
+            last_evaluated_at: data.completed_at ?? null,
+            duration_seconds: data.duration_seconds ?? 0,
+            counts: {
+              total: data.counts?.total ?? 0,
+              evaluated: data.counts?.evaluated ?? 0,
+              eligible: data.counts?.eligible ?? 0,
+              shortlisted: data.counts?.shortlisted ?? 0,
+            },
+            symbols: data.symbols as SymbolEvaluationResult[],
+            alerts_count: data.alerts_count ?? 0,
+            errors: [],
+          });
+        } else {
+          setUniverseEval(null);
+        }
       }
     } catch (e) {
-      console.error("Failed to fetch latest evaluation:", e);
+      console.error("Failed to fetch evaluation:", e);
       setUniverseEval(null);
     }
-  }, [mode]);
+  }, [mode, runIdParam]);
 
   // Fetch current evaluation status (is running, run_id).
   const fetchEvalStatus = useCallback(async () => {
@@ -288,6 +318,35 @@ export function DashboardPage() {
   return (
     <div className="space-y-6 p-6">
       <h1 className="sr-only">Dashboard</h1>
+
+      {/* Phase 5: Banner when evaluation run is in progress */}
+      {mode === "LIVE" && evalRunning && (
+        <div className="flex items-center gap-3 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3">
+          <Loader2 className="h-5 w-5 shrink-0 animate-spin text-blue-600 dark:text-blue-400" />
+          <div>
+            <p className="font-medium text-blue-800 dark:text-blue-200">Evaluation run in progress</p>
+            <p className="text-sm text-blue-700 dark:text-blue-300">
+              Results will update when complete.
+              {currentRunId && <span className="ml-1 font-mono text-xs">{currentRunId.slice(-12)}</span>}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 5: Viewing prior run (from History) */}
+      {mode === "LIVE" && runIdParam && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2">
+          <p className="text-sm text-amber-800 dark:text-amber-200">
+            Viewing prior run <code className="font-mono text-xs">{runIdParam.slice(-16)}</code>. Dashboards default to latest completed run.
+          </p>
+          <Link
+            to="/dashboard"
+            className="shrink-0 rounded px-3 py-1.5 text-sm font-medium bg-amber-600 text-white hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-600"
+          >
+            Back to latest
+          </Link>
+        </div>
+      )}
 
       {/* Compact System Status Pill (LIVE only) — click to open diagnostics
           Color rules:

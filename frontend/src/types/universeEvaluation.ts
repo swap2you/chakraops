@@ -2,6 +2,8 @@
  * Types for Universe Evaluation and Alerts
  */
 
+import type { ScoreBreakdown } from "./symbolDiagnostics";
+
 export interface CandidateTrade {
   strategy: string; // CSP, CC, HOLD
   expiry: string | null;
@@ -106,7 +108,13 @@ export interface SymbolEvaluationResult {
   position_open?: boolean;
   position_reason?: string | null;
   // Phase 10: Confidence band and capital hint
-  capital_hint?: { band: string; suggested_capital_pct: number } | null;
+  capital_hint?: { band: string; suggested_capital_pct: number; band_reason?: string | null } | null;
+  // Phase 3: Explainable scoring and capital-aware ranking
+  score_breakdown?: ScoreBreakdown | null;
+  rank_reasons?: { reasons: string[]; penalty: string | null } | null;
+  csp_notional?: number | null;
+  notional_pct?: number | null;
+  band_reason?: string | null;
 }
 
 /** Phase 8: Human-readable verdict explanation from evaluation run */

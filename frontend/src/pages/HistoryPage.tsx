@@ -21,7 +21,7 @@ import { validateDecisionHistory } from "@/mock/validator";
 import { cn } from "@/lib/utils";
 import { apiGet, ApiError } from "@/data/apiClient";
 import { ENDPOINTS } from "@/data/endpoints";
-import { Info, CheckCircle2, XCircle, Clock, Loader2 } from "lucide-react";
+import { Info, CheckCircle2, XCircle, Clock, Loader2, ExternalLink } from "lucide-react";
 
 const OUTCOME_LABEL: Record<DecisionOutcome, string> = {
   TRADE: "Trade",
@@ -250,6 +250,7 @@ export function HistoryPage() {
                     <th className="px-4 py-2 font-medium">Stage1/2</th>
                     <th className="px-4 py-2 font-medium">Eligible</th>
                     <th className="px-4 py-2 font-medium">Holds</th>
+                    <th className="px-4 py-2 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -325,6 +326,15 @@ export function HistoryPage() {
                         )}>
                           {run.holds ?? 0}
                         </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Link
+                          to={`/dashboard?run_id=${encodeURIComponent(run.run_id)}`}
+                          className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-primary hover:bg-muted"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          View run
+                        </Link>
                       </td>
                     </tr>
                   );

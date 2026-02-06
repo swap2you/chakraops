@@ -29,6 +29,8 @@ const NAV_ITEMS = [
   { path: "/history", label: "History", icon: History, shortcut: "g h" },
   { path: "/analytics", label: "Universe", icon: BarChart3, shortcut: "g a" },
   { path: "/analysis", label: "Ticker", icon: Search, shortcut: "g y" },
+  { path: "/strategy", label: "Strategy", icon: BookOpen, shortcut: "g s" },
+  { path: "/pipeline", label: "Pipeline", icon: BookOpen, shortcut: "g i" },
   { path: "/diagnostics", label: "Diagnostics", icon: Activity, shortcut: "g x" },
 ] as const;
 

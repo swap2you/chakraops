@@ -195,3 +195,19 @@ Run the full test suite with pytest:
 ```bash
 pytest tests/
 ```
+
+### How to interpret pipeline docs
+
+The evaluation pipeline is documented in implementation-truthful form (no aspirational claims):
+
+- **`docs/EVALUATION_PIPELINE.md`** — Stage-by-stage reference: purpose, inputs (with source file or ORATS endpoint), outputs, failure modes mapped to reason codes used in code/UI, and "where to verify" (run JSON path, API response fields).
+- **`docs/DATA_DICTIONARY.md`** — Table of every key field shown in the UI: field name, meaning, units/format, source, null/waived behavior, example. Fields not available from ORATS are explicitly marked with fallback/waiver behavior.
+- **`docs/ORATS_OPTION_DATA_PIPELINE.md`** — ORATS endpoint reference and data flow.
+
+Use these docs to:
+
+- Interpret run JSON (`out/evaluations/{run_id}.json`) and API responses (`/api/view/evaluation/latest`, `/api/view/symbol-diagnostics`).
+- Map UI labels and reason codes (e.g. `POSITION_BLOCKED`, `DATA_INCOMPLETE_FATAL`, `REGIME_RISK_OFF`) to the pipeline stage and code path.
+- Understand which fields come from which ORATS endpoint and how missing or waived fields are handled.
+
+The React app exposes a **Pipeline** page (route `/pipeline`) with the same seven stages (Universe → … → Score & Band); expanding a stage shows purpose, inputs with source, outputs, failure modes with reason codes, and where to verify.

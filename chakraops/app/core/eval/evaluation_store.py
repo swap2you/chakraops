@@ -202,6 +202,15 @@ def _latest_path() -> Path:
     return _ensure_evaluations_dir() / "latest.json"
 
 
+def _run_lock_path() -> Path:
+    """Path for run lock file (Phase 5: prevent overlapping runs)."""
+    return _get_evaluations_dir() / "run.lock"
+
+
+# Stale lock threshold: if lock file older than this, treat as stale and clear (seconds).
+RUN_LOCK_STALE_SEC = 7200  # 2 hours
+
+
 def _run_field_names() -> frozenset:
     return frozenset(f.name for f in fields(EvaluationRunFull))
 
@@ -218,6 +227,120 @@ def _validate_run_payload(data: Dict[str, Any]) -> None:
     run_id = data.get("run_id")
     if not isinstance(run_id, str) or not run_id.strip():
         raise ValueError("run_id must be a non-empty string")
+
+
+def acquire_run_lock(run_id: str, started_at: str) -> bool:
+    """
+    Acquire the run lock (create lock file). Prevents overlapping runs.
+    Returns True if lock acquired, False if another run is in progress.
+    Cross-platform: uses exclusive create (O_EXCL / 'x' mode).
+    """
+    path = _run_lock_path()
+    _ensure_evaluations_dir()
+    with _STORE_LOCK:
+        if path.exists():
+            # Stale lock?
+            try:
+                mtime = path.stat().st_mtime
+                if (datetime.now(timezone.utc).timestamp() - mtime) > RUN_LOCK_STALE_SEC:
+                    path.unlink()
+                    logger.info("[STORE] Cleared stale run lock (older than %ds)", RUN_LOCK_STALE_SEC)
+                else:
+                    return False
+            except OSError:
+                return False
+        try:
+            path.write_text(f"{run_id}\n{started_at}", encoding="utf-8")
+            logger.info("[STORE] Run lock acquired run_id=%s", run_id)
+            return True
+        except OSError as e:
+            logger.warning("[STORE] Run lock create failed: %s", e)
+            return False
+
+
+def release_run_lock() -> None:
+    """Release the run lock (remove lock file)."""
+    path = _run_lock_path()
+    with _STORE_LOCK:
+        try:
+            if path.exists():
+                path.unlink()
+                logger.info("[STORE] Run lock released")
+        except OSError as e:
+            logger.warning("[STORE] Run lock release failed: %s", e)
+
+
+def get_current_run_status() -> Optional[Dict[str, Any]]:
+    """
+    Return current run status if a run is in progress (lock file exists and not stale).
+    Returns {run_id, started_at} or None.
+    """
+    path = _run_lock_path()
+    if not path.exists():
+        return None
+    try:
+        mtime = path.stat().st_mtime
+        if (datetime.now(timezone.utc).timestamp() - mtime) > RUN_LOCK_STALE_SEC:
+            path.unlink()
+            return None
+        text = path.read_text(encoding="utf-8")
+        lines = text.strip().split("\n")
+        run_id = lines[0].strip() if lines else ""
+        started_at = lines[1].strip() if len(lines) > 1 else ""
+        return {"run_id": run_id, "started_at": started_at}
+    except OSError:
+        return None
+
+
+def clear_stale_run_lock() -> None:
+    """Remove run lock if older than RUN_LOCK_STALE_SEC. Call on startup."""
+    path = _run_lock_path()
+    if not path.exists():
+        return
+    try:
+        if (datetime.now(timezone.utc).timestamp() - path.stat().st_mtime) > RUN_LOCK_STALE_SEC:
+            path.unlink()
+            logger.info("[STORE] Cleared stale run lock on startup")
+    except OSError:
+        pass
+
+
+def write_run_running(run_id: str, started_at: str) -> None:
+    """Write minimal run file with status=RUNNING so run appears in list and has started_at."""
+    run = EvaluationRunFull(
+        run_id=run_id,
+        started_at=started_at,
+        completed_at=None,
+        status="RUNNING",
+        duration_seconds=0.0,
+        total=0,
+        evaluated=0,
+        eligible=0,
+        shortlisted=0,
+        symbols=[],
+        source="scheduled",
+    )
+    data = asdict(run)
+    data["run_version"] = RUN_SCHEMA_VERSION
+    data["checksum"] = _compute_checksum(data)
+    path = _run_path(run_id)
+    _ensure_evaluations_dir()
+    temp = path.with_suffix(".tmp")
+    try:
+        with open(temp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, default=str)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp, path)
+        logger.info("[STORE] RUNNING stub persisted run_id=%s", run_id)
+    except Exception as e:
+        if temp.exists():
+            try:
+                temp.unlink()
+            except OSError:
+                pass
+        logger.exception("[STORE] write_run_running failed: %s", e)
+        raise
 
 
 def _compute_checksum(data: Dict[str, Any]) -> str:
@@ -248,25 +371,77 @@ def _atomic_write(path: Path, data: Dict[str, Any], log_label: str) -> None:
         raise
 
 
-def save_failed_run(run_id: str, reason: str, error: Exception | None = None) -> None:
+def save_failed_run(
+    run_id: str,
+    reason: str,
+    error: Exception | None = None,
+    started_at: Optional[str] = None,
+) -> None:
     """
-    Log a failed evaluation run. Minimal implementation: logging only.
-    No database writes, no schema changes, no side effects. Must not raise.
+    Persist a failed evaluation run: status=FAILED, error_summary, completed_at, duration.
+    If started_at is None, tries to read from existing run file (RUNNING stub) for this run_id.
     """
+    err_str = str(error) if error is not None else ""
+    logger.warning("[STORE] save_failed_run run_id=%s reason=%s error=%s", run_id, reason, err_str)
+    completed_at = datetime.now(timezone.utc).isoformat()
+    if started_at is None:
+        try:
+            r = load_run(run_id)
+            if r:
+                started_at = r.started_at
+        except Exception:
+            pass
+        if not started_at:
+            started_at = completed_at
     try:
-        err_str = str(error) if error is not None else ""
-        logger.warning(
-            "[STORE] save_failed_run run_id=%s reason=%s error=%s",
-            run_id, reason, err_str,
-        )
+        start_ts = datetime.fromisoformat(started_at.replace("Z", "+00:00")).timestamp()
+        end_ts = datetime.fromisoformat(completed_at.replace("Z", "+00:00")).timestamp()
+        duration_seconds = max(0.0, end_ts - start_ts)
     except Exception:
-        pass
+        duration_seconds = 0.0
+    run = EvaluationRunFull(
+        run_id=run_id,
+        started_at=started_at,
+        completed_at=completed_at,
+        status="FAILED",
+        duration_seconds=duration_seconds,
+        total=0,
+        evaluated=0,
+        eligible=0,
+        shortlisted=0,
+        symbols=[],
+        source="scheduled",
+        error_summary=reason[:500] if reason else err_str[:500],
+        errors=[reason] if reason else [],
+    )
+    with _STORE_LOCK:
+        data = asdict(run)
+        data["run_version"] = RUN_SCHEMA_VERSION
+        data["checksum"] = _compute_checksum(data)
+        path = _run_path(run_id)
+        _ensure_evaluations_dir()
+        temp = path.with_suffix(".tmp")
+        try:
+            with open(temp, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, default=str)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp, path)
+            logger.info("[STORE] FAILED run persisted run_id=%s", run_id)
+        except Exception as e:
+            if temp.exists():
+                try:
+                    temp.unlink()
+                except OSError:
+                    pass
+            logger.exception("[STORE] save_failed_run persist failed: %s", e)
 
 
 def save_run(run: EvaluationRunFull) -> None:
     """
     Save an evaluation run atomically. Validates payload before write.
     If validation fails, does not overwrite any existing file.
+    Phase 4: Also writes data completeness report JSON alongside the run.
     """
     with _STORE_LOCK:
         data = asdict(run)
@@ -277,6 +452,12 @@ def save_run(run: EvaluationRunFull) -> None:
         _atomic_write(path, data, f"save_run({run.run_id})")
         cid = getattr(run, "correlation_id", None) or run.run_id
         logger.info("[STORE] persist_success run_id=%s correlation_id=%s", run.run_id, cid)
+        # Phase 4: Data completeness report
+        try:
+            from app.core.eval.data_completeness_report import write_data_completeness_report
+            write_data_completeness_report(run.run_id, run.symbols, _get_evaluations_dir())
+        except Exception as e:
+            logger.warning("[STORE] data_completeness report write failed: %s", e)
 
 
 def update_latest_pointer(run_id: str, completed_at: str) -> None:
@@ -476,6 +657,12 @@ def create_run_from_evaluation(
             "position_reason": getattr(s, "position_reason", None),
             "capital_hint": getattr(s, "capital_hint", None),
             "waiver_reason": getattr(s, "waiver_reason", None),
+            # Phase 3: Explainable scoring and capital-aware ranking
+            "score_breakdown": getattr(s, "score_breakdown", None),
+            "rank_reasons": getattr(s, "rank_reasons", None),
+            "csp_notional": getattr(s, "csp_notional", None),
+            "notional_pct": getattr(s, "notional_pct", None),
+            "band_reason": getattr(s, "band_reason", None),
         }
         symbols_data.append(sym_dict)
     
@@ -592,8 +779,23 @@ def build_latest_response() -> Dict[str, Any]:
             "symbols": [],
             "alerts_count": 0,
         }
+    # Phase 5: Dashboards read from last COMPLETED only; do not return symbols for RUNNING/FAILED
+    if run.status != "COMPLETED":
+        return {
+            "has_completed_run": False,
+            "run_id": run.run_id,
+            "completed_at": run.completed_at,
+            "status": run.status,
+            "reason": f"Latest run is {run.status}, not COMPLETED",
+            "read_source": "persisted",
+            "engine": getattr(run, "engine", "staged"),
+            "counts": {"total": 0, "evaluated": 0, "eligible": 0, "shortlisted": 0},
+            "top_candidates": [],
+            "symbols": [],
+            "alerts_count": 0,
+        }
     return {
-        "has_completed_run": run.status == "COMPLETED",
+        "has_completed_run": True,
         "run_id": run.run_id,
         "started_at": run.started_at,
         "completed_at": run.completed_at,
@@ -666,4 +868,9 @@ __all__ = [
     "build_latest_response",
     "build_runs_list_response",
     "build_run_detail_response",
+    "acquire_run_lock",
+    "release_run_lock",
+    "get_current_run_status",
+    "clear_stale_run_lock",
+    "write_run_running",
 ]

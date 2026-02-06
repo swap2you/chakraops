@@ -21,10 +21,25 @@ export interface StrategyRationale {
   data_warnings: string[];
 }
 
-// Phase 10: Capital hint from confidence band
+// Phase 3: Score breakdown (components 0–100 + composite)
+export interface ScoreBreakdown {
+  data_quality_score: number;
+  regime_score: number;
+  options_liquidity_score: number;
+  strategy_fit_score: number;
+  capital_efficiency_score: number;
+  composite_score: number;
+  csp_notional?: number | null;
+  notional_pct?: number | null;
+  capital_penalties?: string[];
+  top_penalty?: string | null;
+}
+
+// Phase 10: Capital hint from confidence band; Phase 3: band_reason explains why
 export interface CapitalHint {
   band: "A" | "B" | "C";
   suggested_capital_pct: number;
+  band_reason?: string | null;
 }
 
 // Eligibility verdict
@@ -40,6 +55,12 @@ export interface Eligibility {
   position_reason?: string | null;
   /** Phase 10: Confidence band and suggested capital % */
   capital_hint?: CapitalHint | null;
+  /** Phase 3: Score breakdown (components + composite) and rank reasons */
+  score_breakdown?: ScoreBreakdown | null;
+  rank_reasons?: { reasons: string[]; penalty: string | null } | null;
+  csp_notional?: number | null;
+  notional_pct?: number | null;
+  band_reason?: string | null;
   /** Verdict reason code for consistent classification */
   verdict_reason_code?: string | null;
   /** DATA_INCOMPLETE type: FATAL, INTRADAY, or null */

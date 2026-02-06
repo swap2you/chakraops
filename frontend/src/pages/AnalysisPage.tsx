@@ -433,12 +433,17 @@ export function AnalysisPage() {
                       data.eligibility.capital_hint.band === "A" && "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300",
                       data.eligibility.capital_hint.band === "B" && "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300",
                       data.eligibility.capital_hint.band === "C" && "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300"
-                    )} title={`Suggested capital: ${(data.eligibility.capital_hint.suggested_capital_pct * 100).toFixed(0)}% of portfolio`}>
+                    )} title={data.eligibility.capital_hint.band_reason ?? `Suggested capital: ${(data.eligibility.capital_hint.suggested_capital_pct * 100).toFixed(0)}% of portfolio`}>
                       Band {data.eligibility.capital_hint.band}
                     </span>
                     <span className="text-xs text-muted-foreground cursor-help" title="Suggested allocation based on confidence">
                       {(data.eligibility.capital_hint.suggested_capital_pct * 100).toFixed(0)}% capital
                     </span>
+                  </p>
+                )}
+                {data.eligibility?.band_reason && (
+                  <p className="mt-1 text-xs text-muted-foreground cursor-help" title="Why this band">
+                    {data.eligibility.band_reason}
                   </p>
                 )}
                 {/* Run metadata */}
@@ -453,6 +458,50 @@ export function AnalysisPage() {
                 )}
               </div>
             </div>
+            {/* Phase 3: Score breakdown and rank reasons */}
+            {(data.eligibility?.score_breakdown || data.eligibility?.rank_reasons) && (
+              <div className="mt-4 rounded-md border border-border bg-muted/30 p-3">
+                <h3 className="text-sm font-medium text-foreground">Score breakdown & rank reasons</h3>
+                {data.eligibility?.score_breakdown && (
+                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-3">
+                    <span className="text-muted-foreground">Data quality</span>
+                    <span className="font-medium">{data.eligibility.score_breakdown.data_quality_score}</span>
+                    <span className="text-muted-foreground">Regime</span>
+                    <span className="font-medium">{data.eligibility.score_breakdown.regime_score}</span>
+                    <span className="text-muted-foreground">Options liquidity</span>
+                    <span className="font-medium">{data.eligibility.score_breakdown.options_liquidity_score}</span>
+                    <span className="text-muted-foreground">Strategy fit</span>
+                    <span className="font-medium">{data.eligibility.score_breakdown.strategy_fit_score}</span>
+                    <span className="text-muted-foreground">Capital efficiency</span>
+                    <span className="font-medium">{data.eligibility.score_breakdown.capital_efficiency_score}</span>
+                    <span className="text-muted-foreground">Composite</span>
+                    <span className="font-semibold">{data.eligibility.score_breakdown.composite_score}</span>
+                  </div>
+                )}
+                {(data.eligibility?.csp_notional != null || data.eligibility?.notional_pct != null) && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {data.eligibility.csp_notional != null && `CSP notional: $${data.eligibility.csp_notional.toLocaleString()}`}
+                    {data.eligibility.notional_pct != null && ` • ${(data.eligibility.notional_pct * 100).toFixed(1)}% of account`}
+                  </p>
+                )}
+                {data.eligibility?.rank_reasons && (
+                  <div className="mt-2">
+                    {data.eligibility.rank_reasons.reasons?.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">Reasons: </span>
+                        {data.eligibility.rank_reasons.reasons.join(" • ")}
+                      </p>
+                    )}
+                    {data.eligibility.rank_reasons.penalty && (
+                      <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
+                        <span className="font-medium">Penalty: </span>
+                        {data.eligibility.rank_reasons.penalty}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
             {/* Phase 8: Why this verdict? panel */}
             {data.eligibility?.rationale && (
               <div className="mt-4 rounded-md border border-border bg-muted/30 p-3">

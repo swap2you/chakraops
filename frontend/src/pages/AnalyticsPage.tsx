@@ -9,7 +9,7 @@
  * 4. NEVER show "pending" - use explicit "No evaluation run yet" or "Last run at..."
  * 5. Show banner if a run is currently in progress
  */
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, Fragment } from "react";
 import { Link } from "react-router-dom";
 import { useDataMode } from "@/context/DataModeContext";
 import { apiGet, apiPost, ApiError } from "@/data/apiClient";
@@ -26,7 +26,7 @@ import type {
   EvaluationStatusCurrentResponse,
 } from "@/types/universeEvaluation";
 import { getVerdictColor, formatPrice, formatReason, formatStage, formatSelectedContract } from "@/types/universeEvaluation";
-import { Info, RefreshCw, XCircle, ExternalLink, Loader2, AlertTriangle, Clock, Play, Send, Search, CheckCircle2 } from "lucide-react";
+import { Info, RefreshCw, XCircle, ExternalLink, Loader2, AlertTriangle, Clock, Play, Send, Search, CheckCircle2, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // 90 second timeout - ORATS can be slow
@@ -58,6 +58,7 @@ export function AnalyticsPage() {
   const [evalRunning, setEvalRunning] = useState(false);
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
   const [slackSending, setSlackSending] = useState<string | null>(null);
+  const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
   const [abortReason, setAbortReason] = useState<AbortReason>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const abortReasonRef = useRef<AbortReason>(null);
@@ -609,9 +610,27 @@ export function AnalyticsPage() {
                       const reasonInfo = formatReason(row.primary_reason);
                       const stageInfo = formatStage(row.stage_reached);
                       const selectedContractStr = formatSelectedContract(row.selected_contract);
+                      const hasBreakdown = row.score_breakdown || row.rank_reasons;
+                      const isExpanded = expandedSymbol === row.symbol;
                       return (
-                      <tr key={row.symbol} className="border-b border-border/50 hover:bg-muted/30">
-                        <td className="py-2 pr-4 font-medium">{row.symbol}</td>
+                      <Fragment key={row.symbol}>
+                      <tr
+                        className={cn(
+                          "border-b border-border/50 hover:bg-muted/30",
+                          hasBreakdown && "cursor-pointer"
+                        )}
+                        onClick={hasBreakdown ? () => setExpandedSymbol(isExpanded ? null : row.symbol) : undefined}
+                      >
+                        <td className="py-2 pr-4 font-medium">
+                          {hasBreakdown ? (
+                            <span className="inline-flex items-center gap-1">
+                              {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                              {row.symbol}
+                            </span>
+                          ) : (
+                            row.symbol
+                          )}
+                        </td>
                         <td className="py-2 pr-4">
                           <span
                             className={cn("rounded-full px-2 py-0.5 text-xs font-medium", stageInfo.color)}
@@ -671,7 +690,7 @@ export function AnalyticsPage() {
                             </span>
                           )}
                         </td>
-                        <td className="py-2">
+                        <td className="py-2" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-2">
                             <Link
                               to={`/analysis?symbol=${encodeURIComponent(row.symbol)}`}
@@ -695,6 +714,58 @@ export function AnalyticsPage() {
                           </div>
                         </td>
                       </tr>
+                      {isExpanded && hasBreakdown && (
+                        <tr key={`${row.symbol}-expand`} className="border-b border-border/50 bg-muted/20">
+                          <td colSpan={7} className="py-3 pr-4 pl-8 text-xs">
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
+                              {row.score_breakdown && (
+                                <>
+                                  <span className="text-muted-foreground">Data quality</span>
+                                  <span>{row.score_breakdown.data_quality_score}</span>
+                                  <span className="text-muted-foreground">Regime</span>
+                                  <span>{row.score_breakdown.regime_score}</span>
+                                  <span className="text-muted-foreground">Liquidity</span>
+                                  <span>{row.score_breakdown.options_liquidity_score}</span>
+                                  <span className="text-muted-foreground">Strategy fit</span>
+                                  <span>{row.score_breakdown.strategy_fit_score}</span>
+                                  <span className="text-muted-foreground">Capital eff.</span>
+                                  <span>{row.score_breakdown.capital_efficiency_score}</span>
+                                  <span className="text-muted-foreground font-medium">Composite</span>
+                                  <span className="font-semibold">{row.score_breakdown.composite_score}</span>
+                                </>
+                              )}
+                            </div>
+                            {(row.csp_notional != null || row.notional_pct != null) && (
+                              <p className="mt-1 text-muted-foreground">
+                                {row.csp_notional != null && `CSP notional: $${row.csp_notional.toLocaleString()}`}
+                                {row.notional_pct != null && ` • ${(row.notional_pct * 100).toFixed(1)}% of account`}
+                              </p>
+                            )}
+                            {row.rank_reasons && (
+                              <div className="mt-1">
+                                {row.rank_reasons.reasons?.length > 0 && (
+                                  <p className="text-muted-foreground">
+                                    <span className="font-medium text-foreground">Reasons: </span>
+                                    {row.rank_reasons.reasons.join(" • ")}
+                                  </p>
+                                )}
+                                {row.rank_reasons.penalty && (
+                                  <p className="text-amber-700 dark:text-amber-400">
+                                    <span className="font-medium">Penalty: </span>
+                                    {row.rank_reasons.penalty}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                            {row.band_reason && (
+                              <p className="mt-0.5 text-muted-foreground" title="Why this band">
+                                {row.band_reason}
+                              </p>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                     );
                     })}
                   </tbody>

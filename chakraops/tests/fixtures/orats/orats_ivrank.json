@@ -1,0 +1,21 @@
+[
+  {
+    "ticker": "AAPL",
+    "ivRank1m": 42.5,
+    "ivPct1m": 38.2
+  },
+  {
+    "ticker": "SPY",
+    "ivRank1m": 25.0,
+    "ivPct1m": 22.1
+  },
+  {
+    "ticker": "IV_PCT_ONLY",
+    "ivPct1m": 55.0
+  },
+  {
+    "ticker": "NULL_IV",
+    "ivRank1m": null,
+    "ivPct1m": null
+  }
+]

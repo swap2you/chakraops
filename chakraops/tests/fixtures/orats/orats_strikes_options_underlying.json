@@ -1,0 +1,33 @@
+[
+  {
+    "ticker": "AAPL",
+    "stockPrice": 225.50,
+    "bid": 225.48,
+    "ask": 225.52,
+    "bidSize": 100,
+    "askSize": 200,
+    "volume": 45000000,
+    "quoteDate": "2026-02-03"
+  },
+  {
+    "ticker": "SPY",
+    "stockPrice": 598.20,
+    "bid": 598.18,
+    "ask": 598.22,
+    "volume": 65000000,
+    "quoteDate": "2026-02-03"
+  },
+  {
+    "ticker": "MISSING_BID_ASK",
+    "stockPrice": 100.0,
+    "quoteDate": "2026-02-03"
+  },
+  {
+    "ticker": "NULL_FIELDS",
+    "stockPrice": null,
+    "bid": null,
+    "ask": null,
+    "volume": null,
+    "quoteDate": null
+  }
+]

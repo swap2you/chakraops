@@ -32,6 +32,19 @@ import type {
   SlackNotifyResponse,
   EvaluationRunsResponse,
 } from "@/types/universeEvaluation";
+
+/** Phase 6: One record from alert log (sent or suppressed). */
+export interface Phase6AlertRecord {
+  fingerprint?: string;
+  created_at: string;
+  alert_type: string;
+  severity: string;
+  summary: string;
+  action_hint: string;
+  sent: boolean;
+  sent_at?: string | null;
+  suppressed_reason?: string | null;
+}
 import type { TradesAlertsResponse } from "@/types/journal";
 import { getAlertTypeColor } from "@/types/universeEvaluation";
 import { Search, Send, Loader2 } from "lucide-react";
@@ -67,6 +80,8 @@ export function NotificationsPage() {
   const [selected, setSelected] = useState<NotificationItem | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [slackSending, setSlackSending] = useState<string | null>(null);
+  const [alertLogRecords, setAlertLogRecords] = useState<Phase6AlertRecord[]>([]);
+  const [alertingStatus, setAlertingStatus] = useState<{ slack_configured: boolean; message?: string }>({ slack_configured: false });
 
   // Send to Slack
   const sendToSlack = useCallback(async (alert: EvaluationAlert) => {
@@ -126,8 +141,10 @@ export function NotificationsPage() {
       apiGet<EvaluationAlertsResponse>(ENDPOINTS.evaluationAlerts).catch(() => ({ alerts: [], count: 0, last_generated_at: null })),
       apiGet<EvaluationRunsResponse>(ENDPOINTS.evaluationRuns).catch(() => ({ runs: [], count: 0, latest_run_id: null })),
       apiGet<TradesAlertsResponse>(ENDPOINTS.tradesAlerts).catch(() => ({ alerts: [], count: 0 })),
+      apiGet<{ records: Phase6AlertRecord[]; count: number }>(ENDPOINTS.alertLog).catch(() => ({ records: [], count: 0 })),
+      apiGet<{ slack_configured: boolean; message?: string }>(ENDPOINTS.alertingStatus).catch(() => ({ slack_configured: false, message: "Unknown" })),
     ])
-      .then(([alerts, overview, evalAlertsResp, evalRunsResp, journalAlertsResp]) => {
+      .then(([alerts, overview, evalAlertsResp, evalRunsResp, journalAlertsResp, alertLogResp, alertingStatusResp]) => {
         if (cancelled) return;
         const latestTs = overview?.links?.latest_decision_ts ?? null;
         const fromAlerts = notificationsFromAlerts(alerts);
@@ -176,6 +193,8 @@ export function NotificationsPage() {
         
         setEvalAlerts(evalAlertsResp.alerts);
         setNightlyRunIds(nightlyRunIdsList);
+        setAlertLogRecords(alertLogResp.records ?? []);
+        setAlertingStatus({ slack_configured: alertingStatusResp.slack_configured ?? false, message: alertingStatusResp.message });
         setNotifications([...system, ...fromAlerts, ...evalNotifications, ...journalNotifications, ...nightlyNotifications, ...pending]);
       })
       .catch((e) => {
@@ -314,6 +333,51 @@ export function NotificationsPage() {
           />
         </div>
       </section>
+
+      {/* Phase 6: Slack not configured banner */}
+      {mode === "LIVE" && !alertingStatus.slack_configured && (
+        <section className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3" role="region" aria-label="Alerting status">
+          <p className="text-sm text-amber-700 dark:text-amber-400">
+            Alerts suppressed (Slack not configured). Set <code className="rounded bg-muted px-1">SLACK_WEBHOOK_URL</code> to enable delivery.
+          </p>
+        </section>
+      )}
+
+      {/* Phase 6: System Alerts (alert log) */}
+      {mode === "LIVE" && alertLogRecords.length > 0 && (
+        <section className="rounded-lg border border-border bg-card p-4" role="region" aria-label="System Alerts (Phase 6)">
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">System Alerts ({alertLogRecords.length})</h2>
+          <div className="space-y-2">
+            {alertLogRecords.slice(0, 20).map((r, i) => (
+              <div
+                key={r.fingerprint ? `${r.fingerprint}-${i}` : `phase6-${i}`}
+                className={cn(
+                  "rounded-lg border p-3",
+                  r.severity === "CRITICAL" && "border-destructive/30 bg-destructive/5",
+                  r.severity === "WARN" && "border-amber-500/30 bg-amber-500/5",
+                  (r.severity === "INFO" || !r.severity) && "border-border bg-muted/20"
+                )}
+              >
+                <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
+                  <span className="rounded bg-muted px-1.5 py-0.5">{r.alert_type}</span>
+                  <span>{r.severity}</span>
+                </div>
+                <p className="mt-1 text-sm font-medium text-foreground">{r.summary}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{r.action_hint}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {r.sent && r.sent_at ? (
+                    <>Sent at {formatRelative(r.sent_at)}</>
+                  ) : r.suppressed_reason ? (
+                    <>Suppressed: {r.suppressed_reason}</>
+                  ) : (
+                    <>Created {formatRelative(r.created_at)}</>
+                  )}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Evaluation Alerts Section */}
       {mode === "LIVE" && evalAlerts.length > 0 && (

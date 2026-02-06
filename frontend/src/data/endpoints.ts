@@ -38,6 +38,8 @@ export const ENDPOINTS = {
   notifySlack: `${BASE}/api/ops/notify/slack`,
   /** Strategy overview markdown (read-only) */
   strategyOverview: `${BASE}/api/view/strategy-overview`,
+  /** Evaluation pipeline doc markdown (docs/EVALUATION_PIPELINE.md) */
+  pipelineDoc: `${BASE}/api/view/pipeline-doc`,
   /** OpenAI TTS proxy: POST { text, voice? } → audio/mpeg */
   ttsSpeech: `${BASE}/api/tts/speech`,
   
@@ -81,4 +83,12 @@ export const ENDPOINTS = {
   tradeExportCsv: (tradeId: string) => `${BASE}/api/trades/${tradeId}/export.csv`,
   /** Journal alerts (stop breached, target hit) */
   tradesAlerts: `${BASE}/api/trades/alerts`,
+
+  // ============================================================================
+  // PHASE 6: ALERTING (alert log + Slack status)
+  // ============================================================================
+  /** Phase 6: Recent alert log (sent + suppressed) */
+  alertLog: `${BASE}/api/view/alert-log`,
+  /** Phase 6: Slack configured? */
+  alertingStatus: `${BASE}/api/ops/alerting-status`,
 } as const;

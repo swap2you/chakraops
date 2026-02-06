@@ -1,0 +1,40 @@
+# ChakraOps scoring and banding configuration.
+# See docs/SCORING_AND_BANDING.md for semantics and defaults.
+# All values are conservative by default.
+
+# Account equity used for notional_pct (CSP capital efficiency).
+# Can be overridden by env ACCOUNT_EQUITY. If unset, capital_efficiency_score is skipped (no penalty).
+account_equity: null  # e.g. 500000
+
+# Component weights (must sum to 1.0). Used for weighted composite score.
+weights:
+  data_quality: 0.25
+  regime: 0.20
+  options_liquidity: 0.20
+  strategy_fit: 0.20
+  capital_efficiency: 0.15
+
+# Notional % of account: penalize when csp_notional / account_equity exceeds threshold.
+# csp_notional = selected_put_strike * 100.
+notional_pct_thresholds:
+  warn_above: 0.05   # 5% of account -> start penalizing
+  heavy_penalty_above: 0.10  # 10% -> larger penalty
+  cap_above: 0.20    # 20% -> max penalty (score heavily reduced)
+
+# Penalty points applied when notional_pct is in each band (subtracted from capital_efficiency component).
+notional_penalties:
+  warn: 5
+  heavy: 15
+  cap: 30
+
+# Ultra-high underlying price: penalize even if eligible (e.g. COST at $900).
+# Price above this (USD) gets a flat penalty on capital_efficiency component.
+high_price_penalty_above: 400
+high_price_penalty_points: 10
+
+# Band assignment: minimum component/gate requirements.
+# Band A: all gates pass and composite score >= band_a_min_score.
+# Band B: eligible or score in range; else Band C.
+band_a_min_score: 78
+band_b_min_score: 60
+# Band C is default when verdict is not ELIGIBLE or score < band_b_min_score; band_reason explains why.

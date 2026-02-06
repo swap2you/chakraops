@@ -42,6 +42,10 @@ from app.core.models.data_quality import (
 )
 from app.core.eval.strategy_rationale import StrategyRationale, build_rationale_from_staged
 from app.core.eval.confidence_band import compute_confidence_band, CapitalHint
+from app.core.eval.scoring import (
+    compute_score_breakdown,
+    build_rank_reasons,
+)
 from app.core.options.chain_provider import (
     OptionType,
     OptionContract,
@@ -242,6 +246,13 @@ class FullEvaluationResult:
     # Phase 10: Confidence band and capital hint
     capital_hint: Optional[CapitalHint] = None
     
+    # Phase 3: Explainable scoring and capital-aware ranking
+    score_breakdown: Optional[Dict[str, Any]] = None  # data_quality_score, regime_score, ...
+    rank_reasons: Optional[Dict[str, Any]] = None  # { "reasons": [...], "penalty": "..." }
+    csp_notional: Optional[float] = None  # selected_put_strike * 100
+    notional_pct: Optional[float] = None  # csp_notional / account_equity
+    band_reason: Optional[str] = None  # why this band (so Band C is not unexplained)
+    
     # Verdict resolution metadata
     verdict_reason_code: Optional[str] = None
     data_incomplete_type: Optional[str] = None  # FATAL, INTRADAY, or None
@@ -290,6 +301,11 @@ class FullEvaluationResult:
             "position_reason": self.position_reason,
             "capital_hint": self.capital_hint.to_dict() if self.capital_hint else None,
             "waiver_reason": self.waiver_reason,
+            "score_breakdown": self.score_breakdown,
+            "rank_reasons": self.rank_reasons,
+            "csp_notional": self.csp_notional,
+            "notional_pct": self.notional_pct,
+            "band_reason": self.band_reason,
         }
         
         # Add stage 2 specific fields
@@ -1088,9 +1104,35 @@ def evaluate_symbol_full(
         result.verdict = "HOLD"
         result.primary_reason = stage2.liquidity_reason or "No suitable contract found"
     
-    # Compute final score
+    # Compute final score (legacy formula)
     result.score = _compute_final_score(result)
     result.confidence = _compute_confidence(result)
+    
+    # Phase 3: Score breakdown so single-symbol callers (e.g. Ticker) get it; batch overwrites after gates.
+    put_strike = None
+    if result.stage2 and result.stage2.selected_contract:
+        put_strike = result.stage2.selected_contract.contract.strike
+    try:
+        breakdown, composite = compute_score_breakdown(
+            data_completeness=result.data_completeness,
+            regime=result.regime,
+            liquidity_ok=result.liquidity_ok,
+            liquidity_grade=result.stage2.liquidity_grade if result.stage2 else None,
+            verdict=result.verdict,
+            position_open=result.position_open,
+            price=result.price,
+            selected_put_strike=put_strike,
+        )
+        result.score = composite
+        result.score_breakdown = breakdown.to_dict()
+        result.rank_reasons = build_rank_reasons(
+            breakdown, result.regime, result.data_completeness,
+            result.liquidity_ok, result.verdict,
+        )
+        result.csp_notional = breakdown.csp_notional
+        result.notional_pct = breakdown.notional_pct
+    except Exception as e:
+        logger.debug("[EVAL] Score breakdown for %s: %s", result.symbol, e)
     
     return result
 
@@ -1318,6 +1360,37 @@ def evaluate_universe_staged(
             if not result.position_reason:
                 result.position_reason = "POSITION_ALREADY_OPEN"
 
+    # Phase 3: Explainable scoring and capital-aware composite (after regime + position gates).
+    for result in results.values():
+        put_strike = None
+        if result.stage2 and result.stage2.selected_contract:
+            put_strike = result.stage2.selected_contract.contract.strike
+        try:
+            breakdown, composite = compute_score_breakdown(
+                data_completeness=result.data_completeness,
+                regime=result.regime,
+                liquidity_ok=result.liquidity_ok,
+                liquidity_grade=result.stage2.liquidity_grade if result.stage2 else None,
+                verdict=result.verdict,
+                position_open=result.position_open,
+                price=result.price,
+                selected_put_strike=put_strike,
+            )
+            if market_regime_value == "RISK_OFF":
+                composite = min(composite, 50)
+            elif market_regime_value == "NEUTRAL":
+                composite = min(composite, 65)
+            result.score = max(0, min(100, composite))
+            result.score_breakdown = breakdown.to_dict()
+            result.rank_reasons = build_rank_reasons(
+                breakdown, result.regime, result.data_completeness,
+                result.liquidity_ok, result.verdict,
+            )
+            result.csp_notional = breakdown.csp_notional
+            result.notional_pct = breakdown.notional_pct
+        except Exception as e:
+            logger.debug("[STAGED_EVAL] Score breakdown for %s: %s", result.symbol, e)
+
     # Phase 8: Build strategy rationale for each result (human-readable verdict explanation).
     # Phase 10: Compute confidence band and capital hint for each result.
     for result in results.values():
@@ -1346,6 +1419,7 @@ def evaluate_universe_staged(
                 score=result.score,
                 position_open=result.position_open,
             )
+            result.band_reason = result.capital_hint.band_reason if result.capital_hint else None
         except Exception as e:
             logger.debug("[STAGED_EVAL] Confidence band for %s: %s", result.symbol, e)
 

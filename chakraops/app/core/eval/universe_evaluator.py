@@ -87,6 +87,12 @@ class SymbolEvaluationResult:
     waiver_reason: Optional[str] = None
     # Phase 10: confidence band capital hint (dict for JSON)
     capital_hint: Optional[Dict[str, Any]] = None
+    # Phase 3: Explainable scoring and capital-aware ranking
+    score_breakdown: Optional[Dict[str, Any]] = None
+    rank_reasons: Optional[Dict[str, Any]] = None
+    csp_notional: Optional[float] = None
+    notional_pct: Optional[float] = None
+    band_reason: Optional[str] = None
 
 
 @dataclass
@@ -218,25 +224,40 @@ def trigger_evaluation(
     from app.core.eval.evaluation_store import (
         generate_run_id,
         save_run,
+        save_failed_run,
         update_latest_pointer,
         create_run_from_evaluation,
-        EvaluationRunFull,
+        acquire_run_lock,
+        release_run_lock,
+        write_run_running,
+        get_current_run_status,
     )
-    
-    with _EVAL_LOCK:
-        if _IS_RUNNING:
-            return {"started": False, "reason": "Evaluation already running", "run_id": _CURRENT_RUN_ID}
-        _IS_RUNNING = True
-        run_id = generate_run_id()
-        _CURRENT_RUN_ID = run_id
 
+    run_id = generate_run_id()
     started_at = datetime.now(timezone.utc).isoformat()
+    if not acquire_run_lock(run_id, started_at):
+        cur = get_current_run_status()
+        run_id_in_progress = cur.get("run_id") if cur else None
+        logger.info("[EVAL] Skipping trigger: run already in progress run_id=%s", run_id_in_progress)
+        return {"started": False, "reason": "Evaluation already in progress", "run_id": run_id_in_progress}
+
+    with _EVAL_LOCK:
+        _IS_RUNNING = True
+        _CURRENT_RUN_ID = run_id
+    try:
+        write_run_running(run_id, started_at)
+    except Exception as e:
+        logger.exception("[EVAL] write_run_running failed: %s", e)
+        release_run_lock()
+        with _EVAL_LOCK:
+            _IS_RUNNING = False
+            _CURRENT_RUN_ID = None
+        return {"started": False, "reason": str(e), "run_id": run_id}
 
     def _run():
         global _IS_RUNNING, _CURRENT_RUN_ID
         try:
             result = run_universe_evaluation_staged(universe_symbols, use_staged=True)
-            # Persist the run
             try:
                 run = create_run_from_evaluation(
                     run_id=run_id,
@@ -248,9 +269,27 @@ def trigger_evaluation(
                 if run.status == "COMPLETED" and run.completed_at:
                     update_latest_pointer(run_id, run.completed_at)
                     logger.info("[EVAL] Run %s completed and persisted", run_id)
+                try:
+                    from app.core.alerts.alert_engine import process_run_completed
+                    process_run_completed(run)
+                except Exception as alert_err:
+                    logger.warning("[EVAL] Alert processing failed (non-fatal): %s", alert_err)
             except Exception as e:
                 logger.exception("[EVAL] Failed to persist run %s: %s", run_id, e)
+                save_failed_run(run_id, str(e), e, started_at)
+        except Exception as e:
+            logger.exception("[EVAL] Run %s failed: %s", run_id, e)
+            save_failed_run(run_id, str(e), e, started_at)
+            try:
+                from app.core.alerts.alert_engine import process_run_completed
+                from app.core.eval.evaluation_store import load_run
+                failed_run = load_run(run_id)
+                if failed_run:
+                    process_run_completed(failed_run)
+            except Exception as alert_err:
+                logger.warning("[EVAL] Alert processing for failed run (non-fatal): %s", alert_err)
         finally:
+            release_run_lock()
             with _EVAL_LOCK:
                 _IS_RUNNING = False
                 _CURRENT_RUN_ID = None
@@ -826,6 +865,11 @@ def run_universe_evaluation_staged(universe_symbols: List[str], use_staged: bool
                 position_reason=getattr(sr, "position_reason", None),
                 capital_hint=sr.capital_hint.to_dict() if getattr(sr, "capital_hint", None) else None,
                 waiver_reason=getattr(sr, "waiver_reason", None),
+                score_breakdown=getattr(sr, "score_breakdown", None),
+                rank_reasons=getattr(sr, "rank_reasons", None),
+                csp_notional=getattr(sr, "csp_notional", None),
+                notional_pct=getattr(sr, "notional_pct", None),
+                band_reason=getattr(sr, "band_reason", None),
             )
             
             # Add selected contract if available

@@ -15,7 +15,7 @@ class TestBandAssignment:
     """Band A/B/C assignment rules."""
 
     def test_band_a_risk_on_eligible_strong_data(self):
-        """A: RISK_ON, ELIGIBLE, data complete, liquidity ok."""
+        """A: RISK_ON, ELIGIBLE, data complete, liquidity ok, score >= band_a_min."""
         hint = compute_confidence_band(
             verdict="ELIGIBLE",
             regime="RISK_ON",
@@ -26,6 +26,7 @@ class TestBandAssignment:
         )
         assert hint.band == "A"
         assert hint.suggested_capital_pct == BAND_CAPITAL_PCT[ConfidenceBand.A]
+        assert hint.band_reason is not None and "Band A" in hint.band_reason
 
     def test_band_b_neutral_regime(self):
         """B: NEUTRAL regime even when ELIGIBLE and data ok."""
@@ -76,7 +77,7 @@ class TestBandAssignment:
         assert hint.band == "C"
 
     def test_band_c_data_incomplete_eligible(self):
-        """C: ELIGIBLE but data_completeness < 0.75."""
+        """C: ELIGIBLE but data_completeness < 0.75; band_reason explains why."""
         hint = compute_confidence_band(
             verdict="ELIGIBLE",
             regime="RISK_ON",
@@ -86,13 +87,14 @@ class TestBandAssignment:
             position_open=False,
         )
         assert hint.band == "C"
+        assert hint.band_reason is not None and "0.75" in hint.band_reason
 
 
 class TestRegimeImpact:
     """Regime downgrades band."""
 
-    def test_risk_off_eligible_still_c_or_b(self):
-        """ELIGIBLE with RISK_OFF would be capped to HOLD in practice; if passed as ELIGIBLE, regime affects band."""
+    def test_risk_off_eligible_score_below_band_b_is_c(self):
+        """ELIGIBLE but score < band_b_min (60) -> C; band_reason explains."""
         hint = compute_confidence_band(
             verdict="ELIGIBLE",
             regime="RISK_OFF",
@@ -101,7 +103,8 @@ class TestRegimeImpact:
             score=50,
             position_open=False,
         )
-        assert hint.band == "B"
+        assert hint.band == "C"
+        assert hint.band_reason is not None and "60" in hint.band_reason
 
 
 class TestDataCompletenessDowngrade:

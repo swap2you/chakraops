@@ -59,8 +59,9 @@ _jobs_lock = threading.Lock()
 # BACKGROUND SCHEDULER FOR UNIVERSE EVALUATION
 # ============================================================================
 
-# Scheduler interval: default 15 minutes. Set UNIVERSE_EVAL_MINUTES (e.g. 1 for testing).
-UNIVERSE_EVAL_MINUTES = int(os.getenv("UNIVERSE_EVAL_MINUTES", "15"))
+# Scheduler interval: default 15 minutes. Recommended 15, 30, or 60. Set UNIVERSE_EVAL_MINUTES (1-120).
+_UNIVERSE_EVAL_MINUTES_RAW = int(os.getenv("UNIVERSE_EVAL_MINUTES", "15"))
+UNIVERSE_EVAL_MINUTES = max(1, min(120, _UNIVERSE_EVAL_MINUTES_RAW))
 _scheduler_stop_event: Optional[threading.Event] = None
 _scheduler_thread: Optional[threading.Thread] = None
 _last_scheduled_eval_at: Optional[str] = None
@@ -400,6 +401,13 @@ async def _lifespan(app: FastAPI):
     if not _tts_configured:
         print("Set OPENAI_API_KEY in chakraops/.env and restart to enable read-aloud on Strategy page.")
     print("=================================")
+
+    # Phase 5: Clear stale run lock on startup (e.g. after crash)
+    try:
+        from app.core.eval.evaluation_store import clear_stale_run_lock
+        clear_stale_run_lock()
+    except Exception:
+        pass
 
     # Start background scheduler for universe evaluation
     print("===== SCHEDULER STARTUP =====")
@@ -1423,6 +1431,17 @@ def api_view_symbol_diagnostics(symbol: str = Query(..., min_length=1, max_lengt
             result["eligibility"]["position_reason"] = persisted_symbol_data["position_reason"]
         if persisted_symbol_data.get("capital_hint"):
             result["eligibility"]["capital_hint"] = persisted_symbol_data["capital_hint"]
+        # Phase 3: Score breakdown and rank reasons (Ticker page explainability)
+        if persisted_symbol_data.get("score_breakdown") is not None:
+            result["eligibility"]["score_breakdown"] = persisted_symbol_data["score_breakdown"]
+        if persisted_symbol_data.get("rank_reasons") is not None:
+            result["eligibility"]["rank_reasons"] = persisted_symbol_data["rank_reasons"]
+        if persisted_symbol_data.get("csp_notional") is not None:
+            result["eligibility"]["csp_notional"] = persisted_symbol_data["csp_notional"]
+        if persisted_symbol_data.get("notional_pct") is not None:
+            result["eligibility"]["notional_pct"] = persisted_symbol_data["notional_pct"]
+        if persisted_symbol_data.get("band_reason") is not None:
+            result["eligibility"]["band_reason"] = persisted_symbol_data["band_reason"]
         if persisted_symbol_data.get("verdict_reason_code"):
             result["eligibility"]["verdict_reason_code"] = persisted_symbol_data["verdict_reason_code"]
         if persisted_symbol_data.get("data_incomplete_type"):
@@ -1685,9 +1704,13 @@ def api_ops_evaluate_now() -> Dict[str, Any]:
         from app.core.eval.evaluation_store import (
             generate_run_id,
             save_run,
+            save_failed_run,
             update_latest_pointer,
             create_run_from_evaluation,
-            save_failed_run,
+            acquire_run_lock,
+            release_run_lock,
+            write_run_running,
+            get_current_run_status,
         )
     except ImportError as e:
         return {"started": False, "reason": f"Evaluation module not available: {e}", "run_id": None}
@@ -1698,6 +1721,24 @@ def api_ops_evaluate_now() -> Dict[str, Any]:
     run_id = generate_run_id()
     started_at = datetime.now(timezone.utc).isoformat()
     market_phase = get_market_phase()
+
+    if not acquire_run_lock(run_id, started_at):
+        cur = get_current_run_status()
+        current_run_id = cur.get("run_id") if cur else None
+        logger.info("[EVAL] Evaluate now skipped: run already in progress run_id=%s", current_run_id)
+        return {
+            "started": False,
+            "reason": "Evaluation already in progress",
+            "run_id": current_run_id,
+            "status": "RUNNING",
+        }
+
+    try:
+        write_run_running(run_id, started_at)
+    except Exception as e:
+        logger.exception("[EVAL] write_run_running failed: %s", e)
+        release_run_lock()
+        raise HTTPException(status_code=500, detail=f"Failed to persist run state: {e}")
 
     try:
         logger.info("[EVAL] Staged evaluation started run_id=%s", run_id)
@@ -1712,6 +1753,12 @@ def api_ops_evaluate_now() -> Dict[str, Any]:
         if run.status == "COMPLETED" and run.completed_at:
             update_latest_pointer(run_id, run.completed_at)
         logger.info("[EVAL] Run %s completed and persisted status=%s", run_id, run.status)
+        try:
+            from app.core.alerts.alert_engine import process_run_completed
+            process_run_completed(run)
+        except Exception as alert_err:
+            logger.warning("[EVAL] Alert processing failed (non-fatal): %s", alert_err)
+        release_run_lock()
         return {
             "started": True,
             "reason": "Evaluation completed",
@@ -1721,7 +1768,16 @@ def api_ops_evaluate_now() -> Dict[str, Any]:
         }
     except Exception as e:
         logger.exception("Staged evaluation failed - aborting (no legacy fallback): %s", e)
-        save_failed_run(run_id, str(e), e)
+        release_run_lock()
+        save_failed_run(run_id, str(e), e, started_at)
+        try:
+            from app.core.alerts.alert_engine import process_run_completed
+            from app.core.eval.evaluation_store import load_run
+            failed_run = load_run(run_id)
+            if failed_run:
+                process_run_completed(failed_run)
+        except Exception as alert_err:
+            logger.warning("[EVAL] Alert processing for failed run (non-fatal): %s", alert_err)
         raise HTTPException(
             status_code=500,
             detail=f"Staged evaluation failed: {e}",
@@ -1834,6 +1890,12 @@ def api_view_universe_evaluation() -> Dict[str, Any]:
                 "capital_hint": s.capital_hint.to_dict() if hasattr(s, "capital_hint") and s.capital_hint else None,
                 # Selected contract info (C3: for Greeks summary linkage)
                 "selected_contract": selected_contract_info,
+                # Phase 3: Explainable scoring and capital-aware ranking
+                "score_breakdown": getattr(s, "score_breakdown", None),
+                "rank_reasons": getattr(s, "rank_reasons", None),
+                "csp_notional": getattr(s, "csp_notional", None),
+                "notional_pct": getattr(s, "notional_pct", None),
+                "band_reason": getattr(s, "band_reason", None),
             })
         
         # C6: Sort symbols by score desc, then CSP notional asc (to deprioritize high-notional CSPs)
@@ -1927,6 +1989,34 @@ def api_view_evaluation_alerts() -> Dict[str, Any]:
         return {"alerts": [], "count": 0, "last_generated_at": None, "reason": f"Error: {e}"}
 
 
+@app.get("/api/view/alert-log")
+def api_view_alert_log() -> Dict[str, Any]:
+    """Phase 6: Recent alert log (sent + suppressed) for Notifications page."""
+    try:
+        from app.core.alerts.alert_engine import list_recent_alert_records
+        limit = 100
+        records = list_recent_alert_records(limit=limit)
+        return {"records": records, "count": len(records)}
+    except ImportError:
+        return {"records": [], "count": 0, "reason": "Alert module not available"}
+    except Exception as e:
+        logger.exception("Error getting alert log: %s", e)
+        return {"records": [], "count": 0, "reason": str(e)}
+
+
+@app.get("/api/ops/alerting-status")
+def api_ops_alerting_status() -> Dict[str, Any]:
+    """Phase 6: Whether Slack is configured (UI shows 'alerts suppressed' when not)."""
+    try:
+        from app.core.alerts.alert_engine import get_alerting_status
+        return get_alerting_status()
+    except ImportError:
+        return {"slack_configured": False, "message": "Alert module not available"}
+    except Exception as e:
+        logger.exception("Error getting alerting status: %s", e)
+        return {"slack_configured": False, "message": str(e)}
+
+
 @app.get("/api/view/strategy-overview")
 def api_view_strategy_overview() -> Dict[str, Any]:
     """
@@ -1943,6 +2033,24 @@ def api_view_strategy_overview() -> Dict[str, Any]:
     except Exception as e:
         logger.exception("Error reading strategy overview: %s", e)
         return {"content": "# Strategy Overview\n\nError loading document."}
+
+
+@app.get("/api/view/pipeline-doc")
+def api_view_pipeline_doc() -> Dict[str, Any]:
+    """
+    Return the evaluation pipeline markdown (docs/EVALUATION_PIPELINE.md).
+    Implementation-truthful reference; used by the Pipeline Details page.
+    """
+    pipeline_path = Path(__file__).resolve().parent.parent.parent / "docs" / "EVALUATION_PIPELINE.md"
+    try:
+        content = pipeline_path.read_text(encoding="utf-8")
+        return {"content": content}
+    except FileNotFoundError:
+        logger.warning("Pipeline doc not found: %s", pipeline_path)
+        return {"content": "# Evaluation Pipeline\n\nDocument not found."}
+    except Exception as e:
+        logger.exception("Error reading pipeline doc: %s", e)
+        return {"content": "# Evaluation Pipeline\n\nError loading document."}
 
 
 # ============================================================================
@@ -2082,20 +2190,24 @@ def api_view_evaluation_run(run_id: str) -> Dict[str, Any]:
 @app.get("/api/view/evaluation/status/current")
 def api_view_evaluation_status_current() -> Dict[str, Any]:
     """
-    Get current evaluation status.
-    Shows if a run is in progress, the current run_id, and last completed run.
+    Get current evaluation status (Phase 5: persistent run lock).
+    is_running and current_run_id from store lock file; last completed from latest pointer.
     """
     try:
         from app.core.eval.universe_evaluator import get_evaluation_state
-        from app.core.eval.evaluation_store import load_latest_pointer
-        
-        state = get_evaluation_state()
+        from app.core.eval.evaluation_store import load_latest_pointer, get_current_run_status
+
+        cur = get_current_run_status()
+        is_running = cur is not None
+        current_run_id = cur.get("run_id") if cur else None
+        started_at = cur.get("started_at") if cur else None
         pointer = load_latest_pointer()
-        
+        state = get_evaluation_state()
         return {
-            "is_running": state.get("evaluation_state") == "RUNNING",
-            "current_run_id": state.get("current_run_id"),
-            "evaluation_state": state.get("evaluation_state"),
+            "is_running": is_running,
+            "current_run_id": current_run_id,
+            "started_at": started_at,
+            "evaluation_state": "RUNNING" if is_running else state.get("evaluation_state", "IDLE"),
             "evaluation_state_reason": state.get("evaluation_state_reason"),
             "last_completed_run_id": pointer.run_id if pointer else None,
             "last_completed_at": pointer.completed_at if pointer else None,

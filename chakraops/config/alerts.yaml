@@ -1,0 +1,24 @@
+# Phase 6: Alerting configuration.
+# Alert logic lives in app/core/alerts; Slack is delivery channel only.
+
+# Which alert types to generate and send (others are skipped).
+enabled_alert_types:
+  - DATA_HEALTH
+  - REGIME_CHANGE
+  - SIGNAL
+  - SYSTEM
+
+# Cooldown: same fingerprint is not sent again within this window (hours).
+cooldown_hours: 6
+
+# Slack: default webhook from env SLACK_WEBHOOK_URL.
+# Per-alert-type webhooks (optional): use a different webhook URL for that type.
+# If not set for a type, the default is used.
+slack:
+  # default_webhook: from env SLACK_WEBHOOK_URL
+  channels:
+    # Optional: override webhook per type (each webhook posts to one channel).
+    # DATA_HEALTH: "https://hooks.slack.com/..."
+    # REGIME_CHANGE: "https://hooks.slack.com/..."
+    # SIGNAL: "https://hooks.slack.com/..."
+    # SYSTEM: "https://hooks.slack.com/..."

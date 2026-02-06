@@ -23,6 +23,7 @@ const VIEWS = [
   { path: "/history", label: "History", icon: History },
   { path: "/analysis", label: "Ticker", icon: SearchIcon },
   { path: "/strategy", label: "Strategy", icon: FileText },
+  { path: "/pipeline", label: "Pipeline", icon: FileText },
   { path: "/diagnostics", label: "Diagnostics", icon: Activity },
 ] as const;
 

@@ -4,6 +4,7 @@
  * and interpretation of outputs. Designed for advanced users.
  */
 import { useState, useCallback, useRef } from "react";
+import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Globe,
@@ -1342,11 +1343,22 @@ export function StrategyPage() {
 
         {/* Pipeline Flow */}
         <section>
-          <SectionHeader
-            title="Evaluation Pipeline"
-            subtitle="7 stages — click any to explore. Symbols flow left to right."
-            badge="Interactive"
-          />
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-semibold text-foreground">Evaluation Pipeline</h2>
+                <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-xs font-medium text-primary">Interactive</span>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">7 stages — click any to explore. Symbols flow left to right.</p>
+            </div>
+            <Link
+              to="/pipeline"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+            >
+              Pipeline Details (implementation reference)
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
           <GlassCard className="p-6 lg:p-8">
             <div className="overflow-x-auto pb-2">
               <div className="flex min-w-max items-center justify-center gap-0">

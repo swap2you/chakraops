@@ -440,6 +440,30 @@ async def _lifespan(app: FastAPI):
 
 
 app = FastAPI(title="ChakraOps API", version="0.1.0", lifespan=_lifespan)
+
+# Phase 7: API key auth (when CHAKRAOPS_API_KEY is set). /health and /api/healthz are always public.
+CHAKRAOPS_API_KEY = (os.getenv("CHAKRAOPS_API_KEY") or "").strip()
+_PUBLIC_PATHS = frozenset({"/health", "/api/healthz"})
+
+
+@app.middleware("http")
+async def api_key_middleware(request: Request, call_next):
+    """Require X-API-Key for all non-health routes when CHAKRAOPS_API_KEY is set."""
+    path = request.url.path.rstrip("/") or request.url.path
+    if path in _PUBLIC_PATHS:
+        return await call_next(request)
+    if not CHAKRAOPS_API_KEY:
+        return await call_next(request)
+    key = request.headers.get("X-API-Key") or request.headers.get("x-api-key")
+    if key != CHAKRAOPS_API_KEY:
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Missing or invalid X-API-Key"},
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+    return await call_next(request)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -467,9 +491,15 @@ def api_ops_routes() -> list:
     return _collect_api_routes(app)
 
 
+@app.get("/health")
+def health() -> Dict[str, Any]:
+    """Phase 7: Railway (and other) health checks. No auth required."""
+    return {"ok": True, "status": "healthy"}
+
+
 @app.get("/api/healthz")
 def api_healthz() -> Dict[str, Any]:
-    """Quick health check. Phase 10: prefer /api/market-status for full state."""
+    """Quick health check. Phase 10: prefer /api/market-status for full state. No auth when API key is set."""
     return {"ok": True}
 
 
@@ -2476,7 +2506,7 @@ def api_ops_notify_slack(request: Request):
                 "sent": False,
                 "configured": False,
                 "reason": "Slack not configured - set SLACK_WEBHOOK_URL environment variable",
-                "setup_hint": "Add SLACK_WEBHOOK_URL=https://hooks.slack.com/services/... to your .env file and restart the backend.",
+                "setup_hint": "Add SLACK_WEBHOOK_URL to your .env (see docs) and restart the backend.",
                 "slack_response_body": None,
             },
         )

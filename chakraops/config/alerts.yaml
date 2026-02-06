@@ -1,24 +1,43 @@
 # Phase 6: Alerting configuration.
 # Alert logic lives in app/core/alerts; Slack is delivery channel only.
+# See docs/ALERTING.md for Slack policy, channel recommendations, and examples.
 
-# Which alert types to generate and send (others are skipped).
+# -----------------------------------------------------------------------------
+# enabled_alert_types
+# -----------------------------------------------------------------------------
+# Which alert types to generate and send. Types not listed are skipped (logged as
+# "alert_type_disabled"). Options: DATA_HEALTH, REGIME_CHANGE, SIGNAL, SYSTEM.
 enabled_alert_types:
   - DATA_HEALTH
   - REGIME_CHANGE
   - SIGNAL
   - SYSTEM
 
-# Cooldown: same fingerprint is not sent again within this window (hours).
+# -----------------------------------------------------------------------------
+# cooldown_hours
+# -----------------------------------------------------------------------------
+# Same fingerprint is not sent again within this many hours. Reduces noise when
+# the same condition persists across runs. Default 6; set 0 to disable (not recommended).
 cooldown_hours: 6
 
-# Slack: default webhook from env SLACK_WEBHOOK_URL.
-# Per-alert-type webhooks (optional): use a different webhook URL for that type.
-# If not set for a type, the default is used.
+# -----------------------------------------------------------------------------
+# slack
+# -----------------------------------------------------------------------------
+# Default webhook: set SLACK_WEBHOOK_URL in env. If unset, alerts are logged only
+# (UI shows "Alerts suppressed (Slack not configured)").
+#
+# channels: optional per-alert-type webhook URLs. Each Incoming Webhook posts to
+# one Slack channel. Recommended channels (create in Slack, then add webhook URLs):
+#   #chakraops-signals  -> SIGNAL, REGIME_CHANGE
+#   #chakraops-health   -> DATA_HEALTH
+#   #chakraops-ops      -> SYSTEM
+# If a type is not listed below, the default SLACK_WEBHOOK_URL is used.
 slack:
-  # default_webhook: from env SLACK_WEBHOOK_URL
   channels:
-    # Optional: override webhook per type (each webhook posts to one channel).
-    # DATA_HEALTH: "https://hooks.slack.com/..."
-    # REGIME_CHANGE: "https://hooks.slack.com/..."
-    # SIGNAL: "https://hooks.slack.com/..."
-    # SYSTEM: "https://hooks.slack.com/..."
+    # Optional: per-alert-type webhooks. Add Incoming Webhook URLs from Slack (one per channel).
+    # Example shape: SIGNAL: "YOUR_WEBHOOK_URL_FOR_CHANNEL"
+    #   SIGNAL: "<paste webhook for #chakraops-signals>"
+    #   REGIME_CHANGE: "<paste webhook for #chakraops-signals or same>"
+    #   DATA_HEALTH: "<paste webhook for #chakraops-health>"
+    #   SYSTEM: "<paste webhook for #chakraops-ops>"
+    # Or use only SLACK_WEBHOOK_URL in env and leave channels empty.

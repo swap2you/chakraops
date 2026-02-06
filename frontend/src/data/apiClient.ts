@@ -1,15 +1,33 @@
 /**
  * Phase 8.7: Single LIVE API client — fetch with timeout, ok check, JSON parse.
+ * Phase 7: VITE_API_BASE_URL and VITE_API_KEY for deployment (Vercel + Railway).
  * In dev with Vite proxy: use relative /api/... so proxy forwards to backend (no VITE_API_BASE_URL needed).
- * Otherwise VITE_API_BASE_URL (e.g. http://localhost:8000) is used.
  */
-const API_BASE = (import.meta as unknown as { env?: { VITE_API_BASE_URL?: string; DEV?: boolean } }).env?.VITE_API_BASE_URL ?? "";
+const _env = (import.meta as unknown as {
+  env?: {
+    VITE_API_BASE_URL?: string;
+    VITE_API_KEY?: string;
+    DEV?: boolean;
+    VITE_DEBUG_API?: string;
+  };
+}).env;
 
-const isDev = (import.meta as unknown as { env?: { DEV?: boolean; VITE_DEBUG_API?: string } }).env?.DEV === true ||
-  (import.meta as unknown as { env?: { VITE_DEBUG_API?: string } }).env?.VITE_DEBUG_API === "true";
+const API_BASE = _env?.VITE_API_BASE_URL ?? "";
+
+/** Phase 7: When set, sent as X-API-Key on every request (must match CHAKRAOPS_API_KEY on backend). */
+const API_KEY = (_env?.VITE_API_KEY ?? "").trim();
+
+const isDev = _env?.DEV === true || _env?.VITE_DEBUG_API === "true";
 
 /** In dev we use relative /api URLs so Vite proxy can forward to backend. */
 const useProxy = isDev;
+
+/** Headers to send on every API request (e.g. X-API-Key when deployed). */
+function getApiHeaders(extra?: Record<string, string>): Record<string, string> {
+  const h: Record<string, string> = { ...extra };
+  if (API_KEY) h["X-API-Key"] = API_KEY;
+  return h;
+}
 
 export function getResolvedUrl(path: string): string {
   const normalized = path.startsWith("/") ? path : `/${path}`;
@@ -58,7 +76,7 @@ export async function apiGet<T>(path: string, opts?: { timeoutMs?: number; signa
   try {
     const res = await fetch(url, {
       method: "GET",
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", ...getApiHeaders() },
       signal,
     });
     if (id) clearTimeout(id);
@@ -124,7 +142,7 @@ export async function apiPost<T>(
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json",
-    ...opts?.headers,
+    ...getApiHeaders(opts?.headers),
   };
   try {
     const res = await fetch(url, {
@@ -177,7 +195,7 @@ export async function apiPut<T>(
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json",
-    ...opts?.headers,
+    ...getApiHeaders(opts?.headers),
   };
   try {
     const res = await fetch(url, {
@@ -223,7 +241,7 @@ export async function apiDelete<T>(path: string, opts?: { timeoutMs?: number }):
   try {
     const res = await fetch(url, {
       method: "DELETE",
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", ...getApiHeaders() },
       signal: controller.signal,
     });
     clearTimeout(id);

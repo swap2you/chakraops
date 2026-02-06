@@ -2,6 +2,14 @@
 
 A Python application for managing operations.
 
+## Operating ChakraOps
+
+For daily operation, validation, and troubleshooting without reading code:
+
+- **[docs/RUNBOOK.md](docs/RUNBOOK.md)** — Operator runbook: how the system runs, daily workflow, how to interpret Dashboard/Universe/Notifications, alerts (action vs ignore), deployment checklist, common failures.
+- **[docs/ALERTING.md](docs/ALERTING.md)** — Alert taxonomy, Slack policy (recommended channels, type→channel mapping, expected frequency, what Slack does *not* do).
+- **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** — Deploying to Railway (backend) and Vercel (frontend), env vars, key rotation, cost, failure modes.
+
 ## Setup
 
 1. Clone the repository:
@@ -134,11 +142,11 @@ After generating a decision snapshot, the pipeline can send alerts to Slack:
 
 1. **Set environment variable:**
    ```bash
-   set SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+   set SLACK_WEBHOOK_URL=<your-webhook-url>
    ```
    (Windows) or
    ```bash
-   export SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+   export SLACK_WEBHOOK_URL=<your-webhook-url>
    ```
    (Linux/Mac)
 

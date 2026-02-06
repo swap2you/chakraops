@@ -16,6 +16,7 @@ import { AnalysisPage } from "@/pages/AnalysisPage";
 import { DiagnosticsPage } from "@/pages/DiagnosticsPage";
 import { StrategyPage } from "@/pages/StrategyPage";
 import { PipelinePage } from "@/pages/PipelinePage";
+import { AccessGate } from "@/components/AccessGate";
 
 const SHORTCUT_PATHS: Record<string, string> = {
   d: "/dashboard",
@@ -89,16 +90,18 @@ function AppShell() {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <DataModeProvider>
-        <ScenarioProvider>
-          <PollingProvider>
-            <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-              <AppShell />
-            </BrowserRouter>
-          </PollingProvider>
-        </ScenarioProvider>
-      </DataModeProvider>
-    </ThemeProvider>
+    <AccessGate>
+      <ThemeProvider>
+        <DataModeProvider>
+          <ScenarioProvider>
+            <PollingProvider>
+              <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                <AppShell />
+              </BrowserRouter>
+            </PollingProvider>
+          </ScenarioProvider>
+        </DataModeProvider>
+      </ThemeProvider>
+    </AccessGate>
   );
 }

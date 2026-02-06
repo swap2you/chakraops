@@ -83,8 +83,8 @@ cooldown_hours: 6
 # Optional: per-alert-type webhook URLs (each posts to one channel)
 slack:
   channels:
-    # DATA_HEALTH: "https://hooks.slack.com/..."
-    # REGIME_CHANGE: "https://hooks.slack.com/..."
+    # DATA_HEALTH: "<your webhook URL>"
+    # REGIME_CHANGE: "<your webhook URL>"
 ```
 
 - **enabled_alert_types** — Only these types are sent; others are logged as suppressed.
@@ -115,6 +115,57 @@ slack:
 - **Eligible set changed; 3 eligible, 2 shortlisted** → SIGNAL, INFO, action: “Review Dashboard and History for current eligible/shortlist.”
 - **Run had 2 error(s). First: Symbol XYZ missing quote** → DATA_HEALTH, WARN, action: “Check symbol diagnostics and data sources.”
 - **Evaluation run failed: ORATS timeout** → SYSTEM, CRITICAL, action: “Check logs and data sources; re-run evaluation.”
+
+## Slack policy (Phase 8)
+
+### Recommended Slack channels
+
+Use three channels to separate signal vs health vs ops:
+
+| Channel | Purpose | Alert types (recommended mapping) |
+|---------|---------|-----------------------------------|
+| **#chakraops-signals** | Eligible/shortlist changes, regime transitions | SIGNAL, REGIME_CHANGE |
+| **#chakraops-health** | Data quality, run errors | DATA_HEALTH |
+| **#chakraops-ops** | Run failures, system issues | SYSTEM |
+
+Create one Slack Incoming Webhook per channel and map alert types in `config/alerts.yaml` → `slack.channels` (see Configuration section above and the commented example in `config/alerts.yaml`).
+
+### Alert type → channel mapping
+
+| Alert type | Recommended channel | Rationale |
+|------------|----------------------|-----------|
+| SIGNAL | #chakraops-signals | Set changes; low urgency, review when convenient. |
+| REGIME_CHANGE | #chakraops-signals | Strategy context; same channel as SIGNAL. |
+| DATA_HEALTH | #chakraops-health | Data pipeline issues; separate from trading signals. |
+| SYSTEM | #chakraops-ops | Run failed; needs ops attention. |
+
+If you use a single webhook (e.g. only `SLACK_WEBHOOK_URL`), all alerts go to that one channel. Per-type webhooks allow routing by type.
+
+### Expected alert frequency
+
+- **SIGNAL:** Only when eligible or shortlist set **changes** vs previous run. Typically a few times per day during market hours, not every run.
+- **REGIME_CHANGE:** Only on **transition** (e.g. NEUTRAL → RISK_OFF). Rare; often 0–1 per day.
+- **DATA_HEALTH:** When run has errors or many symbols with low completeness. Depends on data quality; aim for zero after pipeline is stable.
+- **SYSTEM:** Only when a run **FAILED**. Should be rare; investigate immediately.
+
+Deduplication (same fingerprint within `cooldown_hours`) prevents repeat messages for the same condition.
+
+### Example Slack messages
+
+- **SIGNAL (INFO):** Header `ChakraOps Alert SIGNAL`; summary e.g. "Signal set changed: eligible set changed. Eligible: 3, shortlist: 2"; action "Review Dashboard and History for current eligible/shortlist."
+- **REGIME_CHANGE (WARN):** Summary "Regime changed from NEUTRAL to RISK_OFF"; action "Review strategy suitability for new regime."
+- **DATA_HEALTH (WARN):** Summary "Run had 2 error(s). First: Symbol XYZ missing quote"; action "Check symbol diagnostics and data sources."
+- **SYSTEM (CRITICAL):** Summary "Evaluation run failed: ORATS timeout"; action "Check logs and data sources; re-run evaluation."
+
+Format: Slack Block Kit (header with type + severity, summary, action, context with reason_code and timestamp).
+
+### What NOT to expect from Slack
+
+- **No trade execution.** Slack is notifications only. ChakraOps does not place, modify, or close trades from Slack.
+- **No per-symbol spam.** Alerts are aggregated or change-based; you will not get one message per symbol per run.
+- **No real-time tick-by-tick.** Alerts fire after a run completes (COMPLETED or FAILED), at scheduler or manual-run cadence.
+
+---
 
 ## Implementation locations
 

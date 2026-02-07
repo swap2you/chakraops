@@ -2555,6 +2555,47 @@ def api_accounts_csp_sizing(account_id: str, strike: float = Query(..., gt=0)) -
 
 
 # ============================================================================
+# PHASE 2A: DASHBOARD OPPORTUNITIES — RANKED DECISION INTELLIGENCE
+# ============================================================================
+
+
+@app.get("/api/dashboard/opportunities")
+def api_dashboard_opportunities(
+    limit: int = Query(default=5, ge=1, le=50),
+    strategy: Optional[str] = Query(default=None),
+    max_capital_pct: Optional[float] = Query(default=None, ge=0.0, le=1.0),
+) -> Dict[str, Any]:
+    """Ranked opportunities for the dashboard.
+
+    Returns top opportunities sorted by band, score, and capital efficiency.
+    Each symbol appears at most once with its primary strategy (exclusivity rule).
+
+    Query params:
+      - limit: Max results (default 5, max 50)
+      - strategy: Filter by strategy (CSP, CC, STOCK)
+      - max_capital_pct: Filter by max capital % (0.0-1.0)
+    """
+    try:
+        from app.core.ranking.service import get_dashboard_opportunities
+        return get_dashboard_opportunities(
+            limit=limit,
+            strategy_filter=strategy,
+            max_capital_pct=max_capital_pct,
+        )
+    except Exception as e:
+        logger.exception("Error fetching dashboard opportunities: %s", e)
+        return {
+            "opportunities": [],
+            "count": 0,
+            "evaluation_id": None,
+            "evaluated_at": None,
+            "account_equity": None,
+            "total_eligible": 0,
+            "error": str(e),
+        }
+
+
+# ============================================================================
 # PHASE 1: POSITIONS — MANUAL EXECUTION TRACKING
 # ============================================================================
 

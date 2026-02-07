@@ -26,6 +26,7 @@ import type {
   EvaluationStatusCurrentResponse,
 } from "@/types/universeEvaluation";
 import { getVerdictColor, formatPrice, formatReason, formatStage, formatSelectedContract } from "@/types/universeEvaluation";
+import { RankedTable } from "@/components/RankedTable";
 import { Info, RefreshCw, XCircle, ExternalLink, Loader2, AlertTriangle, Clock, Play, Send, Search, CheckCircle2, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -477,6 +478,11 @@ export function AnalyticsPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Phase 2A: Full Ranked Table */}
+      {mode === "LIVE" && (
+        <RankedTable />
       )}
 
       {/* Universe panel (LIVE only) */}

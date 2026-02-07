@@ -93,6 +93,12 @@ export const ENDPOINTS = {
   alertingStatus: `${BASE}/api/ops/alerting-status`,
 
   // ============================================================================
+  // PHASE 2A: DASHBOARD OPPORTUNITIES (RANKED)
+  // ============================================================================
+  /** Ranked opportunities for dashboard */
+  dashboardOpportunities: `${BASE}/api/dashboard/opportunities`,
+
+  // ============================================================================
   // PHASE 1: ACCOUNTS & CAPITAL AWARENESS
   // ============================================================================
   /** List all accounts */

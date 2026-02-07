@@ -19,6 +19,7 @@ import { validateDailyOverview, validateAlerts } from "@/mock/validator";
 import type { DailyOverviewView, TradePlanView, AlertsView } from "@/types/views";
 import { apiGet, apiPost, ApiError } from "@/data/apiClient";
 import { ENDPOINTS } from "@/data/endpoints";
+import { TopOpportunities } from "@/components/TopOpportunities";
 import { AlertTriangle, CheckCircle2, Info, ExternalLink, XCircle, Play, Send, Loader2, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
@@ -518,7 +519,12 @@ export function DashboardPage() {
         </section>
       )}
 
-      {/* Eligible Candidates Table */}
+      {/* Phase 2A: Top Ranked Opportunities */}
+      {mode === "LIVE" && (
+        <TopOpportunities pollTick={pollTick} />
+      )}
+
+      {/* Eligible Candidates Table (legacy — shows chain-evaluated details) */}
       {mode === "LIVE" && universeEval && universeEval.symbols.some(s => s.verdict === "ELIGIBLE" && s.stage_reached === "STAGE2_CHAIN") && (
         <section className="rounded-lg border border-border bg-card p-4" aria-label="Eligible candidates">
           <div className="flex items-center justify-between">

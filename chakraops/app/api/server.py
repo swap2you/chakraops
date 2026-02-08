@@ -2596,16 +2596,90 @@ def api_dashboard_opportunities(
 
 
 # ============================================================================
+# PHASE 2B: SYMBOL INTELLIGENCE — EXPLAIN, CANDIDATES, TARGETS
+# ============================================================================
+
+
+@app.get("/api/symbols/{symbol}/explain")
+def api_symbols_explain(symbol: str) -> Dict[str, Any]:
+    """Ticker explain: gate trace, band, score, strategy decision, capital sizing."""
+    try:
+        from app.core.symbols.explain import get_symbol_explain
+        return get_symbol_explain(symbol)
+    except Exception as e:
+        logger.exception("Error fetching symbol explain: %s", e)
+        return {"symbol": symbol, "error": str(e)}
+
+
+@app.get("/api/symbols/{symbol}/candidates")
+def api_symbols_candidates(
+    symbol: str,
+    strategy: Optional[str] = Query(default=None),
+) -> Dict[str, Any]:
+    """Top 3 contract candidates for CSP or CC with sizing."""
+    try:
+        from app.core.symbols.candidates import get_symbol_candidates
+        return get_symbol_candidates(symbol, strategy=strategy)
+    except Exception as e:
+        logger.exception("Error fetching symbol candidates: %s", e)
+        return {"symbol": symbol, "candidates": [], "error": str(e)}
+
+
+@app.get("/api/symbols/{symbol}/targets")
+def api_symbols_targets_get(symbol: str) -> Dict[str, Any]:
+    """Get stored stock entry/exit targets for symbol."""
+    try:
+        from app.core.symbols.targets import get_targets
+        return get_targets(symbol)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("Error fetching symbol targets: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/symbols/{symbol}/targets")
+async def api_symbols_targets_put(symbol: str, request: Request) -> Dict[str, Any]:
+    """Store stock entry/exit targets for symbol."""
+    try:
+        body = await request.json()
+        from app.core.symbols.targets import put_targets
+        return put_targets(symbol, body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("Error storing symbol targets: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/symbols/{symbol}/company")
+def api_symbols_company(symbol: str) -> Dict[str, Any]:
+    """Company metadata for symbol (local dict, no external API)."""
+    try:
+        from app.core.market.company_data import get_company_metadata
+        meta = get_company_metadata(symbol)
+        if meta is None:
+            return {"symbol": symbol.strip().upper(), "name": None, "sector": None, "industry": None}
+        return meta
+    except Exception as e:
+        logger.exception("Error fetching company metadata: %s", e)
+        return {"symbol": symbol, "error": str(e)}
+
+
+# ============================================================================
 # PHASE 1: POSITIONS — MANUAL EXECUTION TRACKING
 # ============================================================================
 
 
 @app.get("/api/positions/tracked")
-def api_positions_tracked(status: Optional[str] = Query(default=None)) -> Dict[str, Any]:
-    """List manually tracked positions."""
+def api_positions_tracked(
+    status: Optional[str] = Query(default=None),
+    symbol: Optional[str] = Query(default=None),
+) -> Dict[str, Any]:
+    """List manually tracked positions, optionally filtered by symbol."""
     try:
         from app.core.positions.service import list_positions
-        positions = list_positions(status=status)
+        positions = list_positions(status=status, symbol=symbol)
         return {"positions": [p.to_dict() for p in positions], "count": len(positions)}
     except Exception as e:
         logger.exception("Error listing tracked positions: %s", e)

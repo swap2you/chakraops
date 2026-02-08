@@ -79,11 +79,15 @@ def _save_all(positions: List[Position]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def list_positions(status: Optional[str] = None) -> List[Position]:
-    """List all positions, optionally filtered by status."""
+def list_positions(status: Optional[str] = None, symbol: Optional[str] = None) -> List[Position]:
+    """List all positions, optionally filtered by status and/or symbol."""
     positions = _load_all()
     if status:
         positions = [p for p in positions if p.status == status]
+    if symbol:
+        sym_upper = (symbol or "").strip().upper()
+        if sym_upper:
+            positions = [p for p in positions if (p.symbol or "").strip().upper() == sym_upper]
     # Sort by opened_at descending (newest first)
     positions.sort(key=lambda p: p.opened_at, reverse=True)
     return positions

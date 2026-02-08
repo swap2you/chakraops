@@ -67,9 +67,9 @@ def validate_manual_execute(data: Dict[str, Any]) -> List[str]:
 # ---------------------------------------------------------------------------
 
 
-def list_positions(status: Optional[str] = None) -> List[Position]:
-    """List all tracked positions."""
-    return store.list_positions(status=status)
+def list_positions(status: Optional[str] = None, symbol: Optional[str] = None) -> List[Position]:
+    """List all tracked positions, optionally filtered by symbol."""
+    return store.list_positions(status=status, symbol=symbol)
 
 
 def get_position(position_id: str) -> Optional[Position]:

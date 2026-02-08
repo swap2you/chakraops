@@ -663,6 +663,10 @@ def create_run_from_evaluation(
             "csp_notional": getattr(s, "csp_notional", None),
             "notional_pct": getattr(s, "notional_pct", None),
             "band_reason": getattr(s, "band_reason", None),
+            # Phase 2B: selected contract and stage
+            "stage_reached": getattr(s, "stage_reached", "NOT_STARTED"),
+            "selected_contract": getattr(s, "selected_contract", None),
+            "selected_expiration": getattr(s, "selected_expiration", None),
         }
         symbols_data.append(sym_dict)
     

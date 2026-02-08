@@ -99,6 +99,20 @@ export const ENDPOINTS = {
   dashboardOpportunities: `${BASE}/api/dashboard/opportunities`,
 
   // ============================================================================
+  // PHASE 2B: SYMBOL INTELLIGENCE (TICKER PAGE)
+  // ============================================================================
+  /** Symbol explain: gates, band, strategy, capital */
+  symbolExplain: (symbol: string) => `${BASE}/api/symbols/${encodeURIComponent(symbol)}/explain`,
+  /** Top 3 contract candidates */
+  symbolCandidates: (symbol: string) => `${BASE}/api/symbols/${encodeURIComponent(symbol)}/candidates`,
+  /** Stock targets GET */
+  symbolTargets: (symbol: string) => `${BASE}/api/symbols/${encodeURIComponent(symbol)}/targets`,
+  /** Stock targets PUT */
+  symbolTargetsPut: (symbol: string) => `${BASE}/api/symbols/${encodeURIComponent(symbol)}/targets`,
+  /** Company metadata */
+  symbolCompany: (symbol: string) => `${BASE}/api/symbols/${encodeURIComponent(symbol)}/company`,
+
+  // ============================================================================
   // PHASE 1: ACCOUNTS & CAPITAL AWARENESS
   // ============================================================================
   /** List all accounts */

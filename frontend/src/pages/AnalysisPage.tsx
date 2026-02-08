@@ -17,6 +17,7 @@ import { pushSystemNotification } from "@/lib/notifications";
 import type { SymbolDiagnosticsView, SymbolDiagnosticsCandidateTrade } from "@/types/symbolDiagnostics";
 import type { SlackNotifyResponse } from "@/types/universeEvaluation";
 import { ManualExecuteModal } from "@/components/ManualExecuteModal";
+import { TickerIntelligencePanel } from "@/components/TickerIntelligencePanel";
 import type { Account, AccountDefaultResponse, CspSizingResponse } from "@/types/accounts";
 import type { PositionStrategy } from "@/types/trackedPositions";
 import { cn } from "@/lib/utils";
@@ -365,6 +366,11 @@ export function AnalysisPage() {
       </div>
 
       {/* Error state — but still show cached data below if available */}
+      {/* Phase 2B: Ticker Intelligence — source of truth when symbol is set */}
+      {mode === "LIVE" && symbol && (
+        <TickerIntelligencePanel symbol={symbol} />
+      )}
+
       {error && !data && (
         <EmptyState
           title="Analysis failed"

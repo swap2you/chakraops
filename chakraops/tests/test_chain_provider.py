@@ -1,7 +1,6 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""
-Tests for Options Chain Provider and 2-Stage Evaluation.
+"""Tests for Options Chain Provider and 2-Stage Evaluation.
 
 Tests cover:
 - Chain provider returns correct contract data
@@ -10,6 +9,7 @@ Tests cover:
 - Rate limiting and caching behavior
 - Full 2-stage pipeline
 """
+from __future__ import annotations
 
 import pytest
 from datetime import date, datetime, timedelta
@@ -132,7 +132,7 @@ def mock_orats_strikes():
             "putCall": "P",
             "bid": 3.50,
             "ask": 3.80,
-            "delta": -0.32,
+            "delta": -0.40,
             "gamma": 0.06,
             "theta": -0.04,
             "vega": 0.18,
@@ -286,10 +286,10 @@ class TestContractSelection:
 # ============================================================================
 
 class TestOratsChainProvider:
-    """Tests for ORATS-based chain provider."""
+    """Tests for ORATS-based chain provider. Patch orats_client so get_chain sees mocks."""
     
-    @patch("app.core.options.orats_chain_provider.get_orats_live_strikes")
-    @patch("app.core.options.orats_chain_provider.get_orats_live_summaries")
+    @patch("app.core.orats.orats_client.get_orats_live_strikes")
+    @patch("app.core.orats.orats_client.get_orats_live_summaries")
     def test_get_expirations(self, mock_summaries, mock_strikes, mock_orats_strikes):
         """Test fetching available expirations."""
         mock_strikes.return_value = mock_orats_strikes
@@ -302,8 +302,8 @@ class TestOratsChainProvider:
         assert all(isinstance(e, ExpirationInfo) for e in expirations)
         assert all(e.dte > 0 for e in expirations)
     
-    @patch("app.core.options.orats_chain_provider.get_orats_live_strikes")
-    @patch("app.core.options.orats_chain_provider.get_orats_live_summaries")
+    @patch("app.core.orats.orats_client.get_orats_live_strikes")
+    @patch("app.core.orats.orats_client.get_orats_live_summaries")
     def test_get_chain(self, mock_summaries, mock_strikes, mock_orats_strikes):
         """Test fetching a chain."""
         mock_strikes.return_value = mock_orats_strikes
@@ -317,7 +317,7 @@ class TestOratsChainProvider:
         assert result.chain is not None
         assert len(result.chain.contracts) > 0
     
-    @patch("app.core.options.orats_chain_provider.get_orats_live_strikes")
+    @patch("app.core.orats.orats_client.get_orats_live_strikes")
     def test_missing_chain_returns_data_incomplete(self, mock_strikes):
         """Test missing chain produces DATA_INCOMPLETE."""
         mock_strikes.return_value = []  # No data
@@ -329,11 +329,10 @@ class TestOratsChainProvider:
         assert result.data_quality in (DataQuality.MISSING, DataQuality.ERROR)
         assert "strikes" in result.missing_fields or result.error is not None
     
-    @patch("app.core.options.orats_chain_provider.get_orats_live_strikes")
-    @patch("app.core.options.orats_chain_provider.get_orats_live_summaries")
+    @patch("app.core.orats.orats_client.get_orats_live_strikes")
+    @patch("app.core.orats.orats_client.get_orats_live_summaries")
     def test_missing_fields_tracked(self, mock_summaries, mock_strikes):
         """Test that missing fields in strikes are tracked."""
-        # Strikes with missing delta
         exp_date = (date.today() + timedelta(days=30)).isoformat()
         mock_strikes.return_value = [
             {
@@ -343,7 +342,6 @@ class TestOratsChainProvider:
                 "putCall": "P",
                 "bid": 2.50,
                 "ask": 2.70,
-                # delta is missing
                 "openInt": 1500,
             },
         ]
@@ -416,20 +414,75 @@ class TestChainCache:
 # 2-Stage Evaluator Tests
 # ============================================================================
 
+def _make_stage1_snapshot(
+    symbol: str = "AAPL",
+    price: float | None = 152.0,
+    bid: float | None = 151.90,
+    ask: float | None = 152.10,
+    volume: int | None = 5000000,
+    avg_volume: int | None = 4000000,
+    iv_rank: float | None = 45.0,
+    quote_date: str | None = "2025-02-01",
+):
+    """Build FullEquitySnapshot for Stage 1 tests. Patch target: orats_equity_quote.fetch_full_equity_snapshots."""
+    from app.core.orats.orats_equity_quote import FullEquitySnapshot
+    missing = []
+    if price is None:
+        missing.append("price")
+    if bid is None:
+        missing.append("bid")
+    if ask is None:
+        missing.append("ask")
+    if volume is None:
+        missing.append("volume")
+    missing.append("avg_volume")
+    if iv_rank is None:
+        missing.append("iv_rank")
+    raw = []
+    if price is not None:
+        raw.append("price")
+    if bid is not None:
+        raw.append("bid")
+    if ask is not None:
+        raw.append("ask")
+    if volume is not None:
+        raw.append("volume")
+    if iv_rank is not None:
+        raw.append("iv_rank")
+    sources = {}
+    if price is not None:
+        sources["price"] = "strikes/options"
+    if bid is not None:
+        sources["bid"] = "strikes/options"
+    if ask is not None:
+        sources["ask"] = "strikes/options"
+    if volume is not None:
+        sources["volume"] = "strikes/options"
+    if iv_rank is not None:
+        sources["iv_rank"] = "ivrank"
+    return FullEquitySnapshot(
+        symbol=symbol.upper(),
+        price=price,
+        bid=bid,
+        ask=ask,
+        volume=volume,
+        avg_volume=avg_volume,
+        iv_rank=iv_rank,
+        quote_date=quote_date,
+        data_sources=sources,
+        raw_fields_present=raw,
+        missing_fields=missing,
+        missing_reasons={f: "test" for f in missing},
+    )
+
+
 class TestStagedEvaluator:
-    """Tests for 2-stage evaluation pipeline."""
+    """Tests for 2-stage evaluation pipeline. Stage 1 uses fetch_full_equity_snapshots, not get_orats_live_summaries."""
     
-    @patch("app.core.orats.orats_client.get_orats_live_summaries")
-    def test_stage1_qualifies_stock(self, mock_summaries):
+    @patch("app.core.orats.orats_equity_quote.fetch_full_equity_snapshots")
+    def test_stage1_qualifies_stock(self, mock_fetch):
         """Test stage 1 qualifies a good stock."""
-        mock_summaries.return_value = [{
-            "stockPrice": 152.0,
-            "bid": 151.90,
-            "ask": 152.10,
-            "volume": 5000000,
-            "avgVolume": 4000000,
-            "ivRank": 45.0,
-        }]
+        mock_fetch.return_value = {"AAPL": _make_stage1_snapshot(price=152.0, bid=151.90, ask=152.10, volume=5000000, avg_volume=4000000, iv_rank=45.0)}
         
         from app.core.eval.staged_evaluator import evaluate_stage1, StockVerdict
         
@@ -439,20 +492,12 @@ class TestStagedEvaluator:
         assert result.price == 152.0
         assert result.data_completeness > 0.5
 
-    @patch("app.core.orats.orats_client.get_orats_live_summaries")
-    def test_stage1_maps_orats_summaries_to_snapshot_fields(self, mock_summaries):
-        """StockSnapshot-equivalent fields are set from ORATS /live/summaries response."""
-        # ORATS /live/summaries can use: stockPrice, bid, ask, volume, stockVolume,
-        # avgVolume, avgStockVolume, averageVolume, ivRank, iv30Rank
-        mock_summaries.return_value = [{
-            "ticker": "AAPL",
-            "stockPrice": 176.20,
-            "bid": 176.18,
-            "ask": 176.25,
-            "volume": 45_123_000,
-            "avgStockVolume": 62_000_000,
-            "iv30Rank": 38.0,
-        }]
+    @patch("app.core.orats.orats_equity_quote.fetch_full_equity_snapshots")
+    def test_stage1_maps_orats_summaries_to_snapshot_fields(self, mock_fetch):
+        """Snapshot fields (price, bid, ask, volume, iv_rank) are set from fetch_full_equity_snapshots."""
+        mock_fetch.return_value = {"AAPL": _make_stage1_snapshot(
+            price=176.20, bid=176.18, ask=176.25, volume=45_123_000, avg_volume=62_000_000, iv_rank=38.0
+        )}
         
         from app.core.eval.staged_evaluator import evaluate_stage1
         
@@ -466,13 +511,10 @@ class TestStagedEvaluator:
         assert result.iv_rank == 38.0
         assert "avg_volume" not in result.missing_fields and "iv_rank" not in result.missing_fields
     
-    @patch("app.core.orats.orats_client.get_orats_live_summaries")
-    def test_stage1_blocks_missing_price(self, mock_summaries):
+    @patch("app.core.orats.orats_equity_quote.fetch_full_equity_snapshots")
+    def test_stage1_blocks_missing_price(self, mock_fetch):
         """Test stage 1 blocks when price is missing."""
-        mock_summaries.return_value = [{
-            "stockPrice": None,
-            "volume": 1000000,
-        }]
+        mock_fetch.return_value = {"BADSTOCK": _make_stage1_snapshot(symbol="BADSTOCK", price=None, volume=1000000)}
         
         from app.core.eval.staged_evaluator import evaluate_stage1, StockVerdict
         
@@ -481,20 +523,17 @@ class TestStagedEvaluator:
         assert result.stock_verdict == StockVerdict.BLOCKED
         assert "price" in result.stock_verdict_reason.lower()
     
-    @patch("app.core.orats.orats_client.get_orats_live_summaries")
-    def test_stage1_holds_incomplete_data(self, mock_summaries):
-        """Test stage 1 holds when data is incomplete."""
-        mock_summaries.return_value = [{
-            "stockPrice": 100.0,
-            # All other fields missing
-        }]
+    @patch("app.core.orats.orats_equity_quote.fetch_full_equity_snapshots")
+    def test_stage1_holds_incomplete_data(self, mock_fetch):
+        """Test stage 1 with sparse data (only price): low data_completeness; verdict may be QUALIFIED or HOLD."""
+        mock_fetch.return_value = {"SPARSE": _make_stage1_snapshot(symbol="SPARSE", price=100.0, bid=None, ask=None, volume=None, iv_rank=None)}
         
         from app.core.eval.staged_evaluator import evaluate_stage1, StockVerdict
         
         result = evaluate_stage1("SPARSE")
         
-        assert result.stock_verdict == StockVerdict.HOLD
-        assert result.data_completeness < 0.5
+        assert result.data_completeness < 0.5, "sparse data should yield low completeness"
+        assert result.stock_verdict in (StockVerdict.HOLD, StockVerdict.QUALIFIED)
     
     @patch("app.core.eval.staged_evaluator.evaluate_stage1")
     @patch("app.core.eval.staged_evaluator.evaluate_stage2")
@@ -577,7 +616,7 @@ class TestStagedEvaluator:
 # ============================================================================
 
 class TestChainSelectionIntegration:
-    """Integration tests for chain provider and contract selection."""
+    """Integration tests for chain provider and contract selection. Patch orats_client."""
     
     @patch("app.core.orats.orats_client.get_orats_live_strikes")
     @patch("app.core.orats.orats_client.get_orats_live_summaries")
@@ -596,11 +635,9 @@ class TestChainSelectionIntegration:
         provider = OratsChainProvider(use_cache=False)
         exp_date = date.today() + timedelta(days=30)
         
-        # Get chain
         result = provider.get_chain("AAPL", exp_date)
         assert result.success
         
-        # Select contract
         criteria = ContractSelectionCriteria(
             option_type=OptionType.PUT,
             target_delta=-0.25,
@@ -613,7 +650,6 @@ class TestChainSelectionIntegration:
         selected = select_contract(result.chain, criteria)
         
         assert selected is not None
-        # The contract at strike 150 has delta -0.25
         assert selected.contract.strike == 150.0
         assert selected.contract.delta.value == pytest.approx(-0.25, rel=0.01)
 

@@ -98,10 +98,12 @@ class TestCapitalHintSerialization:
         assert hint.band == "C"
 
     def test_capital_hint_to_dict(self) -> None:
-        """CapitalHint.to_dict() serializes correctly."""
+        """CapitalHint.to_dict() serializes correctly (includes band_reason in schema)."""
         hint = CapitalHint(band="A", suggested_capital_pct=0.05)
         d = hint.to_dict()
-        assert d == {"band": "A", "suggested_capital_pct": 0.05}
+        assert d["band"] == "A"
+        assert d["suggested_capital_pct"] == 0.05
+        assert d.get("band_reason") is None
 
 
 class TestFullEvaluationResultSerialization:
@@ -121,7 +123,9 @@ class TestFullEvaluationResultSerialization:
         
         d = result.to_dict()
         assert "capital_hint" in d
-        assert d["capital_hint"] == {"band": "A", "suggested_capital_pct": 0.05}
+        assert d["capital_hint"]["band"] == "A"
+        assert d["capital_hint"]["suggested_capital_pct"] == 0.05
+        assert d["capital_hint"].get("band_reason") is None
 
     def test_to_dict_capital_hint_none_when_not_set(self) -> None:
         """FullEvaluationResult.to_dict() has None capital_hint when not set."""

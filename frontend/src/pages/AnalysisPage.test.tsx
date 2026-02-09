@@ -71,9 +71,13 @@ describe("AnalysisPage", () => {
     fireEvent.change(input, { target: { value: "NVDA" } });
     fireEvent.click(screen.getByRole("button", { name: /analyze/i }));
     expect(await screen.findByText("Gates")).toBeInTheDocument();
-    expect(screen.getByText(/no_exclusion/i)).toBeInTheDocument();
+    const noExclusionEls = screen.getAllByText(/no_exclusion/i);
+    expect(noExclusionEls.length).toBeGreaterThanOrEqual(1);
+    expect(noExclusionEls[0]).toBeInTheDocument();
     expect(screen.getByText("Blockers")).toBeInTheDocument();
-    expect(screen.getByText("UNKNOWN")).toBeInTheDocument();
+    const unknownEls = screen.getAllByText("UNKNOWN");
+    expect(unknownEls.length).toBeGreaterThanOrEqual(1);
+    expect(unknownEls[0]).toBeInTheDocument();
     expect(screen.getByText("Eligibility not determined")).toBeInTheDocument();
     expect(screen.getByText("SPREAD")).toBeInTheDocument();
   });

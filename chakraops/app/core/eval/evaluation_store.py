@@ -539,9 +539,9 @@ def list_runs(limit: int = 20) -> List[EvaluationRunSummary]:
         return []
     
     summaries = []
-    # Get all run files (exclude latest.json)
+    # Get all run files (exclude latest.json and *_data_completeness.json)
     run_files = sorted(
-        [f for f in evaluations_dir.glob("eval_*.json")],
+        [f for f in evaluations_dir.glob("eval_*.json") if "_data_completeness" not in f.name],
         key=lambda f: f.stat().st_mtime,
         reverse=True
     )[:limit]
@@ -572,7 +572,7 @@ def delete_old_runs(keep_count: int = 50) -> int:
         return 0
     
     run_files = sorted(
-        [f for f in evaluations_dir.glob("eval_*.json")],
+        [f for f in evaluations_dir.glob("eval_*.json") if "_data_completeness" not in f.name],
         key=lambda f: f.stat().st_mtime,
         reverse=True
     )

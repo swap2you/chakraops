@@ -33,6 +33,19 @@ import type {
   EvaluationRunsResponse,
 } from "@/types/universeEvaluation";
 
+/** Phase 2C: One record from lifecycle log (position directive). */
+export interface LifecycleRecord {
+  position_id: string;
+  symbol: string;
+  lifecycle_state?: string;
+  action: string;
+  reason?: string;
+  directive?: string;
+  triggered_at: string;
+  eval_run_id?: string;
+  sent?: boolean;
+}
+
 /** Phase 6: One record from alert log (sent or suppressed). */
 export interface Phase6AlertRecord {
   fingerprint?: string;
@@ -49,7 +62,7 @@ import type { TradesAlertsResponse } from "@/types/journal";
 import { getAlertTypeColor } from "@/types/universeEvaluation";
 import { Search, Send, Loader2 } from "lucide-react";
 
-type FilterKind = "all" | "actionable" | "warnings" | "errors" | "info" | "eligible" | "data" | "target" | "nightly";
+type FilterKind = "all" | "actionable" | "warnings" | "errors" | "info" | "eligible" | "data" | "target" | "nightly" | "lifecycle";
 
 function formatRelative(iso: string): string {
   try {
@@ -142,14 +155,16 @@ export function NotificationsPage() {
       apiGet<EvaluationRunsResponse>(ENDPOINTS.evaluationRuns).catch(() => ({ runs: [], count: 0, latest_run_id: null })),
       apiGet<TradesAlertsResponse>(ENDPOINTS.tradesAlerts).catch(() => ({ alerts: [], count: 0 })),
       apiGet<{ records: Phase6AlertRecord[]; count: number }>(ENDPOINTS.alertLog).catch(() => ({ records: [], count: 0 })),
+      apiGet<{ records: LifecycleRecord[]; count: number }>(ENDPOINTS.lifecycleLog).catch(() => ({ records: [], count: 0 })),
       apiGet<{ slack_configured: boolean; message?: string }>(ENDPOINTS.alertingStatus).catch(() => ({ slack_configured: false, message: "Unknown" })),
     ])
-      .then(([alerts, overview, evalAlertsResp, evalRunsResp, journalAlertsResp, alertLogResp, alertingStatusResp]) => {
+      .then(([alerts, overview, evalAlertsResp, evalRunsResp, journalAlertsResp, alertLogResp, lifecycleLogResp, alertingStatusResp]) => {
         if (cancelled) return;
         const latestTs = overview?.links?.latest_decision_ts ?? null;
         const fromAlerts = notificationsFromAlerts(alerts);
         const system = systemNotifications({ latestEvaluatedAt: latestTs, mode: "LIVE" });
         const pending = loadPendingSystemNotifications();
+        const lifecycleLogRecords: LifecycleRecord[] = lifecycleLogResp?.records ?? [];
         
         // Convert evaluation alerts to notification items
         const evalNotifications: NotificationItem[] = evalAlertsResp.alerts.map((ea) => ({
@@ -195,7 +210,18 @@ export function NotificationsPage() {
         setNightlyRunIds(nightlyRunIdsList);
         setAlertLogRecords(alertLogResp.records ?? []);
         setAlertingStatus({ slack_configured: alertingStatusResp.slack_configured ?? false, message: alertingStatusResp.message });
-        setNotifications([...system, ...fromAlerts, ...evalNotifications, ...journalNotifications, ...nightlyNotifications, ...pending]);
+        // Phase 2C: Lifecycle directives as notifications
+        const lifecycleNotifications: NotificationItem[] = lifecycleLogRecords.map((r, i) => ({
+          id: `lifecycle-${r.position_id}-${r.action}-${i}`,
+          source: "lifecycle",
+          severity: (r.action === "POSITION_ABORT" || (r.action === "POSITION_EXIT" && r.reason === "STOP_LOSS")) ? "error" : (r.action === "POSITION_EXIT" || r.action === "POSITION_SCALE_OUT") ? "warning" : "info",
+          title: r.action.replace("POSITION_", "") + (r.symbol ? ` — ${r.symbol}` : ""),
+          message: r.directive ?? r.reason ?? r.action,
+          createdAt: r.triggered_at,
+          symbol: r.symbol,
+          actionable: true,
+        }));
+        setNotifications([...system, ...fromAlerts, ...evalNotifications, ...journalNotifications, ...nightlyNotifications, ...lifecycleNotifications, ...pending]);
       })
       .catch((e) => {
         if (!cancelled) {
@@ -225,6 +251,10 @@ export function NotificationsPage() {
     else if (filter === "data") list = list.filter((n) => n.title.includes("DATA_STALE") || n.title.includes("LIQUIDITY"));
     else if (filter === "target") list = list.filter((n) => n.title.includes("TARGET_HIT"));
     else if (filter === "nightly") list = list.filter((n) => n.title === "Nightly run completed");
+    else if (filter === "lifecycle") list = list.filter((n) =>
+      n.title.includes("SCALE OUT") || n.title.includes("EXIT") || n.title.includes("ABORT") ||
+      n.title.includes("STOP LOSS") || n.title.includes("HOLD") || n.source === "lifecycle"
+    );
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(
@@ -302,7 +332,7 @@ export function NotificationsPage() {
         <div className="flex flex-wrap items-center gap-3">
           {/* Filter pills */}
           <div className="flex flex-wrap gap-2">
-            {(["all", "nightly", "eligible", "warnings", "data", "errors", "info"] as FilterKind[]).map((f) => (
+            {(["all", "lifecycle", "nightly", "eligible", "warnings", "data", "errors", "info"] as FilterKind[]).map((f) => (
               <button
                 key={f}
                 type="button"
@@ -315,6 +345,7 @@ export function NotificationsPage() {
                 )}
               >
                 {f === "all" ? "ALL" :
+                 f === "lifecycle" ? "LIFECYCLE" :
                  f === "nightly" ? "NIGHTLY" :
                  f === "eligible" ? "ELIGIBLE" :
                  f === "warnings" ? "WARN" :

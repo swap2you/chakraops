@@ -49,6 +49,8 @@ def _load_alerts_config() -> Dict[str, Any]:
         return {
             "enabled_alert_types": ["DATA_HEALTH", "REGIME_CHANGE", "SIGNAL", "SYSTEM"],
             "cooldown_hours": 6,
+            "lifecycle_cooldown_hours": 4,
+            "portfolio_alert_cooldown_hours": 12,
             "slack": {},
         }
     try:
@@ -64,6 +66,8 @@ def _load_alerts_config() -> Dict[str, Any]:
         return {
             "enabled_alert_types": [str(x) for x in enabled],
             "cooldown_hours": int(data.get("cooldown_hours", 6)),
+            "lifecycle_cooldown_hours": int(data.get("lifecycle_cooldown_hours", 4)),
+            "portfolio_alert_cooldown_hours": int(data.get("portfolio_alert_cooldown_hours", 12)),
             "slack": slack,
         }
     except Exception as e:
@@ -71,6 +75,7 @@ def _load_alerts_config() -> Dict[str, Any]:
         return {
             "enabled_alert_types": ["DATA_HEALTH", "REGIME_CHANGE", "SIGNAL", "SYSTEM"],
             "cooldown_hours": 6,
+            "lifecycle_cooldown_hours": 4,
             "slack": {},
         }
 
@@ -108,6 +113,91 @@ def _shortlist_set(run: Any) -> set:
 def _make_fingerprint(alert_type: str, reason_code: str, symbol: Optional[str], stage: Optional[str], extra: str = "") -> str:
     raw = f"{alert_type}|{reason_code}|{symbol or ''}|{stage or ''}|{extra}"
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+def _lifecycle_fingerprint(position_id: str, action_type: str) -> str:
+    """Phase 2C: Cooldown per (position_id, action_type)."""
+    raw = f"LIFECYCLE|{position_id}|{action_type}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+def _build_symbol_explain_from_run(run: Any, symbol: str) -> Dict[str, Any]:
+    """Build minimal symbol_explain dict from evaluation run for lifecycle."""
+    sym_upper = (symbol or "").strip().upper()
+    for s in (getattr(run, "symbols", None) or []):
+        if isinstance(s, dict) and (s.get("symbol") or "").strip().upper() == sym_upper:
+            return {
+                "symbol": sym_upper,
+                "verdict": s.get("verdict", "UNKNOWN"),
+                "primary_reason": s.get("primary_reason", ""),
+            }
+    return {"symbol": sym_upper, "verdict": "UNKNOWN", "primary_reason": ""}
+
+
+def build_lifecycle_alerts_for_run(run: Any, config: Dict[str, Any]) -> List[Alert]:
+    """Phase 2C: Build lifecycle alerts from OPEN/PARTIAL_EXIT positions."""
+    from app.core.positions.store import list_positions
+    from app.core.symbols.targets import get_targets
+    from app.core.lifecycle.engine import evaluate_position_lifecycle
+    from app.core.lifecycle.models import LifecycleAction
+
+    alerts: List[Alert] = []
+    now = datetime.now(timezone.utc).isoformat()
+    run_id = getattr(run, "run_id", "")
+
+    positions = list_positions(status=None)
+    open_positions = [p for p in positions if (p.status or "").strip() in ("OPEN", "PARTIAL_EXIT")]
+    if not open_positions:
+        return alerts
+
+    action_to_alert_type = {
+        LifecycleAction.SCALE_OUT: AlertType.POSITION_SCALE_OUT,
+        LifecycleAction.EXIT: AlertType.POSITION_EXIT,
+        LifecycleAction.ABORT: AlertType.POSITION_ABORT,
+        LifecycleAction.HOLD: AlertType.POSITION_HOLD,
+    }
+    action_to_severity = {
+        LifecycleAction.SCALE_OUT: Severity.WARN,
+        LifecycleAction.EXIT: Severity.WARN,
+        LifecycleAction.ABORT: Severity.CRITICAL,
+        LifecycleAction.HOLD: Severity.WARN,
+    }
+    # STOP_LOSS override
+    for pos in open_positions:
+        sym = (pos.symbol or "").strip().upper()
+        symbol_explain = _build_symbol_explain_from_run(run, sym)
+        symbol_targets = get_targets(sym)
+        events = evaluate_position_lifecycle(pos, symbol_explain, symbol_targets, run, eval_run_id=run_id)
+        for ev in events:
+            at = action_to_alert_type.get(ev.action)
+            if at is None:
+                continue
+            severity = action_to_severity.get(ev.action, Severity.WARN)
+            if ev.reason and ev.reason.value == "STOP_LOSS":
+                severity = Severity.CRITICAL
+            fp = _lifecycle_fingerprint(pos.position_id, ev.action.value)
+            meta = dict(ev.meta or {})
+            meta["lifecycle_format"] = "directive"
+            meta["position_id"] = pos.position_id
+            meta["lifecycle_state"] = ev.lifecycle_state.value
+            meta["eval_run_id"] = run_id
+            if ev.action.value == "EXIT" and ev.reason and ev.reason.value == "STOP_LOSS":
+                meta["reason_detail"] = "Price breached stop"
+            elif ev.action.value == "EXIT":
+                meta["reason_detail"] = "Target 2 hit"
+            alerts.append(Alert(
+                alert_type=at,
+                severity=severity,
+                reason_code=ev.reason.value if ev.reason else ev.action.value,
+                summary=ev.directive,
+                action_hint=ev.directive,
+                fingerprint=fp,
+                created_at=now,
+                stage=None,
+                symbol=sym,
+                meta=meta,
+            ))
+    return alerts
 
 
 def build_alerts_for_run(run: Any, previous_run: Optional[Any], config: Dict[str, Any]) -> List[Alert]:
@@ -263,10 +353,33 @@ def _append_alert_record(record: Dict[str, Any]) -> None:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+def _append_lifecycle_log_if_lifecycle(alert: Alert, sent: bool) -> None:
+    """Phase 2C: Append to lifecycle_log.jsonl for lifecycle alerts."""
+    meta = alert.meta or {}
+    if meta.get("lifecycle_format") != "directive":
+        return
+    try:
+        from app.core.lifecycle.persistence import append_lifecycle_entry
+        append_lifecycle_entry({
+            "position_id": meta.get("position_id", ""),
+            "symbol": alert.symbol or "",
+            "lifecycle_state": meta.get("lifecycle_state", ""),
+            "action": alert.alert_type.value,
+            "reason": alert.reason_code,
+            "directive": alert.action_hint or alert.summary,
+            "triggered_at": alert.created_at,
+            "eval_run_id": meta.get("eval_run_id", ""),
+            "sent": sent,
+        })
+    except Exception as e:
+        logger.warning("[ALERTS] Failed to append lifecycle log: %s", e)
+
+
 def process_run_completed(run: Any) -> None:
     """
     Called after a run is saved and (if COMPLETED) latest pointer updated.
-    Builds alerts, dedupes by fingerprint cooldown, sends via Slack (if configured), persists to out/alerts/.
+    Builds alerts (evaluation + lifecycle), dedupes by fingerprint cooldown,
+    sends via Slack (if configured), persists to out/alerts/ and out/lifecycle/.
     No alerts during RUNNING; no per-symbol spam.
     """
     if getattr(run, "status", None) == "RUNNING":
@@ -275,13 +388,41 @@ def process_run_completed(run: Any) -> None:
     enabled = set(config.get("enabled_alert_types") or [])
     cooldown_hours = max(0, config.get("cooldown_hours", 6))
     cooldown_seconds = cooldown_hours * 3600
+    lifecycle_cooldown_hours = max(0, config.get("lifecycle_cooldown_hours", 4))
+    lifecycle_cooldown_seconds = lifecycle_cooldown_hours * 3600
+    portfolio_cooldown_hours = max(0, config.get("portfolio_alert_cooldown_hours", 12))
+    portfolio_cooldown_seconds = portfolio_cooldown_hours * 3600
 
     previous_run = get_previous_completed_run(run.run_id) if getattr(run, "run_id", None) else None
     candidates = build_alerts_for_run(run, previous_run, config)
     recent_fps = _get_recent_sent_fingerprints(cooldown_seconds)
+    recent_lifecycle_fps = _get_recent_sent_fingerprints(lifecycle_cooldown_seconds)
+    recent_portfolio_fps = _get_recent_sent_fingerprints(portfolio_cooldown_seconds)
+
+    # Phase 2C: Lifecycle alerts for OPEN/PARTIAL_EXIT positions
+    lifecycle_alerts = build_lifecycle_alerts_for_run(run, config)
+    candidates = candidates + lifecycle_alerts
+
+    # Phase 3: Portfolio risk alerts
+    try:
+        from app.core.portfolio.service import compute_portfolio_summary
+        from app.core.accounts.store import list_accounts
+        from app.core.positions.store import list_positions
+        from app.core.alerts.portfolio_alerts import build_portfolio_alerts_for_run
+
+        accounts = list_accounts()
+        positions = list_positions()
+        summary = compute_portfolio_summary(accounts, positions)
+        portfolio_alerts = build_portfolio_alerts_for_run(summary, summary.risk_flags, config)
+        candidates = candidates + portfolio_alerts
+    except Exception as e:
+        logger.debug("[ALERTS] Portfolio alerts skipped: %s", e)
 
     from app.core.alerts.slack_notifier import SlackNotifier
     notifier = SlackNotifier(config)
+
+    lifecycle_types = {"POSITION_ENTRY", "POSITION_SCALE_OUT", "POSITION_EXIT", "POSITION_ABORT", "POSITION_HOLD"}
+    portfolio_types = {"PORTFOLIO_RISK_WARN", "PORTFOLIO_RISK_BLOCK"}
 
     for alert in candidates:
         if alert.alert_type.value not in enabled:
@@ -295,8 +436,15 @@ def process_run_completed(run: Any) -> None:
                 "sent": False,
                 "suppressed_reason": "alert_type_disabled",
             })
+            if alert.alert_type.value in lifecycle_types:
+                _append_lifecycle_log_if_lifecycle(alert, sent=False)
             continue
-        if alert.fingerprint in recent_fps:
+        fps_to_check = (
+            recent_lifecycle_fps if alert.alert_type.value in lifecycle_types
+            else recent_portfolio_fps if alert.alert_type.value in portfolio_types
+            else recent_fps
+        )
+        if alert.fingerprint in fps_to_check:
             _append_alert_record({
                 "fingerprint": alert.fingerprint,
                 "created_at": alert.created_at,
@@ -307,10 +455,16 @@ def process_run_completed(run: Any) -> None:
                 "sent": False,
                 "suppressed_reason": "cooldown",
             })
+            if alert.alert_type.value in lifecycle_types:
+                _append_lifecycle_log_if_lifecycle(alert, sent=False)
             logger.debug("[ALERTS] Suppressed (cooldown) fingerprint=%s", alert.fingerprint[:8])
             continue
         sent = notifier.send(alert)
-        recent_fps.add(alert.fingerprint)
+        (recent_lifecycle_fps if alert.alert_type.value in lifecycle_types
+         else recent_portfolio_fps if alert.alert_type.value in portfolio_types
+         else recent_fps).add(alert.fingerprint)
+        if alert.alert_type.value in lifecycle_types:
+            _append_lifecycle_log_if_lifecycle(alert, sent=sent)
         _append_alert_record({
             "fingerprint": alert.fingerprint,
             "created_at": alert.created_at,

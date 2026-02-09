@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Zap, LayoutDashboard, Briefcase, BookOpen, Bell, BarChart3, History, Sun, Moon, User, ChevronDown, Stethoscope, AlertTriangle, RefreshCw, Search as SearchIcon, Activity, FileText, DollarSign, Target } from "lucide-react";
+import { Zap, LayoutDashboard, Briefcase, BookOpen, Bell, BarChart3, History, Sun, Moon, User, ChevronDown, Stethoscope, AlertTriangle, RefreshCw, Search as SearchIcon, Activity, FileText, DollarSign, Target, PieChart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDataMode } from "@/context/DataModeContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -24,6 +24,7 @@ const VIEWS = [
   { path: "/analysis", label: "Ticker", icon: SearchIcon },
   { path: "/accounts", label: "Accounts", icon: DollarSign },
   { path: "/tracked-positions", label: "Tracked", icon: Target },
+  { path: "/portfolio", label: "Portfolio", icon: PieChart },
   { path: "/strategy", label: "Strategy", icon: FileText },
   { path: "/pipeline", label: "Pipeline", icon: FileText },
   { path: "/diagnostics", label: "Diagnostics", icon: Activity },

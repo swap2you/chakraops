@@ -6,12 +6,19 @@
 # enabled_alert_types
 # -----------------------------------------------------------------------------
 # Which alert types to generate and send. Types not listed are skipped (logged as
-# "alert_type_disabled"). Options: DATA_HEALTH, REGIME_CHANGE, SIGNAL, SYSTEM.
+# "alert_type_disabled"). Options: DATA_HEALTH, REGIME_CHANGE, SIGNAL, SYSTEM,
+# POSITION_ENTRY, POSITION_SCALE_OUT, POSITION_EXIT, POSITION_ABORT, POSITION_HOLD.
 enabled_alert_types:
   - DATA_HEALTH
   - REGIME_CHANGE
   - SIGNAL
   - SYSTEM
+  - POSITION_SCALE_OUT
+  - POSITION_EXIT
+  - POSITION_ABORT
+  - POSITION_HOLD
+  - PORTFOLIO_RISK_WARN
+  - PORTFOLIO_RISK_BLOCK
 
 # -----------------------------------------------------------------------------
 # cooldown_hours
@@ -19,6 +26,19 @@ enabled_alert_types:
 # Same fingerprint is not sent again within this many hours. Reduces noise when
 # the same condition persists across runs. Default 6; set 0 to disable (not recommended).
 cooldown_hours: 6
+
+# -----------------------------------------------------------------------------
+# lifecycle_cooldown_hours (Phase 2C)
+# -----------------------------------------------------------------------------
+# Lifecycle alerts (scale/exit/abort/hold) use separate cooldown per (position_id, action_type).
+# Default 4 hours.
+lifecycle_cooldown_hours: 4
+
+# -----------------------------------------------------------------------------
+# portfolio_alert_cooldown_hours (Phase 3)
+# -----------------------------------------------------------------------------
+# Portfolio risk alerts (WARN/BLOCK) use separate cooldown. Default 12 hours.
+portfolio_alert_cooldown_hours: 12
 
 # -----------------------------------------------------------------------------
 # slack

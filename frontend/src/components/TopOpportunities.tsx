@@ -170,6 +170,7 @@ export function TopOpportunities({ pollTick }: TopOpportunitiesProps) {
                 <th className="px-4 py-2 font-medium">Symbol</th>
                 <th className="px-4 py-2 font-medium">Strategy</th>
                 <th className="px-4 py-2 font-medium">Band</th>
+                <th className="px-4 py-2 font-medium">Risk</th>
                 <th className="px-4 py-2 font-medium">Score</th>
                 <th className="px-4 py-2 font-medium">Capital</th>
                 <th className="px-4 py-2 font-medium max-w-[220px]">Why this is here</th>
@@ -220,6 +221,25 @@ export function TopOpportunities({ pollTick }: TopOpportunitiesProps) {
                     )}>
                       {opp.band}
                     </span>
+                  </td>
+
+                  {/* Risk status (Phase 3) */}
+                  <td className="px-4 py-2.5">
+                    {opp.risk_status ? (
+                      <span
+                        className={cn(
+                          "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
+                          opp.risk_status === "OK" && "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400",
+                          opp.risk_status === "WARN" && "bg-amber-500/20 text-amber-600 dark:text-amber-400",
+                          opp.risk_status === "BLOCKED" && "bg-red-500/20 text-red-600 dark:text-red-400"
+                        )}
+                        title={opp.risk_status === "BLOCKED" ? (opp.risk_reasons ?? []).join(". ") : undefined}
+                      >
+                        {opp.risk_status}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
 
                   {/* Score */}
@@ -276,9 +296,19 @@ export function TopOpportunities({ pollTick }: TopOpportunitiesProps) {
                       </Link>
                       {!opp.position_open && (
                         <button
-                          onClick={() => openExecute(opp)}
-                          className="flex items-center gap-1 rounded bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/20"
-                          title="Record manual execution"
+                          onClick={() => opp.risk_status !== "BLOCKED" && openExecute(opp)}
+                          disabled={opp.risk_status === "BLOCKED"}
+                          className={cn(
+                            "flex items-center gap-1 rounded px-2 py-1 text-xs font-medium",
+                            opp.risk_status === "BLOCKED"
+                              ? "cursor-not-allowed bg-muted text-muted-foreground"
+                              : "bg-primary/10 text-primary hover:bg-primary/20"
+                          )}
+                          title={
+                            opp.risk_status === "BLOCKED"
+                              ? `Why blocked: ${(opp.risk_reasons ?? []).join("; ")}`
+                              : "Record manual execution"
+                          }
                         >
                           <Target className="h-3 w-3" />
                           Execute

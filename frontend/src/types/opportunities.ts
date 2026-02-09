@@ -26,6 +26,10 @@ export interface RankedOpportunity {
   stage_reached: string | null;
   score_breakdown: ScoreBreakdown | null;
   rank_reasons: { reasons: string[]; penalty: string | null } | null;
+  /** Phase 3: Risk status (OK/WARN/BLOCKED) */
+  risk_status?: "OK" | "WARN" | "BLOCKED";
+  /** Phase 3: Human-readable risk block reasons */
+  risk_reasons?: string[];
 }
 
 export interface OpportunitiesResponse {

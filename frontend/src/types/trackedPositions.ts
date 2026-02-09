@@ -3,7 +3,7 @@
  * Matches backend app.core.positions.models.
  */
 
-export type PositionStatus = "OPEN" | "PARTIAL_EXIT" | "CLOSED";
+export type PositionStatus = "OPEN" | "PARTIAL_EXIT" | "CLOSED" | "ABORTED";
 export type PositionStrategy = "CSP" | "CC" | "STOCK";
 
 export interface TrackedPosition {
@@ -20,6 +20,12 @@ export interface TrackedPosition {
   opened_at: string;
   closed_at: string | null;
   notes: string;
+  /** Phase 2C: Lifecycle state from last directive */
+  lifecycle_state?: string | null;
+  /** Phase 2C: Last directive text (e.g. EXIT 1 CONTRACT) */
+  last_directive?: string | null;
+  /** Phase 2C: Timestamp of last lifecycle alert */
+  last_alert_at?: string | null;
 }
 
 export interface TrackedPositionsListResponse {

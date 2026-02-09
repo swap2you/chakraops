@@ -15,6 +15,15 @@ class AlertType(str, Enum):
     REGIME_CHANGE = "REGIME_CHANGE"
     SIGNAL = "SIGNAL"
     SYSTEM = "SYSTEM"
+    # Phase 2C: Lifecycle alerts (position directive)
+    POSITION_ENTRY = "POSITION_ENTRY"
+    POSITION_SCALE_OUT = "POSITION_SCALE_OUT"
+    POSITION_EXIT = "POSITION_EXIT"
+    POSITION_ABORT = "POSITION_ABORT"
+    POSITION_HOLD = "POSITION_HOLD"
+    # Phase 3: Portfolio risk alerts
+    PORTFOLIO_RISK_WARN = "PORTFOLIO_RISK_WARN"
+    PORTFOLIO_RISK_BLOCK = "PORTFOLIO_RISK_BLOCK"
 
 
 class Severity(str, Enum):

@@ -2034,6 +2034,20 @@ def api_view_alert_log() -> Dict[str, Any]:
         return {"records": [], "count": 0, "reason": str(e)}
 
 
+@app.get("/api/view/lifecycle-log")
+def api_view_lifecycle_log(limit: int = Query(default=100, ge=1, le=500)) -> Dict[str, Any]:
+    """Phase 2C: Recent lifecycle log entries (position directives)."""
+    try:
+        from app.core.lifecycle.persistence import list_recent_lifecycle_entries
+        records = list_recent_lifecycle_entries(limit=limit)
+        return {"records": records, "count": len(records)}
+    except ImportError:
+        return {"records": [], "count": 0, "reason": "Lifecycle module not available"}
+    except Exception as e:
+        logger.exception("Error getting lifecycle log: %s", e)
+        return {"records": [], "count": 0, "reason": str(e)}
+
+
 @app.get("/api/ops/alerting-status")
 def api_ops_alerting_status() -> Dict[str, Any]:
     """Phase 6: Whether Slack is configured (UI shows 'alerts suppressed' when not)."""
@@ -2555,6 +2569,93 @@ def api_accounts_csp_sizing(account_id: str, strike: float = Query(..., gt=0)) -
 
 
 # ============================================================================
+# PHASE 3: PORTFOLIO & RISK INTELLIGENCE
+# ============================================================================
+
+
+@app.get("/api/portfolio/summary")
+def api_portfolio_summary() -> Dict[str, Any]:
+    """Phase 3: Portfolio summary — total_equity, capital_in_use, available_capital, risk_flags."""
+    try:
+        from app.core.accounts.store import list_accounts
+        from app.core.positions.store import list_positions
+        from app.core.portfolio.service import compute_portfolio_summary
+
+        accounts = list_accounts()
+        positions = list_positions()
+        summary = compute_portfolio_summary(accounts, positions)
+        return {
+            "total_equity": round(summary.total_equity, 2),
+            "capital_in_use": round(summary.capital_in_use, 2),
+            "available_capital": round(summary.available_capital, 2),
+            "capital_utilization_pct": round(summary.capital_utilization_pct, 4),
+            "open_positions_count": summary.open_positions_count,
+            "available_capital_clamped": summary.available_capital_clamped,
+            "risk_flags": [
+                {"code": f.code, "message": f.message, "severity": f.severity}
+                for f in summary.risk_flags
+            ],
+        }
+    except Exception as e:
+        logger.exception("Error fetching portfolio summary: %s", e)
+        return {
+            "total_equity": 0,
+            "capital_in_use": 0,
+            "available_capital": 0,
+            "capital_utilization_pct": 0,
+            "open_positions_count": 0,
+            "available_capital_clamped": False,
+            "risk_flags": [],
+            "error": str(e),
+        }
+
+
+@app.get("/api/portfolio/exposure")
+def api_portfolio_exposure(
+    group_by: str = Query(default="symbol", description="Group by: symbol | sector"),
+) -> Dict[str, Any]:
+    """Phase 3: Exposure by symbol or sector."""
+    try:
+        from app.core.accounts.store import list_accounts
+        from app.core.positions.store import list_positions
+        from app.core.portfolio.service import compute_exposure
+
+        accounts = list_accounts()
+        positions = list_positions()
+        group = "sector" if group_by == "sector" else "symbol"
+        items = compute_exposure(accounts, positions, group_by=group)
+        return {"items": items, "group_by": group}
+    except Exception as e:
+        logger.exception("Error fetching portfolio exposure: %s", e)
+        return {"items": [], "group_by": group_by if group_by else "symbol", "error": str(e)}
+
+
+@app.get("/api/portfolio/risk-profile")
+def api_portfolio_risk_profile() -> Dict[str, Any]:
+    """Phase 3: Risk profile settings."""
+    try:
+        from app.core.portfolio.store import load_risk_profile
+        p = load_risk_profile()
+        return p.to_dict()
+    except Exception as e:
+        logger.exception("Error fetching risk profile: %s", e)
+        return {"error": str(e)}
+
+
+@app.put("/api/portfolio/risk-profile")
+async def api_portfolio_risk_profile_put(request: Request) -> Dict[str, Any]:
+    """Phase 3: Update risk profile settings."""
+    try:
+        body = await request.json()
+        from app.core.portfolio.store import update_risk_profile
+        p = update_risk_profile(body)
+        return p.to_dict()
+    except Exception as e:
+        logger.exception("Error updating risk profile: %s", e)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ============================================================================
 # PHASE 2A: DASHBOARD OPPORTUNITIES — RANKED DECISION INTELLIGENCE
 # ============================================================================
 
@@ -2564,16 +2665,19 @@ def api_dashboard_opportunities(
     limit: int = Query(default=5, ge=1, le=50),
     strategy: Optional[str] = Query(default=None),
     max_capital_pct: Optional[float] = Query(default=None, ge=0.0, le=1.0),
+    include_blocked: bool = Query(default=False, description="Phase 3: Include BLOCKED opportunities with risk_reasons"),
 ) -> Dict[str, Any]:
     """Ranked opportunities for the dashboard.
 
     Returns top opportunities sorted by band, score, and capital efficiency.
     Each symbol appears at most once with its primary strategy (exclusivity rule).
+    Phase 3: Each opportunity includes risk_status (OK/WARN/BLOCKED) and risk_reasons.
 
     Query params:
       - limit: Max results (default 5, max 50)
       - strategy: Filter by strategy (CSP, CC, STOCK)
       - max_capital_pct: Filter by max capital % (0.0-1.0)
+      - include_blocked: Include BLOCKED opportunities with block reasons
     """
     try:
         from app.core.ranking.service import get_dashboard_opportunities
@@ -2581,6 +2685,7 @@ def api_dashboard_opportunities(
             limit=limit,
             strategy_filter=strategy,
             max_capital_pct=max_capital_pct,
+            include_blocked=include_blocked,
         )
     except Exception as e:
         logger.exception("Error fetching dashboard opportunities: %s", e)
@@ -2671,16 +2776,38 @@ def api_symbols_company(symbol: str) -> Dict[str, Any]:
 # ============================================================================
 
 
+def _lifecycle_for_position(position_id: str, lifecycle_records: list) -> Dict[str, Any]:
+    """Phase 2C: Last lifecycle entry for a position."""
+    for r in lifecycle_records:
+        if r.get("position_id") == position_id:
+            return {
+                "lifecycle_state": r.get("lifecycle_state"),
+                "last_directive": r.get("directive") or r.get("reason") or r.get("action", ""),
+                "last_alert_at": r.get("triggered_at"),
+            }
+    return {"lifecycle_state": None, "last_directive": None, "last_alert_at": None}
+
+
 @app.get("/api/positions/tracked")
 def api_positions_tracked(
     status: Optional[str] = Query(default=None),
     symbol: Optional[str] = Query(default=None),
 ) -> Dict[str, Any]:
-    """List manually tracked positions, optionally filtered by symbol."""
+    """List manually tracked positions, optionally filtered by symbol. Phase 2C: includes lifecycle_state, last_directive, last_alert_at."""
     try:
         from app.core.positions.service import list_positions
+        from app.core.lifecycle.persistence import list_recent_lifecycle_entries
         positions = list_positions(status=status, symbol=symbol)
-        return {"positions": [p.to_dict() for p in positions], "count": len(positions)}
+        lifecycle_records = list_recent_lifecycle_entries(limit=200)
+        out = []
+        for p in positions:
+            d = p.to_dict()
+            lc = _lifecycle_for_position(p.position_id, lifecycle_records)
+            d["lifecycle_state"] = lc.get("lifecycle_state")
+            d["last_directive"] = lc.get("last_directive")
+            d["last_alert_at"] = lc.get("last_alert_at")
+            out.append(d)
+        return {"positions": out, "count": len(out)}
     except Exception as e:
         logger.exception("Error listing tracked positions: %s", e)
         return {"positions": [], "count": 0, "error": str(e)}

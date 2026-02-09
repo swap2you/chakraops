@@ -53,3 +53,11 @@ def get_company_metadata(symbol: str) -> Optional[Dict[str, Any]]:
         "sector": data.get("sector"),
         "industry": data.get("industry"),
     }
+
+
+def get_sector(symbol: str) -> str:
+    """Phase 3: Return sector for symbol. 'Unknown' if not in local mapping — treat conservatively."""
+    meta = get_company_metadata(symbol)
+    if meta and meta.get("sector"):
+        return str(meta["sector"])
+    return "Unknown"

@@ -89,13 +89,27 @@ export const ENDPOINTS = {
   // ============================================================================
   /** Phase 6: Recent alert log (sent + suppressed) */
   alertLog: `${BASE}/api/view/alert-log`,
+  /** Phase 2C: Lifecycle log (position directives) */
+  lifecycleLog: `${BASE}/api/view/lifecycle-log`,
   /** Phase 6: Slack configured? */
   alertingStatus: `${BASE}/api/ops/alerting-status`,
 
   // ============================================================================
+  // PHASE 3: PORTFOLIO & RISK INTELLIGENCE
+  // ============================================================================
+  /** Portfolio summary */
+  portfolioSummary: `${BASE}/api/portfolio/summary`,
+  /** Portfolio exposure (group_by=symbol|sector) */
+  portfolioExposure: (groupBy: string) => `${BASE}/api/portfolio/exposure?group_by=${groupBy}`,
+  /** Risk profile GET */
+  portfolioRiskProfile: `${BASE}/api/portfolio/risk-profile`,
+  /** Risk profile PUT */
+  portfolioRiskProfilePut: `${BASE}/api/portfolio/risk-profile`,
+
+  // ============================================================================
   // PHASE 2A: DASHBOARD OPPORTUNITIES (RANKED)
   // ============================================================================
-  /** Ranked opportunities for dashboard */
+  /** Ranked opportunities for dashboard (include_blocked for Phase 3) */
   dashboardOpportunities: `${BASE}/api/dashboard/opportunities`,
 
   // ============================================================================

@@ -145,12 +145,66 @@ def _build_rank_reason(
     return ", ".join(parts)
 
 
+def _apply_risk_status(
+    opportunity: Dict[str, Any],
+    risk_context: Optional[Dict[str, Any]],
+) -> None:
+    """Phase 3: Add risk_status (OK/BLOCKED/WARN) and risk_reasons to opportunity."""
+    opportunity["risk_status"] = "OK"
+    opportunity["risk_reasons"] = []
+    if not risk_context:
+        return
+    try:
+        from app.core.portfolio.risk import would_exceed_limits
+        from app.core.market.company_data import get_sector
+
+        profile = risk_context.get("profile")
+        total_equity = risk_context.get("total_equity", 0)
+        capital_in_use = risk_context.get("capital_in_use", 0)
+        exposure_by_symbol = risk_context.get("exposure_by_symbol", {})
+        exposure_by_sector = risk_context.get("exposure_by_sector", {})
+        positions_by_sector = risk_context.get("positions_by_sector", {})
+        open_positions_count = risk_context.get("open_positions_count", 0)
+
+        sym = opportunity.get("symbol", "")
+        cap = opportunity.get("capital_required") or 0.0
+        sector = get_sector(sym)
+
+        if profile and total_equity > 0:
+            would_exceed, reasons = would_exceed_limits(
+                profile=profile,
+                total_equity=total_equity,
+                capital_in_use=capital_in_use,
+                open_positions_count=open_positions_count,
+                exposure_by_symbol=exposure_by_symbol,
+                exposure_by_sector=exposure_by_sector,
+                positions_by_sector=positions_by_sector,
+                candidate_symbol=sym,
+                candidate_capital=cap,
+                candidate_sector=sector,
+            )
+            if would_exceed and reasons:
+                opportunity["risk_status"] = "BLOCKED"
+                opportunity["risk_reasons"] = reasons
+            else:
+                # Soft warn: nearing thresholds (e.g. util > 0.8 * max)
+                util = (capital_in_use + cap) / total_equity if total_equity > 0 else 0
+                max_util = profile.max_capital_utilization_pct if profile else 0.35
+                if max_util > 0 and util > max_util * 0.85 and util <= max_util:
+                    opportunity["risk_status"] = "WARN"
+                    opportunity["risk_reasons"] = [f"Nearing max utilization ({util:.1%} of {max_util:.1%})"]
+    except Exception as e:
+        logger.debug("[RANKING] Risk check failed: %s", e)
+
+
 def rank_opportunities(
     symbols: List[Dict[str, Any]],
     account_equity: Optional[float] = None,
     limit: int = 5,
     strategy_filter: Optional[str] = None,
     max_capital_pct: Optional[float] = None,
+    include_blocked: bool = False,
+    risk_context: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """Produce a ranked list of opportunities from evaluation symbols.
 
@@ -160,9 +214,11 @@ def rank_opportunities(
         limit: Max results to return.
         strategy_filter: Only include this strategy (CSP, CC, STOCK).
         max_capital_pct: Only include opportunities where capital_pct <= this value (0.0-1.0).
+        include_blocked: If True, include BLOCKED opportunities with risk_reasons. If False, exclude them.
+        risk_context: Phase 3: Optional dict for risk-aware ranking (profile, total_equity, etc.).
 
     Returns:
-        List of RankedOpportunity dicts, sorted by rank.
+        List of RankedOpportunity dicts, sorted by rank. Each includes risk_status and risk_reasons.
     """
     opportunities: List[Dict[str, Any]] = []
 
@@ -252,6 +308,13 @@ def rank_opportunities(
             "rank_reasons": sym.get("rank_reasons"),
         }
 
+        # Phase 3: Apply risk status
+        _apply_risk_status(opportunity, risk_context)
+
+        # Exclude BLOCKED unless include_blocked
+        if not include_blocked and opportunity.get("risk_status") == "BLOCKED":
+            continue
+
         opportunities.append(opportunity)
 
     # Sort: Band priority (A>B>C), then score descending, then capital_pct ascending
@@ -274,12 +337,16 @@ def get_dashboard_opportunities(
     limit: int = 5,
     strategy_filter: Optional[str] = None,
     max_capital_pct: Optional[float] = None,
+    include_blocked: bool = False,
 ) -> Dict[str, Any]:
     """Load latest evaluation and produce ranked opportunities.
 
+    Args:
+        include_blocked: Phase 3 — If True, include BLOCKED opportunities with risk_reasons.
+
     Returns:
         {
-            "opportunities": [...],
+            "opportunities": [...],  # each has risk_status, risk_reasons
             "count": int,
             "evaluation_id": str | None,
             "evaluated_at": str | None,
@@ -328,14 +395,56 @@ def get_dashboard_opportunities(
     # Count total eligible
     total_eligible = sum(1 for s in symbols if s.get("verdict") == "ELIGIBLE")
 
+    # Phase 3: Build risk context for risk-aware ranking
+    risk_context: Optional[Dict[str, Any]] = None
+    try:
+        from app.core.accounts.store import list_accounts
+        from app.core.positions.store import list_positions
+        from app.core.portfolio.store import load_risk_profile
+        from app.core.market.company_data import get_sector
+
+        accounts = list_accounts()
+        positions = list_positions()
+        profile = load_risk_profile()
+        total_equity = sum(float(a.total_capital or 0) for a in accounts if getattr(a, "active", True))
+        open_positions = [p for p in positions if (p.status or "").strip() in ("OPEN", "PARTIAL_EXIT")]
+        capital_in_use = 0.0
+        exposure_by_symbol: Dict[str, float] = {}
+        exposure_by_sector: Dict[str, float] = {}
+        positions_by_sector: Dict[str, int] = {}
+        for p in open_positions:
+            sym = (p.symbol or "").strip().upper()
+            if not sym:
+                continue
+            cap = (float(p.strike or 0) * 100 * int(p.contracts or 0)) if (p.strategy or "").strip() == "CSP" else 0.0
+            sector = get_sector(sym)
+            capital_in_use += cap
+            exposure_by_symbol[sym] = exposure_by_symbol.get(sym, 0) + cap
+            exposure_by_sector[sector] = exposure_by_sector.get(sector, 0) + cap
+            positions_by_sector[sector] = positions_by_sector.get(sector, 0) + 1
+        risk_context = {
+            "profile": profile,
+            "total_equity": total_equity,
+            "capital_in_use": capital_in_use,
+            "exposure_by_symbol": exposure_by_symbol,
+            "exposure_by_sector": exposure_by_sector,
+            "positions_by_sector": positions_by_sector,
+            "open_positions_count": len(open_positions),
+        }
+    except Exception as e:
+        logger.debug("[RANKING] Failed to build risk context: %s", e)
+
     # Rank
     opportunities = rank_opportunities(
         symbols=symbols,
         account_equity=account_equity,
-        limit=limit,
+        limit=limit * 2 if include_blocked else limit,  # fetch more if including blocked
         strategy_filter=strategy_filter,
         max_capital_pct=max_capital_pct,
+        include_blocked=include_blocked,
+        risk_context=risk_context,
     )
+    opportunities = opportunities[:limit]
 
     return {
         "opportunities": opportunities,

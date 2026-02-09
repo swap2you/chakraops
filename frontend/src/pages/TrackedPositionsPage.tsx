@@ -27,10 +27,27 @@ function formatDate(iso: string): string {
   }
 }
 
+function formatDateTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? iso : d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+  } catch {
+    return iso;
+  }
+}
+
 const STATUS_STYLES: Record<string, string> = {
   OPEN: "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400",
   PARTIAL_EXIT: "bg-amber-500/20 text-amber-600 dark:text-amber-400",
   CLOSED: "bg-muted text-muted-foreground",
+  ABORTED: "bg-red-500/20 text-red-600 dark:text-red-400",
+};
+
+const LIFECYCLE_STYLES: Record<string, string> = {
+  OPEN: "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400",
+  PARTIAL_EXIT: "bg-amber-500/20 text-amber-600 dark:text-amber-400",
+  CLOSED: "bg-muted text-muted-foreground",
+  ABORTED: "bg-red-500/20 text-red-600 dark:text-red-400",
 };
 
 export function TrackedPositionsPage() {
@@ -126,6 +143,9 @@ export function TrackedPositionsPage() {
                   <th className="p-3 font-medium">Account</th>
                   <th className="p-3 font-medium">Opened</th>
                   <th className="p-3 font-medium">Status</th>
+                  <th className="p-3 font-medium">Lifecycle</th>
+                  <th className="p-3 font-medium">Last Directive</th>
+                  <th className="p-3 font-medium">Last Alert</th>
                 </tr>
               </thead>
               <tbody>
@@ -160,6 +180,24 @@ export function TrackedPositionsPage() {
                       )}>
                         {p.status}
                       </span>
+                    </td>
+                    <td className="p-3">
+                      {p.lifecycle_state ? (
+                        <span className={cn(
+                          "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
+                          LIFECYCLE_STYLES[p.lifecycle_state] ?? "bg-muted text-muted-foreground"
+                        )}>
+                          {p.lifecycle_state}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="p-3 text-sm text-muted-foreground max-w-[180px] truncate" title={p.last_directive ?? undefined}>
+                      {p.last_directive ?? "—"}
+                    </td>
+                    <td className="p-3 text-xs text-muted-foreground">
+                      {p.last_alert_at ? formatDateTime(p.last_alert_at) : "—"}
                     </td>
                   </tr>
                 ))}

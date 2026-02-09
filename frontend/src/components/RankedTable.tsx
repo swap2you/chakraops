@@ -58,7 +58,7 @@ export function RankedTable() {
     try {
       // Fetch up to 50 for the full table
       const res = await apiGet<OpportunitiesResponse>(
-        `${ENDPOINTS.dashboardOpportunities}?limit=50`
+        `${ENDPOINTS.dashboardOpportunities}?limit=50&include_blocked=true`
       );
       setData(res);
       setError(null);
@@ -229,6 +229,7 @@ export function RankedTable() {
                       Band <SortIcon field="band" />
                     </button>
                   </th>
+                  <th className="px-4 py-2 font-medium">Risk</th>
                   <th className="px-4 py-2">
                     <button onClick={() => toggleSort("score")} className="flex items-center gap-1 font-medium hover:text-foreground">
                       Score <SortIcon field="score" />
@@ -277,6 +278,23 @@ export function RankedTable() {
                       )}>{opp.band}</span>
                     </td>
                     <td className="px-4 py-2">
+                      {opp.risk_status ? (
+                        <span
+                          className={cn(
+                            "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
+                            opp.risk_status === "OK" && "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400",
+                            opp.risk_status === "WARN" && "bg-amber-500/20 text-amber-600 dark:text-amber-400",
+                            opp.risk_status === "BLOCKED" && "bg-red-500/20 text-red-600 dark:text-red-400"
+                          )}
+                          title={opp.risk_status === "BLOCKED" ? (opp.risk_reasons ?? []).join("; ") : undefined}
+                        >
+                          {opp.risk_status}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2">
                       <span className={cn(
                         "font-semibold tabular-nums",
                         opp.score >= 78 ? "text-emerald-600 dark:text-emerald-400" :
@@ -319,8 +337,19 @@ export function RankedTable() {
                         </Link>
                         {!opp.position_open && (
                           <button
-                            onClick={() => openExecute(opp)}
-                            className="flex items-center gap-1 rounded bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/20"
+                            onClick={() => opp.risk_status !== "BLOCKED" && openExecute(opp)}
+                            disabled={opp.risk_status === "BLOCKED"}
+                            className={cn(
+                              "flex items-center gap-1 rounded px-2 py-1 text-xs font-medium",
+                              opp.risk_status === "BLOCKED"
+                                ? "cursor-not-allowed bg-muted text-muted-foreground"
+                                : "bg-primary/10 text-primary hover:bg-primary/20"
+                            )}
+                            title={
+                              opp.risk_status === "BLOCKED"
+                                ? `Why blocked: ${(opp.risk_reasons ?? []).join("; ")}`
+                                : "Record manual execution"
+                            }
                           >
                             <Target className="h-3 w-3" />
                           </button>

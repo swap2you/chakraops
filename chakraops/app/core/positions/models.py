@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional
 
 
 # Valid status values
-VALID_STATUSES = {"OPEN", "PARTIAL_EXIT", "CLOSED"}
+VALID_STATUSES = {"OPEN", "PARTIAL_EXIT", "CLOSED", "ABORTED"}
 VALID_STRATEGIES = {"CSP", "CC", "STOCK"}
 
 

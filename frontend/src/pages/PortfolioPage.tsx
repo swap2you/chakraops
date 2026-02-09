@@ -28,11 +28,6 @@ const STATUS_STYLES: Record<string, string> = {
   ABORTED: "bg-red-500/20 text-red-600 dark:text-red-400",
 };
 
-function formatCurrency(val: number | null | undefined): string {
-  if (val == null) return "\u2014";
-  return `$${Number(val).toFixed(2)}`;
-}
-
 export function PortfolioPage() {
   const { mode } = useDataMode();
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);

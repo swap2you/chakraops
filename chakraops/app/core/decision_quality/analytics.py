@@ -15,8 +15,9 @@ from app.core.portfolio.service import _capital_for_position
 
 def _closed_with_exit() -> List[tuple]:
     """
-    Return [(position, final_exit_record, derived)] for positions with exit records.
+    Return [(position, final_exit_record, derived)] for positions with FINAL_EXIT.
     Phase 5: Uses full lifecycle (open → final exit); aggregated realized_pnl; explicit R.
+    Excludes positions with only SCALE_OUT (no FINAL_EXIT) — those are PARTIAL_EXIT, not closed.
     """
     positions = list_positions(status=None)
     exit_ids = set(list_exit_position_ids())
@@ -24,10 +25,13 @@ def _closed_with_exit() -> List[tuple]:
     for pos in positions:
         if pos.position_id not in exit_ids:
             continue
+        events = load_exit_events(pos.position_id)
+        has_final = any(getattr(e, "event_type", "FINAL_EXIT") == "FINAL_EXIT" for e in events)
+        if not has_final:
+            continue
         final_exit = get_final_exit(pos.position_id)
         if final_exit is None:
             continue
-        events = load_exit_events(pos.position_id)
         aggregated_pnl = sum(float(getattr(e, "realized_pnl", 0)) for e in events)
         capital = _capital_for_position(pos)
         risk_amount = getattr(pos, "risk_amount_at_entry", None)
@@ -61,6 +65,7 @@ def get_outcome_summary() -> Dict[str, Any]:
             "win_count": 0,
             "scratch_count": 0,
             "loss_count": 0,
+            "unknown_risk_definition_count": 0,
             "avg_time_in_trade_days": None,
             "avg_capital_days_used": None,
             "total_closed": len(items),

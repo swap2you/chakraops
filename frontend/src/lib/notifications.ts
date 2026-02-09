@@ -7,7 +7,7 @@ import type { AlertsView } from "@/types/views";
 import { isActionable, severityFromLevel, type AlertSeverity } from "./alertClassifier";
 import type { ValidationWarning } from "@/mock/validator";
 
-export type NotificationSource = "alert" | "system" | "evaluation";
+export type NotificationSource = "alert" | "system" | "evaluation" | "lifecycle";
 
 export interface NotificationItem {
   id: string;

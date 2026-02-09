@@ -120,6 +120,14 @@ def manual_execute(data: Dict[str, Any]) -> Tuple[Optional[Position], List[str]]
 
     try:
         created = store.create_position(position)
+        try:
+            from app.core.audit import audit_manual_execution_intent
+            audit_manual_execution_intent(
+                position.position_id, position.symbol, position.strategy,
+                position.account_id, position.contracts,
+            )
+        except Exception as e:
+            logger.warning("[POSITIONS] Audit log failed: %s", e)
         logger.info(
             "[POSITIONS] Manual execution recorded: %s %s %s (%d contracts)",
             position.symbol,

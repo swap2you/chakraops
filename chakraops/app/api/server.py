@@ -2851,17 +2851,36 @@ def api_positions_tracked_detail(position_id: str) -> Dict[str, Any]:
         d["lifecycle_state"] = lc.get("lifecycle_state")
         d["last_directive"] = lc.get("last_directive")
         d["last_alert_at"] = lc.get("last_alert_at")
+        exit_events = load_exit_events(position_id)
         exit_rec = load_exit(position_id)
         d["exit"] = exit_rec.to_dict() if exit_rec else None
-        d["exit_events"] = [e.to_dict() for e in load_exit_events(position_id)]
+        d["exit_events"] = [e.to_dict() for e in exit_events]
         ds = get_data_sufficiency_for_position(
             pos.symbol,
             override=getattr(pos, "data_sufficiency_override", None),
             override_source=getattr(pos, "data_sufficiency_override_source", None),
         )
         d["data_sufficiency"] = ds["status"]
-        d["data_sufficiency_missing_fields"] = ds.get("missing_fields", [])
+        d["data_sufficiency_missing_fields"] = ds.get("missing_fields") or []
         d["data_sufficiency_is_override"] = ds.get("is_override", False)
+        if exit_rec:
+            from app.core.decision_quality.derived import compute_derived_metrics
+            from app.core.portfolio.service import _capital_for_position
+            events_pnl = sum(float(getattr(e, "realized_pnl", 0)) for e in exit_events)
+            derived = compute_derived_metrics(
+                pos, exit_rec, aggregated_realized_pnl=events_pnl,
+                capital=_capital_for_position(pos),
+                risk_amount=getattr(pos, "risk_amount_at_entry", None),
+            )
+            d["return_on_risk"] = derived.get("return_on_risk")
+            d["return_on_risk_status"] = derived.get("return_on_risk_status") or "UNKNOWN_INSUFFICIENT_RISK_DEFINITION"
+            d["outcome_tag"] = derived.get("outcome_tag")
+            d["time_in_trade_days"] = derived.get("time_in_trade_days")
+        else:
+            d["return_on_risk"] = None
+            d["return_on_risk_status"] = "UNKNOWN_INSUFFICIENT_RISK_DEFINITION"
+            d["outcome_tag"] = None
+            d["time_in_trade_days"] = None
         return d
     except HTTPException:
         raise

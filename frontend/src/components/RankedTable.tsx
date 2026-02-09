@@ -1,7 +1,8 @@
 /**
- * Phase 2A: Full Ranked Table — sortable, filterable universe view.
- * Shows all ranked opportunities with sorting and filtering controls.
- * No charts. Tables first. Clarity > beauty.
+ * Phase 5: Ranked Universe Table — sortable, filterable, persisted.
+ * Fully sortable headers; filters + sort persist in localStorage.
+ * Row actions: View Ticker, Execute (Manual).
+ * UNKNOWN states shown explicitly.
  */
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
@@ -14,10 +15,13 @@ import type { PositionStrategy } from "@/types/trackedPositions";
 import { cn } from "@/lib/utils";
 import { Loader2, Search, Target, ArrowUpDown, ArrowUp, ArrowDown, Filter, TrendingUp } from "lucide-react";
 
-type SortField = "rank" | "band" | "score" | "strategy" | "capital_required" | "capital_pct";
+const STORAGE_KEY = "chakraops-ranked-universe";
+
+type SortField = "rank" | "band" | "score" | "strategy" | "capital_required" | "capital_pct" | "risk_status";
 type SortDir = "asc" | "desc";
 
 const BAND_PRIORITY: Record<string, number> = { A: 0, B: 1, C: 2 };
+const RISK_PRIORITY: Record<string, number> = { OK: 0, WARN: 1, BLOCKED: 2, UNKNOWN: 3 };
 
 const BAND_STYLES: Record<string, string> = {
   A: "bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
@@ -32,33 +36,89 @@ const STRATEGY_STYLES: Record<string, string> = {
 };
 
 function formatCurrency(val: number | null): string {
-  if (val == null) return "\u2014";
+  if (val == null) return "UNKNOWN";
   if (val >= 1000) return `$${(val / 1000).toFixed(1)}k`;
   return `$${val.toFixed(0)}`;
 }
 
 function formatPct(val: number | null): string {
-  if (val == null) return "\u2014";
+  if (val == null) return "UNKNOWN";
   return `${(val * 100).toFixed(1)}%`;
 }
 
+function riskLabel(status: string | null | undefined): string {
+  if (status === "OK" || status === "WARN" || status === "BLOCKED") return status;
+  return "UNKNOWN";
+}
+
+function loadPersisted(): { sortField: SortField; sortDir: SortDir; bandFilter: string; strategyFilter: string; riskFilter: string; maxCapFilter: string } {
+  try {
+    const s = localStorage.getItem(STORAGE_KEY);
+    if (!s) return getDefaults();
+    const parsed = JSON.parse(s);
+    return {
+      sortField: typeof parsed.sortField === "string" ? parsed.sortField : "rank",
+      sortDir: parsed.sortDir === "desc" ? "desc" : "asc",
+      bandFilter: typeof parsed.bandFilter === "string" ? parsed.bandFilter : "ALL",
+      strategyFilter: typeof parsed.strategyFilter === "string" ? parsed.strategyFilter : "ALL",
+      riskFilter: typeof parsed.riskFilter === "string" ? parsed.riskFilter : "ALL",
+      maxCapFilter: typeof parsed.maxCapFilter === "string" ? parsed.maxCapFilter : "",
+    };
+  } catch {
+    return getDefaults();
+  }
+}
+
+function getDefaults() {
+  return {
+    sortField: "rank" as SortField,
+    sortDir: "asc" as SortDir,
+    bandFilter: "ALL",
+    strategyFilter: "ALL",
+    riskFilter: "ALL",
+    maxCapFilter: "",
+  };
+}
+
+function savePersisted(state: ReturnType<typeof loadPersisted>) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // ignore
+  }
+}
+
+function usePersistedFilters() {
+  const [filters] = useState(() => loadPersisted());
+  return filters;
+}
+
 export function RankedTable() {
+  const initialFilters = usePersistedFilters();
   const [data, setData] = useState<OpportunitiesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sortField, setSortField] = useState<SortField>("rank");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
-  const [bandFilter, setBandFilter] = useState<string>("ALL");
-  const [strategyFilter, setStrategyFilter] = useState<string>("ALL");
-  const [maxCapFilter, setMaxCapFilter] = useState<string>("");
+  const [sortField, setSortField] = useState<SortField>(initialFilters.sortField);
+  const [sortDir, setSortDir] = useState<SortDir>(initialFilters.sortDir);
+  const [bandFilter, setBandFilter] = useState<string>(initialFilters.bandFilter);
+  const [strategyFilter, setStrategyFilter] = useState<string>(initialFilters.strategyFilter);
+  const [riskFilter, setRiskFilter] = useState<string>(initialFilters.riskFilter);
+  const [maxCapFilter, setMaxCapFilter] = useState<string>(initialFilters.maxCapFilter);
   const [executeModalOpen, setExecuteModalOpen] = useState(false);
   const [executeOpp, setExecuteOpp] = useState<RankedOpportunity | null>(null);
 
+  const persist = useCallback(() => {
+    savePersisted({ sortField, sortDir, bandFilter, strategyFilter, riskFilter, maxCapFilter });
+  }, [sortField, sortDir, bandFilter, strategyFilter, riskFilter, maxCapFilter]);
+
+  useEffect(() => {
+    persist();
+  }, [persist]);
+
   const fetchAll = useCallback(async () => {
     try {
-      // Fetch up to 50 for the full table
       const res = await apiGet<OpportunitiesResponse>(
-        `${ENDPOINTS.dashboardOpportunities}?limit=50&include_blocked=true`
+        `${ENDPOINTS.dashboardOpportunities}?limit=100&include_blocked=true`
       );
       setData(res);
       setError(null);
@@ -90,15 +150,17 @@ export function RankedTable() {
       : <ArrowDown className="h-3 w-3 text-primary" />;
   };
 
-  // Filter and sort
   const filtered = useMemo(() => {
     let items = data?.opportunities ?? [];
 
-    if (bandFilter !== "ALL") {
-      items = items.filter((o) => o.band === bandFilter);
-    }
-    if (strategyFilter !== "ALL") {
-      items = items.filter((o) => o.strategy === strategyFilter);
+    if (bandFilter !== "ALL") items = items.filter((o) => o.band === bandFilter);
+    if (strategyFilter !== "ALL") items = items.filter((o) => o.strategy === strategyFilter);
+    if (riskFilter !== "ALL") {
+      if (riskFilter === "UNKNOWN") {
+        items = items.filter((o) => !o.risk_status || (o.risk_status !== "OK" && o.risk_status !== "WARN" && o.risk_status !== "BLOCKED"));
+      } else {
+        items = items.filter((o) => o.risk_status === riskFilter);
+      }
     }
     if (maxCapFilter) {
       const maxPct = parseFloat(maxCapFilter) / 100;
@@ -107,9 +169,8 @@ export function RankedTable() {
       }
     }
 
-    // Sort
-    const sorted = [...items].sort((a, b) => {
-      const dir = sortDir === "asc" ? 1 : -1;
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...items].sort((a, b) => {
       switch (sortField) {
         case "rank":
           return (a.rank - b.rank) * dir;
@@ -123,13 +184,16 @@ export function RankedTable() {
           return ((a.capital_required ?? 0) - (b.capital_required ?? 0)) * dir;
         case "capital_pct":
           return ((a.capital_pct ?? 0) - (b.capital_pct ?? 0)) * dir;
+        case "risk_status": {
+          const ra = RISK_PRIORITY[a.risk_status ?? "UNKNOWN"] ?? 99;
+          const rb = RISK_PRIORITY[b.risk_status ?? "UNKNOWN"] ?? 99;
+          return (ra - rb) * dir;
+        }
         default:
           return 0;
       }
     });
-
-    return sorted;
-  }, [data, bandFilter, strategyFilter, maxCapFilter, sortField, sortDir]);
+  }, [data, bandFilter, strategyFilter, riskFilter, maxCapFilter, sortField, sortDir]);
 
   const openExecute = (opp: RankedOpportunity) => {
     setExecuteOpp(opp);
@@ -152,20 +216,17 @@ export function RankedTable() {
   return (
     <>
       <section className="rounded-lg border border-border bg-card">
-        {/* Header + filters */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
           <div className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Ranked Opportunities</h2>
+            <h2 className="text-sm font-semibold text-foreground">Ranked Universe</h2>
             <span className="text-xs text-muted-foreground">
               {filtered.length} of {data?.total_eligible ?? 0} eligible
             </span>
           </div>
 
-          {/* Filters */}
           <div className="flex items-center gap-2">
             <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-
             <select
               value={bandFilter}
               onChange={(e) => setBandFilter(e.target.value)}
@@ -177,7 +238,6 @@ export function RankedTable() {
               <option value="B">Band B</option>
               <option value="C">Band C</option>
             </select>
-
             <select
               value={strategyFilter}
               onChange={(e) => setStrategyFilter(e.target.value)}
@@ -189,7 +249,18 @@ export function RankedTable() {
               <option value="CC">CC</option>
               <option value="STOCK">STOCK</option>
             </select>
-
+            <select
+              value={riskFilter}
+              onChange={(e) => setRiskFilter(e.target.value)}
+              className="rounded border border-border bg-background px-2 py-1 text-xs"
+              aria-label="Filter by risk status"
+            >
+              <option value="ALL">All risk</option>
+              <option value="OK">OK</option>
+              <option value="WARN">WARN</option>
+              <option value="BLOCKED">BLOCKED</option>
+              <option value="UNKNOWN">UNKNOWN</option>
+            </select>
             <input
               type="number"
               placeholder="Max cap %"
@@ -203,7 +274,6 @@ export function RankedTable() {
           </div>
         </div>
 
-        {/* Table */}
         {filtered.length === 0 ? (
           <div className="py-8 text-center text-muted-foreground text-sm">
             No opportunities match the current filters.
@@ -229,7 +299,11 @@ export function RankedTable() {
                       Band <SortIcon field="band" />
                     </button>
                   </th>
-                  <th className="px-4 py-2 font-medium">Risk</th>
+                  <th className="px-4 py-2">
+                    <button onClick={() => toggleSort("risk_status")} className="flex items-center gap-1 font-medium hover:text-foreground">
+                      Risk <SortIcon field="risk_status" />
+                    </button>
+                  </th>
                   <th className="px-4 py-2">
                     <button onClick={() => toggleSort("score")} className="flex items-center gap-1 font-medium hover:text-foreground">
                       Score <SortIcon field="score" />
@@ -245,8 +319,7 @@ export function RankedTable() {
                       Cap % <SortIcon field="capital_pct" />
                     </button>
                   </th>
-                  <th className="px-4 py-2 font-medium">Strike / Expiry</th>
-                  <th className="px-4 py-2 font-medium max-w-[180px]">Reason</th>
+                  <th className="px-4 py-2 font-medium">Reason</th>
                   <th className="px-4 py-2 font-medium">Actions</th>
                 </tr>
               </thead>
@@ -264,6 +337,9 @@ export function RankedTable() {
                       {opp.price != null && (
                         <span className="ml-1 text-xs text-muted-foreground">${opp.price.toFixed(2)}</span>
                       )}
+                      {opp.price == null && (
+                        <span className="ml-1 text-xs text-muted-foreground">(UNKNOWN)</span>
+                      )}
                     </td>
                     <td className="px-4 py-2">
                       <span className={cn(
@@ -278,21 +354,18 @@ export function RankedTable() {
                       )}>{opp.band}</span>
                     </td>
                     <td className="px-4 py-2">
-                      {opp.risk_status ? (
-                        <span
-                          className={cn(
-                            "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
-                            opp.risk_status === "OK" && "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400",
-                            opp.risk_status === "WARN" && "bg-amber-500/20 text-amber-600 dark:text-amber-400",
-                            opp.risk_status === "BLOCKED" && "bg-red-500/20 text-red-600 dark:text-red-400"
-                          )}
-                          title={opp.risk_status === "BLOCKED" ? (opp.risk_reasons ?? []).join("; ") : undefined}
-                        >
-                          {opp.risk_status}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                      <span
+                        className={cn(
+                          "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
+                          opp.risk_status === "OK" && "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400",
+                          opp.risk_status === "WARN" && "bg-amber-500/20 text-amber-600 dark:text-amber-400",
+                          opp.risk_status === "BLOCKED" && "bg-red-500/20 text-red-600 dark:text-red-400",
+                          !opp.risk_status && "bg-muted text-muted-foreground"
+                        )}
+                        title={opp.risk_status === "BLOCKED" ? (opp.risk_reasons ?? []).join("; ") : opp.risk_status == null ? "Risk status not available" : undefined}
+                      >
+                        {riskLabel(opp.risk_status)}
+                      </span>
                     </td>
                     <td className="px-4 py-2">
                       <span className={cn(
@@ -303,28 +376,19 @@ export function RankedTable() {
                       )}>{opp.score}</span>
                     </td>
                     <td className="px-4 py-2">
-                      {opp.capital_required != null
-                        ? <span>{formatCurrency(opp.capital_required)}</span>
-                        : <span className="text-xs text-muted-foreground">\u2014</span>}
+                      <span className={opp.capital_required != null ? "" : "text-muted-foreground"}>
+                        {formatCurrency(opp.capital_required)}
+                      </span>
                     </td>
                     <td className="px-4 py-2">
-                      {opp.capital_pct != null ? (
-                        <span className={cn(
-                          "tabular-nums",
-                          opp.capital_pct > 0.10 ? "text-amber-600 dark:text-amber-400 font-medium" : ""
-                        )}>{formatPct(opp.capital_pct)}</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">\u2014</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-xs text-muted-foreground">
-                      {opp.strike != null && <span>${opp.strike}</span>}
-                      {opp.expiry && <span className="ml-1">{opp.expiry}</span>}
-                      {opp.strike == null && opp.expiry == null && "\u2014"}
+                      <span className={cn(
+                        opp.capital_pct != null ? "" : "text-muted-foreground",
+                        opp.capital_pct != null && opp.capital_pct > 0.10 ? "text-amber-600 dark:text-amber-400 font-medium" : ""
+                      )}>{formatPct(opp.capital_pct)}</span>
                     </td>
                     <td className="px-4 py-2 max-w-[180px]">
-                      <span className="text-xs text-muted-foreground truncate block" title={opp.rank_reason}>
-                        {opp.rank_reason}
+                      <span className="text-xs text-muted-foreground truncate block" title={opp.rank_reason || "—"}>
+                        {opp.rank_reason || "—"}
                       </span>
                     </td>
                     <td className="px-4 py-2">
@@ -332,8 +396,10 @@ export function RankedTable() {
                         <Link
                           to={`/analysis?symbol=${opp.symbol}`}
                           className="flex items-center gap-1 rounded px-2 py-1 text-xs text-primary hover:bg-muted"
+                          title="View ticker analysis"
                         >
                           <Search className="h-3 w-3" />
+                          View Ticker
                         </Link>
                         {!opp.position_open && (
                           <button
@@ -348,10 +414,11 @@ export function RankedTable() {
                             title={
                               opp.risk_status === "BLOCKED"
                                 ? `Why blocked: ${(opp.risk_reasons ?? []).join("; ")}`
-                                : "Record manual execution"
+                                : "Record manual execution (log intent only)"
                             }
                           >
                             <Target className="h-3 w-3" />
+                            Execute (Manual)
                           </button>
                         )}
                       </div>
@@ -364,7 +431,6 @@ export function RankedTable() {
         )}
       </section>
 
-      {/* Execute modal */}
       {executeModalOpen && executeOpp && (
         <ManualExecuteModal
           symbol={executeOpp.symbol}
@@ -380,7 +446,7 @@ export function RankedTable() {
               source: "system",
               severity: "info",
               title: "Position recorded",
-              message: `${executeOpp.symbol} ${executeOpp.strategy} tracked.`,
+              message: `${executeOpp.symbol} ${executeOpp.strategy} tracked. Execute in your brokerage.`,
             });
             fetchAll();
           }}

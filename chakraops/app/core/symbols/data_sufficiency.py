@@ -61,7 +61,7 @@ def log_data_sufficiency_override(
     override: str,
     source: str = "MANUAL",
 ) -> None:
-    """Log manual override distinctly (Phase 5)."""
+    """Log manual override distinctly (Phase 5). Writes to both overrides.jsonl and audit."""
     import json
     from pathlib import Path
     try:
@@ -80,6 +80,11 @@ def log_data_sufficiency_override(
     }
     with open(log_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, default=str) + "\n")
+    try:
+        from app.core.audit import audit_data_sufficiency_override
+        audit_data_sufficiency_override(position_id, symbol, override, source)
+    except Exception as e:
+        logger.warning("[DATA_SUFFICIENCY] Audit log failed: %s", e)
     logger.info("[DATA_SUFFICIENCY] Override logged: %s %s -> %s", position_id, symbol, override)
 
 

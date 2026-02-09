@@ -81,6 +81,11 @@ def log_exit(position_id: str, data: Dict[str, Any]) -> Tuple[Optional[ExitRecor
         return None, [str(e)]
 
     exit_store.save_exit(record)
+    try:
+        from app.core.audit import audit_exit_event_created
+        audit_exit_event_created(pos.position_id, pos.symbol, event_type, record.exit_reason)
+    except Exception as e:
+        logger.warning("[EXITS] Audit log failed: %s", e)
     # Phase 5: SCALE_OUT -> PARTIAL_EXIT; FINAL_EXIT -> CLOSED
     if event_type == "FINAL_EXIT":
         position_store.update_position(position_id, {

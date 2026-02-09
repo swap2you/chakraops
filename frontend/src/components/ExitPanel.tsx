@@ -68,6 +68,7 @@ export function ExitPanel({ positionId, symbol, status, onSuccess }: ExitPanelPr
           fees: String(data.exit.fees),
           exit_reason: data.exit.exit_reason,
           exit_initiator: data.exit.exit_initiator,
+          event_type: (data.exit as { event_type?: "SCALE_OUT" | "FINAL_EXIT" }).event_type ?? "FINAL_EXIT",
           confidence_at_exit: data.exit.confidence_at_exit,
           notes: data.exit.notes ?? "",
         });
@@ -102,7 +103,7 @@ export function ExitPanel({ positionId, symbol, status, onSuccess }: ExitPanelPr
       });
       pushSystemNotification({
         source: "system",
-        severity: "success",
+        severity: "info",
         title: "Exit logged",
         message: `${symbol} — position closed and exit recorded.`,
       });

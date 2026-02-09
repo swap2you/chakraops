@@ -1,58 +1,116 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""Phase 5: Data sufficiency — auto-derived from symbol data coverage; manual overrides logged distinctly."""
+"""Phase 5/6: Data sufficiency — structural enforcement from data_dependencies.md."""
 
 from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.core.symbols.data_dependencies import (
+    compute_dependency_lists,
+    dependency_status,
+    all_missing_fields,
+)
+
 logger = logging.getLogger(__name__)
 
 VALID_DATA_SUFFICIENCY = frozenset({"PASS", "WARN", "FAIL"})
 
 
-def _completeness_to_sufficiency(completeness: float) -> str:
-    """Map data_completeness (0-1) to PASS | WARN | FAIL."""
-    if completeness >= 0.9:
-        return "PASS"
-    if completeness >= 0.75:
-        return "WARN"
-    return "FAIL"
+def _symbol_to_dict(s: Any) -> Dict[str, Any]:
+    """Normalize symbol to dict for dependency computation."""
+    if isinstance(s, dict):
+        return s
+    out = {}
+    for k in ("symbol", "price", "bid", "ask", "volume", "avg_volume", "fetched_at", "verdict",
+              "data_completeness", "missing_fields", "candidate_trades", "selected_contract"):
+        out[k] = getattr(s, k, None)
+    out["iv_rank"] = getattr(s, "iv_rank", None)
+    out["quote_date"] = getattr(s, "quote_date", None)
+    return out
 
 
 def derive_data_sufficiency(symbol: str) -> Tuple[str, List[str]]:
     """
-    Auto-derive data_sufficiency from symbol data coverage (latest evaluation).
+    Auto-derive data_sufficiency from symbol data coverage (Phase 6: dependency-based).
 
     Returns:
-        (status, missing_fields) — status in PASS | WARN | FAIL
+        (status, missing_fields) — status in PASS | WARN | FAIL.
+    """
+    result = derive_data_sufficiency_with_dependencies(symbol)
+    return result["status"], result["missing_fields"]
+
+
+def derive_data_sufficiency_with_dependencies(symbol: str) -> Dict[str, Any]:
+    """
+    Phase 6: Derive data_sufficiency from required/optional/stale lists.
+    PASS only when required_data_missing empty AND required_data_stale empty.
     """
     sym = (symbol or "").strip().upper()
     if not sym:
-        return "FAIL", ["symbol_required"]
+        return {
+            "status": "FAIL",
+            "missing_fields": ["symbol_required"],
+            "required_data_missing": ["symbol_required"],
+            "optional_data_missing": [],
+            "required_data_stale": [],
+            "data_as_of_orats": None,
+            "data_as_of_price": None,
+        }
 
     try:
         from app.core.eval.evaluation_store import load_latest_run
         run = load_latest_run()
         if run is None or not run.symbols:
-            return "FAIL", ["no_evaluation_data"]
+            return {
+                "status": "FAIL",
+                "missing_fields": ["no_evaluation_data"],
+                "required_data_missing": ["no_evaluation_data"],
+                "optional_data_missing": [],
+                "required_data_stale": [],
+                "data_as_of_orats": None,
+                "data_as_of_price": None,
+            }
 
         for s in run.symbols:
             s_sym = (getattr(s, "symbol", None) or (s.get("symbol") if isinstance(s, dict) else None) or "").strip().upper()
-            if s_sym == sym:
-                if isinstance(s, dict):
-                    completeness = float(s.get("data_completeness", 0.0) or 0.0)
-                    missing = list(s.get("missing_fields") or [])
-                else:
-                    completeness = float(getattr(s, "data_completeness", 0.0) or 0.0)
-                    missing = list(getattr(s, "missing_fields", None) or [])
-                return _completeness_to_sufficiency(completeness), missing
+            if s_sym != sym:
+                continue
+            sym_dict = _symbol_to_dict(s)
+            required_missing, optional_missing, required_stale, data_as_of = compute_dependency_lists(sym_dict)
+            status = dependency_status(required_missing, required_stale, optional_missing)
+            missing = all_missing_fields(required_missing, optional_missing)
+            return {
+                "status": status,
+                "missing_fields": missing,
+                "required_data_missing": required_missing,
+                "optional_data_missing": optional_missing,
+                "required_data_stale": required_stale,
+                "data_as_of_orats": data_as_of.get("data_as_of_orats"),
+                "data_as_of_price": data_as_of.get("data_as_of_price"),
+            }
 
-        return "FAIL", ["symbol_not_in_latest_evaluation"]
+        return {
+            "status": "FAIL",
+            "missing_fields": ["symbol_not_in_latest_evaluation"],
+            "required_data_missing": ["symbol_not_in_latest_evaluation"],
+            "optional_data_missing": [],
+            "required_data_stale": [],
+            "data_as_of_orats": None,
+            "data_as_of_price": None,
+        }
     except Exception as e:
         logger.warning("[DATA_SUFFICIENCY] Failed to derive for %s: %s", sym, e)
-        return "FAIL", ["derivation_error"]
+        return {
+            "status": "FAIL",
+            "missing_fields": ["derivation_error"],
+            "required_data_missing": ["derivation_error"],
+            "optional_data_missing": [],
+            "required_data_stale": [],
+            "data_as_of_orats": None,
+            "data_as_of_price": None,
+        }
 
 
 def log_data_sufficiency_override(
@@ -95,22 +153,45 @@ def get_data_sufficiency_for_position(
 ) -> Dict[str, Any]:
     """
     Return effective data_sufficiency for a position.
-
-    - If override set (MANUAL): use override, log distinctly (override_source).
-    - Else: auto-derive from symbol coverage.
-    - Returns: status (PASS|WARN|FAIL), missing_fields, is_override (bool)
+    Phase 6: Manual override MUST NOT override when required_data_missing is non-empty.
     """
+    derived = derive_data_sufficiency_with_dependencies(symbol)
+    required_missing = derived.get("required_data_missing") or []
+
+    if required_missing:
+        return {
+            "status": "FAIL",
+            "missing_fields": derived["missing_fields"],
+            "required_data_missing": required_missing,
+            "optional_data_missing": derived.get("optional_data_missing") or [],
+            "required_data_stale": derived.get("required_data_stale") or [],
+            "data_as_of_orats": derived.get("data_as_of_orats"),
+            "data_as_of_price": derived.get("data_as_of_price"),
+            "is_override": False,
+            "override_source": None,
+        }
+
     if override and str(override).strip() in VALID_DATA_SUFFICIENCY:
         return {
             "status": str(override).strip(),
             "missing_fields": [],
+            "required_data_missing": [],
+            "optional_data_missing": [],
+            "required_data_stale": [],
+            "data_as_of_orats": derived.get("data_as_of_orats"),
+            "data_as_of_price": derived.get("data_as_of_price"),
             "is_override": True,
             "override_source": override_source or "MANUAL",
         }
-    status, missing = derive_data_sufficiency(symbol)
+
     return {
-        "status": status,
-        "missing_fields": missing,
+        "status": derived["status"],
+        "missing_fields": derived["missing_fields"],
+        "required_data_missing": derived.get("required_data_missing") or [],
+        "optional_data_missing": derived.get("optional_data_missing") or [],
+        "required_data_stale": derived.get("required_data_stale") or [],
+        "data_as_of_orats": derived.get("data_as_of_orats"),
+        "data_as_of_price": derived.get("data_as_of_price"),
         "is_override": False,
         "override_source": None,
     }

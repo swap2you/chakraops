@@ -30,6 +30,15 @@ export interface RankedOpportunity {
   risk_status?: "OK" | "WARN" | "BLOCKED";
   /** Phase 3: Human-readable risk block reasons */
   risk_reasons?: string[];
+  /** Phase 6: Required fields missing (data BLOCK) */
+  required_data_missing?: string[];
+  /** Phase 6: Optional fields missing */
+  optional_data_missing?: string[];
+  /** Phase 6: Required fields stale */
+  required_data_stale?: string[];
+  /** Phase 6: Provider timestamps */
+  data_as_of_orats?: string | null;
+  data_as_of_price?: string | null;
 }
 
 export interface OpportunitiesResponse {

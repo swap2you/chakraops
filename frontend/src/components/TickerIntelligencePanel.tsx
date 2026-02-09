@@ -41,6 +41,11 @@ interface DataSufficiency {
   symbol: string;
   status: "PASS" | "WARN" | "FAIL";
   missing_fields: string[];
+  required_data_missing?: string[];
+  optional_data_missing?: string[];
+  required_data_stale?: string[];
+  data_as_of_orats?: string | null;
+  data_as_of_price?: string | null;
 }
 
 interface PositionDetail {
@@ -49,6 +54,9 @@ interface PositionDetail {
   return_on_risk_status: string | null;
   data_sufficiency: string | null;
   data_sufficiency_missing_fields: string[];
+  required_data_missing?: string[];
+  required_data_stale?: string[];
+  data_as_of_orats?: string | null;
 }
 
 function formatPrice(v: number | null | undefined): string {
@@ -119,6 +127,9 @@ export function TickerIntelligencePanel({ symbol }: TickerIntelligencePanelProps
               return_on_risk_status: d.return_on_risk_status ?? null,
               data_sufficiency: d.data_sufficiency ?? null,
               data_sufficiency_missing_fields: d.data_sufficiency_missing_fields ?? [],
+              required_data_missing: d.required_data_missing ?? [],
+              required_data_stale: d.required_data_stale ?? [],
+              data_as_of_orats: d.data_as_of_orats ?? null,
             };
           } catch {
             details[p.position_id] = {
@@ -127,6 +138,9 @@ export function TickerIntelligencePanel({ symbol }: TickerIntelligencePanelProps
               return_on_risk_status: "UNKNOWN_INSUFFICIENT_RISK_DEFINITION",
               data_sufficiency: null,
               data_sufficiency_missing_fields: [],
+              required_data_missing: [],
+              required_data_stale: [],
+              data_as_of_orats: null,
             };
           }
         })
@@ -316,8 +330,17 @@ export function TickerIntelligencePanel({ symbol }: TickerIntelligencePanelProps
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
               <div>
                 <p className="font-medium">Data sufficiency: {dataSufficiency.status}</p>
-                {dataSufficiency.missing_fields?.length > 0 && (
-                  <p className="mt-0.5 text-muted-foreground">Missing fields: {dataSufficiency.missing_fields.join(", ")}</p>
+                {dataSufficiency.required_data_missing?.length ? (
+                  <p className="mt-0.5 text-muted-foreground">Required missing: {dataSufficiency.required_data_missing.join(", ")}</p>
+                ) : null}
+                {dataSufficiency.required_data_stale?.length ? (
+                  <p className="mt-0.5 text-muted-foreground">Stale: {dataSufficiency.required_data_stale.join(", ")}</p>
+                ) : null}
+                {dataSufficiency.missing_fields?.length > 0 && !dataSufficiency.required_data_missing?.length && (
+                  <p className="mt-0.5 text-muted-foreground">Missing: {dataSufficiency.missing_fields.join(", ")}</p>
+                )}
+                {dataSufficiency.data_as_of_orats && (
+                  <p className="mt-0.5 text-muted-foreground">Data as of (ORATS): {dataSufficiency.data_as_of_orats}</p>
                 )}
               </div>
             </div>

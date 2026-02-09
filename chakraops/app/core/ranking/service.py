@@ -285,6 +285,19 @@ def rank_opportunities(
                 if bid is not None:
                     credit_estimate = float(bid)
 
+        # Phase 6: Data dependency enforcement — BLOCK when required data missing
+        required_data_missing: List[str] = []
+        optional_data_missing: List[str] = []
+        required_data_stale: List[str] = []
+        data_as_of: Dict[str, Optional[str]] = {}
+        try:
+            from app.core.symbols.data_dependencies import compute_dependency_lists
+            sym_dict = sym if isinstance(sym, dict) else {k: getattr(sym, k, None) for k in ("symbol", "price", "bid", "ask", "volume", "avg_volume", "iv_rank", "quote_date", "fetched_at", "verdict", "candidate_trades", "selected_contract")}
+            required_data_missing, optional_data_missing, required_data_stale, data_as_of = compute_dependency_lists(sym_dict)
+        except Exception as e:
+            logger.debug("[RANKING] Data dependency check failed: %s", e)
+            required_data_missing = ["dependency_check_error"]
+
         opportunity: Dict[str, Any] = {
             "symbol": sym.get("symbol", ""),
             "strategy": strategy,
@@ -303,13 +316,21 @@ def rank_opportunities(
             "position_open": sym.get("position_open", False),
             "data_completeness": sym.get("data_completeness"),
             "stage_reached": sym.get("stage_reached"),
-            # Score breakdown for detail view
             "score_breakdown": sym.get("score_breakdown"),
             "rank_reasons": sym.get("rank_reasons"),
+            "required_data_missing": required_data_missing,
+            "optional_data_missing": optional_data_missing,
+            "required_data_stale": required_data_stale,
+            "data_as_of_orats": data_as_of.get("data_as_of_orats"),
+            "data_as_of_price": data_as_of.get("data_as_of_price"),
         }
 
-        # Phase 3: Apply risk status
-        _apply_risk_status(opportunity, risk_context)
+        # Phase 6: Required data missing → BLOCKED (takes precedence over portfolio risk)
+        if required_data_missing:
+            opportunity["risk_status"] = "BLOCKED"
+            opportunity["risk_reasons"] = ["Required data missing: " + ", ".join(required_data_missing)]
+        else:
+            _apply_risk_status(opportunity, risk_context)
 
         # Exclude BLOCKED unless include_blocked
         if not include_blocked and opportunity.get("risk_status") == "BLOCKED":

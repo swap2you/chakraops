@@ -235,6 +235,7 @@ class FullEvaluationResult:
     data_sources: Dict[str, str] = field(default_factory=dict)
     raw_fields_present: List[str] = field(default_factory=list)
     quote_date: Optional[str] = None  # quoteDate from ORATS
+    iv_rank: Optional[float] = None  # Phase 6: from ivrank endpoint
     
     # Phase 8: Strategy explainability
     rationale: Optional[StrategyRationale] = None
@@ -949,6 +950,7 @@ def evaluate_symbol_full(
     result.data_sources = stage1.data_sources.copy()
     result.raw_fields_present = stage1.raw_fields_present.copy()
     result.quote_date = stage1.quote_date
+    result.iv_rank = stage1.iv_rank
     
     # Add stage 1 gate
     result.gates.append({
@@ -1266,6 +1268,7 @@ def evaluate_universe_staged(
             result.data_sources = stage1.data_sources
             result.raw_fields_present = stage1.raw_fields_present
             result.quote_date = stage1.quote_date
+            result.iv_rank = stage1.iv_rank
             result.score = stage1.stage1_score
             
             if stage1.stock_verdict == StockVerdict.BLOCKED:

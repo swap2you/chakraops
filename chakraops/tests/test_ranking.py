@@ -42,11 +42,17 @@ def _make_symbol(
         candidate_trades = [
             {"strategy": "CSP", "strike": price * 0.9, "expiry": "2026-03-21", "credit_estimate": 2.50, "delta": -0.20}
         ]
+    # Phase 6: required fields for data_dependencies (no BLOCK)
     return {
         "symbol": symbol,
         "verdict": verdict,
         "score": score,
         "price": price,
+        "bid": price - 0.01,
+        "ask": price + 0.01,
+        "volume": 1_000_000,
+        "iv_rank": 45.0,
+        "quote_date": "2025-02-01",
         "liquidity_ok": liquidity_ok,
         "position_open": position_open,
         "candidate_trades": candidate_trades,
@@ -221,8 +227,8 @@ def test_ranking_limit() -> None:
 def test_ranking_strategy_filter() -> None:
     """Strategy filter excludes non-matching strategies."""
     symbols = [
-        _make_symbol("CSP_SYM", candidate_trades=[{"strategy": "CSP", "strike": 50}]),
-        _make_symbol("STOCK_SYM", candidate_trades=[{"strategy": "STOCK"}]),
+        _make_symbol("CSP_SYM", candidate_trades=[{"strategy": "CSP", "strike": 50, "delta": -0.20}]),
+        _make_symbol("STOCK_SYM", candidate_trades=[{"strategy": "STOCK", "delta": 0.30}]),
     ]
     ranked = rank_opportunities(symbols, strategy_filter="CSP", limit=10)
     assert len(ranked) == 1

@@ -45,6 +45,21 @@ def trading_days_until(
     return n
 
 
+def trading_days_since(as_of_date: date | None) -> int | None:
+    """Return the number of trading days since as_of_date (exclusive) through today (inclusive).
+
+    So trading days in the half-open interval (as_of_date, today].
+    If as_of_date is None or in the future, returns None.
+    Phase 6: Used for staleness (e.g. data stale when > 1 trading day).
+    """
+    if as_of_date is None:
+        return None
+    today = date.today()
+    if as_of_date > today:
+        return None
+    return trading_days_until(today, as_of_date)
+
+
 def is_short_session(d: date) -> bool:
     """Return True if the given date is a short (early-close) session for US equities.
 

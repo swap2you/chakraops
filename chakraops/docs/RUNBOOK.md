@@ -88,6 +88,30 @@ Use after deploying (e.g. Railway + Vercel). See [DEPLOYMENT.md](./DEPLOYMENT.md
 
 ---
 
+## Why the system may refuse to trade (Phase 6)
+
+The system will **BLOCK** an opportunity (refuse to recommend) when:
+
+1. **Required data missing:** Price, IV rank, bid, ask, volume, or candidate delta not provided by the data source. See [data_dependencies.md](./data_dependencies.md). No inference is made; missing = BLOCKED.
+2. **Portfolio/risk limits:** Would exceed max capital utilization, sector limits, or position limits. See [PHASE3_PORTFOLIO_AND_RISK.md](./PHASE3_PORTFOLIO_AND_RISK.md).
+3. **Market regime:** RISK_OFF or other regime gate. See pipeline docs.
+
+**Stale data** (e.g. ORATS quote > 1 trading day old) produces **WARN**, not BLOCK, unless data_dependencies.md specifies BLOCK for that field.
+
+---
+
+## How to interpret BLOCKED vs UNKNOWN
+
+| Term | Meaning | What to do |
+|------|---------|------------|
+| **BLOCKED** | The system explicitly refuses to recommend. A reason is always provided (e.g. "Required data missing: bid, iv_rank" or "Sector limit exceeded"). | Fix the cause (data source, limits, or regime). Do not override with manual execution unless you accept the risk. |
+| **UNKNOWN** | The system does not have enough information to compute a value (e.g. return on risk when risk amount was not set at entry). | Treat as non-actionable for that metric. Do not infer a number. |
+| **WARN** | Proceed with caution; optional data missing or data stale, or nearing a limit. | Review before acting; you may still execute manually with full awareness. |
+
+Details: [data_sufficiency.md](./data_sufficiency.md), [decision_quality.md](./decision_quality.md).
+
+---
+
 ## Quick links
 
 - **Scheduling and run lifecycle:** [SCHEDULING_AND_RUNS.md](./SCHEDULING_AND_RUNS.md)

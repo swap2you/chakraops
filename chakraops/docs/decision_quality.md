@@ -1,6 +1,14 @@
-# Decision Quality — Field Reference
+# Decision Quality — Field Reference (Phase 4/5/6)
 
 Phase 4/5: Post-trade decision quality analysis. All fields are computed on load; none are stored.
+
+## UNKNOWN vs BLOCKED vs WARN
+
+| Term | Meaning | When |
+|------|---------|------|
+| **UNKNOWN** | The system does not have enough information to compute or tag. Never infer. | e.g. `return_on_risk` when `risk_amount_at_entry` missing; data sufficiency when symbol not in run. |
+| **BLOCKED** | The system explicitly refuses to recommend (e.g. required data missing, risk limits exceeded). | Phase 6: `required_data_missing` non-empty → risk_status BLOCKED. Portfolio limits can also BLOCK. |
+| **WARN** | Proceed with caution; optional data missing or data stale. | e.g. `required_data_stale` or `optional_data_missing`; nearing capital utilization. |
 
 ## Outcome Summary (GET /api/decision-quality/summary)
 

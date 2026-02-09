@@ -648,6 +648,8 @@ def create_run_from_evaluation(
             ],
             "fetched_at": s.fetched_at,
             "error": s.error,
+            "iv_rank": getattr(s, "iv_rank", None),
+            "quote_date": getattr(s, "quote_date", None),
             # Data quality fields
             "data_completeness": getattr(s, "data_completeness", 1.0),
             "missing_fields": getattr(s, "missing_fields", []),

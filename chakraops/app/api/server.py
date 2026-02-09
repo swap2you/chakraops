@@ -2863,6 +2863,11 @@ def api_positions_tracked_detail(position_id: str) -> Dict[str, Any]:
         d["data_sufficiency"] = ds["status"]
         d["data_sufficiency_missing_fields"] = ds.get("missing_fields") or []
         d["data_sufficiency_is_override"] = ds.get("is_override", False)
+        d["required_data_missing"] = ds.get("required_data_missing") or []
+        d["optional_data_missing"] = ds.get("optional_data_missing") or []
+        d["required_data_stale"] = ds.get("required_data_stale") or []
+        d["data_as_of_orats"] = ds.get("data_as_of_orats")
+        d["data_as_of_price"] = ds.get("data_as_of_price")
         if exit_rec:
             from app.core.decision_quality.derived import compute_derived_metrics
             from app.core.portfolio.service import _capital_for_position
@@ -2956,11 +2961,20 @@ def api_decision_quality_band_outcome() -> Dict[str, Any]:
 
 @app.get("/api/symbols/{symbol}/data-sufficiency")
 def api_symbol_data_sufficiency(symbol: str) -> Dict[str, Any]:
-    """Phase 5: Auto-derive data sufficiency from symbol coverage. Returns status (PASS|WARN|FAIL), missing_fields."""
+    """Phase 6: Data sufficiency from dependency rules. Returns status, missing_fields, required/optional/stale, data_as_of."""
     try:
-        from app.core.symbols.data_sufficiency import derive_data_sufficiency
-        status, missing = derive_data_sufficiency(symbol)
-        return {"symbol": symbol.strip().upper(), "status": status, "missing_fields": missing}
+        from app.core.symbols.data_sufficiency import derive_data_sufficiency_with_dependencies
+        out = derive_data_sufficiency_with_dependencies(symbol)
+        return {
+            "symbol": symbol.strip().upper(),
+            "status": out["status"],
+            "missing_fields": out["missing_fields"],
+            "required_data_missing": out.get("required_data_missing") or [],
+            "optional_data_missing": out.get("optional_data_missing") or [],
+            "required_data_stale": out.get("required_data_stale") or [],
+            "data_as_of_orats": out.get("data_as_of_orats"),
+            "data_as_of_price": out.get("data_as_of_price"),
+        }
     except Exception as e:
         logger.exception("Error deriving data sufficiency for %s: %s", symbol, e)
         raise HTTPException(status_code=500, detail=str(e))

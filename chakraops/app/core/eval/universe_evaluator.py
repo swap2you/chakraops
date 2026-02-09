@@ -72,6 +72,9 @@ class SymbolEvaluationResult:
     # Metadata
     fetched_at: Optional[str] = None
     error: Optional[str] = None
+    # Phase 6: Provider timestamps and IV (for data_dependencies / staleness)
+    iv_rank: Optional[float] = None
+    quote_date: Optional[str] = None
     # Data quality tracking
     data_completeness: float = 1.0  # 0.0 to 1.0
     missing_fields: List[str] = field(default_factory=list)
@@ -861,6 +864,8 @@ def run_universe_evaluation_staged(universe_symbols: List[str], use_staged: bool
                 missing_fields=sr.missing_fields,
                 data_quality_details=sr.data_quality_details,
                 stage_reached=sr.stage_reached.value,
+                iv_rank=getattr(sr, "iv_rank", None),
+                quote_date=getattr(sr, "quote_date", None),
                 position_open=getattr(sr, "position_open", False),
                 position_reason=getattr(sr, "position_reason", None),
                 capital_hint=sr.capital_hint.to_dict() if getattr(sr, "capital_hint", None) else None,

@@ -39,15 +39,17 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import requests
 
+from app.core.orats.endpoints import BASE_DATAV2, PATH_STRIKES, PATH_STRIKES_OPTIONS
+
 logger = logging.getLogger(__name__)
 
 # ============================================================================
-# Configuration
+# Configuration (from single manifest)
 # ============================================================================
 
-ORATS_DELAYED_BASE = "https://api.orats.io/datav2"
-ORATS_STRIKES_PATH = "/strikes"
-ORATS_STRIKES_OPTIONS_PATH = "/strikes/options"
+ORATS_DELAYED_BASE = BASE_DATAV2
+ORATS_STRIKES_PATH = PATH_STRIKES
+ORATS_STRIKES_OPTIONS_PATH = PATH_STRIKES_OPTIONS
 TIMEOUT_SEC = 15
 
 # Rate limiting

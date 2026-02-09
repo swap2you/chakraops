@@ -28,7 +28,7 @@ class TradeAlert:
 def get_latest_price(symbol: str) -> Optional[float]:
     """Get latest price for symbol (ORATS or cached). Returns None if unavailable."""
     try:
-        from app.core.orats.orats_client import get_orats_live_summaries
+        from app.core.data.orats_client import get_orats_live_summaries
         summaries = get_orats_live_summaries(symbol)
         if summaries and len(summaries) > 0:
             p = summaries[0].get("stockPrice")

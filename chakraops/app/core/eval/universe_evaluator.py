@@ -543,7 +543,7 @@ def _generate_alerts(result: SymbolEvaluationResult) -> List[Alert]:
 
 def _evaluate_single_symbol(symbol: str) -> SymbolEvaluationResult:
     """Evaluate a single symbol using ORATS data."""
-    from app.core.orats.orats_client import get_orats_live_summaries, get_orats_live_strikes, OratsUnavailableError
+    from app.core.data.orats_client import get_orats_live_summaries, get_orats_live_strikes, OratsUnavailableError
 
     result = SymbolEvaluationResult(symbol=symbol, source="ORATS")
     now_iso = datetime.now(timezone.utc).isoformat()

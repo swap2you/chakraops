@@ -371,7 +371,7 @@ async def _lifespan(app: FastAPI):
     base_url = "https://api.orats.io/datav2"
     probe_status = "DOWN"
     try:
-        from app.core.orats.orats_client import probe_orats_live
+        from app.core.data.orats_client import probe_orats_live
         probe_orats_live("SPY")
         probe_status = "OK"
     except Exception as e:
@@ -986,7 +986,7 @@ def api_ops_data_health() -> Dict[str, Any]:
 @app.post("/api/ops/refresh-live-data")
 def api_ops_refresh_live_data() -> Dict[str, Any]:
     """Call probe_orats_live(SPY) and return raw result. 503 on failure."""
-    from app.core.orats.orats_client import probe_orats_live, OratsUnavailableError
+    from app.core.data.orats_client import probe_orats_live, OratsUnavailableError
     try:
         result = probe_orats_live("SPY")
         return result
@@ -1243,7 +1243,7 @@ def api_view_symbol_diagnostics(symbol: str = Query(..., min_length=1, max_lengt
     503 if ORATS fails for this symbol.
     """
     from datetime import datetime, timezone
-    from app.core.orats.orats_client import get_orats_live_summaries, OratsUnavailableError
+    from app.core.data.orats_client import get_orats_live_summaries, OratsUnavailableError
     sym = symbol.strip().upper()
     t0 = time.perf_counter()
     try:

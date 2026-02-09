@@ -1,6 +1,6 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""ORATS Live client: probe, get_orats_live_strikes, get_orats_live_summaries. Base https://api.orats.io/datav2, token query param."""
+"""ORATS Live client: probe, get_orats_live_strikes, get_orats_live_summaries. Base and paths from endpoints.py."""
 
 from __future__ import annotations
 
@@ -10,11 +10,13 @@ from typing import Any, Dict, List
 
 import requests
 
+from app.core.orats.endpoints import BASE_DATAV2, PATH_LIVE_STRIKES, PATH_LIVE_SUMMARIES
+
 logger = logging.getLogger(__name__)
 
-ORATS_BASE = "https://api.orats.io/datav2"
-ORATS_LIVE_STRIKES = "/live/strikes"
-ORATS_LIVE_SUMMARIES = "/live/summaries"
+ORATS_BASE = BASE_DATAV2
+ORATS_LIVE_STRIKES = PATH_LIVE_STRIKES
+ORATS_LIVE_SUMMARIES = PATH_LIVE_SUMMARIES
 TIMEOUT_SEC = 10
 
 
@@ -63,12 +65,31 @@ def _orats_get_live(endpoint_path: str, ticker: str, timeout_sec: float = TIMEOU
         raise OratsUnavailableError(f"ORATS invalid JSON: {e}", http_status=r.status_code, response_snippet=(r.text or "")[:200], endpoint=endpoint_path, symbol=ticker.upper())
 
     rows_count = 0
+    rows_list: List[Any] = []
     if isinstance(raw, list):
+        rows_list = raw
         rows_count = len(raw)
     elif isinstance(raw, dict) and "data" in raw and isinstance(raw["data"], list):
-        rows_count = len(raw["data"])
-    logger.info("[ORATS_CALL] endpoint=%s ticker=%s status=%s latency_ms=%s rows=%s", endpoint_path, ticker.upper(), r.status_code, latency_ms, rows_count)
-    print(f"[ORATS_CALL] endpoint={endpoint_path} ticker={ticker.upper()} status={r.status_code} latency_ms={latency_ms} rows={rows_count}")
+        rows_list = raw["data"]
+        rows_count = len(rows_list)
+    quote_date: str | None = None
+    field_presence: Dict[str, bool] = {}
+    if rows_list and isinstance(rows_list[0], dict):
+        first = rows_list[0]
+        quote_date = first.get("quoteDate") or first.get("quote_date")
+        field_presence = {
+            "price": (first.get("stockPrice") is not None or first.get("stock_price") is not None),
+            "volume": first.get("volume") is not None,
+            "iv_rank": (first.get("ivRank1m") is not None or first.get("ivPct1m") is not None),
+            "bid": first.get("bid") is not None,
+            "ask": first.get("ask") is not None,
+            "open_interest": first.get("openInterest") is not None,
+        }
+    logger.info(
+        "[ORATS_CALL] endpoint=%s symbol=%s http_status=%s quote_date=%s fields=%s",
+        endpoint_path, ticker.upper(), r.status_code, quote_date or "", field_presence,
+    )
+    print(f"[ORATS_CALL] endpoint={endpoint_path} symbol={ticker.upper()} status={r.status_code} latency_ms={latency_ms} rows={rows_count} quote_date={quote_date or ''} fields={field_presence}")
 
     if r.status_code != 200:
         snippet = (r.text or "")[:300]

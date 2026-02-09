@@ -109,7 +109,7 @@ def _compute_sticky_status() -> str:
 def _attempt_live_summary() -> None:
     """Call probe_orats_live(SPY) from unified ORATS Live client; set status OK or DOWN."""
     global _DATA_STATUS, _LAST_SUCCESS_AT, _LAST_ATTEMPT_AT, _LAST_ERROR_AT, _LAST_ERROR_REASON, _AVG_LATENCY_SECONDS, _LATENCY_SAMPLES, _ENTITLEMENT
-    from app.core.orats.orats_client import probe_orats_live, OratsUnavailableError
+    from app.core.data.orats_client import probe_orats_live, OratsUnavailableError
     now = datetime.now(timezone.utc).isoformat()
     _LAST_ATTEMPT_AT = now
     try:
@@ -188,7 +188,7 @@ def _record_error(reason: str) -> None:
 
 def run_orats_startup_self_check() -> bool:
     """Run live attempt (probe_orats_live SPY). On failure: DATA_STATUS=DOWN, return False."""
-    from app.core.orats.orats_client import ORATS_BASE
+    from app.core.data.orats_client import ORATS_BASE
     logger.info("ORATS startup: base=%s (redacted), live probe SPY", ORATS_BASE)
     _attempt_live_summary()
     if _DATA_STATUS != "OK":
@@ -200,7 +200,7 @@ def run_orats_startup_self_check() -> bool:
 
 def refresh_live_data() -> Dict[str, Any]:
     """Pull fresh ORATS data via probe_orats_live(SPY). Raises on failure. No fallbacks."""
-    from app.core.orats.orats_client import probe_orats_live, OratsUnavailableError
+    from app.core.data.orats_client import probe_orats_live, OratsUnavailableError
     start = time.perf_counter()
     result = probe_orats_live("SPY")
     elapsed = time.perf_counter() - start
@@ -270,7 +270,7 @@ def fetch_universe_from_orats() -> Dict[str, Any]:
     - all_failed: True if every symbol failed
     - updated_at: ISO timestamp of fetch
     """
-    from app.core.orats.orats_client import get_orats_live_summaries, OratsUnavailableError
+    from app.core.data.orats_client import get_orats_live_summaries, OratsUnavailableError
     updated_at = datetime.now(timezone.utc).isoformat()
     symbols_out: List[Dict[str, Any]] = []
     excluded: List[Dict[str, Any]] = []

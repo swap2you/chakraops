@@ -1,6 +1,12 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""ORATS API client for options chain data."""
+"""ORATS API client for options chain data.
+
+DEPRECATED: This module uses api.orats.com and /chain/{symbol} (v1-style).
+All ORATS v2 traffic MUST go through app.core.orats (endpoints.py + orats_client,
+orats_equity_quote, orats_opra). Migrate callers (e.g. main.py RollEngine) to
+use app.core.orats or app.core.options.orats_chain_pipeline and remove this module.
+"""
 
 from __future__ import annotations
 

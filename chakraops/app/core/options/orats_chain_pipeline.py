@@ -41,6 +41,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
+from app.core.orats.endpoints import BASE_DATAV2, BASE_LIVE, PATH_STRIKES, PATH_STRIKES_OPTIONS
+
 logger = logging.getLogger(__name__)
 
 
@@ -49,15 +51,15 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 class OratsDataMode:
-    """ORATS API data mode configuration."""
+    """ORATS API data mode configuration. Base URLs from app.core.orats.endpoints."""
     DELAYED = "delayed"
     LIVE = "live"
     LIVE_DERIVED = "live_derived"
     
-    # Base URLs for each mode
+    # Base URLs for each mode (single source: endpoints.py)
     BASE_URLS = {
-        DELAYED: "https://api.orats.io/datav2",
-        LIVE: "https://api.orats.io/datav2/live",
+        DELAYED: BASE_DATAV2,
+        LIVE: BASE_LIVE,
         LIVE_DERIVED: "https://api.orats.io/datav2/live/derived",
     }
     
@@ -125,8 +127,8 @@ class OratsOpraModeError(OratsChainError):
 # API Configuration
 # ============================================================================
 
-ORATS_STRIKES = "/strikes"  # Base chain discovery
-ORATS_STRIKES_OPTIONS = "/strikes/options"  # Liquidity enrichment (OPRA symbols)
+ORATS_STRIKES = PATH_STRIKES  # Base chain discovery
+ORATS_STRIKES_OPTIONS = PATH_STRIKES_OPTIONS  # Liquidity enrichment (OPRA symbols)
 TIMEOUT_SEC = 15
 
 # Rate limiting: 1000 req/min = 16.67/sec, we use 5/sec to be safe

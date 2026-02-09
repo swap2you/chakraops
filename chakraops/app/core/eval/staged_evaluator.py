@@ -32,14 +32,7 @@ from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-from app.core.models.data_quality import (
-    DataQuality,
-    FieldValue,
-    wrap_field_float,
-    wrap_field_int,
-    compute_data_completeness_required,
-    build_data_incomplete_reason,
-)
+from app.core.models.data_quality import build_data_incomplete_reason
 from app.core.eval.strategy_rationale import StrategyRationale, build_rationale_from_staged
 from app.core.eval.confidence_band import compute_confidence_band, CapitalHint
 from app.core.eval.scoring import (
@@ -328,42 +321,29 @@ class FullEvaluationResult:
 def evaluate_stage1(symbol: str) -> Stage1Result:
     """
     Stage 1: Evaluate stock quality and regime.
-    
-    Fetches equity quote data from ORATS endpoints:
-    - /datav2/strikes/options with underlying ticker -> price, bid, ask, volume, quote_date
-    - /datav2/ivrank -> iv_rank
-    
-    NOTE: avg_volume is NOT available from any ORATS endpoint.
+
+    Fetches via app.core.data.orats_client, validates via contract_validator,
+    then applies regime/verdict/score. Single source of truth for ORATS and validation.
     """
-    from app.core.orats.orats_equity_quote import (
-        fetch_full_equity_snapshots,
-        OratsEquityQuoteError,
-    )
-    
+    from app.core.data.orats_client import fetch_full_equity_snapshots, OratsEquityQuoteError
+    from app.core.data.contract_validator import validate_equity_snapshot
+
     result = Stage1Result(symbol=symbol, source="ORATS")
     now_iso = datetime.now(timezone.utc).isoformat()
     result.fetched_at = now_iso
-    
-    # Track field quality
-    field_quality: Dict[str, FieldValue] = {}
-    
+
     try:
-        # Fetch equity snapshot using the correct ORATS endpoints:
-        # - /datav2/strikes/options with underlying ticker for bid/ask/volume
-        # - /datav2/ivrank for iv_rank
         snapshots = fetch_full_equity_snapshots([symbol])
-        
+
         if not snapshots or symbol.upper() not in snapshots:
             result.stock_verdict = StockVerdict.ERROR
             result.stock_verdict_reason = "No equity snapshot data returned"
             result.error = "No ORATS equity data"
             return result
-        
+
         snapshot = snapshots[symbol.upper()]
-        
-        # ===========================================================================
-        # DEBUG: Log ORATS response data for sampled tickers
-        # ===========================================================================
+
+        # DEBUG: Log ORATS response for sampled tickers
         _SAMPLED_ORATS_KEYS: set = getattr(evaluate_stage1, "_sampled_orats_keys", set())
         if symbol.upper() in ("AAPL", "SPY") and symbol.upper() not in _SAMPLED_ORATS_KEYS:
             _SAMPLED_ORATS_KEYS.add(symbol.upper())
@@ -376,76 +356,31 @@ def evaluate_stage1(symbol: str) -> Stage1Result:
                 snapshot.iv_rank, snapshot.quote_date, snapshot.data_sources,
                 snapshot.raw_fields_present, snapshot.missing_fields,
             )
-        
-        # ===========================================================================
-        # ORATS Equity Data Mapping
-        # ===========================================================================
-        # Endpoints used:
-        #   /datav2/strikes/options with underlying tickers:
-        #     - stockPrice -> price
-        #     - bid -> bid
-        #     - ask -> ask
-        #     - volume -> volume
-        #     - quoteDate -> quote_date
-        #
-        #   /datav2/ivrank:
-        #     - ivRank1m (or ivPct1m) -> iv_rank
-        #
-        # NOT AVAILABLE from any ORATS endpoint:
-        #     - avg_volume (average volume) - requires external data source
-        # ===========================================================================
-        
-        raw_price = snapshot.price
-        raw_bid = snapshot.bid
-        raw_ask = snapshot.ask
-        raw_volume = snapshot.volume
-        raw_avg_volume = snapshot.avg_volume  # Always None - not available from ORATS
-        raw_iv_rank = snapshot.iv_rank
-        
-        # Log what we found
-        if raw_price is None:
+
+        # Single validator: instrument type + required fields + derivations
+        validation = validate_equity_snapshot(symbol, snapshot)
+
+        result.price = validation.price
+        result.bid = validation.bid
+        result.ask = validation.ask
+        result.volume = validation.volume
+        result.avg_volume = validation.avg_volume
+        result.iv_rank = validation.iv_rank
+        result.quote_date = validation.quote_date
+        result.data_completeness = validation.data_completeness
+        result.missing_fields = validation.missing_fields.copy()
+        result.data_quality_details = validation.data_quality_details.copy()
+        result.field_sources = validation.field_sources.copy()
+        result.data_sources = snapshot.data_sources.copy()
+        result.raw_fields_present = snapshot.raw_fields_present.copy()
+
+        if validation.price is None:
             logger.warning("[SNAPSHOT] %s: price missing - this is FATAL", symbol)
         logger.debug(
             "[SNAPSHOT] %s: price=%s bid=%s ask=%s volume=%s iv_rank=%s sources=%s",
-            symbol, raw_price, raw_bid, raw_ask, raw_volume, raw_iv_rank, snapshot.data_sources
+            symbol, result.price, result.bid, result.ask, result.volume,
+            result.iv_rank, result.data_sources,
         )
-        
-        # MarketSnapshot required fields only (avg_volume excluded per ORATS reference)
-        price_fv = wrap_field_float(raw_price, "price")
-        bid_fv = wrap_field_float(raw_bid, "bid")
-        ask_fv = wrap_field_float(raw_ask, "ask")
-        volume_fv = wrap_field_int(raw_volume, "volume")
-        # quote_time = quoteDate from ORATS; required for completeness
-        quote_time_fv = FieldValue(
-            value=snapshot.quote_date,
-            quality=DataQuality.VALID if snapshot.quote_date else DataQuality.MISSING,
-            reason="" if snapshot.quote_date else "quote_date not provided by source",
-            field_name="quote_time",
-        )
-        iv_rank_fv = wrap_field_float(raw_iv_rank, "iv_rank")
-        
-        # Only REQUIRED fields for completeness (so 1.0 when all present)
-        field_quality["price"] = price_fv
-        field_quality["bid"] = bid_fv
-        field_quality["ask"] = ask_fv
-        field_quality["volume"] = volume_fv
-        field_quality["quote_time"] = quote_time_fv
-        field_quality["iv_rank"] = iv_rank_fv
-        
-        # Extract values
-        result.price = price_fv.value if price_fv.is_valid else None
-        result.bid = bid_fv.value if bid_fv.is_valid else None
-        result.ask = ask_fv.value if ask_fv.is_valid else None
-        result.volume = volume_fv.value if volume_fv.is_valid else None
-        result.avg_volume = raw_avg_volume  # Always None from ORATS; optional, not in required
-        result.iv_rank = iv_rank_fv.value if iv_rank_fv.is_valid else None
-        result.quote_date = snapshot.quote_date
-        
-        # Store data source tracking from snapshot
-        result.data_sources = snapshot.data_sources.copy()
-        result.raw_fields_present = snapshot.raw_fields_present.copy()
-        
-        # Log snapshot fields: INFO for stage summary, DEBUG for populated values (UI/gates)
         logger.info(
             "[STAGE1] %s: snapshot fields - price=%s bid=%s ask=%s volume=%s iv_rank=%s quote_date=%s",
             symbol,
@@ -456,68 +391,17 @@ def evaluate_stage1(symbol: str) -> Stage1Result:
             f"{result.iv_rank:.1f}" if result.iv_rank else "MISSING",
             result.quote_date or "MISSING",
         )
-        # [SNAPSHOT] DEBUG: populated equity fields for downstream (UI, gates, scoring)
-        logger.debug(
-            "[SNAPSHOT] %s bid=%s ask=%s volume=%s avg_volume=%s iv_rank=%s sources=%s",
-            symbol,
-            result.bid,
-            result.ask,
-            f"{result.volume:,}" if result.volume is not None else None,
-            f"{result.avg_volume:,}" if result.avg_volume is not None else None,
-            result.iv_rank,
-            result.data_sources,
-        )
-        
-        # Phase 8E: Instrument-type-specific required fields (ETF/INDEX: bid, ask optional)
-        from app.core.symbols.instrument_type import (
-            classify_instrument,
-            get_required_fields_for_instrument,
-        )
-        from app.core.symbols.derived_fields import derive_equity_fields
-        
-        inst = classify_instrument(symbol)
-        required_by_inst = get_required_fields_for_instrument(inst)
-        # Stage 1 field_quality uses "quote_time"; instrument_type uses "quote_date"
-        required_keys = tuple(
-            "quote_time" if k == "quote_date" else k for k in required_by_inst
-        )
-        
-        # Phase 8E: Derivation — if bid/ask missing but derivable, treat as present
-        derived = derive_equity_fields(
-            price=raw_price, bid=raw_bid, ask=raw_ask, volume=raw_volume
-        )
-        for fname, eff_val in (("bid", derived.synthetic_bid), ("ask", derived.synthetic_ask)):
-            if fname in field_quality and not field_quality[fname].is_valid and eff_val is not None:
-                field_quality[fname] = FieldValue(
-                    value=eff_val,
-                    quality=DataQuality.VALID,
-                    reason="derived (single quote or mid)",
-                    field_name=fname,
-                )
-        
-        # Per-field source for diagnostics (ORATS by default; DERIVED where we promoted)
-        result.field_sources = {k: "ORATS" for k in field_quality}
-        if derived.sources:
-            for f in ("bid", "ask"):
-                if field_quality.get(f) and field_quality[f].reason and "derived" in (field_quality[f].reason or "").lower():
-                    result.field_sources[f] = "DERIVED"
-        
-        # Compute data completeness over instrument-specific REQUIRED fields only
-        result.data_completeness, missing_required = compute_data_completeness_required(
-            field_quality, required_keys
-        )
-        # Expose quote_time as quote_date in missing_fields for API consistency
-        result.missing_fields = [
-            "quote_date" if name == "quote_time" else name for name in missing_required
-        ]
-        for name, fv in field_quality.items():
-            result.data_quality_details[name] = str(fv.quality)
-        
         logger.info(
             "[STAGE1] %s: data_completeness=%.1f%% missing_fields=%s",
-            symbol, result.data_completeness * 100, result.missing_fields
+            symbol, result.data_completeness * 100, result.missing_fields,
         )
-        
+
+        price_fv = validation.field_quality.get("price")
+        if not (price_fv and price_fv.is_valid) or result.price is None:
+            result.stock_verdict = StockVerdict.BLOCKED
+            result.stock_verdict_reason = "DATA_INCOMPLETE_FATAL: No price data"
+            return result
+
         # Determine regime from IV
         if result.iv_rank is not None:
             if result.iv_rank < 30:
@@ -532,13 +416,7 @@ def evaluate_stage1(symbol: str) -> Stage1Result:
         else:
             result.regime = "UNKNOWN"
             result.risk_posture = "UNKNOWN"
-        
-        # Apply quality gates
-        if not price_fv.is_valid or result.price is None:
-            result.stock_verdict = StockVerdict.BLOCKED
-            result.stock_verdict_reason = "DATA_INCOMPLETE_FATAL: No price data"
-            return result
-        
+
         # Check data completeness with market-status awareness
         # Import verdict resolver for proper classification
         try:
@@ -1268,7 +1146,7 @@ def evaluate_universe_staged(
     
     # Phase 8D: Per-run ORATS cache — pre-fetch equity + ivrank for all symbols so stage1 uses cache
     try:
-        from app.core.orats.orats_equity_quote import reset_run_cache, fetch_full_equity_snapshots
+        from app.core.data.orats_client import reset_run_cache, fetch_full_equity_snapshots
         reset_run_cache()
         pre = fetch_full_equity_snapshots(symbols)
         logger.info("[STAGED_EVAL] Pre-fetched equity snapshots for %d symbols (cache ready for stage1)", len(pre))

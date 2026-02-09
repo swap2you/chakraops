@@ -30,15 +30,17 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import requests
 
+from app.core.orats.endpoints import BASE_DATAV2, PATH_STRIKES_OPTIONS, PATH_IVRANK
+
 logger = logging.getLogger(__name__)
 
 # ============================================================================
-# Configuration
+# Configuration (from single manifest)
 # ============================================================================
 
-ORATS_BASE_URL = "https://api.orats.io/datav2"
-ORATS_STRIKES_OPTIONS_PATH = "/strikes/options"
-ORATS_IVRANK_PATH = "/ivrank"
+ORATS_BASE_URL = BASE_DATAV2
+ORATS_STRIKES_OPTIONS_PATH = PATH_STRIKES_OPTIONS
+ORATS_IVRANK_PATH = PATH_IVRANK
 TIMEOUT_SEC = 15
 BATCH_SIZE = 10  # ORATS multi-ticker limit
 
@@ -527,6 +529,25 @@ def _fetch_equity_quotes_single_batch(tickers: List[str]) -> Dict[str, EquityQuo
                 ticker, price, bid, ask, volume, quote_date, raw_fields
             )
     
+    # Runtime log: endpoint, symbols, http status, quote_date, field presence (single consolidated line per call)
+    if results:
+        first_sym = next(iter(results))
+        q0 = results[first_sym]
+        quote_date_log = q0.quote_date or ""
+        field_presence = {
+            "price": q0.price is not None,
+            "volume": q0.volume is not None,
+            "iv_rank": False,  # from ivrank endpoint only
+            "bid": q0.bid is not None,
+            "ask": q0.ask is not None,
+            "open_interest": False,  # option-level in strikes/options
+        }
+        logger.info(
+            "[ORATS_RESP] endpoint=%s symbol=%s http_status=%s quote_date=%s fields=%s",
+            ORATS_STRIKES_OPTIONS_PATH, ",".join(tickers[:5]) + ("..." if len(tickers) > 5 else ""),
+            200, quote_date_log, field_presence,
+        )
+    
     # Create empty entries for tickers that had no underlying row
     for ticker in tickers:
         ticker_upper = ticker.upper()
@@ -725,9 +746,23 @@ def _fetch_iv_ranks_single_batch(tickers: List[str]) -> Dict[str, IVRankData]:
     rows = _extract_rows(raw)
     logger.info("[ORATS_IVRANK_RESP] latency_ms=%d rows=%d", latency_ms, len(rows))
     
-    # Log sample keys for debugging
+    # Runtime log: endpoint, symbol, http status, quote_date (N/A for ivrank), field presence
     if rows:
-        sample_keys = sorted(rows[0].keys())
+        first_row = rows[0]
+        field_presence = {
+            "price": False,
+            "volume": False,
+            "iv_rank": (first_row.get("ivRank1m") is not None or first_row.get("ivPct1m") is not None),
+            "bid": False,
+            "ask": False,
+            "open_interest": False,
+        }
+        logger.info(
+            "[ORATS_RESP] endpoint=%s symbol=%s http_status=%s quote_date=n/a fields=%s",
+            ORATS_IVRANK_PATH, ",".join(tickers[:5]) + ("..." if len(tickers) > 5 else ""),
+            200, field_presence,
+        )
+        sample_keys = sorted(first_row.keys())
         logger.debug("[ORATS_IVRANK_KEYS] Sample row keys: %s", sample_keys)
     
     results: Dict[str, IVRankData] = {}

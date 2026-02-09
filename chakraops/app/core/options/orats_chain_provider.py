@@ -149,7 +149,7 @@ class OratsChainProvider:
         
         Fetches strikes and extracts unique expirations.
         """
-        from app.core.orats.orats_client import get_orats_live_strikes, OratsUnavailableError
+        from app.core.data.orats_client import get_orats_live_strikes, OratsUnavailableError
         
         self._rate_limiter.acquire()
         
@@ -206,7 +206,7 @@ class OratsChainProvider:
                 logger.debug("[ORATS_CHAIN] Cache hit for %s %s", symbol, expiration)
                 return cached
         
-        from app.core.orats.orats_client import get_orats_live_strikes, get_orats_live_summaries, OratsUnavailableError
+        from app.core.data.orats_client import get_orats_live_strikes, get_orats_live_summaries, OratsUnavailableError
         
         self._rate_limiter.acquire()
         

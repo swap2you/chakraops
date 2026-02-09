@@ -17,6 +17,7 @@ from app.core.symbols.instrument_type import (
 from app.core.symbols.data_dependencies import (
     compute_required_missing,
     _required_fields_for_symbol,
+    dependency_status,
 )
 from app.core.symbols.derived_fields import (
     derive_equity_fields,
@@ -143,6 +144,35 @@ def test_equity_missing_bid_fails_required() -> None:
         assert "bid" in missing
 
 
+def test_equity_missing_bid_ask_should_fail() -> None:
+    """EQUITY with missing bid and ask must FAIL (required_missing includes both)."""
+    clear_instrument_cache()
+    from unittest.mock import patch
+    sym = {
+        "symbol": "EQUITY_FAIL",
+        "price": 100.0,
+        "volume": 1_000_000,
+        "iv_rank": 50.0,
+        "quote_date": "2025-02-01",
+        "bid": None,
+        "ask": None,
+    }
+    with patch("app.core.symbols.instrument_type.classify_instrument", return_value=InstrumentType.EQUITY):
+        missing = compute_required_missing(sym)
+    assert "bid" in missing and "ask" in missing
+    assert dependency_status(missing, [], []) == "FAIL"
+
+
+def test_derivation_promotes_field_when_possible() -> None:
+    """When only one of bid/ask exists, derivation promotes field so it is treated as present."""
+    d = derive_equity_fields(price=100.0, bid=None, ask=103.0)
+    assert d.synthetic_bid == 103.0 and d.synthetic_ask == 103.0
+    assert effective_bid(None, d) == 103.0
+    assert effective_ask(103.0, d) == 103.0
+    # Validator can treat bid as present via effective_bid(None, d)
+    assert "synthetic_bid_ask" in d.sources and d.sources["synthetic_bid_ask"] == "DERIVED"
+
+
 # -----------------------------------------------------------------------------
 # Step 3: Derived field promotion
 # -----------------------------------------------------------------------------
@@ -185,6 +215,18 @@ def test_effective_mid_derived_takes_precedence() -> None:
 # Regression: required fields for symbol uses instrument type
 # -----------------------------------------------------------------------------
 
+def test_regression_required_fields_for_symbol() -> None:
+    """Regression: _required_fields_for_symbol() returns instrument-specific required list."""
+    from unittest.mock import patch
+    clear_instrument_cache()
+    assert _required_fields_for_symbol({"symbol": "SPY"}) == list(
+        get_required_fields_for_instrument(InstrumentType.ETF)
+    )
+    with patch("app.core.symbols.instrument_type.classify_instrument", return_value=InstrumentType.EQUITY):
+        assert "bid" in _required_fields_for_symbol({"symbol": "X"})
+        assert "ask" in _required_fields_for_symbol({"symbol": "X"})
+
+
 def test_required_fields_for_symbol_etf() -> None:
     """_required_fields_for_symbol returns ETF set for SPY."""
     clear_instrument_cache()
@@ -205,3 +247,62 @@ def test_required_fields_for_symbol_equity() -> None:
     sym_etf = {"symbol": "QQQ"}
     req_etf = _required_fields_for_symbol(sym_etf)
     assert "bid" not in req_etf and "ask" not in req_etf
+
+
+# -----------------------------------------------------------------------------
+# Contract validator (single source of truth for snapshot validation)
+# -----------------------------------------------------------------------------
+
+
+def test_contract_validator_returns_canonical_result() -> None:
+    """validate_equity_snapshot returns ContractValidationResult with expected fields."""
+    from app.core.data.orats_client import FullEquitySnapshot
+    from app.core.data.contract_validator import validate_equity_snapshot, ContractValidationResult
+
+    clear_instrument_cache()
+    snapshot = FullEquitySnapshot(
+        symbol="SPY",
+        price=450.0,
+        bid=449.9,
+        ask=450.1,
+        volume=1_000_000,
+        quote_date="2025-01-01",
+        iv_rank=25.0,
+    )
+    r = validate_equity_snapshot("SPY", snapshot)
+    assert isinstance(r, ContractValidationResult)
+    assert r.symbol == "SPY"
+    assert r.instrument_type == InstrumentType.ETF
+    assert r.data_completeness == 1.0
+    assert r.price == 450.0
+    assert r.bid == 449.9
+    assert r.ask == 450.1
+    assert r.volume == 1_000_000
+    assert r.quote_date == "2025-01-01"
+    assert r.iv_rank == 25.0
+    assert r.missing_fields == []
+    assert "price" in r.field_quality
+    assert "quote_time" in r.field_quality or "quote_date" in str(r.data_quality_details)
+
+
+def test_contract_validator_derives_bid_ask_when_missing() -> None:
+    """When only ask is present, validator promotes derived bid/ask."""
+    from app.core.data.orats_client import FullEquitySnapshot
+    from app.core.data.contract_validator import validate_equity_snapshot
+
+    clear_instrument_cache()
+    snapshot = FullEquitySnapshot(
+        symbol="SPY",
+        price=450.0,
+        bid=None,
+        ask=450.1,
+        volume=1_000_000,
+        quote_date="2025-01-01",
+        iv_rank=25.0,
+    )
+    r = validate_equity_snapshot("SPY", snapshot)
+    assert r.instrument_type == InstrumentType.ETF
+    assert r.data_completeness == 1.0
+    assert r.bid == 450.1
+    assert r.ask == 450.1
+    assert "DERIVED" in (r.field_sources.get("bid") or r.field_sources.get("ask") or "")

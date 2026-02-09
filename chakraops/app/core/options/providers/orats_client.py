@@ -11,9 +11,11 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
+from app.core.orats.endpoints import BASE_LIVE
+
 logger = logging.getLogger(__name__)
 
-ORATS_BASE_URL = "https://api.orats.io/datav2/live"
+ORATS_BASE_URL = BASE_LIVE
 DEFAULT_TIMEOUT = 30.0
 MAX_RETRIES_429 = 3
 BACKOFF_BASE_SEC = 2.0

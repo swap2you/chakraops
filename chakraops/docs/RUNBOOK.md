@@ -114,8 +114,10 @@ Details: [data_sufficiency.md](./data_sufficiency.md), [decision_quality.md](./d
 
 ## Quick links
 
+- **Baseline definition and release discipline:** [BASELINE.md](./BASELINE.md)
 - **Scheduling and run lifecycle:** [SCHEDULING_AND_RUNS.md](./SCHEDULING_AND_RUNS.md)
 - **Pipeline stages and reason codes:** [EVALUATION_PIPELINE.md](./EVALUATION_PIPELINE.md)
 - **Alerts and Slack policy:** [ALERTING.md](./ALERTING.md)
 - **Deployment (Railway + Vercel):** [DEPLOYMENT.md](./DEPLOYMENT.md)
 - **Local run (backend + frontend, ORATS):** [RUNBOOK_EXECUTION.md](./RUNBOOK_EXECUTION.md)
+- **Pre-release smoke checklist:** [RUNTIME_SMOKE.md](./RUNTIME_SMOKE.md)

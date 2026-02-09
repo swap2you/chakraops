@@ -125,9 +125,28 @@ def update_position(position_id: str, updates: dict) -> Optional[Position]:
     if target is None:
         return None
 
-    for key in ("status", "closed_at", "notes"):
-        if key in updates:
-            setattr(target, key, updates[key])
+    # Phase 1 keys + Phase 4/5 entry snapshot keys
+    allowed_keys = frozenset({
+        "status", "closed_at", "notes",
+        "band", "risk_flags_at_entry", "portfolio_utilization_pct", "sector_exposure_pct",
+        "thesis_strength", "data_sufficiency", "risk_amount_at_entry",
+        "data_sufficiency_override", "data_sufficiency_override_source",
+    })
+    for key, value in updates.items():
+        if key in allowed_keys and hasattr(target, key):
+            setattr(target, key, value)
+
+    # Phase 5: Log data_sufficiency override distinctly
+    if "data_sufficiency_override" in updates and updates.get("data_sufficiency_override"):
+        try:
+            from app.core.symbols.data_sufficiency import log_data_sufficiency_override
+            log_data_sufficiency_override(
+                position_id, getattr(target, "symbol", ""),
+                updates["data_sufficiency_override"],
+                updates.get("data_sufficiency_override_source") or "MANUAL",
+            )
+        except Exception as e:
+            logger.warning("[POSITIONS] Failed to log data_sufficiency override: %s", e)
 
     _save_all(positions)
     logger.info("[POSITIONS] Updated position %s", position_id)

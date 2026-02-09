@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { PortfolioSummaryCards } from "@/components/PortfolioSummaryCards";
 import { ExposureTable } from "@/components/ExposureTable";
 import { RiskProfileForm } from "@/components/RiskProfileForm";
+import { DecisionQualitySummary } from "@/components/DecisionQualitySummary";
 import { pushSystemNotification } from "@/lib/notifications";
 import type {
   PortfolioSummary,
@@ -40,7 +41,7 @@ export function PortfolioPage() {
   const [positions, setPositions] = useState<TrackedPosition[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"exposure" | "positions" | "risk">("exposure");
+  const [activeTab, setActiveTab] = useState<"exposure" | "positions" | "risk" | "decision-quality">("exposure");
 
   const fetchAll = useCallback(async () => {
     if (mode !== "LIVE") return;
@@ -132,7 +133,7 @@ export function PortfolioPage() {
 
       <section>
         <div className="mb-4 flex gap-2">
-          {(["exposure", "positions", "risk"] as const).map((tab) => (
+          {(["exposure", "positions", "risk", "decision-quality"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -143,7 +144,13 @@ export function PortfolioPage() {
                   : "bg-muted text-muted-foreground hover:bg-muted/80"
               )}
             >
-              {tab === "exposure" ? "Exposure" : tab === "positions" ? "Positions" : "Risk Profile"}
+              {tab === "exposure"
+                ? "Exposure"
+                : tab === "positions"
+                  ? "Positions"
+                  : tab === "risk"
+                    ? "Risk Profile"
+                    : "Decision Quality"}
             </button>
           ))}
         </div>
@@ -221,6 +228,12 @@ export function PortfolioPage() {
               Risk Profile
             </h3>
             <RiskProfileForm />
+          </div>
+        )}
+
+        {activeTab === "decision-quality" && (
+          <div className="rounded-lg border border-border p-6">
+            <DecisionQualitySummary />
           </div>
         )}
       </section>

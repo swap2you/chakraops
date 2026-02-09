@@ -92,6 +92,7 @@ def manual_execute(data: Dict[str, Any]) -> Tuple[Optional[Position], List[str]]
     now = datetime.now(timezone.utc).isoformat()
     position_id = data.get("position_id") or generate_position_id()
 
+    # Phase 4: Optional entry decision snapshot (band, risk_flags, etc.)
     position = Position(
         position_id=position_id,
         account_id=data["account_id"],
@@ -106,6 +107,15 @@ def manual_execute(data: Dict[str, Any]) -> Tuple[Optional[Position], List[str]]
         opened_at=now,
         closed_at=None,
         notes=data.get("notes", ""),
+        band=data.get("band"),
+        risk_flags_at_entry=data.get("risk_flags_at_entry"),
+        portfolio_utilization_pct=data.get("portfolio_utilization_pct"),
+        sector_exposure_pct=data.get("sector_exposure_pct"),
+        thesis_strength=data.get("thesis_strength"),
+        data_sufficiency=data.get("data_sufficiency"),
+        risk_amount_at_entry=data.get("risk_amount_at_entry"),
+        data_sufficiency_override=data.get("data_sufficiency_override"),
+        data_sufficiency_override_source=data.get("data_sufficiency_override_source"),
     )
 
     try:

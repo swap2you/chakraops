@@ -2835,6 +2835,129 @@ async def api_positions_manual_execute(request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.get("/api/positions/tracked/{position_id}")
+def api_positions_tracked_detail(position_id: str) -> Dict[str, Any]:
+    """Get a single tracked position with lifecycle and exit info. Phase 4."""
+    try:
+        from app.core.positions.service import get_position
+        from app.core.lifecycle.persistence import list_recent_lifecycle_entries
+        from app.core.exits.store import load_exit, load_exit_events
+        from app.core.symbols.data_sufficiency import get_data_sufficiency_for_position
+        pos = get_position(position_id)
+        if pos is None:
+            raise HTTPException(status_code=404, detail=f"Position {position_id} not found")
+        d = pos.to_dict()
+        lc = _lifecycle_for_position(position_id, list_recent_lifecycle_entries(limit=200))
+        d["lifecycle_state"] = lc.get("lifecycle_state")
+        d["last_directive"] = lc.get("last_directive")
+        d["last_alert_at"] = lc.get("last_alert_at")
+        exit_rec = load_exit(position_id)
+        d["exit"] = exit_rec.to_dict() if exit_rec else None
+        d["exit_events"] = [e.to_dict() for e in load_exit_events(position_id)]
+        ds = get_data_sufficiency_for_position(
+            pos.symbol,
+            override=getattr(pos, "data_sufficiency_override", None),
+            override_source=getattr(pos, "data_sufficiency_override_source", None),
+        )
+        d["data_sufficiency"] = ds["status"]
+        d["data_sufficiency_missing_fields"] = ds.get("missing_fields", [])
+        d["data_sufficiency_is_override"] = ds.get("is_override", False)
+        return d
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error getting position %s: %s", position_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/positions/{position_id}/exit")
+async def api_positions_log_exit(position_id: str, request: Request) -> Dict[str, Any]:
+    """Log a manual exit for a position. Phase 4: updates position to CLOSED."""
+    try:
+        body = await request.json()
+        from app.core.exits.service import log_exit
+        record, errors = log_exit(position_id, body)
+        if errors:
+            raise HTTPException(status_code=400, detail={"errors": errors})
+        return {"exit": record.to_dict(), "position_id": position_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error logging exit for %s: %s", position_id, e)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ============================================================================
+# DECISION QUALITY (Phase 4)
+# ============================================================================
+
+@app.get("/api/decision-quality/summary")
+def api_decision_quality_summary() -> Dict[str, Any]:
+    """Phase 4: Outcome summary — Win/Scratch/Loss, avg time in trade, capital days."""
+    try:
+        from app.core.decision_quality.analytics import get_outcome_summary
+        return get_outcome_summary()
+    except Exception as e:
+        logger.exception("Error getting decision quality summary: %s", e)
+        return {"status": "ERROR", "error": str(e)}
+
+
+@app.get("/api/decision-quality/strategy-health")
+def api_decision_quality_strategy_health() -> Dict[str, Any]:
+    """Phase 4: Strategy health — CSP/CC/STOCK Win %, Loss %, avg duration, Abort %."""
+    try:
+        from app.core.decision_quality.analytics import get_strategy_health
+        return get_strategy_health()
+    except Exception as e:
+        logger.exception("Error getting strategy health: %s", e)
+        return {"status": "ERROR", "error": str(e)}
+
+
+@app.get("/api/decision-quality/exit-discipline")
+def api_decision_quality_exit_discipline() -> Dict[str, Any]:
+    """Phase 4: Exit discipline — % aligned with lifecycle, manual overrides."""
+    try:
+        from app.core.decision_quality.analytics import get_exit_discipline
+        return get_exit_discipline()
+    except Exception as e:
+        logger.exception("Error getting exit discipline: %s", e)
+        return {"status": "ERROR", "error": str(e)}
+
+
+@app.get("/api/decision-quality/band-outcome")
+def api_decision_quality_band_outcome() -> Dict[str, Any]:
+    """Phase 4: Band × Outcome matrix."""
+    try:
+        from app.core.decision_quality.analytics import get_band_outcome_matrix
+        return get_band_outcome_matrix()
+    except Exception as e:
+        logger.exception("Error getting band outcome matrix: %s", e)
+        return {"status": "ERROR", "error": str(e)}
+
+
+@app.get("/api/symbols/{symbol}/data-sufficiency")
+def api_symbol_data_sufficiency(symbol: str) -> Dict[str, Any]:
+    """Phase 5: Auto-derive data sufficiency from symbol coverage. Returns status (PASS|WARN|FAIL), missing_fields."""
+    try:
+        from app.core.symbols.data_sufficiency import derive_data_sufficiency
+        status, missing = derive_data_sufficiency(symbol)
+        return {"symbol": symbol.strip().upper(), "status": status, "missing_fields": missing}
+    except Exception as e:
+        logger.exception("Error deriving data sufficiency for %s: %s", symbol, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/decision-quality/abort-effectiveness")
+def api_decision_quality_abort_effectiveness() -> Dict[str, Any]:
+    """Phase 4: Abort effectiveness."""
+    try:
+        from app.core.decision_quality.analytics import get_abort_effectiveness
+        return get_abort_effectiveness()
+    except Exception as e:
+        logger.exception("Error getting abort effectiveness: %s", e)
+        return {"status": "ERROR", "error": str(e)}
+
+
 # ============================================================================
 # SLACK NOTIFICATION ENDPOINT
 # ============================================================================

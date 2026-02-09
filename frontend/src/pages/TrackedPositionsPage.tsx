@@ -12,6 +12,7 @@ import { pushSystemNotification } from "@/lib/notifications";
 import type { TrackedPosition, TrackedPositionsListResponse } from "@/types/trackedPositions";
 import { cn } from "@/lib/utils";
 import { Loader2, Target } from "lucide-react";
+import { TrackedPositionDetailDrawer } from "@/components/TrackedPositionDetailDrawer";
 
 function formatCurrency(val: number | null | undefined): string {
   if (val == null) return "\u2014";
@@ -55,6 +56,8 @@ export function TrackedPositionsPage() {
   const [positions, setPositions] = useState<TrackedPosition[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [detailPosition, setDetailPosition] = useState<TrackedPosition | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const fetchPositions = useCallback(async () => {
     if (mode !== "LIVE") return;
@@ -152,7 +155,11 @@ export function TrackedPositionsPage() {
                 {positions.map((p) => (
                   <tr
                     key={p.position_id}
-                    className="border-b border-border transition-colors hover:bg-muted/50"
+                    className="border-b border-border transition-colors hover:bg-muted/50 cursor-pointer"
+                    onClick={() => {
+                      setDetailPosition(p);
+                      setDrawerOpen(true);
+                    }}
                   >
                     <td className="p-3 font-medium">{p.symbol}</td>
                     <td className="p-3">
@@ -214,6 +221,20 @@ export function TrackedPositionsPage() {
           {positions.length} total
         </p>
       )}
+
+      <TrackedPositionDetailDrawer
+        position={detailPosition}
+        open={drawerOpen}
+        onClose={() => {
+          setDrawerOpen(false);
+          setDetailPosition(null);
+        }}
+        onExitLogged={() => {
+          fetchPositions();
+          setDrawerOpen(false);
+          setDetailPosition(null);
+        }}
+      />
     </div>
   );
 }

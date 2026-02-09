@@ -149,4 +149,24 @@ export const ENDPOINTS = {
   trackedPositions: `${BASE}/api/positions/tracked`,
   /** Manual execute (create tracked position) */
   manualExecute: `${BASE}/api/positions/manual-execute`,
+  /** Phase 4: Single position detail (includes exit if any) */
+  positionDetail: (positionId: string) => `${BASE}/api/positions/tracked/${encodeURIComponent(positionId)}`,
+  /** Phase 5: Auto-derive data sufficiency for symbol */
+  symbolDataSufficiency: (symbol: string) => `${BASE}/api/symbols/${encodeURIComponent(symbol)}/data-sufficiency`,
+  /** Phase 4: Log exit for position (POST) */
+  positionLogExit: (positionId: string) => `${BASE}/api/positions/${encodeURIComponent(positionId)}/exit`,
+
+  // ============================================================================
+  // PHASE 4: DECISION QUALITY (POST-TRADE INTELLIGENCE)
+  // ============================================================================
+  /** Outcome summary: Win/Scratch/Loss, avg time in trade, capital days */
+  decisionQualitySummary: `${BASE}/api/decision-quality/summary`,
+  /** Strategy health: CSP/CC/STOCK Win %, Loss %, avg duration, Abort % */
+  decisionQualityStrategyHealth: `${BASE}/api/decision-quality/strategy-health`,
+  /** Exit discipline: % aligned with lifecycle, manual overrides */
+  decisionQualityExitDiscipline: `${BASE}/api/decision-quality/exit-discipline`,
+  /** Band × Outcome matrix */
+  decisionQualityBandOutcome: `${BASE}/api/decision-quality/band-outcome`,
+  /** Abort effectiveness */
+  decisionQualityAbortEffectiveness: `${BASE}/api/decision-quality/abort-effectiveness`,
 } as const;

@@ -52,13 +52,25 @@ class Position:
     opened_at: str = ""
     closed_at: Optional[str] = None
     notes: str = ""
+    # Phase 4: Entry decision snapshot (optional, attached to position)
+    band: Optional[str] = None  # A | B | C | D
+    risk_flags_at_entry: Optional[List[str]] = None
+    portfolio_utilization_pct: Optional[float] = None
+    sector_exposure_pct: Optional[float] = None
+    thesis_strength: Optional[int] = None  # 1-5
+    data_sufficiency: Optional[str] = None  # PASS | WARN | FAIL
+    # Phase 5: Explicit risk unit (1R in dollars). Required for return_on_risk; if missing, R = UNKNOWN.
+    risk_amount_at_entry: Optional[float] = None
+    # Phase 5: Manual override for data_sufficiency; logged distinctly from auto-derived
+    data_sufficiency_override: Optional[str] = None  # PASS | WARN | FAIL
+    data_sufficiency_override_source: Optional[str] = None  # "MANUAL" when user overrides
 
     def __post_init__(self) -> None:
         if not self.opened_at:
             self.opened_at = datetime.now(timezone.utc).isoformat()
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d: Dict[str, Any] = {
             "position_id": self.position_id,
             "account_id": self.account_id,
             "symbol": self.symbol,
@@ -73,6 +85,14 @@ class Position:
             "closed_at": self.closed_at,
             "notes": self.notes,
         }
+        # Phase 4/5: Entry snapshot (only if present)
+        for key in ("band", "risk_flags_at_entry", "portfolio_utilization_pct",
+                    "sector_exposure_pct", "thesis_strength", "data_sufficiency",
+                    "risk_amount_at_entry", "data_sufficiency_override", "data_sufficiency_override_source"):
+            v = getattr(self, key, None)
+            if v is not None:
+                d[key] = v
+        return d
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "Position":
@@ -90,6 +110,15 @@ class Position:
             opened_at=d.get("opened_at", ""),
             closed_at=d.get("closed_at"),
             notes=d.get("notes", ""),
+            band=d.get("band"),
+            risk_flags_at_entry=d.get("risk_flags_at_entry"),
+            portfolio_utilization_pct=d.get("portfolio_utilization_pct"),
+            sector_exposure_pct=d.get("sector_exposure_pct"),
+            thesis_strength=d.get("thesis_strength"),
+            data_sufficiency=d.get("data_sufficiency"),
+            risk_amount_at_entry=d.get("risk_amount_at_entry"),
+            data_sufficiency_override=d.get("data_sufficiency_override"),
+            data_sufficiency_override_source=d.get("data_sufficiency_override_source"),
         )
 
 

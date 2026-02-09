@@ -301,5 +301,51 @@ class TestDowngradeTracking:
         assert resolution.was_downgraded is False
 
 
+class TestStrategyOutcomeVsDataFailure:
+    """Phase 8C: Strategy outcomes must never appear as data failures."""
+
+    def test_position_blocked_reason_not_data_incomplete(self) -> None:
+        """When BLOCKED by position, reason and reason_code are position-related, not DATA_INCOMPLETE."""
+        resolution = resolve_final_verdict(
+            current_verdict="ELIGIBLE",
+            current_reason="Chain selected",
+            score=85,
+            position_blocked=True,
+            position_reason="POSITION_ALREADY_OPEN",
+            missing_fields=["bid"],  # would be data issue if we reached that branch
+            has_options_chain=True,
+            market_status=MarketStatus.OPEN,
+        )
+        assert resolution.reason_code == "POSITION_BLOCKED"
+        assert not resolution.reason.strip().upper().startswith("DATA_INCOMPLETE")
+        assert "POSITION" in resolution.reason.upper() or "ALREADY" in resolution.reason.upper()
+
+    def test_regime_hold_reason_not_data_incomplete(self) -> None:
+        """When HOLD due to regime, reason_code is REGIME_RISK_OFF, not DATA_INCOMPLETE."""
+        resolution = resolve_final_verdict(
+            current_verdict="ELIGIBLE",
+            current_reason="Chain selected",
+            score=85,
+            missing_fields=[],
+            market_regime="RISK_OFF",
+        )
+        assert resolution.reason_code == "REGIME_RISK_OFF"
+        assert resolution.reason_code != "DATA_INCOMPLETE_FATAL"
+        assert "REGIME" in resolution.reason.upper() or "RISK" in resolution.reason.upper()
+
+    def test_exposure_blocked_reason_not_data_incomplete(self) -> None:
+        """When BLOCKED by exposure, reason_code is EXPOSURE_BLOCKED."""
+        resolution = resolve_final_verdict(
+            current_verdict="ELIGIBLE",
+            current_reason="Chain selected",
+            score=85,
+            exposure_blocked=True,
+            exposure_reason="Max sector exposure",
+            missing_fields=[],
+        )
+        assert resolution.reason_code == "EXPOSURE_BLOCKED"
+        assert not resolution.reason.strip().upper().startswith("DATA_INCOMPLETE")
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

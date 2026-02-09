@@ -9,9 +9,10 @@ import { ENDPOINTS } from "@/data/endpoints";
 
 const POLL_MS = 60_000;
 
+/** Phase 8B: UNKNOWN = no success ever; OK = within window; WARN = stale; DOWN = failed */
 export interface DataHealthState {
   provider: string;
-  status: "OK" | "DEGRADED" | "DOWN" | string;
+  status: "OK" | "DEGRADED" | "DOWN" | "WARN" | "UNKNOWN" | string;
   last_success_at: string | null;
   last_error_at: string | null;
   last_error_reason: string | null;
@@ -41,9 +42,9 @@ export function useApiDataHealth(): DataHealthState {
         setState({
           provider: data?.provider ?? "ORATS",
           status: data?.status ?? "UNKNOWN",
-          last_success_at: data?.checked_at ?? data?.last_success_at ?? null,
-          last_error_at: data?.error ? new Date().toISOString() : (data?.last_error_at ?? null),
-          last_error_reason: data?.error ?? data?.last_error_reason ?? null,
+          last_success_at: data?.last_success_at ?? data?.checked_at ?? null,
+          last_error_at: data?.last_error_at ?? (data?.error ? new Date().toISOString() : null),
+          last_error_reason: data?.last_error_reason ?? data?.error ?? null,
           avg_latency_seconds: typeof data?.avg_latency_seconds === "number" ? data.avg_latency_seconds : null,
           entitlement: data?.entitlement ?? "UNKNOWN",
         });

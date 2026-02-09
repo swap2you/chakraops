@@ -1,0 +1,3407 @@
+{
+  "run_id": "eval_20260209_164230_45734e53",
+  "started_at": "2026-02-09T16:42:30.667446+00:00",
+  "completed_at": "2026-02-09T16:43:30.244616+00:00",
+  "status": "COMPLETED",
+  "duration_seconds": 59.55,
+  "total": 26,
+  "evaluated": 26,
+  "eligible": 17,
+  "shortlisted": 0,
+  "stage1_pass": 0,
+  "stage2_pass": 0,
+  "holds": 0,
+  "blocks": 0,
+  "regime": "NEUTRAL",
+  "risk_posture": "HIGH",
+  "market_phase": null,
+  "source": "manual",
+  "symbols": [
+    {
+      "symbol": "CRM",
+      "source": "ORATS",
+      "price": 194.35,
+      "bid": 194.29,
+      "ask": 194.42,
+      "volume": 196588,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "Stock qualified (score: 41)",
+      "confidence": 0.0,
+      "score": 63,
+      "regime": "NEUTRAL",
+      "risk": "HIGH",
+      "liquidity_ok": false,
+      "liquidity_reason": "",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": false,
+      "options_reason": "Not in top K candidates",
+      "gates": [],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": null,
+      "error": null,
+      "iv_rank": 79.9,
+      "quote_date": "2026-02-09T16:26:49Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02,
+        "band_reason": "Band C: verdict HOLD (score 63)"
+      },
+      "waiver_reason": null,
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 63,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Capital efficient"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band C: verdict HOLD (score 63)",
+      "stage_reached": "STAGE1_ONLY",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "MRVL",
+      "source": "ORATS",
+      "price": 81.59,
+      "bid": 81.57,
+      "ask": 81.61,
+      "volume": 227974,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "Stock qualified (score: 41)",
+      "confidence": 0.0,
+      "score": 63,
+      "regime": "NEUTRAL",
+      "risk": "HIGH",
+      "liquidity_ok": false,
+      "liquidity_reason": "",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": false,
+      "options_reason": "Not in top K candidates",
+      "gates": [],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": null,
+      "error": null,
+      "iv_rank": 79.04,
+      "quote_date": "2026-02-09T16:27:07Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02,
+        "band_reason": "Band C: verdict HOLD (score 63)"
+      },
+      "waiver_reason": null,
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 63,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Capital efficient"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band C: verdict HOLD (score 63)",
+      "stage_reached": "STAGE1_ONLY",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "NKE",
+      "source": "ORATS",
+      "price": 62.59,
+      "bid": 62.58,
+      "ask": 62.61,
+      "volume": 215448,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "Stock qualified (score: 41)",
+      "confidence": 0.0,
+      "score": 63,
+      "regime": "NEUTRAL",
+      "risk": "HIGH",
+      "liquidity_ok": false,
+      "liquidity_reason": "",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": false,
+      "options_reason": "Not in top K candidates",
+      "gates": [],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": null,
+      "error": null,
+      "iv_rank": 72.99,
+      "quote_date": "2026-02-09T16:26:49Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02,
+        "band_reason": "Band C: verdict HOLD (score 63)"
+      },
+      "waiver_reason": null,
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 63,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Capital efficient"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band C: verdict HOLD (score 63)",
+      "stage_reached": "STAGE1_ONLY",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "ORCL",
+      "source": "ORATS",
+      "price": 156.44,
+      "bid": 156.4,
+      "ask": 156.48,
+      "volume": 1623360,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "Stock qualified (score: 41)",
+      "confidence": 0.0,
+      "score": 63,
+      "regime": "NEUTRAL",
+      "risk": "HIGH",
+      "liquidity_ok": false,
+      "liquidity_reason": "",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": false,
+      "options_reason": "Not in top K candidates",
+      "gates": [],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": null,
+      "error": null,
+      "iv_rank": 78.31,
+      "quote_date": "2026-02-09T16:26:54Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02,
+        "band_reason": "Band C: verdict HOLD (score 63)"
+      },
+      "waiver_reason": null,
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 63,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Capital efficient"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band C: verdict HOLD (score 63)",
+      "stage_reached": "STAGE1_ONLY",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "TSM",
+      "source": "ORATS",
+      "price": 355.39,
+      "bid": 355.36,
+      "ask": 355.43,
+      "volume": 409984,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "Stock qualified (score: 41)",
+      "confidence": 0.0,
+      "score": 63,
+      "regime": "NEUTRAL",
+      "risk": "HIGH",
+      "liquidity_ok": false,
+      "liquidity_reason": "",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": false,
+      "options_reason": "Not in top K candidates",
+      "gates": [],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": null,
+      "error": null,
+      "iv_rank": 92.56,
+      "quote_date": "2026-02-09T16:27:06Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02,
+        "band_reason": "Band C: verdict HOLD (score 63)"
+      },
+      "waiver_reason": null,
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 63,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Capital efficient"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band C: verdict HOLD (score 63)",
+      "stage_reached": "STAGE1_ONLY",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "WMT",
+      "source": "ORATS",
+      "price": 129.68,
+      "bid": 129.66,
+      "ask": 129.7,
+      "volume": 281032,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "Stock qualified (score: 41)",
+      "confidence": 0.0,
+      "score": 63,
+      "regime": "NEUTRAL",
+      "risk": "HIGH",
+      "liquidity_ok": false,
+      "liquidity_reason": "",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": false,
+      "options_reason": "Not in top K candidates",
+      "gates": [],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": null,
+      "error": null,
+      "iv_rank": 87.34,
+      "quote_date": "2026-02-09T16:26:54Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02,
+        "band_reason": "Band C: verdict HOLD (score 63)"
+      },
+      "waiver_reason": null,
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 63,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Capital efficient"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band C: verdict HOLD (score 63)",
+      "stage_reached": "STAGE1_ONLY",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "AAPL",
+      "source": "ORATS",
+      "price": 273.36,
+      "bid": 273.31,
+      "ask": 273.4,
+      "volume": 709134,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.31, DTE=40, OI=3376, bid=$4.85, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.31, DTE=40, OI=3376, bid=$4.85, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.31, DTE=40, OI=3376, bid=$4.85, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:42:42.427974+00:00",
+      "error": null,
+      "iv_rank": 38.64,
+      "quote_date": "2026-02-09T16:26:50Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 100,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 89,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "COST",
+      "source": "ORATS",
+      "price": 1001.08,
+      "bid": 1000.49,
+      "ask": 1001.67,
+      "volume": 21601,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.40, DTE=26, OI=70, bid=$19.30, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.40, DTE=26, OI=70, bid=$19.30, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.40, DTE=26, OI=70, bid=$19.30, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:42:42.428858+00:00",
+      "error": null,
+      "iv_rank": 59.59,
+      "quote_date": "2026-02-09T16:26:51Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 40,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 90,
+        "composite_score": 75,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [
+          "High underlying price $1001 > $400"
+        ],
+        "top_penalty": "High underlying price ($1001)"
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": "High underlying price ($1001)"
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "AMZN",
+      "source": "ORATS",
+      "price": 209.72,
+      "bid": 209.69,
+      "ask": 209.74,
+      "volume": 1990550,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.30, DTE=40, OI=41758, bid=$4.55, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.30, DTE=40, OI=41758, bid=$4.55, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.30, DTE=40, OI=41758, bid=$4.55, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:42:42.429660+00:00",
+      "error": null,
+      "iv_rank": 32.13,
+      "quote_date": "2026-02-09T16:26:56Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 100,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 89,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "AVGO",
+      "source": "ORATS",
+      "price": 345.54,
+      "bid": 345.39,
+      "ask": 345.69,
+      "volume": 502031,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.36, DTE=40, OI=6182, bid=$18.35, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.36, DTE=40, OI=6182, bid=$18.35, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.36, DTE=40, OI=6182, bid=$18.35, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:42:42.430073+00:00",
+      "error": null,
+      "iv_rank": 63.99,
+      "quote_date": "2026-02-09T16:26:55Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 100,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 89,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "COIN",
+      "source": "ORATS",
+      "price": 165.28,
+      "bid": 165.26,
+      "ask": 165.3,
+      "volume": 337839,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.34, DTE=40, OI=785, bid=$10.70, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.34, DTE=40, OI=785, bid=$10.70, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.34, DTE=40, OI=785, bid=$10.70, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:42:42.430640+00:00",
+      "error": null,
+      "iv_rank": 52.38,
+      "quote_date": "2026-02-09T16:26:51Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 80,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 85,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "CRWD",
+      "source": "ORATS",
+      "price": 402.38,
+      "bid": 402.12,
+      "ask": 402.63,
+      "volume": 67123,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.34, DTE=40, OI=625, bid=$18.65, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.34, DTE=40, OI=625, bid=$18.65, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.34, DTE=40, OI=625, bid=$18.65, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:42:52.784921+00:00",
+      "error": null,
+      "iv_rank": 65.01,
+      "quote_date": "2026-02-09T16:26:50Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 80,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 90,
+        "composite_score": 83,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [
+          "High underlying price $402 > $400"
+        ],
+        "top_penalty": "High underlying price ($402)"
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": "High underlying price ($402)"
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "GOOGL",
+      "source": "ORATS",
+      "price": 325.63,
+      "bid": 325.58,
+      "ask": 325.67,
+      "volume": 598738,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.34, DTE=40, OI=2811, bid=$8.15, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.34, DTE=40, OI=2811, bid=$8.15, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.34, DTE=40, OI=2811, bid=$8.15, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:42:53.577364+00:00",
+      "error": null,
+      "iv_rank": 51.53,
+      "quote_date": "2026-02-09T16:26:55Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 100,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 89,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "HD",
+      "source": "ORATS",
+      "price": 378.53,
+      "bid": 378.46,
+      "ask": 378.6,
+      "volume": 29907,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.39, DTE=40, OI=1356, bid=$10.15, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.39, DTE=40, OI=1356, bid=$10.15, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.39, DTE=40, OI=1356, bid=$10.15, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:42:53.967893+00:00",
+      "error": null,
+      "iv_rank": 67.41,
+      "quote_date": "2026-02-09T16:26:55Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 60,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 81,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "JPM",
+      "source": "ORATS",
+      "price": 324.49,
+      "bid": 324.42,
+      "ask": 324.56,
+      "volume": 152853,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.32, DTE=40, OI=1888, bid=$5.80, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.32, DTE=40, OI=1888, bid=$5.80, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.32, DTE=40, OI=1888, bid=$5.80, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:42:54.267571+00:00",
+      "error": null,
+      "iv_rank": 64.7,
+      "quote_date": "2026-02-09T16:27:05Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 80,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 85,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "META",
+      "source": "ORATS",
+      "price": 671.2,
+      "bid": 671.05,
+      "ask": 671.35,
+      "volume": 255961,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.40, DTE=40, OI=2981, bid=$21.10, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.40, DTE=40, OI=2981, bid=$21.10, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.40, DTE=40, OI=2981, bid=$21.10, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:42:54.402991+00:00",
+      "error": null,
+      "iv_rank": 35.45,
+      "quote_date": "2026-02-09T16:27:07Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 100,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 90,
+        "composite_score": 87,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [
+          "High underlying price $671 > $400"
+        ],
+        "top_penalty": "High underlying price ($671)"
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": "High underlying price ($671)"
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "MSFT",
+      "source": "ORATS",
+      "price": 411.72,
+      "bid": 411.68,
+      "ask": 411.75,
+      "volume": 765230,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.33, DTE=26, OI=1738, bid=$6.70, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.33, DTE=26, OI=1738, bid=$6.70, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.33, DTE=26, OI=1738, bid=$6.70, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:43:02.265572+00:00",
+      "error": null,
+      "iv_rank": 63.11,
+      "quote_date": "2026-02-09T16:27:07Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 100,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 90,
+        "composite_score": 87,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [
+          "High underlying price $412 > $400"
+        ],
+        "top_penalty": "High underlying price ($412)"
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": "High underlying price ($412)"
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "MU",
+      "source": "ORATS",
+      "price": 384.64,
+      "bid": 384.29,
+      "ask": 385.0,
+      "volume": 1182680,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.34, DTE=40, OI=2293, bid=$24.30, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.34, DTE=40, OI=2293, bid=$24.30, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.34, DTE=40, OI=2293, bid=$24.30, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:43:03.618737+00:00",
+      "error": null,
+      "iv_rank": 62.55,
+      "quote_date": "2026-02-09T16:27:04Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 100,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 89,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "NVDA",
+      "source": "ORATS",
+      "price": 191.76,
+      "bid": 191.75,
+      "ask": 191.78,
+      "volume": 5924650,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "POSITION_ALREADY_OPEN",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.28, DTE=26, OI=5942, bid=$4.70, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.28, DTE=26, OI=5942, bid=$4.70, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:43:03.760273+00:00",
+      "error": null,
+      "iv_rank": 54.97,
+      "quote_date": "2026-02-09T16:27:00Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": true,
+      "position_reason": "POSITION_ALREADY_OPEN",
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02,
+        "band_reason": "Band C: verdict HOLD (score 65)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 100,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 79,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band C: verdict HOLD (score 65)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "SNOW",
+      "source": "ORATS",
+      "price": 174.66,
+      "bid": 174.51,
+      "ask": 174.8,
+      "volume": 133671,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.35, DTE=40, OI=1067, bid=$10.60, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.35, DTE=40, OI=1067, bid=$10.60, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.35, DTE=40, OI=1067, bid=$10.60, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:43:10.675282+00:00",
+      "error": null,
+      "iv_rank": 67.81,
+      "quote_date": "2026-02-09T16:26:49Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 100,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 89,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "QQQ",
+      "source": "ORATS",
+      "price": 614.47,
+      "bid": 614.46,
+      "ask": 614.48,
+      "volume": 1493750,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE: missing open_interest, bid, ask",
+      "confidence": 0.48750000000000004,
+      "score": 53,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": false,
+      "liquidity_reason": "DATA_INCOMPLETE: missing open_interest, bid, ask",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "FAIL",
+          "reason": "DATA_INCOMPLETE: missing open_interest, bid, ask"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:43:04.002518+00:00",
+      "error": null,
+      "iv_rank": 43.74,
+      "quote_date": "2026-02-09T16:26:51Z",
+      "data_completeness": 0.5,
+      "missing_fields": [
+        "avg_volume",
+        "open_interest",
+        "bid",
+        "ask"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02,
+        "band_reason": "Band C: verdict HOLD (score 53)"
+      },
+      "waiver_reason": null,
+      "score_breakdown": {
+        "data_quality_score": 50,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 90,
+        "composite_score": 53,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [
+          "High underlying price $614 > $400"
+        ],
+        "top_penalty": "High underlying price ($614)"
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL"
+        ],
+        "penalty": "High underlying price ($614)"
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band C: verdict HOLD (score 53)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "DIS",
+      "source": "ORATS",
+      "price": 107.61,
+      "bid": 107.59,
+      "ask": 107.63,
+      "volume": 87620,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.35, DTE=40, OI=5294, bid=$2.14, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "LOW",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.35, DTE=40, OI=5294, bid=$2.14, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 54)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.35, DTE=40, OI=5294, bid=$2.14, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:43:13.871219+00:00",
+      "error": null,
+      "iv_rank": 6.91,
+      "quote_date": "2026-02-09T16:26:51Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 60,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 81,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "TSLA",
+      "source": "ORATS",
+      "price": 418.03,
+      "bid": 418.02,
+      "ask": 418.05,
+      "volume": 1543070,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.40, DTE=26, OI=890, bid=$13.75, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.40, DTE=26, OI=890, bid=$13.75, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.40, DTE=26, OI=890, bid=$13.75, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:43:13.370149+00:00",
+      "error": null,
+      "iv_rank": 55.15,
+      "quote_date": "2026-02-09T16:27:00Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 80,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 90,
+        "composite_score": 83,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [
+          "High underlying price $418 > $400"
+        ],
+        "top_penalty": "High underlying price ($418)"
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": "High underlying price ($418)"
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "SPY",
+      "source": "ORATS",
+      "price": 694.49,
+      "bid": 694.48,
+      "ask": 694.49,
+      "volume": 1604560,
+      "avg_volume": null,
+      "verdict": "HOLD",
+      "primary_reason": "DATA_INCOMPLETE: missing open_interest, bid, ask",
+      "confidence": 0.48750000000000004,
+      "score": 53,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": false,
+      "liquidity_reason": "DATA_INCOMPLETE: missing open_interest, bid, ask",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "FAIL",
+          "reason": "DATA_INCOMPLETE: missing open_interest, bid, ask"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:43:12.204403+00:00",
+      "error": null,
+      "iv_rank": 41.71,
+      "quote_date": "2026-02-09T16:27:06Z",
+      "data_completeness": 0.5,
+      "missing_fields": [
+        "avg_volume",
+        "open_interest",
+        "bid",
+        "ask"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "C",
+        "suggested_capital_pct": 0.02,
+        "band_reason": "Band C: verdict HOLD (score 53)"
+      },
+      "waiver_reason": null,
+      "score_breakdown": {
+        "data_quality_score": 50,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 90,
+        "composite_score": 53,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [
+          "High underlying price $694 > $400"
+        ],
+        "top_penalty": "High underlying price ($694)"
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL"
+        ],
+        "penalty": "High underlying price ($694)"
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band C: verdict HOLD (score 53)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "ABNB",
+      "source": "ORATS",
+      "price": 120.84,
+      "bid": 120.77,
+      "ask": 120.91,
+      "volume": 48534,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.34, DTE=40, OI=2498, bid=$4.50, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "HIGH",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.34, DTE=40, OI=2498, bid=$4.50, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 41)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.34, DTE=40, OI=2498, bid=$4.50, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:43:19.581088+00:00",
+      "error": null,
+      "iv_rank": 85.58,
+      "quote_date": "2026-02-09T16:26:51Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 100,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 89,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "AMD",
+      "source": "ORATS",
+      "price": 215.45,
+      "bid": 215.4,
+      "ask": 215.5,
+      "volume": 1011120,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.26, DTE=40, OI=12333, bid=$6.70, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "HIGH",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.26, DTE=40, OI=12333, bid=$6.70, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 41)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.26, DTE=40, OI=12333, bid=$6.70, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:43:21.801335+00:00",
+      "error": null,
+      "iv_rank": 73.16,
+      "quote_date": "2026-02-09T16:26:51Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 100,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 89,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    }
+  ],
+  "top_candidates": [
+    {
+      "symbol": "AAPL",
+      "source": "ORATS",
+      "price": 273.36,
+      "bid": 273.31,
+      "ask": 273.4,
+      "volume": 709134,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.31, DTE=40, OI=3376, bid=$4.85, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.31, DTE=40, OI=3376, bid=$4.85, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.31, DTE=40, OI=3376, bid=$4.85, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:42:42.427974+00:00",
+      "error": null,
+      "iv_rank": 38.64,
+      "quote_date": "2026-02-09T16:26:50Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 100,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 89,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "COST",
+      "source": "ORATS",
+      "price": 1001.08,
+      "bid": 1000.49,
+      "ask": 1001.67,
+      "volume": 21601,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.40, DTE=26, OI=70, bid=$19.30, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.40, DTE=26, OI=70, bid=$19.30, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.40, DTE=26, OI=70, bid=$19.30, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:42:42.428858+00:00",
+      "error": null,
+      "iv_rank": 59.59,
+      "quote_date": "2026-02-09T16:26:51Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 40,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 90,
+        "composite_score": 75,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [
+          "High underlying price $1001 > $400"
+        ],
+        "top_penalty": "High underlying price ($1001)"
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": "High underlying price ($1001)"
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "AMZN",
+      "source": "ORATS",
+      "price": 209.72,
+      "bid": 209.69,
+      "ask": 209.74,
+      "volume": 1990550,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.30, DTE=40, OI=41758, bid=$4.55, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.30, DTE=40, OI=41758, bid=$4.55, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.30, DTE=40, OI=41758, bid=$4.55, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:42:42.429660+00:00",
+      "error": null,
+      "iv_rank": 32.13,
+      "quote_date": "2026-02-09T16:26:56Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 100,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 89,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "AVGO",
+      "source": "ORATS",
+      "price": 345.54,
+      "bid": 345.39,
+      "ask": 345.69,
+      "volume": 502031,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.36, DTE=40, OI=6182, bid=$18.35, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.36, DTE=40, OI=6182, bid=$18.35, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.36, DTE=40, OI=6182, bid=$18.35, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:42:42.430073+00:00",
+      "error": null,
+      "iv_rank": 63.99,
+      "quote_date": "2026-02-09T16:26:55Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 100,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 89,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "COIN",
+      "source": "ORATS",
+      "price": 165.28,
+      "bid": 165.26,
+      "ask": 165.3,
+      "volume": 337839,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.34, DTE=40, OI=785, bid=$10.70, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.34, DTE=40, OI=785, bid=$10.70, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.34, DTE=40, OI=785, bid=$10.70, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:42:42.430640+00:00",
+      "error": null,
+      "iv_rank": 52.38,
+      "quote_date": "2026-02-09T16:26:51Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 80,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 85,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "CRWD",
+      "source": "ORATS",
+      "price": 402.38,
+      "bid": 402.12,
+      "ask": 402.63,
+      "volume": 67123,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.34, DTE=40, OI=625, bid=$18.65, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.34, DTE=40, OI=625, bid=$18.65, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.34, DTE=40, OI=625, bid=$18.65, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:42:52.784921+00:00",
+      "error": null,
+      "iv_rank": 65.01,
+      "quote_date": "2026-02-09T16:26:50Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 80,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 90,
+        "composite_score": 83,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [
+          "High underlying price $402 > $400"
+        ],
+        "top_penalty": "High underlying price ($402)"
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": "High underlying price ($402)"
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "GOOGL",
+      "source": "ORATS",
+      "price": 325.63,
+      "bid": 325.58,
+      "ask": 325.67,
+      "volume": 598738,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.34, DTE=40, OI=2811, bid=$8.15, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.34, DTE=40, OI=2811, bid=$8.15, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.34, DTE=40, OI=2811, bid=$8.15, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:42:53.577364+00:00",
+      "error": null,
+      "iv_rank": 51.53,
+      "quote_date": "2026-02-09T16:26:55Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 100,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 89,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "HD",
+      "source": "ORATS",
+      "price": 378.53,
+      "bid": 378.46,
+      "ask": 378.6,
+      "volume": 29907,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.39, DTE=40, OI=1356, bid=$10.15, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.39, DTE=40, OI=1356, bid=$10.15, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.39, DTE=40, OI=1356, bid=$10.15, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:42:53.967893+00:00",
+      "error": null,
+      "iv_rank": 67.41,
+      "quote_date": "2026-02-09T16:26:55Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 60,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 81,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "JPM",
+      "source": "ORATS",
+      "price": 324.49,
+      "bid": 324.42,
+      "ask": 324.56,
+      "volume": 152853,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.32, DTE=40, OI=1888, bid=$5.80, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.32, DTE=40, OI=1888, bid=$5.80, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.32, DTE=40, OI=1888, bid=$5.80, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:42:54.267571+00:00",
+      "error": null,
+      "iv_rank": 64.7,
+      "quote_date": "2026-02-09T16:27:05Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 80,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 85,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": null
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    },
+    {
+      "symbol": "META",
+      "source": "ORATS",
+      "price": 671.2,
+      "bid": 671.05,
+      "ask": 671.35,
+      "volume": 255961,
+      "avg_volume": null,
+      "verdict": "ELIGIBLE",
+      "primary_reason": "Options liquidity confirmed (DERIVED_FROM_OPRA): delta=-0.40, DTE=40, OI=2981, bid=$21.10, (enhanced)",
+      "confidence": 0.7791666666666668,
+      "score": 65,
+      "regime": "NEUTRAL",
+      "risk": "MODERATE",
+      "liquidity_ok": true,
+      "liquidity_reason": "delta=-0.40, DTE=40, OI=2981, bid=$21.10, (enhanced)",
+      "earnings_blocked": false,
+      "earnings_days": null,
+      "options_available": true,
+      "options_reason": "3 expirations evaluated",
+      "gates": [
+        {
+          "name": "Stock Quality (Stage 1)",
+          "status": "PASS",
+          "reason": "Stock qualified (score: 58)"
+        },
+        {
+          "name": "Options Liquidity (Stage 2)",
+          "status": "PASS",
+          "reason": "delta=-0.40, DTE=40, OI=2981, bid=$21.10, (enhanced)"
+        }
+      ],
+      "blockers": [],
+      "candidate_trades": [],
+      "fetched_at": "2026-02-09T16:42:54.402991+00:00",
+      "error": null,
+      "iv_rank": 35.45,
+      "quote_date": "2026-02-09T16:27:07Z",
+      "data_completeness": 0.8333333333333334,
+      "missing_fields": [
+        "avg_volume"
+      ],
+      "data_quality_details": {
+        "price": "VALID",
+        "bid": "VALID",
+        "ask": "VALID",
+        "volume": "VALID",
+        "avg_volume": "MISSING",
+        "iv_rank": "VALID"
+      },
+      "position_open": false,
+      "position_reason": null,
+      "capital_hint": {
+        "band": "B",
+        "suggested_capital_pct": 0.03,
+        "band_reason": "Band B: regime NEUTRAL (not RISK_ON)"
+      },
+      "waiver_reason": "DERIVED_FROM_OPRA",
+      "score_breakdown": {
+        "data_quality_score": 83,
+        "regime_score": 65,
+        "options_liquidity_score": 100,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 90,
+        "composite_score": 87,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [
+          "High underlying price $671 > $400"
+        ],
+        "top_penalty": "High underlying price ($671)"
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "Acceptable data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": "High underlying price ($671)"
+      },
+      "csp_notional": null,
+      "notional_pct": null,
+      "band_reason": "Band B: regime NEUTRAL (not RISK_ON)",
+      "stage_reached": "STAGE2_CHAIN",
+      "selected_contract": null,
+      "selected_expiration": null
+    }
+  ],
+  "top_holds": [],
+  "alerts": [
+    {
+      "id": "CRM_1770655410_liquidity",
+      "type": "LIQUIDITY_WARN",
+      "symbol": "CRM",
+      "message": "CRM has low liquidity - ",
+      "severity": "WARN",
+      "created_at": "2026-02-09T16:43:30.244138+00:00",
+      "meta": {
+        "liquidity_reason": ""
+      }
+    },
+    {
+      "id": "MRVL_1770655410_liquidity",
+      "type": "LIQUIDITY_WARN",
+      "symbol": "MRVL",
+      "message": "MRVL has low liquidity - ",
+      "severity": "WARN",
+      "created_at": "2026-02-09T16:43:30.244184+00:00",
+      "meta": {
+        "liquidity_reason": ""
+      }
+    },
+    {
+      "id": "NKE_1770655410_liquidity",
+      "type": "LIQUIDITY_WARN",
+      "symbol": "NKE",
+      "message": "NKE has low liquidity - ",
+      "severity": "WARN",
+      "created_at": "2026-02-09T16:43:30.244211+00:00",
+      "meta": {
+        "liquidity_reason": ""
+      }
+    },
+    {
+      "id": "ORCL_1770655410_liquidity",
+      "type": "LIQUIDITY_WARN",
+      "symbol": "ORCL",
+      "message": "ORCL has low liquidity - ",
+      "severity": "WARN",
+      "created_at": "2026-02-09T16:43:30.244229+00:00",
+      "meta": {
+        "liquidity_reason": ""
+      }
+    },
+    {
+      "id": "TSM_1770655410_liquidity",
+      "type": "LIQUIDITY_WARN",
+      "symbol": "TSM",
+      "message": "TSM has low liquidity - ",
+      "severity": "WARN",
+      "created_at": "2026-02-09T16:43:30.244249+00:00",
+      "meta": {
+        "liquidity_reason": ""
+      }
+    },
+    {
+      "id": "WMT_1770655410_liquidity",
+      "type": "LIQUIDITY_WARN",
+      "symbol": "WMT",
+      "message": "WMT has low liquidity - ",
+      "severity": "WARN",
+      "created_at": "2026-02-09T16:43:30.244267+00:00",
+      "meta": {
+        "liquidity_reason": ""
+      }
+    },
+    {
+      "id": "AAPL_1770655410_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "AAPL",
+      "message": "AAPL is eligible for trading (score: 65)",
+      "severity": "INFO",
+      "created_at": "2026-02-09T16:43:30.244284+00:00",
+      "meta": {
+        "score": 65,
+        "price": 273.36
+      }
+    },
+    {
+      "id": "COST_1770655410_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "COST",
+      "message": "COST is eligible for trading (score: 65)",
+      "severity": "INFO",
+      "created_at": "2026-02-09T16:43:30.244301+00:00",
+      "meta": {
+        "score": 65,
+        "price": 1001.08
+      }
+    },
+    {
+      "id": "AMZN_1770655410_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "AMZN",
+      "message": "AMZN is eligible for trading (score: 65)",
+      "severity": "INFO",
+      "created_at": "2026-02-09T16:43:30.244318+00:00",
+      "meta": {
+        "score": 65,
+        "price": 209.72
+      }
+    },
+    {
+      "id": "AVGO_1770655410_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "AVGO",
+      "message": "AVGO is eligible for trading (score: 65)",
+      "severity": "INFO",
+      "created_at": "2026-02-09T16:43:30.244335+00:00",
+      "meta": {
+        "score": 65,
+        "price": 345.54
+      }
+    },
+    {
+      "id": "COIN_1770655410_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "COIN",
+      "message": "COIN is eligible for trading (score: 65)",
+      "severity": "INFO",
+      "created_at": "2026-02-09T16:43:30.244350+00:00",
+      "meta": {
+        "score": 65,
+        "price": 165.28
+      }
+    },
+    {
+      "id": "CRWD_1770655410_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "CRWD",
+      "message": "CRWD is eligible for trading (score: 65)",
+      "severity": "INFO",
+      "created_at": "2026-02-09T16:43:30.244368+00:00",
+      "meta": {
+        "score": 65,
+        "price": 402.38
+      }
+    },
+    {
+      "id": "GOOGL_1770655410_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "GOOGL",
+      "message": "GOOGL is eligible for trading (score: 65)",
+      "severity": "INFO",
+      "created_at": "2026-02-09T16:43:30.244385+00:00",
+      "meta": {
+        "score": 65,
+        "price": 325.63
+      }
+    },
+    {
+      "id": "HD_1770655410_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "HD",
+      "message": "HD is eligible for trading (score: 65)",
+      "severity": "INFO",
+      "created_at": "2026-02-09T16:43:30.244400+00:00",
+      "meta": {
+        "score": 65,
+        "price": 378.53
+      }
+    },
+    {
+      "id": "JPM_1770655410_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "JPM",
+      "message": "JPM is eligible for trading (score: 65)",
+      "severity": "INFO",
+      "created_at": "2026-02-09T16:43:30.244416+00:00",
+      "meta": {
+        "score": 65,
+        "price": 324.49
+      }
+    },
+    {
+      "id": "META_1770655410_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "META",
+      "message": "META is eligible for trading (score: 65)",
+      "severity": "INFO",
+      "created_at": "2026-02-09T16:43:30.244432+00:00",
+      "meta": {
+        "score": 65,
+        "price": 671.2
+      }
+    },
+    {
+      "id": "MSFT_1770655410_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "MSFT",
+      "message": "MSFT is eligible for trading (score: 65)",
+      "severity": "INFO",
+      "created_at": "2026-02-09T16:43:30.244448+00:00",
+      "meta": {
+        "score": 65,
+        "price": 411.72
+      }
+    },
+    {
+      "id": "MU_1770655410_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "MU",
+      "message": "MU is eligible for trading (score: 65)",
+      "severity": "INFO",
+      "created_at": "2026-02-09T16:43:30.244463+00:00",
+      "meta": {
+        "score": 65,
+        "price": 384.64
+      }
+    },
+    {
+      "id": "SNOW_1770655410_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "SNOW",
+      "message": "SNOW is eligible for trading (score: 65)",
+      "severity": "INFO",
+      "created_at": "2026-02-09T16:43:30.244493+00:00",
+      "meta": {
+        "score": 65,
+        "price": 174.66
+      }
+    },
+    {
+      "id": "QQQ_1770655410_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "QQQ",
+      "message": "QQQ - DATA_INCOMPLETE: missing bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-09T16:43:30.244508+00:00",
+      "meta": {
+        "completeness": 0.5,
+        "missing_fields": [
+          "avg_volume",
+          "open_interest",
+          "bid",
+          "ask"
+        ],
+        "missing_liquidity_fields": [
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "QQQ_1770655410_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "QQQ",
+      "message": "QQQ has incomplete data - missing: avg_volume, open_interest",
+      "severity": "INFO",
+      "created_at": "2026-02-09T16:43:30.244508+00:00",
+      "meta": {
+        "completeness": 0.5,
+        "missing_fields": [
+          "avg_volume",
+          "open_interest"
+        ]
+      }
+    },
+    {
+      "id": "DIS_1770655410_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "DIS",
+      "message": "DIS is eligible for trading (score: 65)",
+      "severity": "INFO",
+      "created_at": "2026-02-09T16:43:30.244531+00:00",
+      "meta": {
+        "score": 65,
+        "price": 107.61
+      }
+    },
+    {
+      "id": "TSLA_1770655410_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "TSLA",
+      "message": "TSLA is eligible for trading (score: 65)",
+      "severity": "INFO",
+      "created_at": "2026-02-09T16:43:30.244546+00:00",
+      "meta": {
+        "score": 65,
+        "price": 418.03
+      }
+    },
+    {
+      "id": "SPY_1770655410_incomplete",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SPY",
+      "message": "SPY - DATA_INCOMPLETE: missing bid, ask",
+      "severity": "WARN",
+      "created_at": "2026-02-09T16:43:30.244561+00:00",
+      "meta": {
+        "completeness": 0.5,
+        "missing_fields": [
+          "avg_volume",
+          "open_interest",
+          "bid",
+          "ask"
+        ],
+        "missing_liquidity_fields": [
+          "bid",
+          "ask"
+        ]
+      }
+    },
+    {
+      "id": "SPY_1770655410_incomplete_other",
+      "type": "DATA_INCOMPLETE",
+      "symbol": "SPY",
+      "message": "SPY has incomplete data - missing: avg_volume, open_interest",
+      "severity": "INFO",
+      "created_at": "2026-02-09T16:43:30.244561+00:00",
+      "meta": {
+        "completeness": 0.5,
+        "missing_fields": [
+          "avg_volume",
+          "open_interest"
+        ]
+      }
+    },
+    {
+      "id": "ABNB_1770655410_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "ABNB",
+      "message": "ABNB is eligible for trading (score: 65)",
+      "severity": "INFO",
+      "created_at": "2026-02-09T16:43:30.244581+00:00",
+      "meta": {
+        "score": 65,
+        "price": 120.84
+      }
+    },
+    {
+      "id": "AMD_1770655410_eligible",
+      "type": "ELIGIBLE",
+      "symbol": "AMD",
+      "message": "AMD is eligible for trading (score: 65)",
+      "severity": "INFO",
+      "created_at": "2026-02-09T16:43:30.244597+00:00",
+      "meta": {
+        "score": 65,
+        "price": 215.45
+      }
+    }
+  ],
+  "alerts_count": 27,
+  "errors": [],
+  "error_summary": null,
+  "exposure_summary": {
+    "total_positions": 1,
+    "by_symbol": {
+      "NVDA": {
+        "position_count": 1,
+        "remaining_contracts": 3,
+        "strategies": [
+          "CSP"
+        ]
+      }
+    },
+    "max_concurrent_positions": 5,
+    "max_capital_per_ticker_pct": 0.05,
+    "at_cap": false,
+    "symbols_over_capital_cap": []
+  },
+  "run_version": 1,
+  "checksum": "e7ae96a36dadcc7596eb0ac5851b0f6a561364a5cb1cd80f0354131ab98ad96c",
+  "correlation_id": "eval_20260209_164230_45734e53",
+  "engine": "staged"
+}

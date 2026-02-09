@@ -196,6 +196,11 @@ class ReasonCode:
     COERCION_FAILED = "COERCION_FAILED"
 
 
+# Required fields for MarketSnapshot (signal engine). avg_volume is explicitly EXCLUDED.
+# See ORATS_DATAV2_ENDPOINT_AND_DATA_REFERENCE: avg_volume not provided by any endpoint.
+MARKET_SNAPSHOT_REQUIRED_FIELDS = ("price", "bid", "ask", "volume", "quote_time", "iv_rank")
+
+
 def compute_data_completeness(fields: dict[str, FieldValue]) -> tuple[float, list[str]]:
     """
     Compute data completeness percentage and list missing fields.
@@ -219,6 +224,29 @@ def compute_data_completeness(fields: dict[str, FieldValue]) -> tuple[float, lis
     
     completeness = valid_count / len(fields)
     return completeness, missing_names
+
+
+def compute_data_completeness_required(
+    fields: dict[str, FieldValue],
+    required_keys: tuple[str, ...] = MARKET_SNAPSHOT_REQUIRED_FIELDS,
+) -> tuple[float, list[str]]:
+    """
+    Compute data completeness over REQUIRED fields only.
+    Use this for MarketSnapshot so optional fields (e.g. avg_volume) do not lower completeness.
+    
+    Args:
+        fields: Dict of field_name -> FieldValue (may contain extra optional keys)
+        required_keys: Field names that count toward completeness (default: MARKET_SNAPSHOT_REQUIRED_FIELDS)
+    
+    Returns:
+        Tuple of (completeness_pct, missing_required_field_names)
+    """
+    if not required_keys:
+        return 1.0, []
+    missing = [k for k in required_keys if k not in fields or fields[k].quality != DataQuality.VALID]
+    valid_count = len(required_keys) - len(missing)
+    completeness = valid_count / len(required_keys)
+    return completeness, missing
 
 
 def build_data_incomplete_reason(missing_fields: list[str]) -> str:
@@ -251,5 +279,7 @@ __all__ = [
     "wrap_field_float",
     "wrap_field_int",
     "compute_data_completeness",
+    "compute_data_completeness_required",
+    "MARKET_SNAPSHOT_REQUIRED_FIELDS",
     "build_data_incomplete_reason",
 ]

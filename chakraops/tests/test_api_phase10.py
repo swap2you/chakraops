@@ -188,3 +188,49 @@ def test_post_ops_evaluate_returns_200_with_job_id_or_ack() -> None:
         assert "job_id" in data
     else:
         assert "cooldown_seconds_remaining" in data
+
+
+# =============================================================================
+# Phase 8A: Dashboard opportunities — limit validation (no 422 in normal usage)
+# =============================================================================
+
+
+def test_dashboard_opportunities_valid_limit_returns_200() -> None:
+    """GET /api/dashboard/opportunities?limit=10 returns 200 with opportunities array."""
+    client = _client_fixture()
+    r = client.get("/api/dashboard/opportunities", params={"limit": 10})
+    assert r.status_code == 200
+    data = r.json()
+    assert "opportunities" in data
+    assert isinstance(data["opportunities"], list)
+    assert len(data["opportunities"]) <= 10
+
+
+def test_dashboard_opportunities_limit_over_max_clamped_returns_200() -> None:
+    """GET /api/dashboard/opportunities?limit=100 returns 200 (clamped to 50), not 422."""
+    client = _client_fixture()
+    r = client.get("/api/dashboard/opportunities", params={"limit": 100})
+    assert r.status_code == 200
+    data = r.json()
+    assert "opportunities" in data
+    assert len(data["opportunities"]) <= 50
+
+
+def test_dashboard_opportunities_limit_zero_or_negative_clamped_returns_200() -> None:
+    """GET /api/dashboard/opportunities?limit=0 returns 200 with at most 1 result (clamped to 1)."""
+    client = _client_fixture()
+    r = client.get("/api/dashboard/opportunities", params={"limit": 0})
+    assert r.status_code == 200
+    data = r.json()
+    assert "opportunities" in data
+    assert len(data["opportunities"]) <= 1
+
+
+def test_dashboard_opportunities_no_limit_uses_default_returns_200() -> None:
+    """GET /api/dashboard/opportunities without limit returns 200 (default limit)."""
+    client = _client_fixture()
+    r = client.get("/api/dashboard/opportunities")
+    assert r.status_code == 200
+    data = r.json()
+    assert "opportunities" in data
+    assert "count" in data

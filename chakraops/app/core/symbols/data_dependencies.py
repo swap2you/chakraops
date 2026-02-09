@@ -1,6 +1,7 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""Phase 6: Data dependency enforcement — required/optional/stale from data_dependencies.md."""
+"""Phase 6: Data dependency enforcement — required/optional/stale from data_dependencies.md.
+Phase 8E: Instrument-type-specific required fields (ETF/INDEX: bid, ask, open_interest optional)."""
 
 from __future__ import annotations
 
@@ -12,9 +13,12 @@ from app.core.environment.market_calendar import trading_days_since
 
 logger = logging.getLogger(__name__)
 
-# From data_dependencies.md: required for option strategies (ranking, gating, sizing)
-REQUIRED_EVALUATION_FIELDS = ["price", "iv_rank", "bid", "ask", "volume"]
-OPTIONAL_EVALUATION_FIELDS = ["avg_volume"]
+# Global required set (EQUITY): used when instrument type unknown or for backward compatibility
+REQUIRED_EVALUATION_FIELDS = ["price", "iv_rank", "bid", "ask", "volume", "quote_date"]
+# Phase 8E: ETF/INDEX never require bid, ask, open_interest for DATA_INCOMPLETE
+REQUIRED_EVALUATION_FIELDS_EQUITY = ["price", "iv_rank", "bid", "ask", "volume", "quote_date"]
+REQUIRED_EVALUATION_FIELDS_ETF_INDEX = ["price", "iv_rank", "volume", "quote_date"]
+OPTIONAL_EVALUATION_FIELDS = ["avg_volume"]  # Not available from ORATS; never blocks
 STALENESS_TRADING_DAYS = 1
 
 
@@ -41,10 +45,25 @@ def _data_as_of_from_symbol(sym: Dict[str, Any]) -> Optional[date]:
     return _parse_date_from_value(fetched)
 
 
+def _required_fields_for_symbol(sym: Dict[str, Any]) -> List[str]:
+    """Phase 8E: Required fields depend on instrument type. ETF/INDEX do not require bid, ask, open_interest."""
+    try:
+        from app.core.symbols.instrument_type import classify_instrument, get_required_fields_for_instrument
+        symbol = (sym.get("symbol") or "").strip().upper()
+        if not symbol:
+            return list(REQUIRED_EVALUATION_FIELDS_EQUITY)
+        inst = classify_instrument(symbol)
+        return list(get_required_fields_for_instrument(inst))
+    except Exception as e:
+        logger.debug("[DATA_DEPS] instrument classification failed: %s; using EQUITY rules", e)
+        return list(REQUIRED_EVALUATION_FIELDS_EQUITY)
+
+
 def compute_required_missing(sym: Dict[str, Any]) -> List[str]:
-    """Return list of required fields that are missing. Do not infer."""
+    """Return list of required fields that are missing. Instrument-type-aware (8E): ETF/INDEX do not require bid/ask/OI."""
+    required = _required_fields_for_symbol(sym)
     missing: List[str] = []
-    for f in REQUIRED_EVALUATION_FIELDS:
+    for f in required:
         val = sym.get(f)
         if val is None:
             missing.append(f)

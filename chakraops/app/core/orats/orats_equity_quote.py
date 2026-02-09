@@ -153,29 +153,37 @@ class IVRankData:
 
 @dataclass
 class FullEquitySnapshot:
-    """Combined equity quote + IV rank data."""
+    """
+    MarketSnapshot: combined equity quote + IV rank for the signal engine.
+    Required: price (stockPrice), bid, ask, volume, quote_time (quoteDate), iv_rank.
+    Optional: live-derived only if available. avg_volume explicitly excluded from required
+    (not provided by ORATS per endpoint reference).
+    """
     symbol: str
     
-    # From equity quote
+    # From equity quote (required for completeness)
     price: Optional[float] = None
     bid: Optional[float] = None
     ask: Optional[float] = None
     volume: Optional[int] = None
-    quote_date: Optional[str] = None
+    quote_date: Optional[str] = None  # quoteDate -> quote_time in contract
     
-    # From IV rank
+    # From IV rank (required)
     iv_rank: Optional[float] = None
     
-    # avg_volume: NOT available from ORATS - keep as None
+    # avg_volume: NOT available from ORATS - keep as None; do not add to missing_fields
     avg_volume: Optional[int] = None
     
     # Data source tracking per field
     data_sources: Dict[str, str] = field(default_factory=dict)
     raw_fields_present: List[str] = field(default_factory=list)
     
-    # Missing fields with reasons
+    # Missing REQUIRED fields only (used for completeness / BLOCKED)
     missing_fields: List[str] = field(default_factory=list)
     missing_reasons: Dict[str, str] = field(default_factory=dict)
+    
+    # Optional fields not available from ORATS (do not affect completeness)
+    optional_not_available: Dict[str, str] = field(default_factory=dict)
     
     # Metadata
     fetched_at: Optional[str] = None
@@ -317,11 +325,11 @@ def fetch_equity_quotes_batch(
             tickers_to_fetch.append(ticker_upper)
     
     if not tickers_to_fetch:
-        logger.info("[EQUITY_QUOTE] All %d tickers served from cache", len(tickers))
+        logger.info("[ORATS_CACHE] equity_quotes: all %d tickers from cache (0 live calls)", len(tickers))
         return results
     
     logger.info(
-        "[EQUITY_QUOTE] Fetching %d tickers (%d from cache), batch_size=%d",
+        "[ORATS_CACHE] equity_quotes: %d live calls, %d cache hits, batch_size=%d",
         len(tickers_to_fetch), len(results), BATCH_SIZE
     )
     
@@ -332,7 +340,7 @@ def fetch_equity_quotes_batch(
     for batch in batches:
         batch_key = ",".join(sorted(batch))
         if cache.mark_batch_fetched(batch_key):
-            logger.debug("[EQUITY_QUOTE] Batch already fetched: %s", batch[:3])
+            logger.debug("[ORATS_CACHE] equity_quotes batch already fetched: %s", batch[:3])
             continue
         
         try:
@@ -420,7 +428,7 @@ def _fetch_equity_quotes_single_batch(tickers: List[str]) -> Dict[str, EquityQuo
     
     rows = _extract_rows(raw)
     
-    # Separate underlying rows (no optionSymbol) from option rows
+    # Mixed-row safety: if optionSymbol exists, treat as option row; do not merge into equity
     underlying_rows = [r for r in rows if not r.get("optionSymbol")]
     option_rows = [r for r in rows if r.get("optionSymbol")]
     
@@ -533,6 +541,65 @@ def _fetch_equity_quotes_single_batch(tickers: List[str]) -> Dict[str, EquityQuo
     return results
 
 
+def _parse_strikes_options_response(raw: Any) -> Tuple[List[Dict[str, Any]], int, int]:
+    """
+    Parse /strikes/options response and split underlying vs option rows.
+    Returns (underlying_rows, underlying_count, option_count).
+    Used by unit tests and merge report meta.
+    """
+    rows = _extract_rows(raw)
+    underlying = [r for r in rows if not r.get("optionSymbol")]
+    option = [r for r in rows if r.get("optionSymbol")]
+    return underlying, len(underlying), len(option)
+
+
+def build_merge_report(
+    snapshots: Dict[str, FullEquitySnapshot],
+    requested_tickers: List[str],
+) -> Dict[str, Any]:
+    """
+    Build deterministic JSON report for equity + ivrank merge.
+    Keys: requested_tickers, returned_quotes, returned_ivrank, excluded_by_reason.
+    """
+    requested = [t.upper() for t in requested_tickers]
+    returned_quotes: List[str] = []
+    returned_ivrank: List[str] = []
+    excluded_by_reason: Dict[str, str] = {}
+    for ticker in requested:
+        snap = snapshots.get(ticker)
+        if not snap:
+            excluded_by_reason[ticker] = "missing_snapshot"
+            continue
+        has_quote = (
+            snap.price is not None
+            and snap.bid is not None
+            and snap.ask is not None
+            and snap.volume is not None
+            and snap.quote_date is not None
+        )
+        if has_quote:
+            returned_quotes.append(ticker)
+        if snap.iv_rank is not None:
+            returned_ivrank.append(ticker)
+        reasons: List[str] = []
+        if not has_quote:
+            reasons.append("missing_equity_quote")
+        if snap.iv_rank is None:
+            reasons.append("missing_ivrank")
+        if snap.missing_fields:
+            reasons.append("missing_required:" + ",".join(sorted(snap.missing_fields)))
+        if snap.errors:
+            reasons.append("errors:" + ";".join(snap.errors[:2]))
+        if reasons:
+            excluded_by_reason[ticker] = ";".join(reasons)
+    return {
+        "requested_tickers": requested,
+        "returned_quotes": sorted(returned_quotes),
+        "returned_ivrank": sorted(returned_ivrank),
+        "excluded_by_reason": dict(sorted(excluded_by_reason.items())),
+    }
+
+
 # ============================================================================
 # IV Rank Fetcher
 # ============================================================================
@@ -572,9 +639,10 @@ def fetch_iv_ranks_batch(
             tickers_to_fetch.append(ticker_upper)
     
     if not tickers_to_fetch:
+        logger.info("[ORATS_CACHE] ivrank: all %d tickers from cache (0 live calls)", len(tickers))
         return results
     
-    logger.info("[IVRANK] Fetching %d tickers, batch_size=%d", len(tickers_to_fetch), BATCH_SIZE)
+    logger.info("[ORATS_CACHE] ivrank: %d live calls, %d cache hits, batch_size=%d", len(tickers_to_fetch), len(results), BATCH_SIZE)
     
     # Batch and fetch
     batches = _batch_tickers(tickers_to_fetch, BATCH_SIZE)
@@ -828,9 +896,8 @@ def fetch_full_equity_snapshots(
             snapshot.missing_fields.append("iv_rank")
             snapshot.missing_reasons["iv_rank"] = iv.error if iv and iv.error else "Not in ORATS response"
         
-        # avg_volume is NEVER available from ORATS
-        snapshot.missing_fields.append("avg_volume")
-        snapshot.missing_reasons["avg_volume"] = "Not available from ORATS endpoints"
+        # avg_volume is NOT provided by any ORATS endpoint; exclude from required
+        snapshot.optional_not_available["avg_volume"] = "Not available from ORATS endpoints"
         
         results[ticker_upper] = snapshot
         
@@ -862,4 +929,8 @@ __all__ = [
     "fetch_equity_quotes_batch",
     "fetch_iv_ranks_batch",
     "fetch_full_equity_snapshots",
+    # Merge report
+    "build_merge_report",
+    # Parser (for tests)
+    "_parse_strikes_options_response",
 ]

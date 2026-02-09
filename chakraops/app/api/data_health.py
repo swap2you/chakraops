@@ -1,18 +1,28 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""ORATS data health: status (OK/DEGRADED/DOWN), last_success_at, last_error_at, entitlement. Used by /api/ops/data-health and startup self-check."""
+"""ORATS data health: sticky status (UNKNOWN/OK/WARN/DOWN), last_success_at, persistence. Used by /api/ops/data-health and startup self-check.
+
+Phase 8B semantics:
+- UNKNOWN: no successful ORATS call has ever occurred.
+- OK: last_success_at within evaluation window.
+- WARN: last_success_at beyond evaluation window (stale).
+- DOWN: last attempt failed and no success within window (or never succeeded).
+"""
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# In-memory state (single process). For multi-worker use file or Redis.
-_DATA_STATUS: str = "UNKNOWN"  # OK | DEGRADED | DOWN
+# In-memory state (single process). Persisted to file for stickiness across restarts.
+_DATA_STATUS: str = "UNKNOWN"  # OK | DEGRADED | DOWN (raw from last probe)
 _LAST_SUCCESS_AT: Optional[str] = None  # ISO
 _LAST_ATTEMPT_AT: Optional[str] = None  # ISO — every attempt
 _LAST_ERROR_AT: Optional[str] = None
@@ -21,6 +31,79 @@ _AVG_LATENCY_SECONDS: Optional[float] = None
 _LATENCY_SAMPLES: list = []
 _ENTITLEMENT: str = "UNKNOWN"  # LIVE | DELAYED | UNKNOWN
 _MAX_LATENCY_SAMPLES = 20
+
+# Persistence path (Phase 8B)
+def _data_health_state_path() -> Path:
+    out = Path(__file__).resolve().parents[2] / "out"
+    out.mkdir(parents=True, exist_ok=True)
+    return out / "data_health_state.json"
+
+
+def _evaluation_window_minutes() -> int:
+    try:
+        from app.core.config.eval_config import EVALUATION_QUOTE_WINDOW_MINUTES
+        return EVALUATION_QUOTE_WINDOW_MINUTES
+    except Exception:
+        return 30
+
+
+def _load_persisted_state() -> None:
+    """Load persisted state so status is sticky across restarts."""
+    global _DATA_STATUS, _LAST_SUCCESS_AT, _LAST_ATTEMPT_AT, _LAST_ERROR_AT, _LAST_ERROR_REASON, _AVG_LATENCY_SECONDS, _ENTITLEMENT
+    path = _data_health_state_path()
+    if not path.exists():
+        return
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        _LAST_SUCCESS_AT = data.get("last_success_at")
+        _LAST_ATTEMPT_AT = data.get("last_attempt_at")
+        _LAST_ERROR_AT = data.get("last_error_at")
+        _LAST_ERROR_REASON = data.get("last_error_reason")
+        _AVG_LATENCY_SECONDS = data.get("avg_latency_seconds")
+        _ENTITLEMENT = data.get("entitlement", "UNKNOWN")
+        raw = data.get("status")
+        if raw in ("OK", "DEGRADED", "DOWN"):
+            _DATA_STATUS = raw
+        # else keep UNKNOWN
+    except Exception as e:
+        logger.debug("Failed to load data_health_state: %s", e)
+
+
+def _persist_state() -> None:
+    """Write current state to file."""
+    path = _data_health_state_path()
+    try:
+        data = {
+            "last_success_at": _LAST_SUCCESS_AT,
+            "last_attempt_at": _LAST_ATTEMPT_AT,
+            "last_error_at": _LAST_ERROR_AT,
+            "last_error_reason": _LAST_ERROR_REASON,
+            "avg_latency_seconds": _AVG_LATENCY_SECONDS,
+            "entitlement": _ENTITLEMENT,
+            "status": _DATA_STATUS,
+        }
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=0)
+    except Exception as e:
+        logger.debug("Failed to persist data_health_state: %s", e)
+
+
+def _compute_sticky_status() -> str:
+    """Phase 8B: UNKNOWN only if no success ever; OK if within window; WARN if stale; DOWN if never succeeded or recent failure."""
+    if _LAST_SUCCESS_AT is None and _LAST_ERROR_AT is None:
+        return "UNKNOWN"
+    if _LAST_SUCCESS_AT is None:
+        return "DOWN"
+    try:
+        success_dt = datetime.fromisoformat(_LAST_SUCCESS_AT.replace("Z", "+00:00"))
+        window_min = _evaluation_window_minutes()
+        age_minutes = (datetime.now(timezone.utc) - success_dt).total_seconds() / 60
+        if age_minutes <= window_min:
+            return "OK"
+        return "WARN"
+    except Exception:
+        return "OK" if _LAST_SUCCESS_AT else "UNKNOWN"
 
 
 def _attempt_live_summary() -> None:
@@ -54,13 +137,15 @@ def _attempt_live_summary() -> None:
         _DATA_STATUS = "DOWN"
         _LAST_ERROR_AT = now
         _LAST_ERROR_REASON = str(e)[:500]
+    _persist_state()
 
 
 def _data_health_state() -> Dict[str, Any]:
-    """Current state only (no new attempt)."""
+    """Current state with sticky status (UNKNOWN/OK/WARN/DOWN)."""
+    status = _compute_sticky_status()
     return {
         "provider": "ORATS",
-        "status": _DATA_STATUS,
+        "status": status,
         "last_attempt_at": _LAST_ATTEMPT_AT,
         "last_success_at": _LAST_SUCCESS_AT,
         "last_error_at": _LAST_ERROR_AT,
@@ -68,12 +153,16 @@ def _data_health_state() -> Dict[str, Any]:
         "avg_latency_seconds": round(_AVG_LATENCY_SECONDS, 3) if _AVG_LATENCY_SECONDS is not None else None,
         "entitlement": _ENTITLEMENT,
         "sample_symbol": "SPY",
+        "evaluation_window_minutes": _evaluation_window_minutes(),
     }
 
 
 def get_data_health() -> Dict[str, Any]:
-    """Honest data health: run live attempt (get_live_summary SPY), then return status, last_attempt_at, last_error_reason, sample_symbol."""
-    _attempt_live_summary()
+    """Sticky data health: load persisted state, return status (UNKNOWN/OK/WARN/DOWN). Probe only when UNKNOWN or when caller needs refresh."""
+    _load_persisted_state()
+    status = _compute_sticky_status()
+    if status == "UNKNOWN":
+        _attempt_live_summary()
     return _data_health_state()
 
 
@@ -86,6 +175,7 @@ def _record_success(latency_seconds: float) -> None:
     if len(_LATENCY_SAMPLES) > _MAX_LATENCY_SAMPLES:
         _LATENCY_SAMPLES.pop(0)
     _AVG_LATENCY_SECONDS = sum(_LATENCY_SAMPLES) / len(_LATENCY_SAMPLES) if _LATENCY_SAMPLES else None
+    _persist_state()
 
 
 def _record_error(reason: str) -> None:
@@ -93,6 +183,7 @@ def _record_error(reason: str) -> None:
     _DATA_STATUS = "DOWN"
     _LAST_ERROR_AT = datetime.now(timezone.utc).isoformat()
     _LAST_ERROR_REASON = reason[:500] if reason else None
+    _persist_state()
 
 
 def run_orats_startup_self_check() -> bool:
@@ -150,6 +241,9 @@ def _load_universe_symbols() -> List[str]:
     if not symbols:
         raise RuntimeError(f"Universe CSV is empty: {csv_path}")
     return symbols
+
+# Load persisted state at import so snapshot and other readers see sticky state (Phase 8B)
+_load_persisted_state()
 
 UNIVERSE_SYMBOLS: List[str] = _load_universe_symbols()
 

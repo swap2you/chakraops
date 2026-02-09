@@ -115,11 +115,15 @@ guardrails:
 
 ### ORATS Live Data (Options)
 
-ChakraOps uses **ORATS Live Data** (api.orats.io/datav2) for options expirations, strikes, and chains. No ThetaData terminal or process is required.
+ChakraOps uses **ORATS Live Data** (api.orats.io/datav2) for options expirations, strikes, and equity quotes. No ThetaData terminal or process is required.
 
-**Required:** Set `ORATS_API_TOKEN` in your environment (get token from [ORATS](https://orats.com)). Never commit the token.
+**Required:** Set `ORATS_API_TOKEN` in your environment (get token from [ORATS](https://orats.com)). The app also reads the token from `app.core.config.orats_secrets` if not set in env. Never commit the token.
 
-**Sanity check:**
+**Health check (backend running):**
+- `GET http://localhost:8000/health` → 200, `{"ok": true}`
+- `GET http://localhost:8000/api/ops/data-health` → `"status": "OK"` when ORATS is reachable
+
+**Sanity check (no server):**
 ```bash
 python scripts/smoke_orats.py
 ```

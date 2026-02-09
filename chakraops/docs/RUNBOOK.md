@@ -42,8 +42,15 @@ npm run dev
 ### Verify stack
 
 - Backend health: `GET http://localhost:8000/health` → 200, `{"ok": true, "status": "healthy"}`
-- Data health: `GET http://localhost:8000/api/ops/data-health` → `"status": "OK"` when ORATS is configured
+- Data health: `GET http://localhost:8000/api/ops/data-health` → returns sticky status (see **ORATS data health semantics** below)
 - Frontend: Open app, switch to LIVE, click **Refresh now** — no 404, no "ORATS DOWN" if backend is healthy
+
+**ORATS data health semantics (Phase 8B):** Status is **sticky** and persisted to `out/data_health_state.json`.  
+- **UNKNOWN** — No successful ORATS call has ever occurred (e.g. first start, or after reset).  
+- **OK** — Last successful call within evaluation window (default 30 min; `EVALUATION_QUOTE_WINDOW_MINUTES`).  
+- **WARN** — Last success is beyond the window (stale); data may still be usable for evaluation.  
+- **DOWN** — Last attempt failed and no recent success (or never succeeded).  
+The UI does not flicker UNKNOWN→OK because status is derived from persisted `last_success_at`; a live probe runs only when status is UNKNOWN.
 
 ---
 

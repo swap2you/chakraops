@@ -525,8 +525,11 @@ class TestStagedEvaluator:
     
     @patch("app.core.orats.orats_equity_quote.fetch_full_equity_snapshots")
     def test_stage1_holds_incomplete_data(self, mock_fetch):
-        """Test stage 1 with sparse data (only price): low data_completeness; verdict may be QUALIFIED or HOLD."""
-        mock_fetch.return_value = {"SPARSE": _make_stage1_snapshot(symbol="SPARSE", price=100.0, bid=None, ask=None, volume=None, iv_rank=None)}
+        """Test stage 1 with sparse data (only price): low data_completeness; verdict may be QUALIFIED or HOLD.
+        Phase 8E: SPARSE is INDEX so required = price, volume, iv_rank, quote_date; pass quote_date=None so only price present -> completeness < 0.5."""
+        mock_fetch.return_value = {"SPARSE": _make_stage1_snapshot(
+            symbol="SPARSE", price=100.0, bid=None, ask=None, volume=None, iv_rank=None, quote_date=None
+        )}
         
         from app.core.eval.staged_evaluator import evaluate_stage1, StockVerdict
         

@@ -118,7 +118,7 @@ export function RankedTable() {
   const fetchAll = useCallback(async () => {
     try {
       const res = await apiGet<OpportunitiesResponse>(
-        `${ENDPOINTS.dashboardOpportunities}?limit=100&include_blocked=true`
+        `${ENDPOINTS.dashboardOpportunities}?limit=50&include_blocked=true`
       );
       setData(res);
       setError(null);

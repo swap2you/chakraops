@@ -46,11 +46,14 @@ def build_data_completeness_report(symbols: List[Dict[str, Any]]) -> Dict[str, A
                 if v and v != "waived":
                     endpoints_used[v] = endpoints_used.get(v, 0) + 1
 
+        # Phase 8E: per-field source (ORATS | DERIVED | CACHED) for diagnostics
+        field_sources = s.get("field_sources") or {}
         per_symbol.append({
             "symbol": sym,
             "missing_fields": missing,
             "waived_fields": waived,
             "source_endpoints": sources,
+            "field_sources": field_sources,
         })
 
         if "bid" in missing or "ask" in missing:
@@ -75,9 +78,42 @@ def build_data_completeness_report(symbols: List[Dict[str, Any]]) -> Dict[str, A
         "endpoints_used": endpoints_used,
     }
 
+    # Deterministic merge report (ORATS equity + ivrank): requested, returned, excluded
+    requested_tickers = [s.get("symbol", "").strip() for s in symbols if s.get("symbol")]
+    requested_tickers = [t.upper() for t in requested_tickers if t]
+    returned_quotes = [
+        s.get("symbol", "").upper()
+        for s in symbols
+        if s.get("price") is not None
+        and s.get("bid") is not None
+        and s.get("ask") is not None
+        and s.get("volume") is not None
+        and s.get("quote_date")
+    ]
+    returned_ivrank = [s.get("symbol", "").upper() for s in symbols if s.get("iv_rank") is not None and s.get("symbol")]
+    excluded_by_reason: Dict[str, str] = {}
+    for s in symbols:
+        sym = (s.get("symbol") or "").strip().upper()
+        if not sym:
+            continue
+        missing = list(s.get("missing_fields") or [])
+        if missing:
+            excluded_by_reason[sym] = "missing_required:" + ",".join(sorted(missing))
+        elif s.get("price") is None:
+            excluded_by_reason[sym] = "missing_equity_quote"
+        elif s.get("iv_rank") is None:
+            excluded_by_reason[sym] = "missing_ivrank"
+    merge_report = {
+        "requested_tickers": sorted(requested_tickers),
+        "returned_quotes": sorted(returned_quotes),
+        "returned_ivrank": sorted(returned_ivrank),
+        "excluded_by_reason": dict(sorted(excluded_by_reason.items())),
+    }
+
     return {
         "per_symbol": per_symbol,
         "aggregate": aggregate,
+        "merge_report": merge_report,
     }
 
 

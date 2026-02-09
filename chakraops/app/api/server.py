@@ -966,35 +966,21 @@ def api_ops_snapshot() -> Dict[str, Any]:
 
 @app.get("/api/ops/data-health")
 def api_ops_data_health() -> Dict[str, Any]:
-    """ORATS data health: call probe_orats_live(SPY). status OK or DOWN only. No cached state."""
-    from datetime import datetime, timezone
-    from app.core.orats.orats_client import probe_orats_live, OratsUnavailableError
-    checked_at = datetime.now(timezone.utc).isoformat()
-    try:
-        details = probe_orats_live("SPY")
-        return {
-            "provider": "ORATS",
-            "status": "OK",
-            "checked_at": checked_at,
-            "details": details,
-            "error": None,
-        }
-    except OratsUnavailableError as e:
-        return {
-            "provider": "ORATS",
-            "status": "DOWN",
-            "checked_at": checked_at,
-            "details": None,
-            "error": str(e),
-        }
-    except Exception as e:
-        return {
-            "provider": "ORATS",
-            "status": "DOWN",
-            "checked_at": checked_at,
-            "details": None,
-            "error": str(e),
-        }
+    """ORATS data health: sticky status (UNKNOWN/OK/WARN/DOWN). Persisted; probe only when UNKNOWN. Phase 8B."""
+    from app.api.data_health import get_data_health
+    state = get_data_health()
+    return {
+        "provider": state.get("provider", "ORATS"),
+        "status": state.get("status", "UNKNOWN"),
+        "last_success_at": state.get("last_success_at"),
+        "last_attempt_at": state.get("last_attempt_at"),
+        "last_error_at": state.get("last_error_at"),
+        "last_error_reason": state.get("last_error_reason"),
+        "avg_latency_seconds": state.get("avg_latency_seconds"),
+        "entitlement": state.get("entitlement", "UNKNOWN"),
+        "sample_symbol": state.get("sample_symbol", "SPY"),
+        "evaluation_window_minutes": state.get("evaluation_window_minutes"),
+    }
 
 
 @app.post("/api/ops/refresh-live-data")
@@ -1038,7 +1024,7 @@ def api_ops_reset_local_state() -> Dict[str, Any]:
     except Exception as e:
         errors.append(f"market_status.json: {e}")
     
-    # Reset cached ORATS state
+    # Reset cached ORATS state (in-memory + persisted Phase 8B file)
     try:
         from app.api import data_health
         data_health._DATA_STATUS = "UNKNOWN"
@@ -1049,6 +1035,10 @@ def api_ops_reset_local_state() -> Dict[str, Any]:
         data_health._AVG_LATENCY_SECONDS = None
         data_health._LATENCY_SAMPLES = []
         data_health._ENTITLEMENT = "UNKNOWN"
+        path = data_health._data_health_state_path()
+        if path.exists():
+            path.unlink()
+            cleared.append("data_health_state.json")
         cleared.append("orats_cached_state")
     except Exception as e:
         errors.append(f"orats_cached_state: {e}")
@@ -2660,9 +2650,24 @@ async def api_portfolio_risk_profile_put(request: Request) -> Dict[str, Any]:
 # ============================================================================
 
 
+# Phase 8A: Backend constraint for opportunities limit (UI must not receive 422)
+DASHBOARD_OPPORTUNITIES_LIMIT_MIN = 1
+DASHBOARD_OPPORTUNITIES_LIMIT_MAX = 50
+DASHBOARD_OPPORTUNITIES_LIMIT_DEFAULT = 5
+
+
+def _clamp_opportunities_limit(value: Any) -> int:
+    """Clamp limit to valid range so normal UI usage never gets 422."""
+    try:
+        n = int(value) if value is not None else DASHBOARD_OPPORTUNITIES_LIMIT_DEFAULT
+    except (TypeError, ValueError):
+        n = DASHBOARD_OPPORTUNITIES_LIMIT_DEFAULT
+    return max(DASHBOARD_OPPORTUNITIES_LIMIT_MIN, min(DASHBOARD_OPPORTUNITIES_LIMIT_MAX, n))
+
+
 @app.get("/api/dashboard/opportunities")
 def api_dashboard_opportunities(
-    limit: int = Query(default=5, ge=1, le=50),
+    limit: Optional[Any] = Query(default=None, description="Max results (1–50); clamped server-side to avoid 422"),
     strategy: Optional[str] = Query(default=None),
     max_capital_pct: Optional[float] = Query(default=None, ge=0.0, le=1.0),
     include_blocked: bool = Query(default=False, description="Phase 3: Include BLOCKED opportunities with risk_reasons"),
@@ -2674,11 +2679,12 @@ def api_dashboard_opportunities(
     Phase 3: Each opportunity includes risk_status (OK/WARN/BLOCKED) and risk_reasons.
 
     Query params:
-      - limit: Max results (default 5, max 50)
+      - limit: Max results (default 5, max 50); values outside 1–50 are clamped (no 422).
       - strategy: Filter by strategy (CSP, CC, STOCK)
       - max_capital_pct: Filter by max capital % (0.0-1.0)
       - include_blocked: Include BLOCKED opportunities with block reasons
     """
+    limit = _clamp_opportunities_limit(limit)
     try:
         from app.core.ranking.service import get_dashboard_opportunities
         return get_dashboard_opportunities(

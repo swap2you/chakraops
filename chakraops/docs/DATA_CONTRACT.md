@@ -53,16 +53,33 @@ This document is the single source of truth for required vs optional data, stale
 - Missing delta for primary candidate → BLOCK CSP/CC ranking for that symbol.
 - Stale → WARN (same as option chain, 1 trading day).
 
-### Liquidity (bid, ask, volume)
+### Liquidity (bid, ask, volume) — instrument-type-specific (Phase 8E)
 
-| Role | Fields | Provider |
-|------|--------|----------|
-| Required | `bid`, `ask`, `volume` | ORATS `/datav2/strikes/options` |
-| Optional | `avg_volume` | Not available from ORATS; never blocks |
+**Core objective (non-negotiable):** DATA_INCOMPLETE must be emitted **only** when a field is **both** (1) required for that instrument type, and (2) missing and non-derivable. ETF/INDEX symbols must not fail due to missing bid, ask, or open_interest.
 
-- Any required missing → BLOCK option strategies (REQUIRED_LIQUIDITY_FIELDS), unless waived when options liquidity is confirmed (DERIVED_FROM_OPRA).
+| Instrument type | Required | Optional (never cause DATA_INCOMPLETE) |
+|-----------------|----------|----------------------------------------|
+| **EQUITY** | `bid`, `ask`, `volume` | `avg_volume` |
+| **ETF / INDEX** | `volume` only | `bid`, `ask`, `open_interest`, `avg_volume` |
+
+- **EQUITY:** Missing `bid` or `ask` or `volume` → required missing; may BLOCK unless derivable or waived (DERIVED_FROM_OPRA).
+- **ETF / INDEX (e.g. SPY, QQQ, IWM, DIA):** `bid`, `ask`, and `open_interest` are **optional**. A symbol must **never** be marked DATA_INCOMPLETE solely for missing bid/ask/open_interest for ETF/INDEX.
+- Provider: ORATS `/datav2/strikes/options`. `avg_volume` is not available from ORATS; never blocks.
 - When market is CLOSED, intraday gaps (bid/ask/volume) may be non-fatal and waivable in Stage 2 when options liquidity is confirmed.
 - Stale → WARN. avg_volume missing → WARN only.
+
+### Derivable fields (Phase 8E)
+
+If a required field is derivable, it is **not** treated as missing. Derivation is explicit, logged, and surfaced in diagnostics (`field_sources`: ORATS | DERIVED | CACHED).
+
+| Derivation | When | Effect |
+|------------|------|--------|
+| **mid_price** | `(bid + ask) / 2` when both exist | Used for pricing when both quotes present. |
+| **synthetic_bid_ask** | When only one of bid or ask exists | The single quote is used as proxy for both; field is treated as present. |
+| **open_interest** (aggregate) | From strikes/chain aggregation when available | Option-level OI aggregated; if present, satisfies chain-level OI requirements. |
+
+- If a required field (for that instrument type) is derivable and derivation succeeds, the symbol is **not** marked DATA_INCOMPLETE for that field.
+- Diagnostics must expose per-field source (ORATS | DERIVED | CACHED) in evaluation JSON and UI.
 
 ### Open interest / strike volume (options)
 
@@ -138,7 +155,10 @@ No decision may appear PASS when required data is missing or when the symbol has
 **When FAIL is set:**
 - No evaluation data → FAIL, required_data_missing = ["no_evaluation_data"].
 - Symbol not in latest evaluation → FAIL, required_data_missing = ["symbol_not_in_latest_evaluation"].
-- Any required field missing (price, iv_rank, bid, ask, volume, or delta for candidate) → FAIL.
+- For **EQUITY:** any required field missing (price, iv_rank, bid, ask, volume, quote_date, or delta for candidate) → FAIL.
+- For **ETF/INDEX:** only price, iv_rank, volume, quote_date (and delta for candidate when ELIGIBLE) are required; missing bid/ask/open_interest does **not** set FAIL.
+
+**Truth statement (Phase 8E):** DATA_INCOMPLETE is emitted only when ORATS data is missing **and** the field is non-derivable for that instrument type. For ETF/INDEX, bid, ask, and open_interest are not required; derivable fields (e.g. mid from bid+ask, synthetic bid/ask from single quote) are treated as present.
 
 ---
 
@@ -168,7 +188,7 @@ When **options liquidity is confirmed** (Stage 2: OPRA/chain has usable bid/ask/
 | IVR | iv_rank | iv_percentile | > 1 td → WARN; missing → FAIL |
 | Option chain | strikes available | — | > 1 td → WARN; missing → BLOCK |
 | Delta | delta (candidate) | theta, vega | > 1 td → WARN |
-| Liquidity | bid, ask, volume | avg_volume | > 1 td → WARN; missing → FAIL (or waive per contract) |
+| Liquidity | EQUITY: bid, ask, volume; ETF/INDEX: volume only | ETF/INDEX: bid, ask, open_interest; all: avg_volume | > 1 td → WARN; missing → FAIL only for required (derivable treated as present) |
 | OI/volume | usable OI or volume | — | > 1 td → WARN |
 | risk_amount_at_entry | — (position-level) | — | N/A |
 
@@ -182,7 +202,18 @@ When **options liquidity is confirmed** (Stage 2: OPRA/chain has usable bid/ask/
 
 ---
 
-## 8. Further Reading
+## 8. ORATS Data Health (API /api/ops/data-health)
+
+Status is **sticky** and persisted; it is not recomputed on every request.  
+- **UNKNOWN:** No successful ORATS call has ever occurred.  
+- **OK:** `last_success_at` within evaluation window (default 30 min).  
+- **WARN:** `last_success_at` beyond window (stale).  
+- **DOWN:** Last attempt failed and no success within window (or never succeeded).  
+See RUNBOOK.md “ORATS data health semantics” and `app/api/data_health.py`.
+
+---
+
+## 9. Further Reading
 
 - [DATA_DICTIONARY.md](./DATA_DICTIONARY.md) — Field-level reference: every UI/API field, source, null/waived behavior, examples.
 - [EVALUATION_PIPELINE.md](./EVALUATION_PIPELINE.md) — Stage-by-stage failure modes and reason codes.

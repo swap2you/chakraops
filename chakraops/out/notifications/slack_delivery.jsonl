@@ -39,3 +39,10 @@
 {"ts": "2026-02-06T21:34:30.522421+00:00", "sent": true, "status_code": 200, "reason": "ok", "response_body": null}
 {"ts": "2026-02-09T03:58:57.583365+00:00", "sent": true, "status_code": 200, "reason": "ok", "response_body": null}
 {"ts": "2026-02-09T03:59:17.518548+00:00", "sent": true, "status_code": 200, "reason": "ok", "response_body": null}
+{"ts": "2026-02-09T16:14:13.513346+00:00", "sent": false, "status_code": 403, "reason": "Slack returned 403", "response_body": "invalid_token"}
+{"ts": "2026-02-09T17:19:48.704372+00:00", "sent": false, "status_code": 403, "reason": "Slack returned 403", "response_body": "invalid_token"}
+{"ts": "2026-02-09T17:19:51.977285+00:00", "sent": false, "status_code": 403, "reason": "Slack returned 403", "response_body": "invalid_token"}
+{"ts": "2026-02-09T18:45:19.019405+00:00", "sent": false, "status_code": 403, "reason": "Slack returned 403", "response_body": "invalid_token"}
+{"ts": "2026-02-09T18:48:43.981030+00:00", "sent": false, "status_code": 403, "reason": "Slack returned 403", "response_body": "invalid_token"}
+{"ts": "2026-02-09T19:06:29.560233+00:00", "sent": false, "status_code": 403, "reason": "Slack returned 403", "response_body": "invalid_token"}
+{"ts": "2026-02-09T19:06:30.885785+00:00", "sent": false, "status_code": 403, "reason": "Slack returned 403", "response_body": "invalid_token"}

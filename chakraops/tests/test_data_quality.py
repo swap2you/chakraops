@@ -11,6 +11,8 @@ from app.core.models.data_quality import (
     wrap_field_float,
     wrap_field_int,
     compute_data_completeness,
+    compute_data_completeness_required,
+    MARKET_SNAPSHOT_REQUIRED_FIELDS,
     build_data_incomplete_reason,
 )
 
@@ -241,6 +243,41 @@ class TestComputeDataCompleteness:
         completeness, missing = compute_data_completeness(fields)
         assert completeness == 0.5
         assert "price" in missing
+
+
+class TestComputeDataCompletenessRequired:
+    """Tests for compute_data_completeness_required (MarketSnapshot required fields only)."""
+
+    def test_required_only_avg_volume_ignored(self):
+        """When all required fields valid, completeness is 1.0 even if avg_volume missing."""
+        fields = {
+            "price": FieldValue(100.0, DataQuality.VALID, field_name="price"),
+            "bid": FieldValue(99.9, DataQuality.VALID, field_name="bid"),
+            "ask": FieldValue(100.1, DataQuality.VALID, field_name="ask"),
+            "volume": FieldValue(1_000_000, DataQuality.VALID, field_name="volume"),
+            "quote_time": FieldValue("2026-02-03T16:00:00Z", DataQuality.VALID, field_name="quote_time"),
+            "iv_rank": FieldValue(50.0, DataQuality.VALID, field_name="iv_rank"),
+            "avg_volume": FieldValue(None, DataQuality.MISSING, field_name="avg_volume"),
+        }
+        completeness, missing = compute_data_completeness_required(fields)
+        assert completeness == 1.0
+        assert missing == []
+        assert "quote_time" in MARKET_SNAPSHOT_REQUIRED_FIELDS
+        assert "avg_volume" not in MARKET_SNAPSHOT_REQUIRED_FIELDS
+
+    def test_one_required_missing(self):
+        """One required field missing reduces required completeness."""
+        fields = {
+            "price": FieldValue(100.0, DataQuality.VALID, field_name="price"),
+            "bid": FieldValue(None, DataQuality.MISSING, field_name="bid"),
+            "ask": FieldValue(100.1, DataQuality.VALID, field_name="ask"),
+            "volume": FieldValue(1_000_000, DataQuality.VALID, field_name="volume"),
+            "quote_time": FieldValue("2026-02-03T16:00:00Z", DataQuality.VALID, field_name="quote_time"),
+            "iv_rank": FieldValue(50.0, DataQuality.VALID, field_name="iv_rank"),
+        }
+        completeness, missing = compute_data_completeness_required(fields)
+        assert completeness == pytest.approx(5 / 6)
+        assert missing == ["bid"]
 
 
 class TestBuildDataIncompleteReason:

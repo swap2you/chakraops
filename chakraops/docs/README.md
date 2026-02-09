@@ -17,6 +17,7 @@
 | **How to operate** | [RUNBOOK.md](./RUNBOOK.md) — run, verify, debug, validate |
 | **How the system works** | [ARCHITECTURE.md](./ARCHITECTURE.md) — evaluation pipeline, strategy model, risk & gating, decision lifecycle |
 | **Data rules** | [DATA_CONTRACT.md](./DATA_CONTRACT.md) — required/optional data, staleness, BLOCKED/WARN/PASS, overrides |
+| **ORATS fields & endpoints** | [ORATS_FIELD_TO_ENDPOINT_MAPPING.md](./ORATS_FIELD_TO_ENDPOINT_MAPPING.md) — field-to-endpoint mapping, known not-available fields |
 | **Historical records** | [history/](./history/) — phase summaries, validation reports, preconditions (not required for operation) |
 
 Other references (scheduling, alerts, deployment, baseline, etc.) are linked from the runbook under **Further Reading**.

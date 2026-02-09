@@ -28,7 +28,7 @@ export function SystemDiagnosticsPanel({ className }: SystemDiagnosticsPanelProp
 
   const oratsOk = dataHealth.status === "OK";
   const oratsDown = dataHealth.status === "DOWN" || dataHealth.status === "UNKNOWN";
-  const oratsDegraded = dataHealth.status === "DEGRADED";
+  const oratsDegraded = dataHealth.status === "DEGRADED" || dataHealth.status === "WARN";
 
   return (
     <div className={cn("space-y-4 rounded-lg border border-border bg-card p-4", className)}>

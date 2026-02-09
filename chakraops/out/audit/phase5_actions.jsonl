@@ -8,3 +8,6 @@
 {"ts": "2026-02-09T03:15:18.803348+00:00", "action_type": "manual_execution_intent", "position_id": "pos_20260209_031518_66e15ca0", "symbol": "SPY", "strategy": "CSP", "account_id": "test-acct", "contracts": 2}
 {"ts": "2026-02-09T03:19:21.836085+00:00", "action_type": "manual_execution_intent", "position_id": "pos_20260209_031921_e402c053", "symbol": "SPY", "strategy": "CSP", "account_id": "test-acct", "contracts": 2}
 {"ts": "2026-02-09T03:20:34.975516+00:00", "action_type": "manual_execution_intent", "position_id": "pos_20260209_032034_0ab7220b", "symbol": "SPY", "strategy": "CSP", "account_id": "test-acct", "contracts": 2}
+{"ts": "2026-02-09T18:02:21.224535+00:00", "action_type": "manual_execution_intent", "position_id": "pos_20260209_180221_cf1d7120", "symbol": "SPY", "strategy": "CSP", "account_id": "test-acct", "contracts": 2}
+{"ts": "2026-02-09T18:05:53.817598+00:00", "action_type": "manual_execution_intent", "position_id": "pos_20260209_180553_f7b161d6", "symbol": "SPY", "strategy": "CSP", "account_id": "test-acct", "contracts": 2}
+{"ts": "2026-02-09T18:54:26.223354+00:00", "action_type": "manual_execution_intent", "position_id": "pos_20260209_185426_6e3145c1", "symbol": "SPY", "strategy": "CSP", "account_id": "test-acct", "contracts": 2}

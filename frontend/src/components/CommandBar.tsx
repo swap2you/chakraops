@@ -178,7 +178,7 @@ export function CommandBar() {
           const stale = isStale(latestTs ?? null);
           const oratsOk = dataHealth.status === "OK";
           const oratsDown = mode === "LIVE" && (dataHealth.status === "DOWN" || dataHealth.status === "UNKNOWN");
-          const oratsStale = mode === "LIVE" && dataHealth.status === "DEGRADED";
+          const oratsStale = mode === "LIVE" && (dataHealth.status === "WARN" || dataHealth.status === "DEGRADED");
           const dataAge = formatDataAge(dataHealth.last_success_at);
           const checkedNoDecision =
             mode === "LIVE" &&

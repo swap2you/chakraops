@@ -127,7 +127,8 @@ def test_stage1_sets_unavailable_fields_to_none(mock_fetch):
 
 @patch("app.core.orats.orats_equity_quote.fetch_full_equity_snapshots")
 def test_stage1_data_quality_reflects_field_availability(mock_fetch):
-    """data_quality_details shows which fields are VALID vs MISSING."""
+    """data_quality_details shows which fields are VALID vs MISSING.
+    Phase 8E: avg_volume is optional and may not be in field_quality; assert only required/diagnostic fields."""
     mock_fetch.return_value = {"AAPL": _make_snapshot(price=275.45)}
     
     from app.core.eval.staged_evaluator import evaluate_stage1
@@ -139,19 +140,24 @@ def test_stage1_data_quality_reflects_field_availability(mock_fetch):
     assert result.data_quality_details.get("bid") == "MISSING"
     assert result.data_quality_details.get("ask") == "MISSING"
     assert result.data_quality_details.get("volume") == "MISSING"
-    assert result.data_quality_details.get("avg_volume") == "MISSING"
+    # avg_volume is optional; may be in data_quality_details or omitted (Phase 8E)
+    if "avg_volume" in result.data_quality_details:
+        assert result.data_quality_details.get("avg_volume") == "MISSING"
 
 
 @patch("app.core.orats.orats_equity_quote.fetch_full_equity_snapshots")
 def test_stage1_missing_fields_list_is_accurate(mock_fetch):
-    """missing_fields list contains only the fields not in snapshot."""
+    """missing_fields list contains required fields that are missing (Phase 8E: instrument-type-specific).
+    For EQUITY, bid/ask/volume are required; for INDEX only volume. Patch AAPL as EQUITY to assert bid/ask/volume in missing."""
     mock_fetch.return_value = {"AAPL": _make_snapshot(price=275.45)}
     
+    from app.core.symbols.instrument_type import InstrumentType
     from app.core.eval.staged_evaluator import evaluate_stage1
-    
-    result = evaluate_stage1("AAPL")
-    
-    expected_missing = {"bid", "ask", "volume", "avg_volume"}
+
+    with patch("app.core.symbols.instrument_type.classify_instrument", return_value=InstrumentType.EQUITY):
+        result = evaluate_stage1("AAPL")
+    # EQUITY requires bid, ask, volume, quote_date; snapshot has price, iv_rank, quote_date -> missing bid, ask, volume
+    expected_missing = {"bid", "ask", "volume"}
     actual_missing = set(result.missing_fields)
     assert expected_missing == actual_missing, (
         f"missing_fields should be {expected_missing}, got {actual_missing}"

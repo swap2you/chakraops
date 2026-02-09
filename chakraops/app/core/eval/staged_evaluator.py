@@ -37,7 +37,7 @@ from app.core.models.data_quality import (
     FieldValue,
     wrap_field_float,
     wrap_field_int,
-    compute_data_completeness,
+    compute_data_completeness_required,
     build_data_incomplete_reason,
 )
 from app.core.eval.strategy_rationale import StrategyRationale, build_rationale_from_staged
@@ -149,6 +149,8 @@ class Stage1Result:
     # Data source tracking (which ORATS endpoint provided each field)
     data_sources: Dict[str, str] = field(default_factory=dict)
     raw_fields_present: List[str] = field(default_factory=list)
+    # Phase 8E: per-field source for diagnostics (ORATS | DERIVED | CACHED)
+    field_sources: Dict[str, str] = field(default_factory=dict)
     
     # Metadata
     fetched_at: Optional[str] = None
@@ -234,6 +236,7 @@ class FullEvaluationResult:
     # Data source tracking
     data_sources: Dict[str, str] = field(default_factory=dict)
     raw_fields_present: List[str] = field(default_factory=list)
+    field_sources: Dict[str, str] = field(default_factory=dict)  # Phase 8E: ORATS | DERIVED | CACHED
     quote_date: Optional[str] = None  # quoteDate from ORATS
     iv_rank: Optional[float] = None  # Phase 6: from ivrank endpoint
     
@@ -291,6 +294,7 @@ class FullEvaluationResult:
             "data_quality_details": self.data_quality_details,
             "data_sources": self.data_sources,
             "raw_fields_present": self.raw_fields_present,
+            "field_sources": getattr(self, "field_sources", {}),
             "quote_date": self.quote_date,
             "fetched_at": self.fetched_at,
             "error": self.error,
@@ -406,19 +410,26 @@ def evaluate_stage1(symbol: str) -> Stage1Result:
             symbol, raw_price, raw_bid, raw_ask, raw_volume, raw_iv_rank, snapshot.data_sources
         )
         
+        # MarketSnapshot required fields only (avg_volume excluded per ORATS reference)
         price_fv = wrap_field_float(raw_price, "price")
         bid_fv = wrap_field_float(raw_bid, "bid")
         ask_fv = wrap_field_float(raw_ask, "ask")
         volume_fv = wrap_field_int(raw_volume, "volume")
-        avg_volume_fv = wrap_field_int(raw_avg_volume, "avg_volume")
+        # quote_time = quoteDate from ORATS; required for completeness
+        quote_time_fv = FieldValue(
+            value=snapshot.quote_date,
+            quality=DataQuality.VALID if snapshot.quote_date else DataQuality.MISSING,
+            reason="" if snapshot.quote_date else "quote_date not provided by source",
+            field_name="quote_time",
+        )
         iv_rank_fv = wrap_field_float(raw_iv_rank, "iv_rank")
         
-        # Store quality info
+        # Only REQUIRED fields for completeness (so 1.0 when all present)
         field_quality["price"] = price_fv
         field_quality["bid"] = bid_fv
         field_quality["ask"] = ask_fv
         field_quality["volume"] = volume_fv
-        field_quality["avg_volume"] = avg_volume_fv
+        field_quality["quote_time"] = quote_time_fv
         field_quality["iv_rank"] = iv_rank_fv
         
         # Extract values
@@ -426,7 +437,7 @@ def evaluate_stage1(symbol: str) -> Stage1Result:
         result.bid = bid_fv.value if bid_fv.is_valid else None
         result.ask = ask_fv.value if ask_fv.is_valid else None
         result.volume = volume_fv.value if volume_fv.is_valid else None
-        result.avg_volume = avg_volume_fv.value if avg_volume_fv.is_valid else None
+        result.avg_volume = raw_avg_volume  # Always None from ORATS; optional, not in required
         result.iv_rank = iv_rank_fv.value if iv_rank_fv.is_valid else None
         result.quote_date = snapshot.quote_date
         
@@ -457,8 +468,48 @@ def evaluate_stage1(symbol: str) -> Stage1Result:
             result.data_sources,
         )
         
-        # Compute data completeness
-        result.data_completeness, result.missing_fields = compute_data_completeness(field_quality)
+        # Phase 8E: Instrument-type-specific required fields (ETF/INDEX: bid, ask optional)
+        from app.core.symbols.instrument_type import (
+            classify_instrument,
+            get_required_fields_for_instrument,
+        )
+        from app.core.symbols.derived_fields import derive_equity_fields
+        
+        inst = classify_instrument(symbol)
+        required_by_inst = get_required_fields_for_instrument(inst)
+        # Stage 1 field_quality uses "quote_time"; instrument_type uses "quote_date"
+        required_keys = tuple(
+            "quote_time" if k == "quote_date" else k for k in required_by_inst
+        )
+        
+        # Phase 8E: Derivation — if bid/ask missing but derivable, treat as present
+        derived = derive_equity_fields(
+            price=raw_price, bid=raw_bid, ask=raw_ask, volume=raw_volume
+        )
+        for fname, eff_val in (("bid", derived.synthetic_bid), ("ask", derived.synthetic_ask)):
+            if fname in field_quality and not field_quality[fname].is_valid and eff_val is not None:
+                field_quality[fname] = FieldValue(
+                    value=eff_val,
+                    quality=DataQuality.VALID,
+                    reason="derived (single quote or mid)",
+                    field_name=fname,
+                )
+        
+        # Per-field source for diagnostics (ORATS by default; DERIVED where we promoted)
+        result.field_sources = {k: "ORATS" for k in field_quality}
+        if derived.sources:
+            for f in ("bid", "ask"):
+                if field_quality.get(f) and field_quality[f].reason and "derived" in (field_quality[f].reason or "").lower():
+                    result.field_sources[f] = "DERIVED"
+        
+        # Compute data completeness over instrument-specific REQUIRED fields only
+        result.data_completeness, missing_required = compute_data_completeness_required(
+            field_quality, required_keys
+        )
+        # Expose quote_time as quote_date in missing_fields for API consistency
+        result.missing_fields = [
+            "quote_date" if name == "quote_time" else name for name in missing_required
+        ]
         for name, fv in field_quality.items():
             result.data_quality_details[name] = str(fv.quality)
         
@@ -949,6 +1000,7 @@ def evaluate_symbol_full(
     result.data_quality_details = stage1.data_quality_details.copy()
     result.data_sources = stage1.data_sources.copy()
     result.raw_fields_present = stage1.raw_fields_present.copy()
+    result.field_sources = getattr(stage1, "field_sources", {}).copy()
     result.quote_date = stage1.quote_date
     result.iv_rank = stage1.iv_rank
     
@@ -1214,7 +1266,16 @@ def evaluate_universe_staged(
     logger.info("[STAGED_EVAL] Starting 2-stage evaluation for %d symbols", len(symbols))
     start_time = time.time()
     
-    # Stage 1: Evaluate all symbols (can be parallelized)
+    # Phase 8D: Per-run ORATS cache — pre-fetch equity + ivrank for all symbols so stage1 uses cache
+    try:
+        from app.core.orats.orats_equity_quote import reset_run_cache, fetch_full_equity_snapshots
+        reset_run_cache()
+        pre = fetch_full_equity_snapshots(symbols)
+        logger.info("[STAGED_EVAL] Pre-fetched equity snapshots for %d symbols (cache ready for stage1)", len(pre))
+    except Exception as e:
+        logger.warning("[STAGED_EVAL] Pre-fetch equity failed (stage1 will fetch per-symbol): %s", e)
+    
+    # Stage 1: Evaluate all symbols (cache hits for equity/ivrank)
     stage1_results: Dict[str, Stage1Result] = {}
     
     with ThreadPoolExecutor(max_workers=10) as executor:
@@ -1267,6 +1328,7 @@ def evaluate_universe_staged(
             result.data_quality_details = stage1.data_quality_details
             result.data_sources = stage1.data_sources
             result.raw_fields_present = stage1.raw_fields_present
+            result.field_sources = getattr(stage1, "field_sources", {})
             result.quote_date = stage1.quote_date
             result.iv_rank = stage1.iv_rank
             result.score = stage1.stage1_score

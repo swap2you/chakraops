@@ -21,7 +21,9 @@ from app.core.ranking.service import rank_opportunities
 
 
 def test_required_missing_blocks_when_required_missing() -> None:
-    """Required data missing → BLOCKED in ranking."""
+    """Required data missing → BLOCKED in ranking (Phase 8E: only for EQUITY where bid/ask are required)."""
+    from unittest.mock import patch
+    from app.core.symbols.instrument_type import InstrumentType
     symbols = [{
         "symbol": "MISS",
         "verdict": "ELIGIBLE",
@@ -42,7 +44,9 @@ def test_required_missing_blocks_when_required_missing() -> None:
         "stage_reached": "STAGE2_CHAIN",
         "rank_reasons": {"reasons": [], "penalty": None},
     }]
-    ranked = rank_opportunities(symbols, include_blocked=True, limit=10)
+    # Phase 8E: MISS must be EQUITY so bid/ask are required; otherwise INDEX would not require bid
+    with patch("app.core.symbols.instrument_type.classify_instrument", return_value=InstrumentType.EQUITY):
+        ranked = rank_opportunities(symbols, include_blocked=True, limit=10)
     assert len(ranked) == 1
     assert ranked[0]["risk_status"] == "BLOCKED"
     assert "Required data missing" in (ranked[0].get("risk_reasons") or [""])[0]

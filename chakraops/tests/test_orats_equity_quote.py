@@ -12,6 +12,7 @@ Tests:
 
 from __future__ import annotations
 
+import os
 import pytest
 from unittest.mock import patch, MagicMock
 from typing import Dict, List, Any
@@ -22,11 +23,50 @@ from app.core.orats.orats_equity_quote import (
     FullEquitySnapshot,
     EquityQuoteCache,
     _batch_tickers,
+    _parse_strikes_options_response,
+    build_merge_report,
     fetch_equity_quotes_batch,
     fetch_iv_ranks_batch,
     fetch_full_equity_snapshots,
     reset_run_cache,
 )
+
+
+class TestParseStrikesOptionsMixedRows:
+    """Unit tests: parser splits underlying vs option rows."""
+
+    def test_underlying_only_rows(self):
+        """Only rows without optionSymbol are underlying."""
+        raw = {
+            "data": [
+                {"ticker": "AAPL", "stockPrice": 200.0, "bid": 199.9, "ask": 200.1, "volume": 1_000_000},
+                {"ticker": "MSFT", "stockPrice": 400.0},
+            ]
+        }
+        underlying, u_count, o_count = _parse_strikes_options_response(raw)
+        assert u_count == 2
+        assert o_count == 0
+        assert len(underlying) == 2
+        assert underlying[0]["ticker"] == "AAPL"
+        assert underlying[1]["ticker"] == "MSFT"
+
+    def test_option_rows_excluded(self):
+        """Rows with optionSymbol are option rows and not merged into equity snapshot."""
+        raw = {
+            "data": [
+                {"ticker": "AAPL", "stockPrice": 200.0, "bid": 199.9, "ask": 200.1, "volume": 1_000_000},
+                {"ticker": "AAPL", "optionSymbol": "AAPL  260120C00150000", "bidPrice": 5.0, "askPrice": 5.5},
+            ]
+        }
+        underlying, u_count, o_count = _parse_strikes_options_response(raw)
+        assert u_count == 1
+        assert o_count == 1
+        assert len(underlying) == 1
+        assert underlying[0]["ticker"] == "AAPL" and "optionSymbol" not in underlying[0]
+
+    def test_empty_data(self):
+        underlying, u_count, o_count = _parse_strikes_options_response({"data": []})
+        assert u_count == 0 and o_count == 0 and len(underlying) == 0
 
 
 class TestBatching:
@@ -282,10 +322,10 @@ class TestFullEquitySnapshot:
         # From IV rank
         assert snap.iv_rank == 45.5
         
-        # avg_volume is always None (not available from ORATS)
+        # avg_volume is always None; excluded from required (optional_not_available)
         assert snap.avg_volume is None
-        assert "avg_volume" in snap.missing_fields
-        assert "Not available from ORATS" in snap.missing_reasons["avg_volume"]
+        assert "avg_volume" not in snap.missing_fields
+        assert snap.optional_not_available.get("avg_volume") == "Not available from ORATS endpoints"
         
         # Data sources should track which endpoint provided each field
         assert snap.data_sources.get("price") == "strikes/options"
@@ -317,12 +357,13 @@ class TestFullEquitySnapshot:
         snapshots = fetch_full_equity_snapshots(["AAPL"])
         snap = snapshots["AAPL"]
         
-        # Check missing fields
+        # Check missing fields (required only; avg_volume is optional_not_available)
         assert "bid" in snap.missing_fields
         assert "ask" in snap.missing_fields
         assert "volume" in snap.missing_fields
         assert "iv_rank" in snap.missing_fields
-        assert "avg_volume" in snap.missing_fields  # Always missing
+        assert "avg_volume" not in snap.missing_fields
+        assert "avg_volume" in snap.optional_not_available
         
         # Price should NOT be missing
         assert "price" not in snap.missing_fields
@@ -444,3 +485,64 @@ class TestDataQuality:
         assert "bid" in snap.raw_fields_present
         assert "ivRank1m" in snap.raw_fields_present
         assert "ivPct1m" in snap.raw_fields_present
+
+
+class TestMergeReport:
+    """Unit tests: merge report and complete snapshot."""
+
+    def test_merge_report_complete_snapshot(self):
+        """When both equity quote and ivrank present, merge report shows no exclusion."""
+        snap = FullEquitySnapshot(
+            symbol="AAPL",
+            price=185.50,
+            bid=185.45,
+            ask=185.55,
+            volume=45_000_000,
+            quote_date="2026-02-03T16:00:00Z",
+            iv_rank=45.5,
+            missing_fields=[],
+            optional_not_available={"avg_volume": "Not available from ORATS endpoints"},
+        )
+        report = build_merge_report({"AAPL": snap}, ["AAPL"])
+        assert report["requested_tickers"] == ["AAPL"]
+        assert report["returned_quotes"] == ["AAPL"]
+        assert report["returned_ivrank"] == ["AAPL"]
+        assert report["excluded_by_reason"] == {}
+
+    def test_merge_report_excluded_missing_ivrank(self):
+        """Ticker with quote but no iv_rank is in excluded_by_reason."""
+        snap = FullEquitySnapshot(
+            symbol="XYZ",
+            price=10.0,
+            bid=9.9,
+            ask=10.1,
+            volume=1000,
+            quote_date="2026-02-03T16:00:00Z",
+            iv_rank=None,
+            missing_fields=["iv_rank"],
+        )
+        report = build_merge_report({"XYZ": snap}, ["XYZ"])
+        assert report["returned_quotes"] == ["XYZ"]
+        assert report["returned_ivrank"] == []
+        assert "XYZ" in report["excluded_by_reason"]
+        assert "missing_ivrank" in report["excluded_by_reason"]["XYZ"]
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    os.getenv("CHAKRAOPS_ORATS_INTEGRATION") != "1",
+    reason="optional live ORATS; set CHAKRAOPS_ORATS_INTEGRATION=1 to run",
+)
+def test_live_aapl_strikes_options_and_ivrank():
+    """Optional integration: AAPL /strikes/options and /ivrank return non-empty with required fields."""
+    reset_run_cache()
+    snapshots = fetch_full_equity_snapshots(["AAPL"])
+    assert "AAPL" in snapshots
+    snap = snapshots["AAPL"]
+    assert snap.price is not None, "price (stockPrice) required"
+    assert snap.bid is not None, "bid required"
+    assert snap.ask is not None, "ask required"
+    assert snap.volume is not None, "volume required"
+    assert snap.quote_date, "quote_time (quoteDate) required"
+    assert snap.iv_rank is not None, "iv_rank required"
+    assert snap.missing_fields == [], "no NA for required fields"

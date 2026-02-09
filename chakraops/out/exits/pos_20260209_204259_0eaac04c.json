@@ -1,0 +1,15 @@
+{
+  "events": [
+    {
+      "position_id": "pos_20260209_204259_0eaac04c",
+      "exit_date": "2026-02-09",
+      "exit_price": 3.5,
+      "realized_pnl": 0.0,
+      "fees": 0.0,
+      "exit_reason": "TARGET1",
+      "exit_initiator": "MANUAL",
+      "confidence_at_exit": 3,
+      "notes": ""
+    }
+  ]
+}

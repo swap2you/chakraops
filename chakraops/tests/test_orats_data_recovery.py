@@ -43,19 +43,23 @@ def test_symbol_diagnostics_returns_503_when_orats_fails(mock_get_summaries):
 
 
 def test_data_health_shape() -> None:
-    """GET /api/ops/data-health returns provider, status, last_success_at, last_error_at, entitlement."""
+    """GET /api/ops/data-health returns provider, status, last_success_at, effective_* fields, entitlement."""
     client = _client()
     r = client.get("/api/ops/data-health")
     assert r.status_code == 200
     data = r.json()
     assert data.get("provider") == "ORATS"
     assert "status" in data
-    assert data["status"] in ("OK", "DEGRADED", "DOWN", "UNKNOWN")
+    assert data["status"] in ("OK", "WARN", "DEGRADED", "DOWN", "UNKNOWN")
     assert "last_success_at" in data
     assert "last_error_at" in data
     assert "last_error_reason" in data
     assert "entitlement" in data
     assert data["entitlement"] in ("LIVE", "DELAYED", "UNKNOWN")
+    assert "effective_last_success_at" in data
+    assert "effective_source" in data
+    assert data["effective_source"] in ("persisted_run", "live_probe")
+    assert "effective_reason" in data
 
 
 def test_refresh_live_data_returns_fetched_at_or_503() -> None:
@@ -148,3 +152,34 @@ def test_data_health_reports_down_when_orats_error_recorded() -> None:
     assert data.get("status") in ("OK", "DOWN")
     if data.get("status") == "DOWN":
         assert data.get("error") is not None
+
+
+@patch("app.api.data_health._get_effective_orats_timestamp")
+def test_data_health_banner_uses_persisted_run_when_newer(mock_get_effective):
+    """When latest completed evaluation run exists, banner uses its time (effective_source=persisted_run)."""
+    from datetime import datetime, timezone, timedelta
+    recent = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+    mock_get_effective.return_value = (recent, "persisted_run", "Using latest completed evaluation data")
+    client = _client()
+    r = client.get("/api/ops/data-health")
+    assert r.status_code == 200
+    data = r.json()
+    assert data.get("effective_last_success_at") == recent
+    assert data.get("effective_source") == "persisted_run"
+    assert "completed evaluation" in (data.get("effective_reason") or "")
+    assert data.get("status") == "OK"
+
+
+@patch("app.api.data_health._get_effective_orats_timestamp")
+def test_data_health_fallback_to_live_probe_when_no_persisted_run(mock_get_effective):
+    """When no completed evaluation run exists, effective timestamp falls back to live probe."""
+    from datetime import datetime, timezone, timedelta
+    probe_ts = (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat()
+    mock_get_effective.return_value = (probe_ts, "live_probe", "Using live probe (no completed evaluation run)")
+    client = _client()
+    r = client.get("/api/ops/data-health")
+    assert r.status_code == 200
+    data = r.json()
+    assert data.get("effective_last_success_at") == probe_ts
+    assert data.get("effective_source") == "live_probe"
+    assert data.get("status") in ("OK", "WARN")

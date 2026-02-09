@@ -4,9 +4,13 @@
 
 Phase 8B semantics:
 - UNKNOWN: no successful ORATS call has ever occurred.
-- OK: last_success_at within evaluation window.
-- WARN: last_success_at beyond evaluation window (stale).
-- DOWN: last attempt failed and no success within window (or never succeeded).
+- OK: effective_last_success_at within evaluation window.
+- WARN: effective_last_success_at beyond evaluation window (stale).
+- DOWN: last attempt failed and no effective success within window (or never succeeded).
+
+Effective freshness: Prefer latest completed evaluation run's completed_at over live probe
+last_success_at so the banner stays consistent with History/Diagnostics (e.g. run at 3:40 PM
+makes banner show fresh, not "3h ago" from an older probe).
 """
 
 from __future__ import annotations
@@ -89,21 +93,48 @@ def _persist_state() -> None:
         logger.debug("Failed to persist data_health_state: %s", e)
 
 
-def _compute_sticky_status() -> str:
-    """Phase 8B: UNKNOWN only if no success ever; OK if within window; WARN if stale; DOWN if never succeeded or recent failure."""
-    if _LAST_SUCCESS_AT is None and _LAST_ERROR_AT is None:
+def _get_effective_orats_timestamp() -> tuple[Optional[str], str, str]:
+    """
+    Best available ORATS data timestamp for banner/status.
+    Prefer latest completed evaluation run (persisted_run) over live probe (live_probe).
+    Returns (effective_iso, effective_source, effective_reason).
+    """
+    try:
+        from app.core.eval.evaluation_store import load_latest_pointer
+        pointer = load_latest_pointer()
+        if pointer and getattr(pointer, "completed_at", None):
+            return (
+                pointer.completed_at,
+                "persisted_run",
+                "Using latest completed evaluation data",
+            )
+    except Exception as e:
+        logger.debug("Failed to load latest evaluation pointer for effective timestamp: %s", e)
+    if _LAST_SUCCESS_AT:
+        return (
+            _LAST_SUCCESS_AT,
+            "live_probe",
+            "Using live probe (no completed evaluation run)",
+        )
+    return None, "live_probe", "No ORATS success timestamp available"
+
+
+def _compute_sticky_status(effective_last_success_at: Optional[str] = None) -> str:
+    """Phase 8B: Status from effective timestamp. UNKNOWN/DOWN when no effective success; OK/WARN from age vs window."""
+    use_ts = effective_last_success_at if effective_last_success_at is not None else _LAST_SUCCESS_AT
+    if use_ts is None and _LAST_ERROR_AT is None:
         return "UNKNOWN"
-    if _LAST_SUCCESS_AT is None:
+    if use_ts is None:
         return "DOWN"
     try:
-        success_dt = datetime.fromisoformat(_LAST_SUCCESS_AT.replace("Z", "+00:00"))
+        success_dt = datetime.fromisoformat(use_ts.replace("Z", "+00:00"))
         window_min = _evaluation_window_minutes()
         age_minutes = (datetime.now(timezone.utc) - success_dt).total_seconds() / 60
         if age_minutes <= window_min:
             return "OK"
         return "WARN"
     except Exception:
-        return "OK" if _LAST_SUCCESS_AT else "UNKNOWN"
+        return "OK" if use_ts else "UNKNOWN"
 
 
 def _attempt_live_summary() -> None:
@@ -141,8 +172,9 @@ def _attempt_live_summary() -> None:
 
 
 def _data_health_state() -> Dict[str, Any]:
-    """Current state with sticky status (UNKNOWN/OK/WARN/DOWN)."""
-    status = _compute_sticky_status()
+    """Current state with sticky status (UNKNOWN/OK/WARN/DOWN). Status and banner use effective_last_success_at."""
+    effective_ts, effective_source, effective_reason = _get_effective_orats_timestamp()
+    status = _compute_sticky_status(effective_ts)
     return {
         "provider": "ORATS",
         "status": status,
@@ -154,6 +186,9 @@ def _data_health_state() -> Dict[str, Any]:
         "entitlement": _ENTITLEMENT,
         "sample_symbol": "SPY",
         "evaluation_window_minutes": _evaluation_window_minutes(),
+        "effective_last_success_at": effective_ts,
+        "effective_source": effective_source,
+        "effective_reason": effective_reason,
     }
 
 

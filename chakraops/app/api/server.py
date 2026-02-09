@@ -966,7 +966,7 @@ def api_ops_snapshot() -> Dict[str, Any]:
 
 @app.get("/api/ops/data-health")
 def api_ops_data_health() -> Dict[str, Any]:
-    """ORATS data health: sticky status (UNKNOWN/OK/WARN/DOWN). Persisted; probe only when UNKNOWN. Phase 8B."""
+    """ORATS data health: sticky status (UNKNOWN/OK/WARN/DOWN). Banner uses effective_last_success_at (persisted run or live probe). Phase 8B."""
     from app.api.data_health import get_data_health
     state = get_data_health()
     return {
@@ -980,6 +980,9 @@ def api_ops_data_health() -> Dict[str, Any]:
         "entitlement": state.get("entitlement", "UNKNOWN"),
         "sample_symbol": state.get("sample_symbol", "SPY"),
         "evaluation_window_minutes": state.get("evaluation_window_minutes"),
+        "effective_last_success_at": state.get("effective_last_success_at"),
+        "effective_source": state.get("effective_source"),
+        "effective_reason": state.get("effective_reason"),
     }
 
 

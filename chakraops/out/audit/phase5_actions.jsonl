@@ -12,3 +12,4 @@
 {"ts": "2026-02-09T18:05:53.817598+00:00", "action_type": "manual_execution_intent", "position_id": "pos_20260209_180553_f7b161d6", "symbol": "SPY", "strategy": "CSP", "account_id": "test-acct", "contracts": 2}
 {"ts": "2026-02-09T18:54:26.223354+00:00", "action_type": "manual_execution_intent", "position_id": "pos_20260209_185426_6e3145c1", "symbol": "SPY", "strategy": "CSP", "account_id": "test-acct", "contracts": 2}
 {"ts": "2026-02-09T20:42:59.556472+00:00", "action_type": "manual_execution_intent", "position_id": "pos_20260209_204259_0eaac04c", "symbol": "AAPL", "strategy": "CSP", "account_id": "RH-Trading-Account", "contracts": 1}
+{"ts": "2026-02-09T21:23:32.356125+00:00", "action_type": "exit_event_created", "position_id": "pos_20260209_204259_0eaac04c", "symbol": "AAPL", "event_type": "FINAL_EXIT", "exit_reason": "TARGET1"}

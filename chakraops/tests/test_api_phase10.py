@@ -15,12 +15,15 @@ except ImportError:
     app = None  # type: ignore[misc, assignment]
     _HAS_FASTAPI = False
 
+# Integration: require FastAPI (optional dependency). Skip reason is explicit in skipif below.
+pytestmark = [pytest.mark.integration, pytest.mark.skipif(not _HAS_FASTAPI, reason="requires FastAPI (optional dependency)")]
+
 _client = None
 
 
 def _client_fixture():
     if not _HAS_FASTAPI:
-        pytest.skip("fastapi not installed")
+        pytest.skip("requires FastAPI (optional dependency)")
     from fastapi.testclient import TestClient as TC
     from app.api.server import app as _app
     global _client
@@ -45,7 +48,6 @@ def test_market_status_returns_required_keys() -> None:
     assert data["market_phase"] in ("PRE", "OPEN", "MID", "POST", "CLOSED", None) or isinstance(data["market_phase"], str)
 
 
-@pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
 def test_symbol_diagnostics_returns_200_unknown_not_500() -> None:
     """GET /api/view/symbol-diagnostics?symbol=UNKNOWNXYZ returns 200 with recommendation (or 503 if ORATS fails)."""
     from unittest.mock import patch
@@ -66,7 +68,6 @@ def test_symbol_diagnostics_returns_200_unknown_not_500() -> None:
     assert "blockers" in data
 
 
-@pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
 def test_symbol_diagnostics_out_of_universe_returns_200_out_of_scope() -> None:
     """Out-of-universe symbol returns 200 with status OUT_OF_SCOPE when ORATS returns data but symbol not in universe."""
     from unittest.mock import patch
@@ -88,7 +89,6 @@ def test_symbol_diagnostics_out_of_universe_returns_200_out_of_scope() -> None:
     assert "NOT_IN_UNIVERSE" in codes
 
 
-@pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
 def test_universe_returns_stable_shape() -> None:
     """GET /api/view/universe returns 200 with symbols, updated_at, error (null). Never 503."""
     from unittest.mock import patch
@@ -109,7 +109,6 @@ def test_universe_returns_stable_shape() -> None:
     assert data["error"] is None
 
 
-@pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
 def test_symbol_diagnostics_missing_symbol_returns_422() -> None:
     """Missing symbol query returns 422."""
     client = _client_fixture()
@@ -117,7 +116,6 @@ def test_symbol_diagnostics_missing_symbol_returns_422() -> None:
     assert r.status_code == 422
 
 
-@pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
 def test_healthz_returns_ok() -> None:
     """GET /api/healthz returns ok."""
     client = _client_fixture()
@@ -126,7 +124,6 @@ def test_healthz_returns_ok() -> None:
     assert r.json().get("ok") is True
 
 
-@pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
 def test_ops_status_returns_phase12_shape() -> None:
     """GET /api/ops/status returns last_run_at, next_run_at, cadence_minutes, last_run_reason, symbols_evaluated, trades_found, blockers_summary."""
     client = _client_fixture()
@@ -144,7 +141,6 @@ def test_ops_status_returns_phase12_shape() -> None:
     assert isinstance(data["blockers_summary"], dict)
 
 
-@pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
 def test_ops_evaluate_unknown_job_returns_200_not_404() -> None:
     """GET /api/ops/evaluate/{job_id} for unknown job_id returns 200 with state=not_found, never 404."""
     client = _client_fixture()
@@ -154,7 +150,6 @@ def test_ops_evaluate_unknown_job_returns_200_not_404() -> None:
     assert data.get("state") == "not_found"
 
 
-@pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
 def test_trade_plan_returns_200_stable_shape() -> None:
     """GET /api/view/trade-plan returns 200 with trade_plan and fetched_at (optional endpoint, never 404)."""
     client = _client_fixture()
@@ -165,7 +160,6 @@ def test_trade_plan_returns_200_stable_shape() -> None:
     assert "fetched_at" in data
 
 
-@pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
 def test_symbol_diagnostics_spy_returns_200_with_fetched_at() -> None:
     """GET /api/view/symbol-diagnostics?symbol=SPY returns 200 with fetched_at (or 503 if ORATS fails)."""
     from unittest.mock import patch
@@ -183,7 +177,6 @@ def test_symbol_diagnostics_spy_returns_200_with_fetched_at() -> None:
     assert data.get("recommendation") in ("ELIGIBLE", "NOT_ELIGIBLE", "UNKNOWN", None) or data.get("status") in ("OUT_OF_SCOPE", "UNKNOWN", None)
 
 
-@pytest.mark.skipif(not _HAS_FASTAPI, reason="fastapi not installed")
 def test_post_ops_evaluate_returns_200_with_job_id_or_ack() -> None:
     """POST /api/ops/evaluate returns 200 with job_id (accepted) or cooldown_seconds_remaining (not accepted)."""
     client = _client_fixture()

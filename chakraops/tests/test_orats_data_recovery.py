@@ -17,10 +17,13 @@ except ImportError:
     app = None  # type: ignore[misc, assignment]
     _HAS_FASTAPI = False
 
+# Integration: require FastAPI (optional dependency). Skip reason in _client().
+pytestmark = pytest.mark.integration
+
 
 def _client():
     if not _HAS_FASTAPI:
-        pytest.skip("fastapi not installed")
+        pytest.skip("requires FastAPI (optional dependency)")
     return TestClient(app)
 
 

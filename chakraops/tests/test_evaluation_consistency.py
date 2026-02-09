@@ -300,6 +300,7 @@ class TestViewConsistency:
         assert blocks == 1
 
 
+@pytest.mark.integration
 class TestSnapshotContract:
     """Tests for /api/ops/snapshot error contract - NEVER throws.
     
@@ -309,7 +310,7 @@ class TestSnapshotContract:
     @pytest.fixture
     def requires_fastapi(self):
         """Skip tests if FastAPI not available."""
-        pytest.importorskip("fastapi", reason="FastAPI required for server tests")
+        pytest.importorskip("fastapi", reason="requires FastAPI (optional dependency)")
 
     def test_snapshot_returns_snapshot_ok_false_when_no_run(self, requires_fastapi):
         """Snapshot should return 200 with snapshot_ok=False when no run exists."""

@@ -116,12 +116,13 @@ class Stage1Result:
     symbol: str
     source: str = "ORATS"
     
-    # Stock data
+    # Stock data (from canonical snapshot only; no avg_volume — use volume metrics from data_requirements)
     price: Optional[float] = None
     bid: Optional[float] = None
     ask: Optional[float] = None
     volume: Optional[int] = None
-    avg_volume: Optional[int] = None
+    avg_option_volume_20d: Optional[float] = None  # /datav2/cores avgOptVolu20d
+    avg_stock_volume_20d: Optional[float] = None   # derived from /datav2/hist/dailies
     iv_rank: Optional[float] = None
     quote_date: Optional[str] = None  # quoteDate from ORATS
     
@@ -207,7 +208,8 @@ class FullEvaluationResult:
     bid: Optional[float] = None
     ask: Optional[float] = None
     volume: Optional[int] = None
-    avg_volume: Optional[int] = None
+    avg_option_volume_20d: Optional[float] = None
+    avg_stock_volume_20d: Optional[float] = None
     verdict: str = "UNKNOWN"
     liquidity_ok: bool = False
     liquidity_reason: str = ""
@@ -275,7 +277,8 @@ class FullEvaluationResult:
             "bid": self.bid,
             "ask": self.ask,
             "volume": self.volume,
-            "avg_volume": self.avg_volume,
+            "avg_option_volume_20d": self.avg_option_volume_20d,
+            "avg_stock_volume_20d": self.avg_stock_volume_20d,
             "regime": self.regime,
             "risk": self.risk,
             "liquidity_ok": self.liquidity_ok,
@@ -322,40 +325,40 @@ def evaluate_stage1(symbol: str) -> Stage1Result:
     """
     Stage 1: Evaluate stock quality and regime.
 
-    Fetches via app.core.data.orats_client, validates via contract_validator,
-    then applies regime/verdict/score. Single source of truth for ORATS and validation.
+    Uses ONLY canonical snapshot (symbol_snapshot_service). Delayed data only; no live.
+    Stage-1 HARD GATE: any required field missing or stale → BLOCK.
     """
-    from app.core.data.orats_client import fetch_full_equity_snapshots, OratsEquityQuoteError
+    from app.core.data.symbol_snapshot_service import get_snapshot
     from app.core.data.contract_validator import validate_equity_snapshot
+    from app.core.data.data_requirements import (
+        REQUIRED_STAGE1_FIELDS,
+        STAGE1_STALE_TRADING_DAYS,
+    )
+    from app.core.environment.market_calendar import trading_days_since
+    from app.core.data.orats_client import FullEquitySnapshot
 
     result = Stage1Result(symbol=symbol, source="ORATS")
     now_iso = datetime.now(timezone.utc).isoformat()
     result.fetched_at = now_iso
 
     try:
-        snapshots = fetch_full_equity_snapshots([symbol])
+        # Canonical snapshot only (delayed strikes/options + cores + optional derived)
+        canonical = get_snapshot(symbol, derive_avg_stock_volume_20d=True, use_cache=True)
 
-        if not snapshots or symbol.upper() not in snapshots:
-            result.stock_verdict = StockVerdict.ERROR
-            result.stock_verdict_reason = "No equity snapshot data returned"
-            result.error = "No ORATS equity data"
-            return result
-
-        snapshot = snapshots[symbol.upper()]
-
-        # DEBUG: Log ORATS response for sampled tickers
-        _SAMPLED_ORATS_KEYS: set = getattr(evaluate_stage1, "_sampled_orats_keys", set())
-        if symbol.upper() in ("AAPL", "SPY") and symbol.upper() not in _SAMPLED_ORATS_KEYS:
-            _SAMPLED_ORATS_KEYS.add(symbol.upper())
-            evaluate_stage1._sampled_orats_keys = _SAMPLED_ORATS_KEYS  # type: ignore
-            logger.info(
-                "[ORATS_EQUITY_SAMPLE] %s: price=%s bid=%s ask=%s volume=%s iv_rank=%s "
-                "quote_date=%s data_sources=%s raw_fields=%s missing=%s",
-                symbol,
-                snapshot.price, snapshot.bid, snapshot.ask, snapshot.volume,
-                snapshot.iv_rank, snapshot.quote_date, snapshot.data_sources,
-                snapshot.raw_fields_present, snapshot.missing_fields,
-            )
+        # Adapter: validator expects FullEquitySnapshot
+        snapshot = FullEquitySnapshot(
+            symbol=symbol.upper(),
+            price=canonical.price,
+            bid=canonical.bid,
+            ask=canonical.ask,
+            volume=canonical.volume,
+            quote_date=canonical.quote_date,
+            iv_rank=canonical.iv_rank,
+            data_sources=dict(canonical.field_sources),
+            raw_fields_present=[],
+            missing_fields=list(canonical.missing_reasons.keys()),
+            missing_reasons=dict(canonical.missing_reasons),
+        )
 
         # Single validator: instrument type + required fields + derivations
         validation = validate_equity_snapshot(symbol, snapshot)
@@ -364,7 +367,8 @@ def evaluate_stage1(symbol: str) -> Stage1Result:
         result.bid = validation.bid
         result.ask = validation.ask
         result.volume = validation.volume
-        result.avg_volume = validation.avg_volume
+        result.avg_option_volume_20d = canonical.avg_option_volume_20d
+        result.avg_stock_volume_20d = canonical.avg_stock_volume_20d
         result.iv_rank = validation.iv_rank
         result.quote_date = validation.quote_date
         result.data_completeness = validation.data_completeness
@@ -374,8 +378,36 @@ def evaluate_stage1(symbol: str) -> Stage1Result:
         result.data_sources = snapshot.data_sources.copy()
         result.raw_fields_present = snapshot.raw_fields_present.copy()
 
+        # Stage-1 HARD GATE: any required field missing → BLOCK
+        if result.missing_fields:
+            result.stock_verdict = StockVerdict.BLOCKED
+            result.stock_verdict_reason = f"DATA_INCOMPLETE: required missing ({', '.join(result.missing_fields)})"
+            logger.warning("[STAGE1] %s BLOCKED: required missing %s", symbol, result.missing_fields)
+            return result
+
+        # Stage-1 HARD GATE: stale → BLOCK (no WARN + PASS)
+        quote_date_parsed = None
+        if result.quote_date:
+            try:
+                from datetime import date
+                s = str(result.quote_date).strip()[:10]
+                if len(s) >= 10:
+                    quote_date_parsed = date(int(s[:4]), int(s[5:7]), int(s[8:10]))
+            except (ValueError, IndexError):
+                pass
+        if quote_date_parsed:
+            days = trading_days_since(quote_date_parsed)
+            if days is not None and days > STAGE1_STALE_TRADING_DAYS:
+                result.stock_verdict = StockVerdict.BLOCKED
+                result.stock_verdict_reason = f"DATA_STALE: quote_date {result.quote_date} is {days} trading days old"
+                logger.warning("[STAGE1] %s BLOCKED: data stale (%s days)", symbol, days)
+                return result
+
         if validation.price is None:
-            logger.warning("[SNAPSHOT] %s: price missing - this is FATAL", symbol)
+            result.stock_verdict = StockVerdict.BLOCKED
+            result.stock_verdict_reason = "DATA_INCOMPLETE_FATAL: No price data"
+            return result
+
         logger.debug(
             "[SNAPSHOT] %s: price=%s bid=%s ask=%s volume=%s iv_rank=%s sources=%s",
             symbol, result.price, result.bid, result.ask, result.volume,
@@ -391,16 +423,6 @@ def evaluate_stage1(symbol: str) -> Stage1Result:
             f"{result.iv_rank:.1f}" if result.iv_rank else "MISSING",
             result.quote_date or "MISSING",
         )
-        logger.info(
-            "[STAGE1] %s: data_completeness=%.1f%% missing_fields=%s",
-            symbol, result.data_completeness * 100, result.missing_fields,
-        )
-
-        price_fv = validation.field_quality.get("price")
-        if not (price_fv and price_fv.is_valid) or result.price is None:
-            result.stock_verdict = StockVerdict.BLOCKED
-            result.stock_verdict_reason = "DATA_INCOMPLETE_FATAL: No price data"
-            return result
 
         # Determine regime from IV
         if result.iv_rank is not None:
@@ -417,54 +439,6 @@ def evaluate_stage1(symbol: str) -> Stage1Result:
             result.regime = "UNKNOWN"
             result.risk_posture = "UNKNOWN"
 
-        # Check data completeness with market-status awareness
-        # Import verdict resolver for proper classification
-        try:
-            from app.core.eval.verdict_resolver import (
-                classify_data_incompleteness,
-                MarketStatus,
-                DataIncompleteType,
-            )
-            from app.api.server import get_market_phase
-            
-            market_phase = get_market_phase()
-            market_status = MarketStatus.CLOSED if market_phase != "OPEN" else MarketStatus.OPEN
-            
-            data_type, data_reason = classify_data_incompleteness(
-                result.missing_fields,
-                market_status,
-                has_options_chain=True,  # Will check in stage 2
-            )
-            
-            # Only block if FATAL (missing price or critical fields)
-            # With /strikes/options endpoint, bid/ask/volume should be available.
-            # Only avg_volume is never available from ORATS.
-            if data_type == DataIncompleteType.FATAL:
-                result.stock_verdict = StockVerdict.HOLD
-                result.stock_verdict_reason = data_reason
-                return result
-            elif data_type == DataIncompleteType.INTRADAY:
-                # INTRADAY fields missing - could be market closed or ORATS didn't return them
-                if market_status == MarketStatus.CLOSED:
-                    result.stock_verdict_reason = f"Stock data OK ({data_reason})"
-                else:
-                    # Market OPEN - log which fields were missing
-                    result.stock_verdict_reason = f"Stock data partial (missing: {', '.join(result.missing_fields)})"
-                logger.debug(
-                    "[STAGE1] %s: INTRADAY_ONLY fields missing but non-fatal: %s",
-                    symbol, result.missing_fields
-                )
-            elif data_type == DataIncompleteType.NONE:
-                # All fields present
-                result.stock_verdict_reason = "Stock data complete"
-            # NOTE: avg_volume is never available from ORATS and is always in missing_fields.
-        except ImportError:
-            # Fallback if verdict_resolver not available
-            if result.data_completeness < 0.5 and result.price is None:
-                result.stock_verdict = StockVerdict.HOLD
-                result.stock_verdict_reason = build_data_incomplete_reason(result.missing_fields)
-                return result
-        
         # Compute stage 1 score
         result.stage1_score = _compute_stage1_score(result)
         
@@ -472,16 +446,12 @@ def evaluate_stage1(symbol: str) -> Stage1Result:
         result.stock_verdict = StockVerdict.QUALIFIED
         result.stock_verdict_reason = f"Stock qualified (score: {result.stage1_score})"
         
-    except OratsEquityQuoteError as e:
-        result.stock_verdict = StockVerdict.ERROR
-        result.stock_verdict_reason = f"Equity data fetch error: {e}"
-        result.error = str(e)
     except Exception as e:
         logger.exception("[STAGE1] Error evaluating %s: %s", symbol, e)
         result.stock_verdict = StockVerdict.ERROR
         result.stock_verdict_reason = f"Evaluation error: {e}"
         result.error = str(e)
-    
+
     return result
 
 
@@ -870,7 +840,8 @@ def evaluate_symbol_full(
     result.bid = stage1.bid
     result.ask = stage1.ask
     result.volume = stage1.volume
-    result.avg_volume = stage1.avg_volume
+    result.avg_option_volume_20d = stage1.avg_option_volume_20d
+    result.avg_stock_volume_20d = stage1.avg_stock_volume_20d
     result.regime = stage1.regime
     result.risk = stage1.risk_posture
     result.data_completeness = stage1.data_completeness
@@ -1198,7 +1169,8 @@ def evaluate_universe_staged(
             result.bid = stage1.bid
             result.ask = stage1.ask
             result.volume = stage1.volume
-            result.avg_volume = stage1.avg_volume
+            result.avg_option_volume_20d = stage1.avg_option_volume_20d
+            result.avg_stock_volume_20d = stage1.avg_stock_volume_20d
             result.regime = stage1.regime
             result.risk = stage1.risk_posture
             result.data_completeness = stage1.data_completeness
@@ -1210,7 +1182,7 @@ def evaluate_universe_staged(
             result.quote_date = stage1.quote_date
             result.iv_rank = stage1.iv_rank
             result.score = stage1.stage1_score
-            
+
             if stage1.stock_verdict == StockVerdict.BLOCKED:
                 result.final_verdict = FinalVerdict.BLOCKED
                 result.verdict = "BLOCKED"

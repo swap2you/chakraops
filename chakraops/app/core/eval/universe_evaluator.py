@@ -49,7 +49,8 @@ class SymbolEvaluationResult:
     bid: Optional[float] = None
     ask: Optional[float] = None
     volume: Optional[int] = None
-    avg_volume: Optional[int] = None
+    avg_option_volume_20d: Optional[float] = None
+    avg_stock_volume_20d: Optional[float] = None
     # Verdict
     verdict: str = "UNKNOWN"  # ELIGIBLE, HOLD, BLOCKED, UNKNOWN
     primary_reason: str = ""
@@ -570,28 +571,26 @@ def _evaluate_single_symbol(symbol: str) -> SymbolEvaluationResult:
                 raw_volume = s.get("stockVolume")
             volume_fv = wrap_field_int(raw_volume, "volume")
             
-            # Handle avg_volume fallback properly - 0 is a valid value
-            raw_avg_volume = s.get("avgVolume")
-            if raw_avg_volume is None:
-                raw_avg_volume = s.get("avgStockVolume")
-            avg_volume_fv = wrap_field_int(raw_avg_volume, "avg_volume")
-            
-            iv_rank_fv = wrap_field_float(s.get("ivRank"), "iv_rank")
-            
+            # Volume metrics: only avg_option_volume_20d / avg_stock_volume_20d (no avg_volume in ORATS)
+            raw_opt = s.get("avg_option_volume_20d") or s.get("avgOptVolu20d")
+            raw_stock = s.get("avg_stock_volume_20d")
+            result.avg_option_volume_20d = _safe_float(raw_opt)
+            result.avg_stock_volume_20d = _safe_float(raw_stock)
+
+            iv_rank_fv = wrap_field_float(s.get("ivRank") or s.get("iv_rank"), "iv_rank")
+
             # Store quality info
             field_quality["price"] = price_fv
             field_quality["bid"] = bid_fv
             field_quality["ask"] = ask_fv
             field_quality["volume"] = volume_fv
-            field_quality["avg_volume"] = avg_volume_fv
             field_quality["iv_rank"] = iv_rank_fv
-            
+
             # Extract values (None if MISSING, preserves 0 if VALID)
             result.price = price_fv.value if price_fv.is_valid else None
             result.bid = bid_fv.value if bid_fv.is_valid else None
             result.ask = ask_fv.value if ask_fv.is_valid else None
             result.volume = volume_fv.value if volume_fv.is_valid else None
-            result.avg_volume = avg_volume_fv.value if avg_volume_fv.is_valid else None
             
             # Track quality details for API
             for name, fv in field_quality.items():
@@ -837,7 +836,7 @@ def run_universe_evaluation_staged(universe_symbols: List[str], use_staged: bool
         
         for sr in staged_results:
             # Convert FullEvaluationResult to SymbolEvaluationResult
-            # bid/ask/volume/avg_volume are now direct fields on FullEvaluationResult
+            # bid/ask/volume and volume metrics from FullEvaluationResult
             sym_result = SymbolEvaluationResult(
                 symbol=sr.symbol,
                 source=sr.source,
@@ -845,7 +844,8 @@ def run_universe_evaluation_staged(universe_symbols: List[str], use_staged: bool
                 bid=sr.bid,
                 ask=sr.ask,
                 volume=sr.volume,
-                avg_volume=sr.avg_volume,
+                avg_option_volume_20d=getattr(sr, "avg_option_volume_20d", None),
+                avg_stock_volume_20d=getattr(sr, "avg_stock_volume_20d", None),
                 verdict=sr.verdict,
                 primary_reason=sr.primary_reason,
                 confidence=sr.confidence,

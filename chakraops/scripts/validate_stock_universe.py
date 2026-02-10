@@ -49,7 +49,7 @@ def main() -> int:
     for s in sorted(eligible, key=lambda x: x.symbol):
         print(
             f"- {s.symbol} price={s.price} bid={s.bid} ask={s.ask} "
-            f"vol={s.volume} avg_vol={s.avg_volume} has_options={s.has_options}"
+            f"vol={s.volume} avg_stock_20d={getattr(s, 'avg_stock_volume_20d', None)} has_options={s.has_options}"
         )
     print()
 

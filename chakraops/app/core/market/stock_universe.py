@@ -41,7 +41,7 @@ class StockUniverseManager:
         allow_etfs: bool = False,
         min_price: float = 20.0,
         max_price: float = 500.0,
-        min_avg_volume: int = 1_500_000,
+        min_avg_stock_volume: int = 1_500_000,
         curated: Optional[List[UniverseSymbol]] = None,
         symbols_from_db: Optional[List[str]] = None,
     ) -> None:
@@ -49,7 +49,7 @@ class StockUniverseManager:
         self._allow_etfs = bool(allow_etfs)
         self._min_price = float(min_price)
         self._max_price = float(max_price)
-        self._min_avg_volume = int(min_avg_volume)
+        self._min_avg_stock_volume = int(min_avg_stock_volume)
 
         # When symbols_from_db is provided, use it as the authoritative list (no hardcoded universe).
         if symbols_from_db is not None and len(symbols_from_db) > 0:
@@ -106,7 +106,7 @@ class StockUniverseManager:
 
         Rules:
         - price between $20 and $500 (if price available)
-        - avg_volume >= 1_500_000 (if available)
+        - avg_stock_volume_20d >= min (if available)
         - has listed options == True
         - exclude ETFs unless explicitly allowed
         - exclude symbols with no valid snapshot response (provider returns None + reason)
@@ -140,10 +140,11 @@ class StockUniverseManager:
                     self._last_exclusions[sym] = f"price_out_of_range({snap.price})"
                     continue
 
-            # Hard filter: avg_volume threshold (only if available)
-            if snap.avg_volume is not None:
-                if int(snap.avg_volume) < self._min_avg_volume:
-                    self._last_exclusions[sym] = f"avg_volume_below_threshold({snap.avg_volume})"
+            # Hard filter: avg_stock_volume_20d threshold (only if available)
+            avg_stock = getattr(snap, "avg_stock_volume_20d", None)
+            if avg_stock is not None:
+                if int(avg_stock) < self._min_avg_stock_volume:
+                    self._last_exclusions[sym] = f"avg_stock_volume_below_threshold({avg_stock})"
                     continue
 
             eligible.append(snap)

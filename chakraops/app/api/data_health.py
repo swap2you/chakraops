@@ -297,13 +297,62 @@ def _extract_last_price(row: Dict[str, Any]) -> Optional[float]:
     return None
 
 
+def fetch_universe_from_canonical_snapshot() -> Dict[str, Any]:
+    """
+    Fetch universe from canonical SymbolSnapshot service (delayed quote + core + optional derived).
+    Does NOT use /datav2/live/* for equity. Returns same shape as fetch_universe_from_orats for API compatibility.
+    """
+    from app.core.data.symbol_snapshot_service import get_snapshots_batch
+
+    updated_at = datetime.now(timezone.utc).isoformat()
+    symbols_out: List[Dict[str, Any]] = []
+    excluded: List[Dict[str, Any]] = []
+    try:
+        snapshots = get_snapshots_batch(list(UNIVERSE_SYMBOLS), derive_avg_stock_volume_20d=True, use_cache=True)
+    except Exception as e:
+        logger.warning("[UNIVERSE] Canonical snapshot batch failed: %s", e)
+        for ticker in UNIVERSE_SYMBOLS:
+            excluded.append({"symbol": ticker, "exclusion_reason": str(e)[:200]})
+        return {
+            "symbols": [],
+            "excluded": excluded,
+            "all_failed": True,
+            "updated_at": updated_at,
+        }
+    for ticker in UNIVERSE_SYMBOLS:
+        sym = ticker.upper()
+        snap = snapshots.get(sym)
+        if not snap:
+            excluded.append({"symbol": ticker, "exclusion_reason": "Snapshot not returned"})
+            continue
+        exclusion_reason = None
+        if snap.price is None and "price" in snap.missing_reasons:
+            exclusion_reason = snap.missing_reasons.get("price")
+        symbols_out.append({
+            "symbol": ticker,
+            "source": "orats_delayed_and_core",
+            "last_price": snap.price,
+            "fetched_at": updated_at,
+            "exclusion_reason": exclusion_reason,
+            "stock_volume_today": snap.stock_volume_today,
+            "avg_option_volume_20d": snap.avg_option_volume_20d,
+            "avg_stock_volume_20d": snap.avg_stock_volume_20d,
+            "quote_as_of": snap.quote_as_of,
+            "field_sources": snap.field_sources,
+            "missing_reasons": snap.missing_reasons,
+        })
+    return {
+        "symbols": symbols_out,
+        "excluded": excluded,
+        "all_failed": len(symbols_out) == 0,
+        "updated_at": updated_at,
+    }
+
+
 def fetch_universe_from_orats() -> Dict[str, Any]:
     """
-    Fetch universe from ORATS Live (same source as probe_orats_live) for UNIVERSE_SYMBOLS. Returns:
-    - symbols: list of { symbol, source, last_price, fetched_at, exclusion_reason (null for success) }
-    - excluded: list of { symbol, exclusion_reason } for symbols that failed
-    - all_failed: True if every symbol failed
-    - updated_at: ISO timestamp of fetch
+    DEPRECATED: Uses /datav2/live/summaries (Live API). Use fetch_universe_from_canonical_snapshot for Universe page.
+    Kept for backward compatibility only.
     """
     from app.core.data.orats_client import get_orats_live_summaries, OratsUnavailableError
     updated_at = datetime.now(timezone.utc).isoformat()

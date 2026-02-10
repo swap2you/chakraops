@@ -8,10 +8,25 @@ This document is the single source of truth for required vs optional data, stale
 - **Optional** missing → WARN only
 - All required present and not stale → PASS
 - **Overrides cannot bypass required missing data.** Manual override MUST NOT override when required data is missing; the system must not present a symbol as PASS in that case.
+- **No UNKNOWN without reason.** A value may be missing only if ORATS truly does not provide it (or the request failed); it must be recorded in `missing_fields` with a documented reason (e.g. "Not provided by ORATS Core Data"). Never display "UNKNOWN" for a field without that reason.
 
 ---
 
 ## 1. Required vs Optional Data
+
+### ORATS Core Data v2 — per-ticker snapshot (Phase 8)
+
+**Single source:** `GET /datav2/cores` is the authoritative per-ticker snapshot. All per-ticker equity + options context (stkVolu, avgOptVolu20d, IV metrics, trade_date, etc.) flows from this endpoint via `app/core/orats/orats_core_client.py` and `app/core/data/equity_snapshot.py`. Canonical field names are defined in `app/core/data/orats_field_map.py`.
+
+| Role | Canonical fields | Provider / notes |
+|------|------------------|------------------|
+| **Required** | `ticker`, `trade_date`, `last_close_price`, `stock_volume_today` | ORATS `/datav2/cores` (pxCls, tradeDate, stkVolu) |
+| **Optional** | `avg_stock_volume_20d` | Derived from `/datav2/hist/dailies` when enabled; source=DERIVED_ORATS_HIST. Do not block evaluation if missing; warning only. |
+| **Informational** | `avg_option_volume_20d`, `iv_percentile_1y`, `iv_rank`, `orats_confidence`, `prior_close`, `sector`, `market_cap`, `industry` | ORATS cores when present. Never block. |
+
+- If ORATS provides the field → populate it. If not requested → that's a bug. If ORATS truly does not return it → add to `missing_fields` with reason (e.g. "Not provided by ORATS Core Data").
+- Derived fields must be explicitly labeled (e.g. DERIVED_ORATS_HIST for avg_stock_volume_20d).
+- **EquitySnapshot** is the single model for Universe row, Ticker snapshot, and Decision artifact (bit-for-bit for the same run).
 
 ### Price (underlying)
 
@@ -59,14 +74,14 @@ This document is the single source of truth for required vs optional data, stale
 
 | Instrument type | Required | Optional (never cause DATA_INCOMPLETE) |
 |-----------------|----------|----------------------------------------|
-| **EQUITY** | `bid`, `ask`, `volume` | `avg_volume` |
-| **ETF / INDEX** | `volume` only | `bid`, `ask`, `open_interest`, `avg_volume` |
+| **EQUITY** | `bid`, `ask`, `volume` | — |
+| **ETF / INDEX** | `volume` only | `bid`, `ask`, `open_interest` |
 
 - **EQUITY:** Missing `bid` or `ask` or `volume` → required missing; may BLOCK unless derivable or waived (DERIVED_FROM_OPRA).
 - **ETF / INDEX (e.g. SPY, QQQ, IWM, DIA):** `bid`, `ask`, and `open_interest` are **optional**. A symbol must **never** be marked DATA_INCOMPLETE solely for missing bid/ask/open_interest for ETF/INDEX.
-- Provider: ORATS `/datav2/strikes/options`. `avg_volume` is not available from ORATS; never blocks.
+- Provider: ORATS `/datav2/strikes/options`. Volume metrics: only `avg_option_volume_20d` (cores) or derived `avg_stock_volume_20d` (hist/dailies). No field named `avg_volume` (see [DATA_REQUIREMENTS.md](./DATA_REQUIREMENTS.md)).
 - When market is CLOSED, intraday gaps (bid/ask/volume) may be non-fatal and waivable in Stage 2 when options liquidity is confirmed.
-- Stale → WARN. avg_volume missing → WARN only.
+- Stale → WARN (Stage-1: stale → BLOCK per DATA_REQUIREMENTS).
 
 ### Derivable fields (Phase 8E)
 
@@ -188,7 +203,7 @@ When **options liquidity is confirmed** (Stage 2: OPRA/chain has usable bid/ask/
 | IVR | iv_rank | iv_percentile | > 1 td → WARN; missing → FAIL |
 | Option chain | strikes available | — | > 1 td → WARN; missing → BLOCK |
 | Delta | delta (candidate) | theta, vega | > 1 td → WARN |
-| Liquidity | EQUITY: bid, ask, volume; ETF/INDEX: volume only | ETF/INDEX: bid, ask, open_interest; all: avg_volume | > 1 td → WARN; missing → FAIL only for required (derivable treated as present) |
+| Liquidity | EQUITY: bid, ask, volume; ETF/INDEX: volume only | ETF/INDEX: bid, ask, open_interest | > 1 td → WARN; missing → FAIL only for required (derivable treated as present) |
 | OI/volume | usable OI or volume | — | > 1 td → WARN |
 | risk_amount_at_entry | — (position-level) | — | N/A |
 
@@ -198,6 +213,7 @@ When **options liquidity is confirmed** (Stage 2: OPRA/chain has usable bid/ask/
 
 - **GET /api/symbols/{symbol}/data-sufficiency** (or equivalent): Returns `status` (PASS | WARN | FAIL), `required_data_missing`, `optional_data_missing`, `required_data_stale`, `data_as_of_orats`, `data_as_of_price`.
 - **Position detail:** Includes `data_sufficiency`, `data_sufficiency_missing_fields`, `data_sufficiency_is_override`, and the Phase 6 fields above.
+- **UI (Phase 8F):** UI must render only backend-provided snapshot fields. No UI fallback calls to ORATS. Universe row == Ticker snapshot == Decision artifact (same run). For missing fields, tooltip text: **"Not provided by ORATS Core Data"** (or the reason from `missing_reasons`). Do not display "UNKNOWN" without that reason.
 - **UI:** For status WARN or FAIL, always show `missing_fields` and `required_data_missing` when non-empty. For required_data_stale non-empty, show e.g. "Data stale (last updated N trading days ago)." When is_override = true, indicate manual override and that override is invalid when required data is missing. Do not treat missing data_sufficiency as PASS; if absent, treat as FAIL.
 
 ---

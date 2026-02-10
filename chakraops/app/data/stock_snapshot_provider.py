@@ -80,7 +80,8 @@ class StockSnapshotProvider:
             if price is None and bid is not None and ask is not None:
                 price = (float(bid) + float(ask)) / 2.0
             volume = _first_int(info, ["volume", "regularMarketVolume"])
-            avg_volume = _first_int(info, ["averageVolume", "averageVolume10days"])
+            avg_stock = _first_int(info, ["averageVolume", "averageVolume10days"])
+            avg_stock_float = float(avg_stock) if avg_stock is not None else None
 
             snap = StockSnapshot(
                 symbol=sym,
@@ -88,10 +89,11 @@ class StockSnapshotProvider:
                 bid=bid,
                 ask=ask,
                 volume=volume,
-                avg_volume=avg_volume,
                 has_options=bool(has_options),
                 snapshot_time=snapshot_time,
                 data_source="YFINANCE",
+                avg_option_volume_20d=None,
+                avg_stock_volume_20d=avg_stock_float,
             )
             return snap, None
         except Exception as e:

@@ -25,10 +25,11 @@ class StockSnapshot:
     bid: Optional[float]
     ask: Optional[float]
     volume: Optional[int]
-    avg_volume: Optional[int]
     has_options: bool
     snapshot_time: datetime
     data_source: Literal["THETA"]
+    avg_option_volume_20d: Optional[float] = None
+    avg_stock_volume_20d: Optional[float] = None
 
 
 __all__ = ["StockSnapshot"]

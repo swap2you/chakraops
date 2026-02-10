@@ -18,6 +18,10 @@ BASE_DATAV2 = "https://api.orats.io/datav2"
 PATH_STRIKES = "/strikes"
 PATH_STRIKES_OPTIONS = "/strikes/options"
 PATH_IVRANK = "/ivrank"
+# Core Data v2 — single authoritative per-ticker snapshot (Phase 8A)
+PATH_CORES = "/cores"
+# Hist dailies — for derived avg stock volume (Phase 8D)
+PATH_HIST_DAILIES = "/hist/dailies"
 
 # Live API paths (same base BASE_DATAV2; paths are /live/strikes, /live/summaries)
 PATH_LIVE_STRIKES = "/live/strikes"
@@ -37,16 +41,26 @@ def url_live_strikes(base: str = BASE_DATAV2) -> str:
 def url_live_summaries(base: str = BASE_DATAV2) -> str:
     return f"{base.rstrip('/')}{PATH_LIVE_SUMMARIES}"
 
+def url_cores(base: str = BASE_DATAV2) -> str:
+    return f"{base.rstrip('/')}{PATH_CORES}"
+
+def url_hist_dailies(base: str = BASE_DATAV2) -> str:
+    return f"{base.rstrip('/')}{PATH_HIST_DAILIES}"
+
 __all__ = [
     "BASE_DATAV2",
     "BASE_LIVE",
     "PATH_STRIKES",
     "PATH_STRIKES_OPTIONS",
     "PATH_IVRANK",
+    "PATH_CORES",
+    "PATH_HIST_DAILIES",
     "PATH_LIVE_STRIKES",
     "PATH_LIVE_SUMMARIES",
     "url_strikes_options",
     "url_ivrank",
+    "url_cores",
+    "url_hist_dailies",
     "url_live_strikes",
     "url_live_summaries",
 ]

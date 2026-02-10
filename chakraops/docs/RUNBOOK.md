@@ -13,11 +13,14 @@ Single entry point for daily operation, smoke tests, debugging, and validation. 
 - **Backend deps (from `chakraops`):** `pip install -r requirements.txt` (includes FastAPI, uvicorn)
 - **ORATS token:** Configure via `.env` or project config (see [SECRETS_AND_ENV.md](./SECRETS_AND_ENV.md)). Never commit secrets.
 
-### Start backend
+### Start backend and uvicorn
 
-```bash
+```powershell
 cd chakraops
-# Optional: activate venv first, e.g. .\.venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -c "import fastapi; import uvicorn; print('OK')"
+
 uvicorn app.api.server:app --reload --port 8000
 ```
 

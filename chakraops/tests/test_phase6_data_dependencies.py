@@ -89,13 +89,12 @@ def test_dependency_status_fail_when_required_missing() -> None:
 def test_dependency_status_warn_when_stale_or_optional_missing() -> None:
     """WARN when required_data_stale or optional_data_missing (and no required missing)."""
     assert dependency_status([], ["price"], []) == "WARN"
-    assert dependency_status([], [], ["avg_volume"]) == "WARN"
+    assert dependency_status([], [], ["some_optional"]) == "WARN"
 
 
 def test_dependency_status_pass_when_all_clear() -> None:
     """PASS only when required_data_missing and required_data_stale empty."""
     assert dependency_status([], [], []) == "PASS"
-    assert dependency_status([], [], ["avg_volume"]) == "WARN"
 
 
 def test_compute_required_missing_delta_for_eligible() -> None:
@@ -114,11 +113,11 @@ def test_compute_required_missing_delta_for_eligible() -> None:
     assert "delta" in missing
 
 
-def test_compute_optional_missing_avg_volume() -> None:
-    """Optional avg_volume missing is in optional_data_missing only."""
+def test_compute_optional_missing_no_avg_volume() -> None:
+    """avg_volume is not in OPTIONAL_EVALUATION_FIELDS (does not exist in ORATS per DATA_REQUIREMENTS)."""
     sym = {"symbol": "X", "price": 100, "bid": 99, "ask": 101, "volume": 1000, "iv_rank": 50.0}
     optional = compute_optional_missing(sym)
-    assert "avg_volume" in optional
+    assert "avg_volume" not in optional
 
 
 def test_data_sufficiency_no_pass_when_required_missing() -> None:

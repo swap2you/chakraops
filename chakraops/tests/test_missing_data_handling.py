@@ -243,11 +243,9 @@ class TestEvaluatorMissingDataHandling:
 
         # volume should be VALID (0 is a valid value)
         assert result.data_quality_details.get("volume") == "VALID"
-        assert result.data_quality_details.get("avg_volume") == "VALID"
 
-        # volume should NOT be in missing_fields
+        # volume should NOT be in missing_fields (no avg_volume; use volume metrics)
         assert "volume" not in result.missing_fields
-        assert "avg_volume" not in result.missing_fields
 
 
 class TestDataQualityDetails:
@@ -288,9 +286,7 @@ class TestDataQualityDetails:
 
         assert "volume" in result.data_quality_details
         assert result.data_quality_details["volume"] == "VALID"  # 0 is valid
-
-        assert "avg_volume" in result.data_quality_details
-        assert result.data_quality_details["avg_volume"] == "MISSING"
+        # Volume metrics: avg_option_volume_20d / avg_stock_volume_20d (no avg_volume)
 
 
 class TestAlertCategoryDistinction:

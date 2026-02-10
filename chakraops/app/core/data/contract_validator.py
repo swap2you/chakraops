@@ -51,7 +51,6 @@ class ContractValidationResult:
     volume: Optional[int] = None
     iv_rank: Optional[float] = None
     quote_date: Optional[str] = None
-    avg_volume: Optional[int] = None
 
     # Completeness and diagnostics
     data_completeness: float = 0.0
@@ -84,7 +83,6 @@ def validate_equity_snapshot(symbol: str, snapshot: FullEquitySnapshot) -> Contr
     )
 
     result = ContractValidationResult(symbol=symbol, instrument_type=inst)
-    result.avg_volume = snapshot.avg_volume  # Optional; not from ORATS
 
     raw_price = snapshot.price
     raw_bid = snapshot.bid

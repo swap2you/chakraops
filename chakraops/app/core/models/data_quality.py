@@ -196,8 +196,7 @@ class ReasonCode:
     COERCION_FAILED = "COERCION_FAILED"
 
 
-# Required fields for MarketSnapshot (signal engine). avg_volume is explicitly EXCLUDED.
-# See ORATS_DATAV2_ENDPOINT_AND_DATA_REFERENCE: avg_volume not provided by any endpoint.
+# Required fields for MarketSnapshot (signal engine). Volume metrics (avg_option_volume_20d, avg_stock_volume_20d) are optional.
 MARKET_SNAPSHOT_REQUIRED_FIELDS = ("price", "bid", "ask", "volume", "quote_time", "iv_rank")
 
 
@@ -232,7 +231,7 @@ def compute_data_completeness_required(
 ) -> tuple[float, list[str]]:
     """
     Compute data completeness over REQUIRED fields only.
-    Use this for MarketSnapshot so optional fields (e.g. avg_volume) do not lower completeness.
+    Use this for MarketSnapshot so optional fields (e.g. volume metrics) do not lower completeness.
     
     Args:
         fields: Dict of field_name -> FieldValue (may contain extra optional keys)

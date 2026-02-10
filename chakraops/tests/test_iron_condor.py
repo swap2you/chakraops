@@ -31,7 +31,7 @@ def _stock_snapshot(symbol: str = "AAPL", price: float = 100.0) -> StockSnapshot
         bid=price - 0.01,
         ask=price + 0.01,
         volume=1_000_000,
-        avg_volume=2_000_000,
+        avg_stock_volume_20d=2_000_000.0,
         has_options=True,
         snapshot_time=datetime(2026, 1, 22, 10, 0, 0),
         data_source="THETA",

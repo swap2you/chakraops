@@ -4,6 +4,8 @@ ChakraOps uses ORATS datav2 for equity quotes and IV rank. This page summarizes 
 
 **Source of truth:** See [OratsUtil docs: ORATS_DATAV2_ENDPOINT_AND_DATA_REFERENCE.md](https://github.com/your-org/OratsUtil/blob/main/docs/ORATS_DATAV2_ENDPOINT_AND_DATA_REFERENCE.md) (or the copy under `C:\Development\Workspace\OratsUtil\docs\`) for full endpoint specs, query params, and response shapes.
 
+**Phase 8 — Core Data v2:** The single authoritative per-ticker snapshot is `GET /datav2/cores` (see [DATA_CONTRACT.md](./DATA_CONTRACT.md) §1). Canonical ChakraOps field names are defined in `app/core/data/orats_field_map.py` (ORATS_TO_CANONICAL). All downstream code uses canonical names only.
+
 ---
 
 ## 1. ORATS Field-to-Endpoint Mapping
@@ -16,6 +18,18 @@ ChakraOps uses ORATS datav2 for equity quotes and IV rank. This page summarizes 
 | **volume** | `GET /datav2/strikes/options` | `volume` | |
 | **quote_time** | `GET /datav2/strikes/options` | `quoteDate` | ISO UTC |
 | **iv_rank** | `GET /datav2/ivrank` | `ivRank1m` else `ivPct1m` | Max 10 tickers per request |
+
+### Core Data v2 (Phase 8 — single per-ticker snapshot)
+
+| ChakraOps (canonical) | ORATS endpoint | ORATS field(s) |
+|----------------------|----------------|----------------|
+| **last_close_price** | `GET /datav2/cores` | `pxCls` |
+| **stock_volume_today** | `GET /datav2/cores` | `stkVolu` |
+| **avg_option_volume_20d** | `GET /datav2/cores` | `avgOptVolu20d` |
+| **iv_rank** / **iv_percentile_1y** | `GET /datav2/cores` | `ivRank`, `ivPctile1y` |
+| **trade_date** | `GET /datav2/cores` | `tradeDate` |
+| **orats_confidence**, **sector**, **market_cap** | `GET /datav2/cores` | `confidence`, `sector`, `marketCap` |
+| **avg_stock_volume_20d** (optional, derived) | `GET /datav2/hist/dailies` | `stockVolume` / `stockVolu` (mean of last 20) — source=DERIVED_ORATS_HIST |
 
 - **Equity quote fields** (price, bid, ask, volume, quoteDate) come **only** from delayed **`/strikes/options`** with **underlying tickers** in `tickers=`. Live endpoints do not return equity-level bid/ask/volume.
 - **IV rank** comes from delayed **`/ivrank`** with `ticker=` (comma-delimited, max 10).

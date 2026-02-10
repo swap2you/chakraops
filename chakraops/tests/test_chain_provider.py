@@ -420,123 +420,111 @@ def _make_stage1_snapshot(
     bid: float | None = 151.90,
     ask: float | None = 152.10,
     volume: int | None = 5000000,
-    avg_volume: int | None = 4000000,
     iv_rank: float | None = 45.0,
     quote_date: str | None = "2025-02-01",
+    avg_option_volume_20d: float | None = 40000.0,
+    avg_stock_volume_20d: float | None = 5_000_000.0,
 ):
-    """Build FullEquitySnapshot for Stage 1 tests. Patch target: orats_equity_quote.fetch_full_equity_snapshots."""
-    from app.core.orats.orats_equity_quote import FullEquitySnapshot
-    missing = []
+    """Build SymbolSnapshot for Stage 1 tests. Patch target: symbol_snapshot_service.get_snapshot. No avg_volume."""
+    from app.core.data.symbol_snapshot_service import SymbolSnapshot
+    missing_reasons = {}
     if price is None:
-        missing.append("price")
+        missing_reasons["price"] = "test"
     if bid is None:
-        missing.append("bid")
+        missing_reasons["bid"] = "test"
     if ask is None:
-        missing.append("ask")
+        missing_reasons["ask"] = "test"
     if volume is None:
-        missing.append("volume")
-    missing.append("avg_volume")
+        missing_reasons["volume"] = "test"
     if iv_rank is None:
-        missing.append("iv_rank")
-    raw = []
-    if price is not None:
-        raw.append("price")
-    if bid is not None:
-        raw.append("bid")
-    if ask is not None:
-        raw.append("ask")
-    if volume is not None:
-        raw.append("volume")
-    if iv_rank is not None:
-        raw.append("iv_rank")
-    sources = {}
-    if price is not None:
-        sources["price"] = "strikes/options"
-    if bid is not None:
-        sources["bid"] = "strikes/options"
-    if ask is not None:
-        sources["ask"] = "strikes/options"
-    if volume is not None:
-        sources["volume"] = "strikes/options"
-    if iv_rank is not None:
-        sources["iv_rank"] = "ivrank"
-    return FullEquitySnapshot(
-        symbol=symbol.upper(),
+        missing_reasons["iv_rank"] = "test"
+    if quote_date is None:
+        missing_reasons["quote_date"] = "test"
+    return SymbolSnapshot(
+        ticker=symbol.upper(),
         price=price,
         bid=bid,
         ask=ask,
         volume=volume,
-        avg_volume=avg_volume,
-        iv_rank=iv_rank,
         quote_date=quote_date,
-        data_sources=sources,
-        raw_fields_present=raw,
-        missing_fields=missing,
-        missing_reasons={f: "test" for f in missing},
+        iv_rank=iv_rank,
+        stock_volume_today=None,
+        avg_option_volume_20d=avg_option_volume_20d,
+        avg_stock_volume_20d=avg_stock_volume_20d,
+        quote_as_of=quote_date or "",
+        core_as_of=None,
+        derived_as_of=None,
+        field_sources={},
+        missing_reasons=missing_reasons,
     )
 
 
 class TestStagedEvaluator:
-    """Tests for 2-stage evaluation pipeline. Stage 1 uses fetch_full_equity_snapshots, not get_orats_live_summaries."""
-    
-    @patch("app.core.orats.orats_equity_quote.fetch_full_equity_snapshots")
-    def test_stage1_qualifies_stock(self, mock_fetch):
-        """Test stage 1 qualifies a good stock."""
-        mock_fetch.return_value = {"AAPL": _make_stage1_snapshot(price=152.0, bid=151.90, ask=152.10, volume=5000000, avg_volume=4000000, iv_rank=45.0)}
-        
+    """Tests for 2-stage evaluation pipeline. Stage 1 uses get_snapshot (symbol_snapshot_service)."""
+
+    @patch("app.core.data.symbol_snapshot_service.get_snapshot")
+    def test_stage1_qualifies_stock(self, mock_get_snapshot):
+        """Test stage 1 qualifies a good stock. Use recent quote_date so staleness check does not BLOCK."""
+        from datetime import date
+        today = date.today().isoformat()
+        mock_get_snapshot.return_value = _make_stage1_snapshot(
+            price=152.0, bid=151.90, ask=152.10, volume=5000000, iv_rank=45.0, quote_date=today
+        )
+
         from app.core.eval.staged_evaluator import evaluate_stage1, StockVerdict
-        
+
         result = evaluate_stage1("AAPL")
-        
+
         assert result.stock_verdict == StockVerdict.QUALIFIED
         assert result.price == 152.0
         assert result.data_completeness > 0.5
 
-    @patch("app.core.orats.orats_equity_quote.fetch_full_equity_snapshots")
-    def test_stage1_maps_orats_summaries_to_snapshot_fields(self, mock_fetch):
-        """Snapshot fields (price, bid, ask, volume, iv_rank) are set from fetch_full_equity_snapshots."""
-        mock_fetch.return_value = {"AAPL": _make_stage1_snapshot(
-            price=176.20, bid=176.18, ask=176.25, volume=45_123_000, avg_volume=62_000_000, iv_rank=38.0
-        )}
-        
+    @patch("app.core.data.symbol_snapshot_service.get_snapshot")
+    def test_stage1_maps_snapshot_fields(self, mock_get_snapshot):
+        """Snapshot fields (price, bid, ask, volume, iv_rank, avg_option_volume_20d, avg_stock_volume_20d) from get_snapshot."""
+        mock_get_snapshot.return_value = _make_stage1_snapshot(
+            price=176.20, bid=176.18, ask=176.25, volume=45_123_000, iv_rank=38.0,
+            avg_option_volume_20d=62_000.0, avg_stock_volume_20d=62_000_000.0,
+        )
+
         from app.core.eval.staged_evaluator import evaluate_stage1
-        
+
         result = evaluate_stage1("AAPL")
-        
+
         assert result.price == 176.20
         assert result.bid == 176.18
         assert result.ask == 176.25
         assert result.volume == 45_123_000
-        assert result.avg_volume == 62_000_000
         assert result.iv_rank == 38.0
-        assert "avg_volume" not in result.missing_fields and "iv_rank" not in result.missing_fields
-    
-    @patch("app.core.orats.orats_equity_quote.fetch_full_equity_snapshots")
-    def test_stage1_blocks_missing_price(self, mock_fetch):
+        assert result.avg_option_volume_20d == 62_000.0
+        assert result.avg_stock_volume_20d == 62_000_000.0
+        assert "iv_rank" not in result.missing_fields
+
+    @patch("app.core.data.symbol_snapshot_service.get_snapshot")
+    def test_stage1_blocks_missing_price(self, mock_get_snapshot):
         """Test stage 1 blocks when price is missing."""
-        mock_fetch.return_value = {"BADSTOCK": _make_stage1_snapshot(symbol="BADSTOCK", price=None, volume=1000000)}
+        mock_get_snapshot.return_value = _make_stage1_snapshot(symbol="BADSTOCK", price=None, volume=1000000)
         
         from app.core.eval.staged_evaluator import evaluate_stage1, StockVerdict
-        
+
         result = evaluate_stage1("BADSTOCK")
         
         assert result.stock_verdict == StockVerdict.BLOCKED
         assert "price" in result.stock_verdict_reason.lower()
     
-    @patch("app.core.orats.orats_equity_quote.fetch_full_equity_snapshots")
-    def test_stage1_holds_incomplete_data(self, mock_fetch):
-        """Test stage 1 with sparse data (only price): low data_completeness; verdict may be QUALIFIED or HOLD.
-        Phase 8E: SPARSE is INDEX so required = price, volume, iv_rank, quote_date; pass quote_date=None so only price present -> completeness < 0.5."""
-        mock_fetch.return_value = {"SPARSE": _make_stage1_snapshot(
+    @patch("app.core.data.symbol_snapshot_service.get_snapshot")
+    def test_stage1_holds_incomplete_data(self, mock_get_snapshot):
+        """Test stage 1 with sparse data (only price): required missing -> BLOCK; low data_completeness."""
+        mock_get_snapshot.return_value = _make_stage1_snapshot(
             symbol="SPARSE", price=100.0, bid=None, ask=None, volume=None, iv_rank=None, quote_date=None
-        )}
-        
+        )
+
         from app.core.eval.staged_evaluator import evaluate_stage1, StockVerdict
-        
+
         result = evaluate_stage1("SPARSE")
-        
+
         assert result.data_completeness < 0.5, "sparse data should yield low completeness"
-        assert result.stock_verdict in (StockVerdict.HOLD, StockVerdict.QUALIFIED)
+        assert result.stock_verdict == StockVerdict.BLOCKED, "missing required fields must BLOCK"
     
     @patch("app.core.eval.staged_evaluator.evaluate_stage1")
     @patch("app.core.eval.staged_evaluator.evaluate_stage2")

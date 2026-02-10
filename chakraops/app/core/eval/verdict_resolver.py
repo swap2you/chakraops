@@ -45,10 +45,9 @@ class MarketStatus(str, Enum):
 FATAL_MISSING_FIELDS = frozenset({"price"})
 
 # Fields that are only relevant during market hours or optional for display (non-fatal when missing)
-# ORATS /live/summaries may not include bid/ask/volume/avg_volume/iv_rank; do not FATAL when only these are missing
+# ORATS delayed must provide bid/ask/volume/iv_rank for Stage-1. INTRADAY_ONLY used for classification only.
 INTRADAY_ONLY_FIELDS = frozenset({
-    "bid", "ask", "volume", "bidSize", "askSize",
-    "avg_volume", "iv_rank",  # optional for UI/scoring; ORATS summaries may omit
+    "bid", "ask", "volume", "bidSize", "askSize", "iv_rank",
 })
 
 

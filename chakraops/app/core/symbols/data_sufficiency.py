@@ -23,7 +23,7 @@ def _symbol_to_dict(s: Any) -> Dict[str, Any]:
     if isinstance(s, dict):
         return s
     out = {}
-    for k in ("symbol", "price", "bid", "ask", "volume", "avg_volume", "fetched_at", "verdict",
+    for k in ("symbol", "price", "bid", "ask", "volume", "avg_option_volume_20d", "avg_stock_volume_20d", "fetched_at", "verdict",
               "data_completeness", "missing_fields", "candidate_trades", "selected_contract"):
         out[k] = getattr(s, k, None)
     out["iv_rank"] = getattr(s, "iv_rank", None)

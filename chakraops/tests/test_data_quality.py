@@ -248,8 +248,8 @@ class TestComputeDataCompleteness:
 class TestComputeDataCompletenessRequired:
     """Tests for compute_data_completeness_required (MarketSnapshot required fields only)."""
 
-    def test_required_only_avg_volume_ignored(self):
-        """When all required fields valid, completeness is 1.0 even if avg_volume missing."""
+    def test_required_only_optional_volume_ignored(self):
+        """When all required fields valid, completeness is 1.0 even if optional volume metric missing. No avg_volume."""
         fields = {
             "price": FieldValue(100.0, DataQuality.VALID, field_name="price"),
             "bid": FieldValue(99.9, DataQuality.VALID, field_name="bid"),
@@ -257,13 +257,14 @@ class TestComputeDataCompletenessRequired:
             "volume": FieldValue(1_000_000, DataQuality.VALID, field_name="volume"),
             "quote_time": FieldValue("2026-02-03T16:00:00Z", DataQuality.VALID, field_name="quote_time"),
             "iv_rank": FieldValue(50.0, DataQuality.VALID, field_name="iv_rank"),
-            "avg_volume": FieldValue(None, DataQuality.MISSING, field_name="avg_volume"),
+            "avg_stock_volume_20d": FieldValue(None, DataQuality.MISSING, field_name="avg_stock_volume_20d"),
         }
         completeness, missing = compute_data_completeness_required(fields)
         assert completeness == 1.0
         assert missing == []
         assert "quote_time" in MARKET_SNAPSHOT_REQUIRED_FIELDS
         assert "avg_volume" not in MARKET_SNAPSHOT_REQUIRED_FIELDS
+        assert "avg_stock_volume_20d" not in MARKET_SNAPSHOT_REQUIRED_FIELDS
 
     def test_one_required_missing(self):
         """One required field missing reduces required completeness."""

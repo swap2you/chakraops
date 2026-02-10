@@ -618,15 +618,34 @@ REFRESH_CADENCE_SECONDS = 900   # 15 minutes
 
 
 @app.get("/api/ops/snapshot")
-def api_ops_snapshot() -> Dict[str, Any]:
+def api_ops_snapshot(symbol: Optional[str] = Query(default=None)) -> Dict[str, Any]:
     """System snapshot: summarizes current state WITHOUT triggering ORATS calls.
-    
-    NEVER THROWS - Always returns 200.
-    SINGLE SOURCE OF TRUTH: Reads ONLY from persisted evaluation run.
-    No live ORATS calls. Idempotent and deterministic.
+    When ?symbol= is provided: returns canonical SymbolSnapshot for that symbol (debug; same pipeline as ticker/diagnostics).
     """
     from datetime import datetime, timezone
-    
+
+    # Debug: return canonical SymbolSnapshot for symbol (single snapshot pipeline proof)
+    if symbol is not None and str(symbol).strip():
+        sym = str(symbol).strip().upper()
+        try:
+            from app.core.data.symbol_snapshot_service import get_snapshot
+            snap = get_snapshot(sym, derive_avg_stock_volume_20d=True, use_cache=True)
+            return {
+                "symbol": sym,
+                "snapshot_time": datetime.now(timezone.utc).isoformat(),
+                "snapshot": snap.to_dict(),
+                "field_sources": snap.field_sources,
+                "missing_reasons": snap.missing_reasons,
+            }
+        except Exception as e:
+            return {
+                "symbol": sym,
+                "error": str(e),
+                "snapshot": None,
+                "field_sources": {},
+                "missing_reasons": {},
+            }
+
     # Initialize all variables with safe defaults
     now = datetime.now(timezone.utc)
     snapshot_time_utc = now.isoformat()
@@ -1119,13 +1138,13 @@ def api_view_trade_plan() -> Dict[str, Any]:
 
 @app.get("/api/view/universe")
 def api_view_universe() -> Dict[str, Any]:
-    """Universe: best-effort from persistence/ORATS. Never 503  -  return empty symbols and log on failure (decoupled from ORATS)."""
+    """Universe: canonical SymbolSnapshot only (delayed quote + core + optional derived). Never 503. Banner from GET /api/ops/data-health."""
     from datetime import datetime, timezone
     try:
-        from app.api.data_health import fetch_universe_from_orats
-        result = fetch_universe_from_orats()
+        from app.api.data_health import fetch_universe_from_canonical_snapshot
+        result = fetch_universe_from_canonical_snapshot()
         if result["all_failed"]:
-            logger.warning("[UNIVERSE] ORATS returned no data for any symbol; returning empty. excluded=%s", result.get("excluded"))
+            logger.warning("[UNIVERSE] Canonical snapshot returned no symbols; excluded=%s", result.get("excluded"))
             return {"symbols": [], "excluded": result.get("excluded", []), "updated_at": datetime.now(timezone.utc).isoformat(), "error": None}
         return {
             "symbols": result["symbols"],
@@ -1134,7 +1153,7 @@ def api_view_universe() -> Dict[str, Any]:
             "error": None,
         }
     except Exception as e:
-        logger.warning("[UNIVERSE] Universe load failed (ORATS/persistence): %s; returning empty.", e, exc_info=False)
+        logger.warning("[UNIVERSE] Universe load failed: %s; returning empty.", e, exc_info=False)
         return {"symbols": [], "excluded": [], "updated_at": datetime.now(timezone.utc).isoformat(), "error": None}
 
 
@@ -1234,67 +1253,42 @@ def api_ops_evaluate_status(job_id: str) -> Dict[str, Any]:
 def api_view_symbol_diagnostics(symbol: str = Query(..., min_length=1, max_length=12)) -> Dict[str, Any]:
     """Symbol diagnostics with FULL EXPLAINABILITY for ANY valid ticker.
     
-    Returns comprehensive data including:
-    - Stock snapshot (price, bid, ask, volume, trend)
-    - Eligibility verdict with primary reason
-    - Gates status (PASS/FAIL with reasons)
-    - Regime and risk assessment
-    - Liquidity analysis
-    - Options and Greeks summary
-    - Candidate trades (if eligible)
-    
-    503 if ORATS fails for this symbol.
+    Stock snapshot from canonical SymbolSnapshot service (delayed quote + core + optional derived).
+    Does NOT use /datav2/live/* for equity bid/ask/volume or iv_rank. Never returns UNKNOWN; use null + missing_reasons.
     """
     from datetime import datetime, timezone
-    from app.core.data.orats_client import get_orats_live_summaries, OratsUnavailableError
+    from app.core.data.symbol_snapshot_service import get_snapshot
     sym = symbol.strip().upper()
     t0 = time.perf_counter()
     try:
-        orats_data = get_orats_live_summaries(sym, timeout_sec=15.0)
-    except OratsUnavailableError as e:
+        snap = get_snapshot(sym, derive_avg_stock_volume_20d=True, use_cache=True)
+    except Exception as e:
         raise HTTPException(
             status_code=503,
             detail={
                 "provider": "ORATS",
                 "reason": str(e),
-                "endpoint": getattr(e, "endpoint", "") or "summaries",
-                "symbol": getattr(e, "symbol", "") or sym,
-                "http_status": e.http_status,
+                "symbol": sym,
             },
         )
     elapsed = time.perf_counter() - t0
     fetched_at = datetime.now(timezone.utc).isoformat()
-    if not orats_data or (isinstance(orats_data, list) and len(orats_data) == 0):
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "provider": "ORATS",
-                "reason": "ORATS returned no data for symbol",
-                "symbol": sym,
-            },
-        )
-    
-    # Extract stock data from ORATS response
-    first = orats_data[0] if isinstance(orats_data, list) and orats_data else {}
-    stock_price = None
-    for key in ("stockPrice", "closePrice", "close", "last", "price"):
-        if first.get(key) is not None:
-            try:
-                stock_price = float(first[key])
-                break
-            except (TypeError, ValueError):
-                pass
-    
-    # Build stock snapshot
-    # NOTE: ORATS /live/summaries is a VOLATILITY endpoint, NOT an equity quote endpoint.
-    # It does NOT provide bid/ask/volume/avgVolume - those would come from an equity data feed.
+    orats_data = []  # kept for downstream options/greeks if we add live chain later; stock comes from snap
+
+    # Build stock snapshot from canonical snapshot (delayed + core + derived). No UNKNOWN.
     stock = {
-        "price": stock_price,
-        "bid": None,  # NOT in ORATS summaries
-        "ask": None,  # NOT in ORATS summaries
-        "volume": None,  # NOT in ORATS summaries
-        "avg_volume": None,  # NOT in ORATS summaries
-        "trend": _compute_trend(first),
+        "price": snap.price,
+        "bid": snap.bid,
+        "ask": snap.ask,
+        "volume": snap.volume,
+        "avg_option_volume_20d": snap.avg_option_volume_20d,
+        "avg_stock_volume_20d": snap.avg_stock_volume_20d,
+        "trend": None,
+        "quote_as_of": snap.quote_as_of,
+        "stock_volume_today": snap.stock_volume_today,
+        "avg_option_volume_20d": snap.avg_option_volume_20d,
+        "field_sources": snap.field_sources,
+        "missing_reasons": snap.missing_reasons,
     }
     
     # Initialize result with full explainability structure
@@ -1356,21 +1350,19 @@ def api_view_symbol_diagnostics(symbol: str = Query(..., min_length=1, max_lengt
             "reason": "No earnings data",
         },
         
-        # Options
+        # Options (underlying_price = stock snapshot price from canonical snapshot)
         "options": {
             "has_options": True,
             "chain_ok": True,
             "expirations_count": len(orats_data) if isinstance(orats_data, list) else None,
             "contracts_count": None,
-            "underlying_price": stock_price,
+            "underlying_price": snap.price,
         },
         
-        # Greeks summary
-        # NOTE: ORATS /live/summaries does NOT provide ivRank directly.
-        # We compute it from iv30d/iv1y ratio (same as staged_evaluator).
+        # Greeks summary (iv_rank from canonical snapshot delayed ivrank endpoint)
         "greeks_summary": {
-            "iv_rank": _compute_iv_rank(first),
-            "iv_percentile": _safe_float(first.get("ivPct") or first.get("iv30Pct")),
+            "iv_rank": snap.iv_rank,
+            "iv_percentile": None,
             "delta_target_range": "0.20-0.35 for CSP",
             "theta_bias": "Favor high theta / low DTE",
         },
@@ -1489,9 +1481,14 @@ def api_view_symbol_diagnostics(symbol: str = Query(..., min_length=1, max_lengt
         result["notes"].append("Symbol not in latest evaluation run - computed independently")
     
     # Generate candidate trades if eligible and none provided from persisted run
-    if result["eligibility"]["verdict"] == "ELIGIBLE" and stock_price and not result["candidate_trades"]:
-        _generate_candidate_trades(result, stock_price, first)
-    
+    stock_price = result["stock"].get("price")
+    orats_payload = {}
+    if result["eligibility"]["verdict"] == "ELIGIBLE" and not result["candidate_trades"]:
+        if stock_price is not None and float(stock_price) > 0:
+            _generate_candidate_trades(result, float(stock_price), orats_payload)
+        else:
+            result["notes"].append("Candidate trades not generated: missing stock price")
+
     return result
 
 
@@ -1882,7 +1879,8 @@ def api_view_universe_evaluation() -> Dict[str, Any]:
                 "bid": s.bid,
                 "ask": s.ask,
                 "volume": s.volume,
-                "avg_volume": s.avg_volume,
+                "avg_option_volume_20d": getattr(s, "avg_option_volume_20d", None),
+                "avg_stock_volume_20d": getattr(s, "avg_stock_volume_20d", None),
                 "verdict": s.verdict,
                 "primary_reason": _clean_encoding(s.primary_reason),
                 "confidence": s.confidence,

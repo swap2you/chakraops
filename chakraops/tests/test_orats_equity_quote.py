@@ -322,11 +322,10 @@ class TestFullEquitySnapshot:
         # From IV rank
         assert snap.iv_rank == 45.5
         
-        # avg_volume is always None; excluded from required (optional_not_available)
-        assert snap.avg_volume is None
+        # No avg_volume (forbidden); volume metrics are avg_option_volume_20d / avg_stock_volume_20d from cores/hist
+        assert not hasattr(snap, "avg_volume") or getattr(snap, "avg_volume", None) is None
         assert "avg_volume" not in snap.missing_fields
-        assert snap.optional_not_available.get("avg_volume") == "Not available from ORATS endpoints"
-        
+
         # Data sources should track which endpoint provided each field
         assert snap.data_sources.get("price") == "strikes/options"
         assert snap.data_sources.get("bid") == "strikes/options"
@@ -357,14 +356,13 @@ class TestFullEquitySnapshot:
         snapshots = fetch_full_equity_snapshots(["AAPL"])
         snap = snapshots["AAPL"]
         
-        # Check missing fields (required only; avg_volume is optional_not_available)
+        # Check missing fields (required only; no avg_volume)
         assert "bid" in snap.missing_fields
         assert "ask" in snap.missing_fields
         assert "volume" in snap.missing_fields
         assert "iv_rank" in snap.missing_fields
         assert "avg_volume" not in snap.missing_fields
-        assert "avg_volume" in snap.optional_not_available
-        
+
         # Price should NOT be missing
         assert "price" not in snap.missing_fields
         
@@ -501,7 +499,7 @@ class TestMergeReport:
             quote_date="2026-02-03T16:00:00Z",
             iv_rank=45.5,
             missing_fields=[],
-            optional_not_available={"avg_volume": "Not available from ORATS endpoints"},
+            optional_not_available={},
         )
         report = build_merge_report({"AAPL": snap}, ["AAPL"])
         assert report["requested_tickers"] == ["AAPL"]

@@ -135,7 +135,7 @@ def format_stock_field(value: Any, waiver_reason: Optional[str], field_name: str
     Args:
         value: The value to format
         waiver_reason: e.g. "DERIVED_FROM_OPRA"
-        field_name: Name of the field (bid, ask, volume, avg_volume)
+        field_name: Name of the field (bid, ask, volume, avg_stock_volume_20d, avg_option_volume_20d)
         is_currency: Format as currency
         is_volume: Format as volume (K/M)
     """

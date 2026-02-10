@@ -25,7 +25,7 @@ def create_test_stock_snapshot(
         bid=price - 0.01 if price is not None else None,
         ask=price + 0.01 if price is not None else None,
         volume=1000000,
-        avg_volume=2000000,
+        avg_stock_volume_20d=2000000.0,
         has_options=True,
         snapshot_time=snapshot_time,
         data_source="THETA",

@@ -292,7 +292,7 @@ def rank_opportunities(
         data_as_of: Dict[str, Optional[str]] = {}
         try:
             from app.core.symbols.data_dependencies import compute_dependency_lists
-            sym_dict = sym if isinstance(sym, dict) else {k: getattr(sym, k, None) for k in ("symbol", "price", "bid", "ask", "volume", "avg_volume", "iv_rank", "quote_date", "fetched_at", "verdict", "candidate_trades", "selected_contract")}
+            sym_dict = sym if isinstance(sym, dict) else {k: getattr(sym, k, None) for k in ("symbol", "price", "bid", "ask", "volume", "avg_option_volume_20d", "avg_stock_volume_20d", "iv_rank", "quote_date", "fetched_at", "verdict", "candidate_trades", "selected_contract")}
             required_data_missing, optional_data_missing, required_data_stale, data_as_of = compute_dependency_lists(sym_dict)
         except Exception as e:
             logger.debug("[RANKING] Data dependency check failed: %s", e)

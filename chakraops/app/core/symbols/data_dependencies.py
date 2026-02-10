@@ -18,7 +18,8 @@ REQUIRED_EVALUATION_FIELDS = ["price", "iv_rank", "bid", "ask", "volume", "quote
 # Phase 8E: ETF/INDEX never require bid, ask, open_interest for DATA_INCOMPLETE
 REQUIRED_EVALUATION_FIELDS_EQUITY = ["price", "iv_rank", "bid", "ask", "volume", "quote_date"]
 REQUIRED_EVALUATION_FIELDS_ETF_INDEX = ["price", "iv_rank", "volume", "quote_date"]
-OPTIONAL_EVALUATION_FIELDS = ["avg_volume"]  # Not available from ORATS; never blocks
+# Volume: only avg_option_volume_20d (cores) or avg_stock_volume_20d (derived). No avg_volume (does not exist in ORATS).
+OPTIONAL_EVALUATION_FIELDS: List[str] = []  # No optional fields that block; volume metrics are informational
 STALENESS_TRADING_DAYS = 1
 
 

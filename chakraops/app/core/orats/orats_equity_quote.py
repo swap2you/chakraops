@@ -158,23 +158,19 @@ class FullEquitySnapshot:
     """
     MarketSnapshot: combined equity quote + IV rank for the signal engine.
     Required: price (stockPrice), bid, ask, volume, quote_time (quoteDate), iv_rank.
-    Optional: live-derived only if available. avg_volume explicitly excluded from required
-    (not provided by ORATS per endpoint reference).
+    Only from delayed /strikes/options and /ivrank. No avg_volume (does not exist in ORATS).
     """
     symbol: str
     
-    # From equity quote (required for completeness)
+    # From equity quote (required for completeness) — ONLY from delayed /strikes/options
     price: Optional[float] = None
     bid: Optional[float] = None
     ask: Optional[float] = None
     volume: Optional[int] = None
     quote_date: Optional[str] = None  # quoteDate -> quote_time in contract
     
-    # From IV rank (required)
+    # From IV rank (required) — delayed /ivrank
     iv_rank: Optional[float] = None
-    
-    # avg_volume: NOT available from ORATS - keep as None; do not add to missing_fields
-    avg_volume: Optional[int] = None
     
     # Data source tracking per field
     data_sources: Dict[str, str] = field(default_factory=dict)
@@ -843,8 +839,6 @@ def fetch_full_equity_snapshots(
     - Equity quote from /strikes/options (price, bid, ask, volume, quote_date)
     - IV rank from /ivrank (iv_rank)
     
-    Note: avg_volume is NOT available from ORATS and will remain None.
-    
     Args:
         tickers: List of underlying tickers
         cache: Optional cache instance
@@ -930,9 +924,6 @@ def fetch_full_equity_snapshots(
         if snapshot.iv_rank is None:
             snapshot.missing_fields.append("iv_rank")
             snapshot.missing_reasons["iv_rank"] = iv.error if iv and iv.error else "Not in ORATS response"
-        
-        # avg_volume is NOT provided by any ORATS endpoint; exclude from required
-        snapshot.optional_not_available["avg_volume"] = "Not available from ORATS endpoints"
         
         results[ticker_upper] = snapshot
         

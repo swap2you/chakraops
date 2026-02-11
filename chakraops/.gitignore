@@ -16,3 +16,7 @@ data/*.json
 
 # logs
 logs/
+
+# Runtime / evaluation output (do not commit)
+out/
+artifacts/

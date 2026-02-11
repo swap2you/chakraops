@@ -1,6 +1,7 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""Phase 8.3: Provider selection (Theta -> yfinance -> SnapshotOnly)."""
+"""Phase 8.3: Provider selection (Theta -> yfinance -> SnapshotOnly).
+ARCHIVED: Moved from tests/; excluded from pytest via norecursedirs (_archived_theta)."""
 
 from __future__ import annotations
 

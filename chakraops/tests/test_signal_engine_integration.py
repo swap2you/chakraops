@@ -31,7 +31,7 @@ def create_test_snapshots() -> list[StockSnapshot]:
             avg_stock_volume_20d=2000000.0,
             has_options=True,
             snapshot_time=base_time,
-            data_source="THETA",
+            data_source="ORATS",
         ),
         StockSnapshot(
             symbol="MSFT",
@@ -42,7 +42,7 @@ def create_test_snapshots() -> list[StockSnapshot]:
             avg_stock_volume_20d=3000000.0,
             has_options=True,
             snapshot_time=base_time,
-            data_source="THETA",
+            data_source="ORATS",
         ),
     ]
 
@@ -359,7 +359,7 @@ class TestSignalEngineIntegration:
                 avg_stock_volume_20d=2000000.0,
                 has_options=True,
                 snapshot_time=base_time,
-                data_source="THETA",
+                data_source="ORATS",
             )
         ]
 

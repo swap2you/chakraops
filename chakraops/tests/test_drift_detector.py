@@ -61,7 +61,7 @@ def _make_snapshot(
 
 
 def _make_live(
-    data_source: str = "ThetaTerminal",
+    data_source: str = "ORATS",
     underlying_prices: Dict[str, float] | None = None,
     option_chain_available: Dict[str, bool] | None = None,
     iv_by_contract: Dict[str, float] | None = None,

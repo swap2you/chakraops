@@ -1,6 +1,7 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
 """Unit tests for ThetaData market data provider.
+ARCHIVED: Moved from tests/legacy/; excluded from pytest via norecursedirs (_archived_theta).
 
 IMPORTANT: These tests are currently DISABLED.
 

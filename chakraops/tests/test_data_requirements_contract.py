@@ -80,6 +80,31 @@ def test_stage1_blocks_on_missing_required():
     assert "missing" in result.stock_verdict_reason.lower() or "incomplete" in result.stock_verdict_reason.lower()
 
 
+def test_stage1_blocks_on_missing_bid_ask_volume():
+    """Stage-1 must BLOCK when bid, ask, or volume is missing (strict; no OPRA waiver)."""
+    from unittest.mock import patch
+    from app.core.data.symbol_snapshot_service import SymbolSnapshot
+    from app.core.eval.staged_evaluator import evaluate_stage1, StockVerdict
+
+    # Snapshot with price/quote_date/iv_rank but missing bid/ask/volume
+    with patch("app.core.data.symbol_snapshot_service.get_snapshot") as mock_get:
+        mock_get.return_value = SymbolSnapshot(
+            ticker="TEST",
+            price=100.0,
+            bid=None,
+            ask=None,
+            volume=None,
+            quote_date="2026-02-09",
+            iv_rank=50.0,
+            field_sources={},
+            missing_reasons={"bid": "missing", "ask": "missing", "volume": "missing"},
+        )
+        result = evaluate_stage1("TEST")
+    assert result.stock_verdict == StockVerdict.BLOCKED
+    assert "bid" in result.missing_fields or "ask" in result.missing_fields or "volume" in result.missing_fields
+    assert "incomplete" in result.stock_verdict_reason.lower() or "missing" in result.stock_verdict_reason.lower()
+
+
 def test_no_avg_volume_in_optional_evaluation_fields():
     """data_dependencies must not list avg_volume as optional."""
     from app.core.symbols.data_dependencies import OPTIONAL_EVALUATION_FIELDS

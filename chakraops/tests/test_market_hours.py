@@ -80,9 +80,9 @@ def test_get_polling_interval_seconds_closed_300() -> None:
     assert get_polling_interval_seconds(utc) == POLL_INTERVAL_CLOSED_SEC
 
 
-def test_get_mode_label_live_theta() -> None:
-    assert "LIVE" in get_mode_label("ThetaTerminal", True)
-    assert "ThetaTerminal" in get_mode_label("ThetaTerminal", True)
+def test_get_mode_label_live_provider() -> None:
+    assert "LIVE" in get_mode_label("ORATS", True)
+    assert "ORATS" in get_mode_label("ORATS", True)
 
 
 def test_get_mode_label_snapshot_only() -> None:

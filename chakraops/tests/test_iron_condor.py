@@ -34,7 +34,7 @@ def _stock_snapshot(symbol: str = "AAPL", price: float = 100.0) -> StockSnapshot
         avg_stock_volume_20d=2_000_000.0,
         has_options=True,
         snapshot_time=datetime(2026, 1, 22, 10, 0, 0),
-        data_source="THETA",
+        data_source="ORATS",
     )
 
 

@@ -8,9 +8,9 @@ Validation-only document. No business logic changes.
 | Stage | Purpose | ChakraOps Field | ORATS Endpoint | ORATS Field(s) | Required? | Used In Calculation? | If Missing |
 |-------|---------|-----------------|----------------|----------------|-----------|----------------------|------------|
 | Stage 1 | Equity Quote | stock.price (snapshot.price) | /datav2/strikes/options | stockPrice | YES | Eligibility gate | BLOCK |
-| Stage 1 | Liquidity | stock.bid (snapshot.bid) | /datav2/strikes/options | bid | YES | Liquidity check | BLOCK* |
-| Stage 1 | Liquidity | stock.ask (snapshot.ask) | /datav2/strikes/options | ask | YES | Liquidity check | BLOCK* |
-| Stage 1 | Liquidity | stock.volume (snapshot.volume) | /datav2/strikes/options | volume | YES | Liquidity check | BLOCK* |
+| Stage 1 | Liquidity | stock.bid (snapshot.bid) | /datav2/strikes/options | bid | YES | Liquidity check | BLOCK |
+| Stage 1 | Liquidity | stock.ask (snapshot.ask) | /datav2/strikes/options | ask | YES | Liquidity check | BLOCK |
+| Stage 1 | Liquidity | stock.volume (snapshot.volume) | /datav2/strikes/options | volume | YES | Liquidity check | BLOCK |
 | Stage 1 | Quote time | quote_date | /datav2/strikes/options | quoteDate | YES | Staleness gate | BLOCK |
 | Stage 1 | IV Rank | iv_rank | /datav2/ivrank | ivRank1m (fallback ivPct1m) | YES | Volatility regime | BLOCK |
 | Stage 2 | Options Chain | option bid/ask (per contract) | /datav2/live/strikes | bidPrice, askPrice (per option row) | YES | Strategy scoring, liquidity | BLOCK |
@@ -21,8 +21,6 @@ Validation-only document. No business logic changes.
 | Stage 2 (OPRA) | Option liquidity | bid/ask per OCC symbol | /datav2/strikes/options | bidPrice, askPrice (OCC symbols only) | When used | Liquidity validation | N/A (options path) |
 | Future | Earnings | earnings_date | /datav2/live/summaries or cores | earnings / nextErn | NO | Not fully implemented | IGNORE |
 | Future | News | news | — | — | NO | Not implemented | IGNORE |
-
-\* **Waiver:** When Stage 2 OPRA path confirms options liquidity, `bid`, `ask`, and `volume` may be **waived** (removed from missing_fields, completeness boosted). See docs/FIELD_WAIVERS.md.
 
 ---
 

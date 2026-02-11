@@ -27,7 +27,7 @@ class StockSnapshot:
     volume: Optional[int]
     has_options: bool
     snapshot_time: datetime
-    data_source: Literal["THETA"]
+    data_source: Literal["ORATS", "SNAPSHOT", "YFINANCE"]
     avg_option_volume_20d: Optional[float] = None
     avg_stock_volume_20d: Optional[float] = None
 

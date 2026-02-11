@@ -13,13 +13,9 @@
 
 ---
 
-## 1. waived_fields (Stage 2 OPRA waiver)
+## 1. waived_fields (Stage 2 OPRA waiver) — REMOVED
 
-| Location | Field(s) | Why Waived | Is This Still Valid? | Should Be Removed? |
-|----------|----------|------------|----------------------|--------------------|
-| `app/core/eval/staged_evaluator.py` (STOCK_INTRADAY_FIELDS) | **bid**, **ask**, **volume**, bidsize, asksize | When Stage 2 OPRA path confirms options liquidity (`stage2.liquidity_ok`), stock intraday fields are removed from `missing_fields` and added to `waived_fields`. Completeness is boosted; gate shows "Stock bid, ask, volume waived - options liquidity confirmed (DERIVED_FROM_OPRA)". | By design: options liquidity is treated as sufficient so missing underlying quote is not BLOCK. | **FLAG: BUG** — Auditor rule: *If bid / ask / volume appear here → flag as BUG.* Required Stage 1 fields (bid, ask, volume) are being waived when OPRA passes. Product decision: either accept waiver explicitly or remove it and BLOCK when stock quote missing. |
-
-**Evidence:** `out/evaluations/*_data_completeness.json` frequently contains `"waived_fields": ["bid", "ask", "volume"]` for symbols (e.g. ABNB, AMZN, COIN, CRWD).
+**REMOVED (as of strict Stage-1 cleanup).** Equity bid/ask/volume are **required** Stage 1 fields from delayed `/datav2/strikes/options`. If missing or stale, Stage 1 BLOCKs; no waiver. The code path that removed bid, ask, volume, bidsize, asksize from `missing_fields` when Stage 2 OPRA passed has been deleted from `app/core/eval/staged_evaluator.py`. `waived_fields` no longer includes these fields anywhere.
 
 ---
 
@@ -49,6 +45,6 @@
 
 ## Summary
 
-- **Waived fields in production:** **bid**, **ask**, **volume** (and optionally bidsize, asksize) when OPRA confirms options liquidity. **Flagged as BUG** per audit rule.
+- **Waived fields (stock bid/ask/volume):** REMOVED. Stage 1 strictly requires price, bid, ask, volume, quote_date, iv_rank; missing → BLOCK.
 - **optional_not_available:** Present on FullEquitySnapshot; currently empty in canonical snapshot path; valid to keep.
 - **ALLOW_MISSING / skip_if_missing:** Not used.

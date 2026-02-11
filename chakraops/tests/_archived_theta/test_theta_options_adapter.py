@@ -1,6 +1,7 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""Unit tests for Theta options adapter: normalization and parsing."""
+"""Unit tests for Theta options adapter: normalization and parsing.
+ARCHIVED: Moved from tests/; excluded from pytest via norecursedirs (_archived_theta)."""
 
 from __future__ import annotations
 

@@ -1,13 +1,12 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
 """
-Tests for EOD strategy liquidity waiver.
+Tests for EOD strategy and strict Stage 1.
 
-Validates that symbols can progress past HOLD when:
-- Stock bid/ask/volume are missing
-- But valid ORATS option chain liquidity exists (via two-step pipeline)
-
-This is correct behavior for EOD options strategies (Wheel/CSP/CC).
+- Stage 1 strictly requires bid/ask/volume from delayed /datav2/strikes/options.
+  If any are missing, Stage 1 BLOCKs; no OPRA waiver.
+- When Stage 1 qualifies (all required present), Stage 2 liquidity can still come from
+  OPRA pipeline; no waiver gate for stock fields.
 """
 
 from __future__ import annotations
@@ -35,98 +34,43 @@ from app.core.orats.orats_opra import (
 
 
 class TestEodLiquidityWaiver:
-    """Tests for EOD strategy liquidity waiver logic."""
+    """Tests for strict Stage 1 and Stage 2 liquidity (no stock-field waiver)."""
 
-    def test_missing_stock_liquidity_but_valid_options_progresses_past_hold(self):
+    def test_stage1_blocks_when_bid_ask_volume_missing_even_if_stage2_would_have_liquidity(self):
         """
-        Given:
-            - Stock price exists
-            - Stock bid/ask/volume are MISSING
-            - Valid ORATS OPRA enrichment (strikes/options) returns valid liquidity
-        
-        Expect:
-            - Symbol progresses past HOLD
-            - Stock bid/ask/volume are waived
-            - Verdict is ELIGIBLE (not HOLD)
+        Stage 1 must BLOCK when bid/ask/volume are missing. No waiver when Stage 2 OPRA
+        would have provided options liquidity.
         """
-        # Mock stage 1: Stock price exists, but bid/ask/volume missing
+        # Stage 1 BLOCKed due to missing required bid/ask/volume
         mock_stage1 = Stage1Result(symbol="AAPL")
         mock_stage1.price = 180.0
-        mock_stage1.bid = None  # Missing
-        mock_stage1.ask = None  # Missing
-        mock_stage1.volume = None  # Missing
+        mock_stage1.bid = None
+        mock_stage1.ask = None
+        mock_stage1.volume = None
         mock_stage1.iv_rank = 45.0
         mock_stage1.data_completeness = 0.5
         mock_stage1.missing_fields = ["bid", "ask", "volume"]
-        mock_stage1.stock_verdict = StockVerdict.QUALIFIED
-        mock_stage1.stock_verdict_reason = "Stock qualified with missing intraday fields"
-        mock_stage1.stage1_score = 60
+        mock_stage1.stock_verdict = StockVerdict.BLOCKED
+        mock_stage1.stock_verdict_reason = "DATA_INCOMPLETE: required missing (bid, ask, volume)"
+        mock_stage1.stage1_score = 50
         mock_stage1.regime = "NEUTRAL"
         mock_stage1.risk_posture = "MODERATE"
-        
-        # OPRA enrichment result with valid liquidity (used by _enhance_liquidity_with_pipeline)
-        valid_put = OptionContract(
-            symbol="AAPL",
-            option_symbol="AAPL260320P00175000",
-            expir_date="2026-03-20",
-            strike=175.0,
-            option_type="PUT",
-            dte=31,
-            bid_price=4.40,
-            ask_price=4.50,
-            volume=100,
-            open_interest=539,
-            delta=-0.32,
-        )
-        mock_opra_result = OpraEnrichmentResult(
-            symbol="AAPL",
-            underlying=None,  # Stock bid/ask missing - waiver applies
-            options=[valid_put] * 5,  # 5 valid puts so gate passes
-            strikes_rows=20,
-            opra_symbols_built=10,
-            option_rows_returned=10,
-            underlying_row_returned=False,
-            error=None,
-        )
-        
-        with patch("app.core.eval.staged_evaluator.evaluate_stage1") as mock_eval_stage1, \
-             patch("app.core.eval.staged_evaluator.evaluate_stage2") as mock_eval_stage2, \
-             patch("app.core.orats.orats_opra.fetch_opra_enrichment") as mock_fetch_opra:
-            
+
+        with patch("app.core.eval.staged_evaluator.evaluate_stage1") as mock_eval_stage1:
             mock_eval_stage1.return_value = mock_stage1
-            
-            # Stage 2 initially fails (e.g. live chain had no OPRA data)
-            mock_stage2 = Stage2Result(symbol="AAPL")
-            mock_stage2.expirations_available = 5
-            mock_stage2.expirations_evaluated = 3
-            mock_stage2.contracts_evaluated = 100
-            mock_stage2.liquidity_ok = False
-            mock_stage2.liquidity_reason = "No contracts meeting criteria"
-            mock_stage2.chain_missing_fields = ["open_interest", "bid", "ask"]
-            mock_eval_stage2.return_value = mock_stage2
-            
-            mock_fetch_opra.return_value = mock_opra_result
-            
+
             result = evaluate_symbol_full("AAPL")
-            
-            # OPRA enrichment (two-step pipeline) was invoked
-            mock_fetch_opra.assert_called_once()
-            
-            assert result.liquidity_ok == True, "liquidity_ok should be True after OPRA enhancement"
-            
-            waiver_gate = next(
-                (g for g in result.gates if g.get("name") == "EOD Strategy Data Waiver"),
-                None
-            )
-            assert waiver_gate is not None, "EOD Strategy Data Waiver gate should exist"
-            assert waiver_gate["status"] == "WAIVED"
-            assert "DERIVED_FROM_OPRA" in waiver_gate["reason"]
-            
-            assert result.verdict == "ELIGIBLE", f"Expected ELIGIBLE but got {result.verdict}"
-            assert result.final_verdict == FinalVerdict.ELIGIBLE
-            
-            for field in ["bid", "ask", "volume"]:
-                assert field not in result.missing_fields, f"{field} should be waived"
+
+        # Must be BLOCKED; we never run Stage 2 when Stage 1 blocks
+        assert result.verdict == "BLOCKED"
+        assert result.final_verdict == FinalVerdict.BLOCKED
+        assert "bid" in result.missing_fields or "ask" in result.missing_fields or "volume" in result.missing_fields
+        # No EOD Strategy Data Waiver gate (waiver removed)
+        waiver_gate = next(
+            (g for g in result.gates if g.get("name") == "EOD Strategy Data Waiver"),
+            None,
+        )
+        assert waiver_gate is None
 
     def test_missing_stock_price_still_blocks(self):
         """
@@ -154,64 +98,45 @@ class TestEodLiquidityWaiver:
 
     def test_no_option_liquidity_still_holds(self):
         """
-        Given:
-            - Stock price exists, bid/ask/volume missing
-            - OPRA enrichment returns no valid liquidity (error or zero valid contracts)
-        
-        Expect:
-            - Symbol stays at HOLD
-            - No waiver applied
+        Given Stage 1 qualified (all required fields present) and Stage 2 has no
+        option liquidity (and enhancement does not add any), expect HOLD. No waiver gate.
         """
         mock_stage1 = Stage1Result(symbol="AAPL")
         mock_stage1.price = 180.0
-        mock_stage1.bid = None
-        mock_stage1.ask = None
-        mock_stage1.volume = None
-        mock_stage1.data_completeness = 0.5
-        mock_stage1.missing_fields = ["bid", "ask", "volume"]
+        mock_stage1.bid = 179.9
+        mock_stage1.ask = 180.1
+        mock_stage1.volume = 1_000_000
+        mock_stage1.data_completeness = 1.0
+        mock_stage1.missing_fields = []
         mock_stage1.stock_verdict = StockVerdict.QUALIFIED
-        mock_stage1.stage1_score = 50
+        mock_stage1.stage1_score = 70
         mock_stage1.regime = "NEUTRAL"
         mock_stage1.risk_posture = "MODERATE"
-        
-        # OPRA enrichment returns no valid liquidity (fails gate)
-        mock_opra_result = OpraEnrichmentResult(
-            symbol="AAPL",
-            underlying=None,
-            options=[],  # No options with valid liquidity
-            strikes_rows=0,
-            opra_symbols_built=0,
-            option_rows_returned=0,
-            underlying_row_returned=False,
-            error="No strikes data returned",
-        )
-        
+
+        mock_stage2 = Stage2Result(symbol="AAPL")
+        mock_stage2.liquidity_ok = False
+        mock_stage2.liquidity_reason = "No contracts meeting criteria"
+        mock_stage2.chain_missing_fields = []
+        mock_stage2.expirations_available = 0
+
+        def no_enhance(_sym, s2):
+            return s2  # Return stage2 unchanged so liquidity_ok stays False
+
         with patch("app.core.eval.staged_evaluator.evaluate_stage1") as mock_eval_stage1, \
              patch("app.core.eval.staged_evaluator.evaluate_stage2") as mock_eval_stage2, \
-             patch("app.core.orats.orats_opra.fetch_opra_enrichment") as mock_fetch_opra:
-            
+             patch("app.core.eval.staged_evaluator._enhance_liquidity_with_pipeline", side_effect=no_enhance):
             mock_eval_stage1.return_value = mock_stage1
-            
-            mock_stage2 = Stage2Result(symbol="AAPL")
-            mock_stage2.liquidity_ok = False
-            mock_stage2.liquidity_reason = "No contracts meeting criteria"
-            mock_stage2.chain_missing_fields = []
-            mock_stage2.expirations_available = 0
             mock_eval_stage2.return_value = mock_stage2
-            
-            mock_fetch_opra.return_value = mock_opra_result
-            
+
             result = evaluate_symbol_full("AAPL")
-            
-            # Should remain HOLD - OPRA did not provide valid liquidity
-            assert result.liquidity_ok == False
-            assert result.verdict == "HOLD"
-            
-            waiver_gate = next(
-                (g for g in result.gates if g.get("name") == "EOD Strategy Data Waiver"),
-                None
-            )
-            assert waiver_gate is None, "No waiver should be applied without option liquidity"
+
+        assert result.liquidity_ok is False
+        assert result.verdict == "HOLD"
+        waiver_gate = next(
+            (g for g in result.gates if g.get("name") == "EOD Strategy Data Waiver"),
+            None,
+        )
+        assert waiver_gate is None, "No EOD waiver gate (waiver removed)"
 
 
 class TestEnhancementLogging:

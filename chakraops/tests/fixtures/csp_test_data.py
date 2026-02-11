@@ -28,7 +28,7 @@ def create_test_stock_snapshot(
         avg_stock_volume_20d=2000000.0,
         has_options=True,
         snapshot_time=snapshot_time,
-        data_source="THETA",
+        data_source="ORATS",
     )
 
 

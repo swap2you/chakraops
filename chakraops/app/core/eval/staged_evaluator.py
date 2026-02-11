@@ -907,43 +907,9 @@ def evaluate_symbol_full(
     result.stage2 = stage2
     result.stage_reached = EvaluationStage.STAGE2_CHAIN
     
-    # EOD OPTIONS STRATEGY WAIVER:
-    # If we have valid option chain liquidity, waive stock bid/ask/volume requirements
-    # These fields are intraday-only and not needed for EOD options strategies
-    STOCK_INTRADAY_FIELDS = {"bid", "ask", "volume", "bidsize", "asksize"}
-    
-    if stage2.liquidity_ok:
-        # Remove stock intraday fields from missing_fields - we have options liquidity
-        original_missing = result.missing_fields.copy()
-        result.missing_fields = [
-            f for f in result.missing_fields 
-            if f.lower() not in STOCK_INTRADAY_FIELDS
-        ]
-        waived_fields = [f for f in original_missing if f.lower() in STOCK_INTRADAY_FIELDS]
-        
-        if waived_fields:
-            # Recalculate data completeness without the waived fields
-            result.data_completeness = min(1.0, result.data_completeness + 0.1 * len(waived_fields))
-            result.data_completeness = min(1.0, result.data_completeness)
-            
-            # Add gate showing the waiver; OPRA is sole liquidity authority
-            result.gates.append({
-                "name": "EOD Strategy Data Waiver",
-                "status": "WAIVED",
-                "reason": f"Stock {', '.join(waived_fields)} waived - options liquidity confirmed (DERIVED_FROM_OPRA)",
-            })
-            logger.info(
-                "[EOD_WAIVER] %s: waived stock fields %s because OPRA liquidity valid (DERIVED_FROM_OPRA)",
-                symbol, waived_fields
-            )
-        # OPRA is sole liquidity authority: attach waiver reason whenever OPRA gate passed
-        result.waiver_reason = "DERIVED_FROM_OPRA"
-        valid_contracts = getattr(stage2, "opra_valid_contracts", None)
-        logger.info(
-            "OPRA waiver applied symbol=%s valid_contracts=%s",
-            symbol, valid_contracts,
-        )
-    
+    # Stage 1 required fields (price, bid, ask, volume, quote_date, iv_rank) are HARD required.
+    # No waiver: if any were missing, Stage 1 would have BLOCKed and we would not reach Stage 2.
+
     # Add stage 2 gate
     result.gates.append({
         "name": "Options Liquidity (Stage 2)",
@@ -985,13 +951,11 @@ def evaluate_symbol_full(
         result.verdict = "ELIGIBLE"
         result.primary_reason = f"Chain evaluated, contract selected: {stage2.selected_contract.selection_reason}"
     elif stage2.liquidity_ok and is_enhanced:
-        # OPRA path: liquidity from /datav2/strikes/options - sole authority; never DATA_INCOMPLETE
+        # OPRA path: liquidity from /datav2/strikes/options; stock bid/ask/volume are not waived
         result.final_verdict = FinalVerdict.ELIGIBLE
         result.verdict = "ELIGIBLE"
-        result.primary_reason = f"Options liquidity confirmed (DERIVED_FROM_OPRA): {stage2.liquidity_reason}"
-        if not result.waiver_reason:
-            result.waiver_reason = "DERIVED_FROM_OPRA"
-        logger.info("[VERDICT] %s: ELIGIBLE via OPRA liquidity (DERIVED_FROM_OPRA)", symbol)
+        result.primary_reason = f"Options liquidity confirmed (OPRA): {stage2.liquidity_reason}"
+        logger.info("[VERDICT] %s: ELIGIBLE via OPRA liquidity", symbol)
     elif stage2.error:
         result.final_verdict = FinalVerdict.UNKNOWN
         result.verdict = "UNKNOWN"

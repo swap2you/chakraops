@@ -13,6 +13,30 @@ Single entry point for daily operation, smoke tests, debugging, and validation. 
 - **Backend deps (from `chakraops`):** `pip install -r requirements.txt` (includes FastAPI, uvicorn)
 - **ORATS token:** Configure via `.env` or project config (see [SECRETS_AND_ENV.md](./SECRETS_AND_ENV.md)). Never commit secrets.
 
+---
+
+## STOP EVERYTHING (CLEAN RESET)
+
+Before (re)starting, stop all ChakraOps processes and free ports. Run these in order.
+
+### Stop uvicorn (Python backend) & Stop Vite (Node frontend)
+
+```powershell
+Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force
+```
+
+### Kill port 8000 (backend) if still in use
+
+```powershell
+netstat -ano | findstr :8000
+netstat -ano | findstr :5173
+npx kill-port 8000
+npx kill-port 5173
+```
+
+---
+
 ### Start backend and uvicorn
 
 ```powershell

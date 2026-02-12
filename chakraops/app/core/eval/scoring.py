@@ -6,7 +6,7 @@ Phase 3: Explainable scoring and capital-aware ranking.
 - Score breakdown: data_quality_score, regime_score, options_liquidity_score,
   strategy_fit_score, capital_efficiency_score (with weights from config/scoring.yaml).
 - Capital efficiency: csp_notional = strike * 100; notional_pct = csp_notional / account_equity;
-  penalize when notional_pct exceeds thresholds; penalize ultra-high priced underlyings.
+  penalize when notional_pct exceeds thresholds (config-driven). No price-level penalties.
 - Rank reasons: top 3 positive reasons + top 1 penalty for UI.
 - Band assignment uses breakdown + gates; band_reason explains why (so Band C is not unexplained).
 """
@@ -29,8 +29,6 @@ _DEFAULT_WEIGHTS = {
 }
 _DEFAULT_NOTIONAL_THRESHOLDS = {"warn_above": 0.05, "heavy_penalty_above": 0.10, "cap_above": 0.20}
 _DEFAULT_NOTIONAL_PENALTIES = {"warn": 5, "heavy": 15, "cap": 30}
-_DEFAULT_HIGH_PRICE_PENALTY_ABOVE = 400
-_DEFAULT_HIGH_PRICE_PENALTY_POINTS = 10
 _DEFAULT_BAND_A_MIN = 78
 _DEFAULT_BAND_B_MIN = 60
 
@@ -124,14 +122,6 @@ def get_notional_penalties() -> Dict[str, int]:
     }
 
 
-def get_high_price_config() -> Tuple[float, int]:
-    """(high_price_penalty_above USD, penalty_points)."""
-    cfg = _load_scoring_config()
-    above = float(cfg.get("high_price_penalty_above", _DEFAULT_HIGH_PRICE_PENALTY_ABOVE))
-    points = int(cfg.get("high_price_penalty_points", _DEFAULT_HIGH_PRICE_PENALTY_POINTS))
-    return above, points
-
-
 def get_band_limits() -> Tuple[int, int]:
     """(band_a_min_score, band_b_min_score)."""
     cfg = _load_scoring_config()
@@ -150,12 +140,20 @@ def data_quality_score(data_completeness: float) -> int:
 
 
 def regime_score(regime: Optional[str]) -> int:
-    """0-100 from market regime. RISK_ON=100, NEUTRAL=65, RISK_OFF=50, UNKNOWN=50."""
+    """
+    0-100 from market regime (Phase 3.2.3: IVR band–driven).
+    LOW_VOL=40 (penalize), NEUTRAL=65, HIGH_VOL=85 (positive).
+    Legacy: RISK_ON=100, RISK_OFF=50, UNKNOWN=50.
+    """
     r = (regime or "").strip().upper()
-    if r == "RISK_ON":
-        return 100
+    if r == "LOW_VOL":
+        return 40   # Penalize: low IV rank
     if r == "NEUTRAL":
         return 65
+    if r == "HIGH_VOL":
+        return 85   # Positive: high IV (tail risk noted in rationale)
+    if r == "RISK_ON":
+        return 100
     if r == "RISK_OFF":
         return 50
     return 50
@@ -197,7 +195,7 @@ def capital_efficiency_score(
 
     - csp_notional = selected_put_strike * 100 (or None if no put).
     - notional_pct = csp_notional / account_equity when both set.
-    - Penalize by notional_pct thresholds and by ultra-high price.
+    - Penalize only by notional_pct thresholds (config-driven). No price-level penalties.
     Returns (score, list of penalty reason strings, top_penalty for rank_reasons).
     """
     score = 100
@@ -205,24 +203,10 @@ def capital_efficiency_score(
     top_penalty: Optional[str] = None
 
     if account_equity is None or account_equity <= 0:
-        # No account equity configured: no notional penalty; only high-price penalty if applicable.
-        if price is not None:
-            above, points = get_high_price_config()
-            if price > above:
-                score = max(0, score - points)
-                penalties.append(f"High underlying price ${price:.0f} > ${above:.0f}")
-                top_penalty = f"High underlying price (${price:.0f})"
-        return (max(0, min(100, score)), penalties, top_penalty)
+        return (100, penalties, top_penalty)
 
     if csp_notional is None or csp_notional <= 0:
-        # No CSP notional (e.g. no selected put): full score unless high price.
-        if price is not None:
-            above, points = get_high_price_config()
-            if price > above:
-                score = max(0, score - points)
-                penalties.append(f"High underlying price ${price:.0f} > ${above:.0f}")
-                top_penalty = f"High underlying price (${price:.0f})"
-        return (max(0, min(100, score)), penalties, top_penalty)
+        return (100, penalties, top_penalty)
 
     notional_pct = csp_notional / account_equity
     thresh = get_notional_thresholds()
@@ -243,14 +227,6 @@ def capital_efficiency_score(
         penalties.append(f"Notional {notional_pct:.1%} of account (warn)")
         if top_penalty is None:
             top_penalty = f"CSP notional {notional_pct:.1%} of account"
-
-    if price is not None:
-        above, points = get_high_price_config()
-        if price > above:
-            score = max(0, score - points)
-            penalties.append(f"High underlying price ${price:.0f} > ${above:.0f}")
-            if top_penalty is None:
-                top_penalty = f"High underlying price (${price:.0f})"
 
     return (max(0, min(100, score)), penalties, top_penalty)
 
@@ -368,6 +344,8 @@ def build_rank_reasons(
         reasons.append("Regime RISK_ON")
     elif regime == "NEUTRAL":
         reasons.append("Regime NEUTRAL")
+    elif regime == "HIGH_VOL":
+        reasons.append("IV Rank HIGH (favorable premium)")
     if data_completeness >= 0.9:
         reasons.append("High data completeness")
     elif data_completeness >= 0.75:

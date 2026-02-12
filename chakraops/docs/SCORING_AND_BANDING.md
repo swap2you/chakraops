@@ -10,7 +10,7 @@ All weights and thresholds are defined in **config/scoring.yaml** (under the Cha
 
 - **account_equity**: `null` or a number (e.g. `500000`).
 - Override at runtime with env **ACCOUNT_EQUITY**.
-- If unset, `notional_pct` is not computed and capital-efficiency penalties apply only for **high underlying price** (no notional % penalty).
+- If unset, `notional_pct` is not computed and no capital-efficiency penalties apply (full score for that component).
 
 ### Component weights (must sum to 1.0)
 
@@ -22,7 +22,7 @@ Used to compute the **composite score** (0–100):
 | regime | 0.20 | Market regime (RISK_ON=100, NEUTRAL=65, RISK_OFF=50) |
 | options_liquidity | 0.20 | Liquidity pass + grade (A/B/C) |
 | strategy_fit | 0.20 | Verdict + position (ELIGIBLE no position=100, etc.) |
-| capital_efficiency | 0.15 | 100 minus notional % and high-price penalties |
+| capital_efficiency | 0.15 | 100 minus notional % penalties (config thresholds only) |
 
 ### Notional % thresholds and penalties
 
@@ -43,12 +43,7 @@ Used to compute the **composite score** (0–100):
 
 Points are **subtracted** from the **capital_efficiency** component (0–100); the component is then used in the weighted composite.
 
-### High underlying price
-
-- **high_price_penalty_above**: Default `400` (USD). Underlyings above this price get an extra penalty on the capital_efficiency component.
-- **high_price_penalty_points**: Default `10`. Applied in addition to any notional % penalty.
-
-This deprioritizes very high-priced names (e.g. COST) even when they are “eligible” and liquidity is OK.
+No price-level penalties (legacy high-price penalty removed; Wheel 30–45 DTE uses notional % only).
 
 ### Band limits
 
@@ -63,7 +58,7 @@ Each symbol gets a **score_breakdown** with five components (0–100 each) and a
 2. **regime_score** – RISK_ON=100, NEUTRAL=65, RISK_OFF/unknown=50.
 3. **options_liquidity_score** – liquidity pass + grade (A=100, B=80, C=60; fail=20).
 4. **strategy_fit_score** – ELIGIBLE no position=100, ELIGIBLE with position=70, HOLD=50, BLOCKED=20.
-5. **capital_efficiency_score** – 100 minus notional_pct penalties and high-price penalty.
+5. **capital_efficiency_score** – 100 minus notional_pct penalties (config-driven thresholds only).
 
 The API and UI expose:
 
@@ -84,9 +79,9 @@ Suggested capital % by band (from Phase 10): A=5%, B=3%, C=2%.
 ## Rank reasons (UI)
 
 - **Top 3 reasons**: Short positive explanations (e.g. “Regime RISK_ON”, “High data completeness”, “Options liquidity passed”, “Eligible for trade”, “Capital efficient”).
-- **Top 1 penalty**: Single string for the main drag (e.g. “CSP notional 12% of account”, “High underlying price ($920)”).
+- **Top 1 penalty**: Single string for the main drag (e.g. “CSP notional 12% of account”).
 
-This is why a name like COST can be “eligible” but rank lower: high notional % and/or high underlying price reduce **capital_efficiency_score** and the composite, and the penalty is visible in **rank_reasons.penalty** and **score_breakdown.top_penalty**.
+Capital efficiency penalties come only from notional_pct vs account (warn/heavy/cap bands). The penalty is visible in **rank_reasons.penalty** and **score_breakdown.top_penalty**.
 
 ## Pipeline order
 

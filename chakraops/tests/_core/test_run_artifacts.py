@@ -20,6 +20,7 @@ from app.core.eval.run_artifacts import (
     _run_id_to_date_and_time,
     _run_dir_name,
     build_latest_response_from_artifacts,
+    build_universe_from_latest_artifact,
     get_latest_run_dir,
     purge_old_runs,
     update_recent_manifest,
@@ -121,6 +122,42 @@ def test_runner_writes_expected_files_and_latest_manifest(artifacts_tmp):
     assert latest["completed_at"]
 
 
+def test_build_universe_from_latest_artifact_returns_shape(artifacts_tmp):
+    """build_universe_from_latest_artifact returns symbols + updated_at + as_of + run_id when latest run exists."""
+    run = _make_completed_run()
+    run.symbols[0]["quote_date"] = "2026-02-10T20:00:00Z"
+    run.symbols[0]["field_sources"] = {"price": "delayed"}
+    run_dir = write_run_artifacts(run)
+    assert run_dir is not None
+    update_latest_and_recent(run, run_dir)
+    out = build_universe_from_latest_artifact()
+    assert out is not None
+    assert out["run_id"] == run.run_id
+    assert out["updated_at"] == run.completed_at
+    assert out["as_of"] == run.completed_at
+    assert "symbols" in out
+    assert len(out["symbols"]) == 2
+    aapl = next(s for s in out["symbols"] if s["symbol"] == "AAPL")
+    assert aapl["last_price"] == 150.0
+    assert aapl["quote_as_of"] == "2026-02-10T20:00:00Z"
+    assert aapl["field_sources"] == {"price": "delayed"}
+    assert out.get("excluded") == []
+    assert out["all_failed"] is False
+
+
+def test_build_universe_from_latest_artifact_returns_none_when_no_artifact(artifacts_tmp):
+    """build_universe_from_latest_artifact returns None when latest.json or run dir missing."""
+    # No latest.json
+    assert build_universe_from_latest_artifact() is None
+    # latest.json points to non-existent path
+    artifacts_tmp.mkdir(parents=True, exist_ok=True)
+    (artifacts_tmp / "latest.json").write_text(
+        json.dumps({"run_id": "eval_20260210_200000_xxx", "path": str(artifacts_tmp / "2026-02-10" / "run_20260210_200000Z"), "completed_at": "2026-02-10T20:00:00+00:00"}),
+        encoding="utf-8",
+    )
+    assert build_universe_from_latest_artifact() is None
+
+
 def test_runner_skips_non_completed(artifacts_tmp):
     """write_run_artifacts does nothing for RUNNING or FAILED."""
     run = _make_completed_run()
@@ -130,6 +167,34 @@ def test_runner_skips_non_completed(artifacts_tmp):
     run.status = "FAILED"
     run.completed_at = "2026-02-10T14:30:00+00:00"
     assert write_run_artifacts(run) is None
+
+
+def test_eod_chain_artifacts_written_when_contract_data_eod(artifacts_tmp):
+    """When a symbol has contract_data.source EOD_SNAPSHOT and available, chains/SYMBOL_chain_YYYYMMDD_1600ET.json is written."""
+    run = _make_completed_run()
+    run.symbols[0]["contract_data"] = {
+        "available": True,
+        "as_of": "2026-02-10T21:00:00+00:00",
+        "source": "EOD_SNAPSHOT",
+        "expiration_count": 3,
+        "contract_count": 150,
+        "required_fields_present": True,
+    }
+    run_dir = write_run_artifacts(run)
+    assert run_dir is not None
+    chains_dir = run_dir / "chains"
+    assert chains_dir.exists()
+    # run_id eval_20260210_143000_abc12345 -> date 20260210
+    chain_file = chains_dir / "AAPL_chain_20260210_1600ET.json"
+    assert chain_file.exists()
+    with open(chain_file, encoding="utf-8") as f:
+        meta = json.load(f)
+    assert meta["symbol"] == "AAPL"
+    assert meta["source"] == "EOD_SNAPSHOT"
+    assert meta["expiration_count"] == 3
+    assert meta["contract_count"] == 150
+    assert meta["required_fields_present"] is True
+    assert meta["as_of"] == "2026-02-10T21:00:00+00:00"
 
 
 # ---------------------------------------------------------------------------

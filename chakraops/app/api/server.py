@@ -78,6 +78,14 @@ _nightly_stop_event: Optional[threading.Event] = None
 _nightly_thread: Optional[threading.Thread] = None
 _last_nightly_eval_at: Optional[str] = None
 
+# EOD chain snapshot: 16:05 ET on trading days (Phase 3.1.3)
+EOD_CHAIN_TIME = os.getenv("EOD_CHAIN_TIME", "16:05")
+EOD_CHAIN_TZ = os.getenv("EOD_CHAIN_TZ", "America/New_York")
+EOD_CHAIN_ENABLED = os.getenv("EOD_CHAIN_ENABLED", "true").lower() in ("true", "1", "yes")
+_eod_chain_stop_event: Optional[threading.Event] = None
+_eod_chain_thread: Optional[threading.Thread] = None
+_last_eod_chain_run_date: Optional[str] = None  # YYYY-MM-DD to avoid double-run same day
+
 
 def _get_next_nightly_time() -> datetime:
     """Get the next scheduled nightly evaluation time."""
@@ -103,6 +111,38 @@ def _get_next_nightly_time() -> datetime:
         target = target + timedelta(days=1)
     
     return target
+
+
+def _get_next_eod_chain_time() -> datetime:
+    """Get the next 16:05 ET on a trading day (weekday, not holiday). Friday runs normally."""
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        from backports.zoneinfo import ZoneInfo  # type: ignore
+    from datetime import time as dt_time, timedelta
+
+    from app.core.eval.eod_chain_snapshot import should_run_eod_chain_today
+
+    tz = ZoneInfo(EOD_CHAIN_TZ)
+    now_et = datetime.now(tz)
+    try:
+        hour, minute = map(int, EOD_CHAIN_TIME.split(":"))
+    except ValueError:
+        hour, minute = 16, 5
+    target_time = dt_time(hour, minute, 0, 0)
+
+    # Today at 16:05 ET
+    today_et = now_et.date()
+    candidate = now_et.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if should_run_eod_chain_today(today_et) and now_et.time() < target_time:
+        return candidate
+    # Else: next trading day at 16:05
+    d = today_et
+    for _ in range(14):
+        d += timedelta(days=1)
+        if should_run_eod_chain_today(d):
+            return datetime.combine(d, target_time, tzinfo=tz)
+    return candidate + timedelta(days=1)
 
 
 def _run_nightly_evaluation() -> bool:
@@ -173,6 +213,100 @@ def _nightly_scheduler_loop(stop_event: threading.Event) -> None:
     
     logger.info("[NIGHTLY_SCHEDULER] Stopped")
     print("[NIGHTLY_SCHEDULER] Stopped")
+
+
+def _run_eod_chain_snapshot_job() -> bool:
+    """
+    Run the EOD chain snapshot job for today (ET): fetch ORATS chain for each universe symbol,
+    store under artifacts/runs/YYYY-MM-DD/eod_chain/. Skips if not a trading day; no-op if already run today.
+    Returns True if job ran.
+    """
+    global _last_eod_chain_run_date
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        from backports.zoneinfo import ZoneInfo  # type: ignore
+
+    from app.api.data_health import UNIVERSE_SYMBOLS
+    from app.core.eval.eod_chain_snapshot import run_eod_chain_snapshot, should_run_eod_chain_today
+
+    try:
+        tz = ZoneInfo(EOD_CHAIN_TZ)
+        today_et = datetime.now(tz).date()
+        if not should_run_eod_chain_today(today_et):
+            logger.debug("[EOD_CHAIN_SCHEDULER] Not a trading day (%s), skipping", today_et)
+            return False
+        if _last_eod_chain_run_date == today_et.isoformat():
+            logger.debug("[EOD_CHAIN_SCHEDULER] Already ran today (%s), skipping", _last_eod_chain_run_date)
+            return False
+        symbols = list(UNIVERSE_SYMBOLS) if UNIVERSE_SYMBOLS else []
+        if not symbols:
+            logger.warning("[EOD_CHAIN_SCHEDULER] Universe empty, skipping")
+            return False
+        logger.info("[EOD_CHAIN_SCHEDULER] Running EOD chain snapshot for %s (%d symbols)", today_et, len(symbols))
+        print(f"[EOD_CHAIN_SCHEDULER] Running EOD chain snapshot for {today_et} ({len(symbols)} symbols)")
+        result = run_eod_chain_snapshot(today_et, symbols)
+        _last_eod_chain_run_date = today_et.isoformat()
+        logger.info("[EOD_CHAIN_SCHEDULER] Done: written=%d skipped=%d errors=%d", result["written"], result["skipped"], result["errors"])
+        return True
+    except Exception as e:
+        logger.exception("[EOD_CHAIN_SCHEDULER] Error: %s", e)
+        return False
+
+
+def _eod_chain_scheduler_loop(stop_event: threading.Event) -> None:
+    """Wait until 16:05 ET on a trading day, run EOD chain snapshot, then wait for next run."""
+    logger.info("[EOD_CHAIN_SCHEDULER] Started for %s %s", EOD_CHAIN_TIME, EOD_CHAIN_TZ)
+    print(f"[EOD_CHAIN_SCHEDULER] Started for {EOD_CHAIN_TIME} {EOD_CHAIN_TZ}")
+    while not stop_event.is_set():
+        try:
+            next_time = _get_next_eod_chain_time()
+            now = datetime.now(next_time.tzinfo)
+            wait_seconds = (next_time - now).total_seconds()
+            if wait_seconds > 0:
+                while wait_seconds > 0 and not stop_event.is_set():
+                    chunk = min(60, wait_seconds)
+                    stop_event.wait(chunk)
+                    wait_seconds -= chunk
+            if stop_event.is_set():
+                break
+            _run_eod_chain_snapshot_job()
+            stop_event.wait(120)
+        except Exception as e:
+            logger.exception("[EOD_CHAIN_SCHEDULER] Error in loop: %s", e)
+            stop_event.wait(300)
+    logger.info("[EOD_CHAIN_SCHEDULER] Stopped")
+    print("[EOD_CHAIN_SCHEDULER] Stopped")
+
+
+def start_eod_chain_scheduler() -> None:
+    """Start the EOD chain snapshot scheduler (16:05 ET on trading days)."""
+    global _eod_chain_stop_event, _eod_chain_thread
+    if not EOD_CHAIN_ENABLED:
+        logger.info("[EOD_CHAIN_SCHEDULER] Disabled via EOD_CHAIN_ENABLED=false")
+        return
+    if _eod_chain_thread is not None and _eod_chain_thread.is_alive():
+        logger.warning("[EOD_CHAIN_SCHEDULER] Already running")
+        return
+    _eod_chain_stop_event = threading.Event()
+    _eod_chain_thread = threading.Thread(
+        target=_eod_chain_scheduler_loop,
+        args=(_eod_chain_stop_event,),
+        daemon=True,
+        name="EodChainScheduler",
+    )
+    _eod_chain_thread.start()
+
+
+def stop_eod_chain_scheduler() -> None:
+    """Stop the EOD chain snapshot scheduler."""
+    global _eod_chain_stop_event, _eod_chain_thread
+    if _eod_chain_stop_event is not None:
+        _eod_chain_stop_event.set()
+    if _eod_chain_thread is not None and _eod_chain_thread.is_alive():
+        _eod_chain_thread.join(timeout=5.0)
+    _eod_chain_stop_event = None
+    _eod_chain_thread = None
 
 
 def start_nightly_scheduler() -> None:
@@ -427,6 +561,13 @@ async def _lifespan(app: FastAPI):
     print(f"Running: {nightly_status['running']}")
     print(f"Next scheduled: {nightly_status.get('next_scheduled_at', 'N/A')}")
     print("=====================================")
+
+    # EOD chain snapshot: 16:05 ET on trading days
+    print("===== EOD CHAIN SCHEDULER STARTUP =====")
+    print(f"Enabled: {EOD_CHAIN_ENABLED}")
+    print(f"Time: {EOD_CHAIN_TIME} {EOD_CHAIN_TZ}")
+    start_eod_chain_scheduler()
+    print("=======================================")
     
     yield
     
@@ -436,6 +577,8 @@ async def _lifespan(app: FastAPI):
     print("Scheduler: STOPPED")
     stop_nightly_scheduler()
     print("Nightly: STOPPED")
+    stop_eod_chain_scheduler()
+    print("EOD chain: STOPPED")
     print("===============================")
 
 
@@ -1139,23 +1282,61 @@ def api_view_trade_plan() -> Dict[str, Any]:
 
 @app.get("/api/view/universe")
 def api_view_universe() -> Dict[str, Any]:
-    """Universe: canonical SymbolSnapshot only (delayed quote + core + optional derived). Never 503. Banner from GET /api/ops/data-health."""
+    """Universe: canonical SymbolSnapshot only (delayed quote + core + optional derived). Never 503. Banner from GET /api/ops/data-health.
+    When market is OPEN: live compute (source=LIVE_COMPUTE). When closed: serve from latest artifact if present (source=ARTIFACT_LATEST), else live compute (source=LIVE_COMPUTE_NO_ARTIFACT)."""
     from datetime import datetime, timezone
     try:
+        phase = get_market_phase()
+        if phase == "OPEN":
+            from app.api.data_health import fetch_universe_from_canonical_snapshot
+            result = fetch_universe_from_canonical_snapshot()
+            if result["all_failed"]:
+                logger.warning("[UNIVERSE] Canonical snapshot returned no symbols; excluded=%s", result.get("excluded"))
+                return {
+                    "symbols": [], "excluded": result.get("excluded", []),
+                    "updated_at": datetime.now(timezone.utc).isoformat(), "error": None, "source": "LIVE_COMPUTE",
+                }
+            return {
+                "symbols": result["symbols"],
+                "excluded": result.get("excluded", []),
+                "updated_at": result["updated_at"],
+                "error": None,
+                "source": "LIVE_COMPUTE",
+            }
+        # Market not OPEN: prefer latest artifact to avoid ORATS calls for all symbols
+        from app.core.eval.run_artifacts import build_universe_from_latest_artifact
+        artifact = build_universe_from_latest_artifact()
+        if artifact:
+            return {
+                "symbols": artifact["symbols"],
+                "excluded": artifact.get("excluded", []),
+                "updated_at": artifact["updated_at"],
+                "error": None,
+                "source": "ARTIFACT_LATEST",
+                "as_of": artifact.get("as_of"),
+                "run_id": artifact.get("run_id"),
+            }
         from app.api.data_health import fetch_universe_from_canonical_snapshot
         result = fetch_universe_from_canonical_snapshot()
         if result["all_failed"]:
-            logger.warning("[UNIVERSE] Canonical snapshot returned no symbols; excluded=%s", result.get("excluded"))
-            return {"symbols": [], "excluded": result.get("excluded", []), "updated_at": datetime.now(timezone.utc).isoformat(), "error": None}
+            logger.warning("[UNIVERSE] No artifact; canonical snapshot returned no symbols; excluded=%s", result.get("excluded"))
+            return {
+                "symbols": [], "excluded": result.get("excluded", []),
+                "updated_at": datetime.now(timezone.utc).isoformat(), "error": None, "source": "LIVE_COMPUTE_NO_ARTIFACT",
+            }
         return {
             "symbols": result["symbols"],
             "excluded": result.get("excluded", []),
             "updated_at": result["updated_at"],
             "error": None,
+            "source": "LIVE_COMPUTE_NO_ARTIFACT",
         }
     except Exception as e:
         logger.warning("[UNIVERSE] Universe load failed: %s; returning empty.", e, exc_info=False)
-        return {"symbols": [], "excluded": [], "updated_at": datetime.now(timezone.utc).isoformat(), "error": None}
+        return {
+            "symbols": [], "excluded": [], "updated_at": datetime.now(timezone.utc).isoformat(), "error": None,
+            "source": "LIVE_COMPUTE",
+        }
 
 
 def _infer_liquidity_tier(notes: str) -> Optional[str]:
@@ -1250,6 +1431,94 @@ def api_ops_evaluate_status(job_id: str) -> Dict[str, Any]:
     }
 
 
+def _symbol_diagnostics_greeks_summary(iv_rank: Any) -> Dict[str, Any]:
+    """Build greeks_summary dict from wheel_strategy_config (no hardcoded DTE/delta/IVR)."""
+    from app.core.config.wheel_strategy_config import get_dte_range, get_target_delta_range
+    dte_min, dte_max = get_dte_range()
+    delta_lo, delta_hi = get_target_delta_range()
+    return {
+        "iv_rank": iv_rank,
+        "iv_percentile": None,
+        "delta_target_range": f"{delta_lo:.2f}-{delta_hi:.2f} for CSP",
+        "dte_target": f"{dte_min}-{dte_max} DTE (Wheel strategy)",
+    }
+
+
+def _diagnostics_primary_reason(result: Dict[str, Any], full_result: Any) -> str:
+    """
+    Phase 3.3.2: Set primary_reason from eligibility layers only.
+    - Symbol FAIL: Stage-1 reasons only (no Stage-2 "missing bid/ask").
+    - Contract unavailable: CONTRACT_UNAVAILABLE with Stage-2 reasons or "No enriched chain candidates".
+    - Contract FAIL: Stage-2 reason (delta/OI/spread gate).
+    """
+    se = result.get("symbol_eligibility") or {}
+    cd = result.get("contract_data") or {}
+    ce = result.get("contract_eligibility") or {}
+    se_status = se.get("status") if isinstance(se, dict) else None
+    cd_available = cd.get("available") is True
+    ce_status = ce.get("status") if isinstance(ce, dict) else None
+
+    if se_status == "FAIL":
+        reasons = se.get("reasons") or []
+        return "; ".join(reasons) if reasons else "Stage 1 did not qualify"
+    if not cd_available:
+        # Contract unavailable: use contract_eligibility or Stage-2 contract_selection_reasons
+        stage2 = getattr(full_result, "stage2", None)
+        sel_reasons = list(getattr(stage2, "contract_selection_reasons", None) or []) if stage2 else []
+        if sel_reasons:
+            return f"CONTRACT_UNAVAILABLE: {'; '.join(sel_reasons[:3])}"
+        if ce_status == "UNAVAILABLE":
+            return "CONTRACT_UNAVAILABLE (after-hours or no eligible contract)"
+        return "CONTRACT_UNAVAILABLE: No enriched chain candidates"
+    if ce_status == "FAIL":
+        reasons = ce.get("reasons") or []
+        return "; ".join(reasons) if reasons else "Options liquidity check failed"
+    return full_result.primary_reason or ""
+
+
+def _diagnostics_liquidity_from_gates(result: Dict[str, Any], full_result: Any) -> None:
+    """
+    Phase 3.3.2: Set liquidity block from gates when computed; otherwise keep not assessed.
+    If computed, reason must not say "not assessed".
+    """
+    liquidity = result.get("liquidity")
+    if not isinstance(liquidity, dict):
+        return
+    gates = result.get("gates") or []
+    stock_gate = next((g for g in gates if g.get("name") == "Stock Quality (Stage 1)"), None)
+    option_gate = next((g for g in gates if g.get("name") == "Options Liquidity (Stage 2)"), None)
+    cd = result.get("contract_data") or {}
+    ce = result.get("contract_eligibility") or {}
+    cd_available = cd.get("available") is True
+    ce_status = (ce or {}).get("status") if isinstance(ce, dict) else None
+
+    if stock_gate is not None:
+        liquidity["stock_liquidity_ok"] = stock_gate.get("pass", stock_gate.get("status") == "PASS")
+        stock_reason = stock_gate.get("reason") or ("Stock liquidity passed" if liquidity["stock_liquidity_ok"] else "Stock liquidity failed")
+        parts = [stock_reason]
+    else:
+        liquidity["stock_liquidity_ok"] = None
+        parts = []
+
+    if option_gate is not None and cd_available:
+        liquidity["option_liquidity_ok"] = option_gate.get("pass", option_gate.get("status") == "PASS")
+        opt_reason = option_gate.get("reason") or ("Option liquidity passed" if liquidity["option_liquidity_ok"] else "Option liquidity failed")
+        parts.append(opt_reason)
+    elif ce_status == "UNAVAILABLE":
+        liquidity["option_liquidity_ok"] = None
+        parts.append("Option liquidity not assessed (no enriched chain)")
+    elif ce_status == "FAIL":
+        liquidity["option_liquidity_ok"] = False
+        reasons = (ce or {}).get("reasons") or []
+        parts.append(reasons[0] if reasons else "Options liquidity failed")
+    else:
+        liquidity["option_liquidity_ok"] = None
+        if not parts:
+            parts.append("Option liquidity not assessed")
+
+    liquidity["reason"] = "; ".join(parts) if parts else "Liquidity not assessed"
+
+
 @app.get("/api/view/symbol-diagnostics")
 def api_view_symbol_diagnostics(symbol: str = Query(..., min_length=1, max_length=12)) -> Dict[str, Any]:
     """Symbol diagnostics with FULL EXPLAINABILITY for ANY valid ticker.
@@ -1308,6 +1577,10 @@ def api_view_symbol_diagnostics(symbol: str = Query(..., min_length=1, max_lengt
             "primary_reason": "Not yet evaluated",
             "confidence_score": None,
         },
+        # Phase 3.0.2: Split eligibility layers
+        "symbol_eligibility": {"status": "UNKNOWN", "reasons": []},
+        "contract_data": {"available": False, "as_of": None, "source": "NONE"},
+        "contract_eligibility": {"status": "UNAVAILABLE", "reasons": []},
         
         # Legacy fields for backward compatibility
         "in_universe": False,
@@ -1361,12 +1634,7 @@ def api_view_symbol_diagnostics(symbol: str = Query(..., min_length=1, max_lengt
         },
         
         # Greeks summary (iv_rank from canonical snapshot delayed ivrank endpoint)
-        "greeks_summary": {
-            "iv_rank": snap.iv_rank,
-            "iv_percentile": None,
-            "delta_target_range": "0.20-0.35 for CSP",
-            "theta_bias": "Favor high theta / low DTE",
-        },
+        "greeks_summary": _symbol_diagnostics_greeks_summary(snap.iv_rank),
         
         # Candidate trades
         "candidate_trades": [],
@@ -1454,17 +1722,34 @@ def api_view_symbol_diagnostics(symbol: str = Query(..., min_length=1, max_lengt
         result["eligibility"]["verdict_reason_code"] = full_result.verdict_reason_code
     if getattr(full_result, "data_incomplete_type", None):
         result["eligibility"]["data_incomplete_type"] = full_result.data_incomplete_type
+    if getattr(full_result, "symbol_eligibility", None):
+        result["symbol_eligibility"] = full_result.symbol_eligibility
+    if getattr(full_result, "contract_data", None):
+        result["contract_data"] = full_result.contract_data
+    if getattr(full_result, "contract_eligibility", None):
+        result["contract_eligibility"] = full_result.contract_eligibility
     result["gates"] = list(full_result.gates) if full_result.gates else result["gates"]
     result["blockers"] = list(full_result.blockers) if full_result.blockers else result["blockers"]
     result["candidate_trades"] = list(full_result.candidate_trades) if full_result.candidate_trades else []
     result["recommendation"] = full_result.verdict
 
-    # Options counts from live stage-2
+    # Phase 3.3.2: diagnostics primary_reason consistency (Stage-1 vs Stage-2, no "missing bid/ask" for stock)
+    result["eligibility"]["primary_reason"] = _diagnostics_primary_reason(result, full_result)
+
+    # Liquidity block: when evaluation ran, set from gates; do not say "not assessed" when computed
+    _diagnostics_liquidity_from_gates(result, full_result)
+
+    # Options counts from live stage-2 (including option_type_counts for PUT/CALL diagnostics)
     expirations_count = 0
     contracts_count = None
     if full_result.stage2 is not None:
         expirations_count = getattr(full_result.stage2, "expirations_available", 0) or 0
         contracts_count = getattr(full_result.stage2, "contracts_evaluated", None)
+        result["options"]["option_type_counts"] = getattr(
+            full_result.stage2, "option_type_counts", None
+        ) or {"puts_seen": 0, "calls_seen": 0, "unknown_seen": 0}
+    else:
+        result["options"]["option_type_counts"] = {"puts_seen": 0, "calls_seen": 0, "unknown_seen": 0}
     result["options"]["expirations_count"] = expirations_count
     result["options"]["contracts_count"] = contracts_count
 
@@ -1654,37 +1939,51 @@ def _compute_eligibility_verdict(result: Dict[str, Any]) -> None:
 
 
 def _generate_candidate_trades(result: Dict[str, Any], stock_price: float, orats_data: dict) -> None:
-    """Generate candidate trade ideas based on current data."""
+    """Generate candidate trade ideas based on current data (Wheel config)."""
+    from app.core.config.wheel_strategy_config import (
+        WHEEL_CONFIG,
+        DTE_MIN,
+        DTE_MAX,
+        TARGET_DELTA_RANGE,
+        IVR_BANDS,
+        get_dte_range,
+        get_target_delta_range,
+    )
     iv_rank = result["greeks_summary"].get("iv_rank")
-    
+    dte_min, dte_max = get_dte_range()
+    delta_lo, delta_hi = get_target_delta_range()
+    delta_mid = (delta_lo + delta_hi) / 2
+    ivr_bands = WHEEL_CONFIG[IVR_BANDS]
+    ivr_low_max = ivr_bands["LOW"][1]  # Upper bound of LOW band (e.g. 25)
+
     # CSP candidate (Cash Secured Put)
     strike_csp = round(stock_price * 0.85, 2)  # 15% OTM
     result["candidate_trades"].append({
         "strategy": "CSP",
         "description": "Cash Secured Put",
-        "expiry": "30-45 DTE",
+        "expiry": f"{dte_min}-{dte_max} DTE",
         "strike": strike_csp,
-        "delta": -0.25,
+        "delta": -delta_mid,
         "credit_estimate": round(stock_price * 0.015, 2),  # ~1.5% of stock price
         "max_loss": strike_csp * 100,
         "why_this_trade": f"Sell put at ${strike_csp} (15% below current). Collect premium while willing to own at discount.",
     })
-    
+
     # CC candidate (Covered Call) if holding stock
     strike_cc = round(stock_price * 1.10, 2)  # 10% OTM
     result["candidate_trades"].append({
         "strategy": "CC",
         "description": "Covered Call",
-        "expiry": "30-45 DTE",
+        "expiry": f"{dte_min}-{dte_max} DTE",
         "strike": strike_cc,
-        "delta": 0.30,
+        "delta": delta_hi,
         "credit_estimate": round(stock_price * 0.01, 2),  # ~1% of stock price
         "max_loss": None,  # No additional loss beyond stock ownership
         "why_this_trade": f"Sell call at ${strike_cc} (10% above current) against existing shares. Generate income.",
     })
-    
-    # HOLD if IV is low
-    if iv_rank is not None and iv_rank < 25:
+
+    # HOLD if IV is in LOW band (below threshold)
+    if iv_rank is not None and iv_rank < ivr_low_max:
         result["candidate_trades"].append({
             "strategy": "HOLD",
             "description": "Wait for higher IV",
@@ -1693,7 +1992,7 @@ def _generate_candidate_trades(result: Dict[str, Any], stock_price: float, orats
             "delta": None,
             "credit_estimate": None,
             "max_loss": None,
-            "why_this_trade": f"IV Rank is {iv_rank}% - below 25% threshold. Wait for better premium environment.",
+            "why_this_trade": f"IV Rank is {iv_rank}% - below {ivr_low_max}% threshold. Wait for better premium environment.",
         })
 
 

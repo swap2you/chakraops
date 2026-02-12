@@ -670,6 +670,14 @@ def create_run_from_evaluation(
             "stage_reached": getattr(s, "stage_reached", "NOT_STARTED"),
             "selected_contract": getattr(s, "selected_contract", None),
             "selected_expiration": getattr(s, "selected_expiration", None),
+            "selected_candidates": getattr(s, "selected_candidates", []),
+            "contract_selection_reasons": getattr(s, "contract_selection_reasons", []),
+            # Phase 3.0.2: Split eligibility layers
+            "symbol_eligibility": getattr(s, "symbol_eligibility", None),
+            "contract_data": getattr(s, "contract_data", None),
+            "contract_eligibility": getattr(s, "contract_eligibility", None),
+            # Phase 3.2.2: Explicit liquidity gate results
+            "liquidity_gates": getattr(s, "liquidity_gates", None),
         }
         symbols_data.append(sym_dict)
     

@@ -81,6 +81,11 @@ class OratsDataMode:
         if mode is None:
             mode = cls.get_current_mode()
         return cls.BASE_URLS.get(mode, cls.BASE_URLS[cls.DELAYED])
+
+    @classmethod
+    def mode_from_chain_source(cls, chain_source: str) -> str:
+        """Map chain_source (LIVE|DELAYED) to OratsDataMode. For use when routing by market phase."""
+        return cls.LIVE if (chain_source or "").upper() == "LIVE" else cls.DELAYED
     
     @classmethod
     def supports_opra_fields(cls, mode: Optional[str] = None) -> bool:
@@ -478,9 +483,10 @@ def fetch_base_chain(
     max_expiries: int = MAX_EXPIRIES,
     target_moneyness_put: float = 0.85,  # 15% below for puts
     target_moneyness_call: float = 1.10,  # 10% above for calls
+    chain_mode: Optional[str] = None,
 ) -> Tuple[List[BaseContract], Optional[float], Optional[str]]:
     """
-    STEP 1: Fetch base option chain from /datav2/strikes.
+    STEP 1: Fetch base option chain from /datav2/strikes (or /datav2/live when chain_mode=LIVE).
     
     This endpoint returns the chain structure (strikes, expirations) 
     but NO liquidity data.
@@ -495,13 +501,16 @@ def fetch_base_chain(
         max_expiries: Max expirations within DTE window
         target_moneyness_put: Target moneyness for puts (e.g., 0.85 = 15% OTM)
         target_moneyness_call: Target moneyness for calls (e.g., 1.10 = 10% OTM)
+        chain_mode: Override: "DELAYED" | "LIVE" (from get_chain_source()). When None, use ORATS_DATA_MODE env.
     
     Returns:
         Tuple of (contracts, underlying_price, error)
     """
     _RATE_LIMITER.acquire()
-    
-    mode = OratsDataMode.get_current_mode()
+    if chain_mode is not None:
+        mode = OratsDataMode.mode_from_chain_source(chain_mode)
+    else:
+        mode = OratsDataMode.get_current_mode()
     base_url = OratsDataMode.get_base_url(mode)
     token = _get_orats_token()
     
@@ -693,6 +702,7 @@ def fetch_enriched_contracts(
     opra_symbols: List[str],
     batch_size: int = OPRA_BATCH_SIZE,
     require_opra_fields: bool = True,
+    chain_mode: Optional[str] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """
     STEP 3 (OPRA lookup): Fetch liquidity data for OCC option symbols from /datav2/strikes/options.
@@ -704,6 +714,7 @@ def fetch_enriched_contracts(
         opra_symbols: List of OCC option symbols only (built from chain data)
         batch_size: Max symbols per request (default 10)
         require_opra_fields: If True, raise error if mode doesn't support OPRA fields
+        chain_mode: Override: "DELAYED" | "LIVE". When None, use ORATS_DATA_MODE env.
     
     Returns:
         Dict mapping OPRA symbol -> enrichment data
@@ -725,7 +736,10 @@ def fetch_enriched_contracts(
                 response_snippet=s[:80] if s else "",
             )
     
-    mode = OratsDataMode.get_current_mode()
+    if chain_mode is not None:
+        mode = OratsDataMode.mode_from_chain_source(chain_mode)
+    else:
+        mode = OratsDataMode.get_current_mode()
     
     # FAIL FAST: Check if mode supports OPRA fields
     if require_opra_fields and not OratsDataMode.supports_opra_fields(mode):
@@ -952,13 +966,14 @@ def fetch_option_chain(
     enrich_all: bool = True,
     max_strikes_per_expiry: int = MAX_STRIKES_PER_EXPIRY,
     max_expiries: int = MAX_EXPIRIES,
+    chain_mode: Optional[str] = None,
 ) -> OptionChainResult:
     """
     Fetch complete option chain with liquidity data using two-step pipeline.
     
-    STEP 1: GET /datav2/strikes → base chain (bounded selection)
+    STEP 1: GET /datav2/strikes (or /datav2/live when chain_mode=LIVE) → base chain
     STEP 2: Build OPRA symbols
-    STEP 3: GET /datav2/strikes/options?ticker=OPRA1,OPRA2,... → liquidity
+    STEP 3: GET /datav2/strikes/options (or live equivalent) → liquidity
     STEP 4: Merge results
     
     Args:
@@ -968,6 +983,7 @@ def fetch_option_chain(
         enrich_all: If True, enrich all contracts; if False, only enrich puts
         max_strikes_per_expiry: Max strikes to select per expiration
         max_expiries: Max expirations within DTE window
+        chain_mode: Override: "DELAYED" | "LIVE" (from get_chain_source()). When None, use ORATS_DATA_MODE env.
     
     Returns:
         OptionChainResult with all contracts and stats
@@ -977,7 +993,10 @@ def fetch_option_chain(
     """
     start_time = time.time()
     now_iso = datetime.now(timezone.utc).isoformat()
-    mode = OratsDataMode.get_current_mode()
+    if chain_mode is not None:
+        mode = OratsDataMode.mode_from_chain_source(chain_mode)
+    else:
+        mode = OratsDataMode.get_current_mode()
     
     result = OptionChainResult(
         symbol=symbol.upper(),
@@ -1002,7 +1021,8 @@ def fetch_option_chain(
         symbol.upper(), mode, max_expiries, max_strikes_per_expiry
     )
     base_contracts, underlying_price, error = fetch_base_chain(
-        symbol, dte_min, dte_max, max_strikes_per_expiry, max_expiries
+        symbol, dte_min, dte_max, max_strikes_per_expiry, max_expiries,
+        chain_mode=chain_mode,
     )
     
     if error:
@@ -1040,7 +1060,9 @@ def fetch_option_chain(
     
     # STEP 3: Enrich with liquidity
     logger.info("[CHAIN_PIPELINE] %s: STEP 3 - Enriching with liquidity...", symbol.upper())
-    enrichment_map = fetch_enriched_contracts(opra_symbols_to_enrich, require_opra_fields=True)
+    enrichment_map = fetch_enriched_contracts(
+        opra_symbols_to_enrich, require_opra_fields=True, chain_mode=chain_mode
+    )
     result.enriched_count = len(enrichment_map)
     
     logger.info(

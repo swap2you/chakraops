@@ -295,7 +295,7 @@ class TestOratsChainProvider:
         mock_strikes.return_value = mock_orats_strikes
         mock_summaries.return_value = [{"stockPrice": 152.0}]
         
-        provider = OratsChainProvider(use_cache=False)
+        provider = OratsChainProvider(use_cache=False, chain_source="LIVE")
         expirations = provider.get_expirations("AAPL")
         
         assert len(expirations) >= 1
@@ -309,7 +309,7 @@ class TestOratsChainProvider:
         mock_strikes.return_value = mock_orats_strikes
         mock_summaries.return_value = [{"stockPrice": 152.0}]
         
-        provider = OratsChainProvider(use_cache=False)
+        provider = OratsChainProvider(use_cache=False, chain_source="LIVE")
         exp_date = date.today() + timedelta(days=30)
         result = provider.get_chain("AAPL", exp_date)
         
@@ -322,7 +322,7 @@ class TestOratsChainProvider:
         """Test missing chain produces DATA_INCOMPLETE."""
         mock_strikes.return_value = []  # No data
         
-        provider = OratsChainProvider(use_cache=False)
+        provider = OratsChainProvider(use_cache=False, chain_source="LIVE")
         result = provider.get_chain("INVALID", date.today() + timedelta(days=30))
         
         assert not result.success
@@ -347,7 +347,7 @@ class TestOratsChainProvider:
         ]
         mock_summaries.return_value = [{"stockPrice": 152.0}]
         
-        provider = OratsChainProvider(use_cache=False)
+        provider = OratsChainProvider(use_cache=False, chain_source="LIVE")
         result = provider.get_chain("AAPL", date.today() + timedelta(days=30))
         
         assert result.success
@@ -623,7 +623,7 @@ class TestChainSelectionIntegration:
             "ivRank": 45.0,
         }]
         
-        provider = OratsChainProvider(use_cache=False)
+        provider = OratsChainProvider(use_cache=False, chain_source="LIVE")
         exp_date = date.today() + timedelta(days=30)
         
         result = provider.get_chain("AAPL", exp_date)

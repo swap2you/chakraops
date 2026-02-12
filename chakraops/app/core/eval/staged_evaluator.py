@@ -49,6 +49,22 @@ from app.core.options.chain_provider import (
     select_contract,
 )
 from app.core.options.orats_chain_provider import OratsChainProvider, get_chain_provider
+from app.core.config.wheel_strategy_config import (
+    WHEEL_CONFIG,
+    DTE_MIN,
+    DTE_MAX,
+    TARGET_DELTA_RANGE,
+    MIN_UNDERLYING_VOLUME,
+    MAX_UNDERLYING_SPREAD_PCT,
+    MIN_OPTION_OI,
+    MAX_OPTION_SPREAD_PCT,
+    IVR_LOW,
+    IVR_MID,
+    IVR_HIGH,
+    get_dte_range,
+    get_target_delta_range,
+)
+from app.core.eval.volatility import get_ivr_band
 
 logger = logging.getLogger(__name__)
 
@@ -80,20 +96,32 @@ class FinalVerdict(str, Enum):
     UNKNOWN = "UNKNOWN"  # Error state
 
 
-# Configuration
+# Configuration (Wheel strategy: from wheel_strategy_config, no hardcoded numbers)
 STAGE1_TOP_K = 20  # Top K candidates to advance to stage 2
 STAGE2_MAX_CONCURRENT = 5  # Max concurrent chain fetches
-TARGET_DTE_MIN = 21
-TARGET_DTE_MAX = 45
-TARGET_DELTA = -0.25  # For CSP
-DELTA_TOLERANCE = 0.10
+TARGET_DTE_MIN = WHEEL_CONFIG[DTE_MIN]
+TARGET_DTE_MAX = WHEEL_CONFIG[DTE_MAX]
+_delta_lo, _delta_hi = get_target_delta_range()
+TARGET_DELTA = -(_delta_lo + _delta_hi) / 2  # Put delta (negative); use midpoint of range
+DELTA_TOLERANCE = 0.10  # Tolerance around TARGET_DELTA for contract selection
 MIN_LIQUIDITY_GRADE = ContractLiquidityGrade.B
-MIN_OPEN_INTEREST = 500
-MAX_SPREAD_PCT = 0.10
+MIN_OPEN_INTEREST = WHEEL_CONFIG[MIN_OPTION_OI]
+MAX_SPREAD_PCT = WHEEL_CONFIG[MAX_OPTION_SPREAD_PCT]
 
 # Scoring
 SHORTLIST_SCORE_THRESHOLD = 70
 DATA_INCOMPLETE_SCORE_CAP = 60
+
+# Required chain fields for Wheel strategy (Phase 3.3.1). required_fields_present is True
+# iff at least one selected_candidate has all of these non-null and numeric; no extra fields.
+REQUIRED_CHAIN_FIELDS = [
+    "strike",
+    "expiration",
+    "bid",
+    "ask",
+    "delta",
+    "open_interest",
+]
 
 
 @dataclass
@@ -131,10 +159,11 @@ class Stage1Result:
     stock_verdict_reason: str = ""
     stage1_score: int = 0  # 0-100
     
-    # Context
+    # Context (Phase 3.2.3: from IVR band only, no trend logic)
     regime: Optional[str] = None
     risk_posture: Optional[str] = None
-    
+    ivr_band: Optional[str] = None  # LOW | MID | HIGH from wheel config bands
+
     # Data quality
     data_completeness: float = 0.0
     missing_fields: List[str] = field(default_factory=list)
@@ -161,10 +190,12 @@ class Stage2Result:
     expirations_evaluated: int = 0
     contracts_evaluated: int = 0
     
-    # Selected contract
+    # Selected contract (Phase 3.2.4: top 1; selected_candidates holds 1–3)
     selected_contract: Optional[SelectedContract] = None
     selected_expiration: Optional[date] = None
-    
+    selected_candidates: List[Any] = field(default_factory=list)  # Up to 3 SelectedContract
+    contract_selection_reasons: List[str] = field(default_factory=list)  # When no contract passes
+
     # Liquidity assessment
     liquidity_grade: Optional[str] = None
     liquidity_reason: str = ""
@@ -180,6 +211,10 @@ class Stage2Result:
     error: Optional[str] = None
     # OPRA enhancement: count of valid contracts when liquidity_ok from strikes/options
     opra_valid_contracts: Optional[int] = None
+    # Debug: rejection reason counts (lightweight trace for Stage-2 artifacts)
+    rejection_counts: Dict[str, int] = field(default_factory=dict)
+    # Option type counts from chain contracts (before filtering) for diagnostics
+    option_type_counts: Dict[str, int] = field(default_factory=dict)  # puts_seen, calls_seen, unknown_seen
 
 
 @dataclass
@@ -258,6 +293,13 @@ class FullEvaluationResult:
     # OPRA authority: when set, stock bid/ask/volume were waived and liquidity is from /datav2/strikes/options
     waiver_reason: Optional[str] = None  # e.g. "DERIVED_FROM_OPRA"
     
+    # Phase 3.0.2: Split eligibility layers (symbol vs contract)
+    symbol_eligibility: Optional[Dict[str, Any]] = None  # { status: PASS|FAIL, reasons: [] }
+    contract_data: Optional[Dict[str, Any]] = None       # { available, as_of, source: LIVE|EOD_SNAPSHOT|NONE }
+    contract_eligibility: Optional[Dict[str, Any]] = None  # { status: PASS|FAIL|UNAVAILABLE, reasons: [] }
+    # Phase 3.2.2: Explicit liquidity gate results (underlying + option) for artifact
+    liquidity_gates: Optional[Dict[str, Any]] = None  # { underlying: {...}, option: {...} }
+
     # Metadata
     fetched_at: Optional[str] = None
     error: Optional[str] = None
@@ -307,8 +349,12 @@ class FullEvaluationResult:
             "csp_notional": self.csp_notional,
             "notional_pct": self.notional_pct,
             "band_reason": self.band_reason,
+            "symbol_eligibility": self.symbol_eligibility,
+            "contract_data": self.contract_data,
+            "contract_eligibility": self.contract_eligibility,
+            "liquidity_gates": self.liquidity_gates,
         }
-        
+
         # Add stage 2 specific fields
         if self.stage2 and self.stage2.selected_contract:
             result["selected_contract"] = self.stage2.selected_contract.to_dict()
@@ -424,17 +470,17 @@ def evaluate_stage1(symbol: str) -> Stage1Result:
             result.quote_date or "MISSING",
         )
 
-        # Determine regime from IV
-        if result.iv_rank is not None:
-            if result.iv_rank < 30:
-                result.regime = "BULL"
-                result.risk_posture = "LOW"
-            elif result.iv_rank > 70:
-                result.regime = "BEAR"
-                result.risk_posture = "HIGH"
-            else:
-                result.regime = "NEUTRAL"
-                result.risk_posture = "MODERATE"
+        # Phase 3.2.3: Regime from IV Rank bands only (no trend logic)
+        result.ivr_band = get_ivr_band(result.iv_rank)
+        if result.ivr_band == IVR_LOW:
+            result.regime = "LOW_VOL"
+            result.risk_posture = "LOW"
+        elif result.ivr_band == IVR_MID:
+            result.regime = "NEUTRAL"
+            result.risk_posture = "MODERATE"
+        elif result.ivr_band == IVR_HIGH:
+            result.regime = "HIGH_VOL"
+            result.risk_posture = "HIGH"
         else:
             result.regime = "UNKNOWN"
             result.risk_posture = "UNKNOWN"
@@ -456,24 +502,17 @@ def evaluate_stage1(symbol: str) -> Stage1Result:
 
 
 def _compute_stage1_score(result: Stage1Result) -> int:
-    """Compute stage 1 score based on stock quality."""
+    """Compute stage 1 score: IVR band only — LOW penalize, MID neutral, HIGH positive (Phase 3.2.3)."""
     score = 50  # Baseline
-    
-    # Regime bonus
-    if result.regime == "BULL":
-        score += 15
-    elif result.regime == "NEUTRAL":
-        score += 10
-    elif result.regime == "BEAR":
-        score -= 5
-    
-    # IV rank bonus (prefer higher IV for premium selling)
-    if result.iv_rank is not None:
-        if 30 <= result.iv_rank <= 70:
-            score += 10  # Moderate IV is good
-        elif result.iv_rank > 70:
-            score += 5  # High IV has risk but good premium
-    
+
+    # IV Rank band scoring (no trend logic)
+    if result.ivr_band == IVR_LOW:
+        score -= 15  # Penalize: low premium environment
+    elif result.ivr_band == IVR_MID:
+        pass  # Neutral
+    elif result.ivr_band == IVR_HIGH:
+        score += 10  # Positive: favorable premium (tail risk note added in rationale)
+
     # Data completeness factor
     score = int(score * result.data_completeness)
     
@@ -482,6 +521,202 @@ def _compute_stage1_score(result: Stage1Result) -> int:
         score = min(score, DATA_INCOMPLETE_SCORE_CAP)
     
     return max(0, min(100, score))
+
+
+# ============================================================================
+# Stage 2: Contract selection (Phase 3.2.4)
+# ============================================================================
+
+# Top N candidates to keep (1–3)
+CONTRACT_SELECTION_TOP_N = 3
+
+
+def _delta_magnitude(contract: OptionContract) -> Optional[float]:
+    """Return |delta| for range checks; ORATS may return put deltas as positive or negative."""
+    if not getattr(contract.delta, "is_valid", False) or contract.delta.value is None:
+        return None
+    try:
+        return abs(float(contract.delta.value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalized_delta(contract: OptionContract) -> Optional[float]:
+    """Puts: negative magnitude. Calls: positive magnitude. For reporting/storage."""
+    mag = _delta_magnitude(contract)
+    if mag is None:
+        return None
+    return -mag if contract.option_type == OptionType.PUT else mag
+
+
+def _select_csp_candidates(
+    chains: Dict[date, Any],
+    dte_min: int,
+    dte_max: int,
+    delta_lo: float,
+    delta_hi: float,
+    min_oi: int,
+    max_spread_pct: float,
+    symbol: str,
+) -> Tuple[List[SelectedContract], List[str], Dict[str, int]]:
+    """
+    Filter by option_type==PUT, 30–45 DTE, delta magnitude in [delta_lo, delta_hi],
+    then option liquidity gates. Returns (candidates, failure_reasons, rejection_counts).
+    Delta filter uses magnitude so both +0.25 and -0.25 puts are in-range.
+    """
+    reasons: List[str] = []
+    rejection_counts: Dict[str, int] = {
+        "rejected_due_to_delta": 0,
+        "rejected_due_to_oi": 0,
+        "rejected_due_to_spread": 0,
+        "rejected_due_to_missing_fields": 0,
+    }
+
+    # Collect put contracts from chains in DTE range (identify puts by option_type, not delta sign)
+    all_puts: List[Tuple[OptionContract, date]] = []
+    for exp_date, chain_result in chains.items():
+        if not chain_result.success or chain_result.chain is None:
+            continue
+        chain = chain_result.chain
+        for c in chain.contracts:
+            if c.option_type != OptionType.PUT:
+                continue
+            if not (dte_min <= c.dte <= dte_max):
+                continue
+            c.compute_derived_fields()
+            all_puts.append((c, exp_date))
+
+    if not all_puts:
+        reasons.append("No contracts in 30–45 DTE range")
+        return [], reasons, rejection_counts
+
+    # Filter by delta range using magnitude (0.15 <= |delta| <= 0.35)
+    in_delta: List[Tuple[OptionContract, date]] = []
+    for c, exp in all_puts:
+        delta_mag = _delta_magnitude(c)
+        if delta_mag is None:
+            rejection_counts["rejected_due_to_missing_fields"] += 1
+            continue
+        if not (delta_lo <= delta_mag <= delta_hi):
+            rejection_counts["rejected_due_to_delta"] += 1
+            continue
+        in_delta.append((c, exp))
+
+    if not in_delta:
+        reasons.append(f"No contracts in delta range [{delta_lo}, {delta_hi}] (puts)")
+        return [], reasons, rejection_counts
+
+    # Apply option liquidity gates: OI >= min_oi, spread_pct <= max_spread_pct
+    passed: List[Tuple[OptionContract, date]] = []
+    for c, exp in in_delta:
+        oi = 0
+        if getattr(c.open_interest, "is_valid", False) and c.open_interest.value is not None:
+            try:
+                oi = int(c.open_interest.value)
+            except (TypeError, ValueError):
+                pass
+        sp = 1.0
+        if getattr(c.spread_pct, "is_valid", False) and c.spread_pct.value is not None:
+            sp = float(c.spread_pct.value)
+        if oi < min_oi:
+            rejection_counts["rejected_due_to_oi"] += 1
+            continue
+        if sp > max_spread_pct:
+            rejection_counts["rejected_due_to_spread"] += 1
+            continue
+        passed.append((c, exp))
+
+    if not passed:
+        reasons.append(f"No contracts passed option liquidity gates (OI≥{min_oi}, spread≤{max_spread_pct:.0%})")
+        return [], reasons, rejection_counts
+
+    # Rank by premium/capital_required and liquidity quality
+    def rank_key(item: Tuple[OptionContract, date]) -> Tuple[float, int]:
+        c, _ = item
+        capital = (c.strike * 100) if c.strike and c.strike > 0 else 1
+        bid_val = c.bid.value if c.bid.is_valid and c.bid.value is not None else 0
+        premium_cap = bid_val / capital if capital else 0
+        grade = c.get_liquidity_grade()
+        grade_order = {"A": 3, "B": 2, "C": 1, "D": 0, "F": 0}.get(grade.value, 0)
+        return (premium_cap, grade_order)
+
+    passed.sort(key=rank_key, reverse=True)
+    top = passed[:CONTRACT_SELECTION_TOP_N]
+
+    # Build SelectedContract list; report normalized delta (negative for puts)
+    candidates: List[SelectedContract] = []
+    for c, exp_date in top:
+        reason_parts = []
+        norm_d = _normalized_delta(c)
+        if norm_d is not None:
+            reason_parts.append(f"delta={norm_d:.2f}")
+        reason_parts.append(f"DTE={c.dte}")
+        reason_parts.append(f"grade={c.get_liquidity_grade().value}")
+        if c.bid.is_valid and c.bid.value is not None:
+            reason_parts.append(f"bid=${c.bid.value:.2f}")
+        sel = SelectedContract(
+            contract=c,
+            selection_reason=", ".join(reason_parts),
+            meets_all_criteria=True,
+            criteria_results={"dte_in_range": True, "liquidity_ok": True},
+        )
+        candidates.append(sel)
+    return candidates, [], rejection_counts
+
+
+def _contract_has_all_required_chain_fields(contract: OptionContract) -> Tuple[bool, List[str]]:
+    """
+    Return (True, []) if all REQUIRED_CHAIN_FIELDS are non-null and numeric; else (False, list of missing).
+    Used for required_fields_present: no missing_reasons for these Wheel strategy fields.
+    """
+    missing: List[str] = []
+    for fn in REQUIRED_CHAIN_FIELDS:
+        if fn == "strike":
+            if contract.strike is None or not isinstance(contract.strike, (int, float)):
+                missing.append(fn)
+            continue
+        if fn == "expiration":
+            if contract.expiration is None:
+                missing.append(fn)
+            continue
+        fv = getattr(contract, fn, None)
+        if fv is None or not getattr(fv, "is_valid", False):
+            missing.append(fn)
+            continue
+        val = getattr(fv, "value", None)
+        if val is None:
+            missing.append(fn)
+            continue
+        if fn == "open_interest":
+            if not isinstance(val, (int, float)):
+                missing.append(fn)
+        else:
+            if not isinstance(val, (int, float)):
+                missing.append(fn)
+    return (len(missing) == 0, missing)
+
+
+def _compute_required_chain_fields_from_candidates(
+    selected_candidates: List[Any],
+    current_chain_missing: List[str],
+) -> Tuple[bool, List[str]]:
+    """
+    Compute required_fields_present and chain_missing_fields from selected_candidates.
+    Returns (required_fields_present, chain_missing_fields).
+    True iff at least one contract in selected_candidates has all REQUIRED_CHAIN_FIELDS non-null and numeric.
+    """
+    if not selected_candidates:
+        return False, current_chain_missing
+    all_missing: set = set()
+    for sc in selected_candidates:
+        contract = getattr(sc, "contract", None)
+        if contract is None:
+            continue
+        ok, missing = _contract_has_all_required_chain_fields(contract)
+        if ok:
+            return True, []
+        all_missing.update(missing)
+    return False, list(all_missing)
 
 
 # ============================================================================
@@ -501,97 +736,90 @@ def evaluate_stage2(
     result = Stage2Result(symbol=symbol)
     now_iso = datetime.now(timezone.utc).isoformat()
     result.chains_fetched_at = now_iso
-    
+
     provider = chain_provider or get_chain_provider()
+    try:
+        from app.market.market_hours import get_market_phase
+        market_phase = get_market_phase()
+        chain_source = getattr(provider, "_chain_source", "DELAYED")
+        logger.info("[STAGE2_MODE] market_phase=%s chain_source=%s", market_phase, chain_source)
+    except Exception:
+        logger.info("[STAGE2_MODE] market_phase=UNKNOWN chain_source=%s", getattr(provider, "_chain_source", "DELAYED"))
     start_time = time.time()
     
     try:
-        # Get available expirations
+        # Phase 3.2.4: Filter expirations 30–45 DTE (wheel config)
+        dte_min = WHEEL_CONFIG[DTE_MIN]
+        dte_max = WHEEL_CONFIG[DTE_MAX]
+        delta_lo, delta_hi = get_target_delta_range()
+        min_oi = WHEEL_CONFIG[MIN_OPTION_OI]
+        max_spread_pct = WHEEL_CONFIG[MAX_OPTION_SPREAD_PCT]
+
         expirations = provider.get_expirations(symbol)
         result.expirations_available = len(expirations)
-        
+
         if not expirations:
             result.error = "No expirations available"
             result.liquidity_reason = "No options chain data"
+            result.contract_selection_reasons = ["No expirations available"]
             return result
-        
-        # Filter to target DTE range
-        target_expirations = [
-            e for e in expirations
-            if TARGET_DTE_MIN <= e.dte <= TARGET_DTE_MAX
-        ]
-        
+
+        target_expirations = [e for e in expirations if dte_min <= e.dte <= dte_max]
         if not target_expirations:
-            # Fall back to nearest expirations
-            target_expirations = sorted(expirations, key=lambda e: e.dte)[:3]
-        
-        # Fetch chains for target expirations
-        exp_dates = [e.expiration for e in target_expirations[:3]]  # Limit to 3
+            result.liquidity_ok = False
+            result.liquidity_reason = f"No expirations in {dte_min}-{dte_max} DTE"
+            result.contract_selection_reasons = [f"No expirations in {dte_min}-{dte_max} DTE"]
+            result.contracts_evaluated = 0
+            return result
+
+        exp_dates = [e.expiration for e in target_expirations[:5]]  # Fetch up to 5
         chains = provider.get_chains_batch(symbol, exp_dates, max_concurrent=STAGE2_MAX_CONCURRENT)
         result.expirations_evaluated = len(chains)
-        
-        # Find best contract across all chains
-        best_selection: Optional[SelectedContract] = None
-        best_expiration: Optional[date] = None
-        best_score = -float("inf")
-        total_contracts = 0
-        all_missing_fields = set()
-        
-        criteria = ContractSelectionCriteria(
-            option_type=OptionType.PUT,  # CSP
-            target_delta=TARGET_DELTA,
-            delta_tolerance=DELTA_TOLERANCE,
-            min_dte=TARGET_DTE_MIN,
-            max_dte=TARGET_DTE_MAX,
-            min_liquidity_grade=MIN_LIQUIDITY_GRADE,
-        )
-        
-        for exp, chain_result in chains.items():
+        total_contracts = sum(len(cr.chain.contracts) for cr in chains.values() if cr.success and cr.chain)
+        result.contracts_evaluated = total_contracts
+        # Count option types in chain contracts (before filtering) for diagnostics
+        puts_seen = calls_seen = unknown_seen = 0
+        for chain_result in chains.values():
             if not chain_result.success or chain_result.chain is None:
                 continue
-            
-            chain = chain_result.chain
-            total_contracts += len(chain.contracts)
-            
-            # Track missing fields
-            _, missing = chain.compute_data_completeness()
-            all_missing_fields.update(missing)
-            
-            # Select best contract for this chain
-            selection = select_contract(chain, criteria)
-            if selection and selection.meets_all_criteria:
-                # Score based on premium and liquidity
-                contract = selection.contract
-                selection_score = 0
-                if contract.bid.is_valid and contract.bid.value:
-                    selection_score += contract.bid.value * 10
-                grade = contract.get_liquidity_grade()
-                if grade == ContractLiquidityGrade.A:
-                    selection_score += 20
-                elif grade == ContractLiquidityGrade.B:
-                    selection_score += 10
-                
-                if selection_score > best_score:
-                    best_score = selection_score
-                    best_selection = selection
-                    best_expiration = exp
-        
-        result.contracts_evaluated = total_contracts
+            for c in chain_result.chain.contracts:
+                if c.option_type == OptionType.PUT:
+                    puts_seen += 1
+                elif c.option_type == OptionType.CALL:
+                    calls_seen += 1
+                else:
+                    unknown_seen += 1
+        result.option_type_counts = {"puts_seen": puts_seen, "calls_seen": calls_seen, "unknown_seen": unknown_seen}
+        all_missing_fields = set()
+        for chain_result in chains.values():
+            if chain_result.success and chain_result.chain:
+                _, missing = chain_result.chain.compute_data_completeness()
+                all_missing_fields.update(missing)
         result.chain_missing_fields = list(all_missing_fields)
-        
-        if best_selection:
-            result.selected_contract = best_selection
-            result.selected_expiration = best_expiration
-            result.liquidity_grade = best_selection.contract.get_liquidity_grade().value
+        result.chain_completeness = 1.0 - (len(all_missing_fields) / 4) if all_missing_fields else 1.0
+
+        candidates, failure_reasons, rejection_counts = _select_csp_candidates(
+            chains, dte_min, dte_max, delta_lo, delta_hi, min_oi, max_spread_pct, symbol,
+        )
+        result.rejection_counts = rejection_counts
+
+        if candidates:
+            result.selected_contract = candidates[0]
+            result.selected_expiration = candidates[0].contract.expiration
+            result.selected_candidates = candidates[:CONTRACT_SELECTION_TOP_N]
+            result.liquidity_grade = result.selected_contract.contract.get_liquidity_grade().value
             result.liquidity_ok = True
-            result.liquidity_reason = best_selection.selection_reason
-            
-            # Compute chain completeness
-            result.chain_completeness = 1.0 - (len(all_missing_fields) / 4) if all_missing_fields else 1.0
+            result.liquidity_reason = result.selected_contract.selection_reason
+            # required_fields_present: True iff at least one selected_candidate has all REQUIRED_CHAIN_FIELDS
+            _present, _missing = _compute_required_chain_fields_from_candidates(
+                result.selected_candidates, result.chain_missing_fields
+            )
+            result.chain_missing_fields = _missing
         else:
             result.liquidity_ok = False
-            result.liquidity_reason = "No contracts meeting criteria"
-            if all_missing_fields:
+            result.liquidity_reason = failure_reasons[0] if failure_reasons else "No contracts meeting criteria"
+            result.contract_selection_reasons = failure_reasons
+            if not failure_reasons and all_missing_fields:
                 # Check if missing fields are intraday-only (OI, volume) and market is closed
                 try:
                     from app.core.eval.verdict_resolver import (
@@ -768,8 +996,12 @@ def _enhance_liquidity_with_pipeline(
             total_options = len(result.options)
             valid_total = result.total_valid
             stage2.chain_completeness = valid_total / total_options if total_options > 0 else 0.0
-            stage2.chain_missing_fields = []  # Clear missing fields - we have liquidity!
-            
+            # required_fields_present from selected_candidates (same rule as main path)
+            _present, _missing = _compute_required_chain_fields_from_candidates(
+                stage2.selected_candidates, stage2.chain_missing_fields
+            )
+            stage2.chain_missing_fields = _missing
+
             logger.info(
                 "[STAGE2_ENHANCE] %s: SUCCESS - liquidity_ok=True, reason='%s'",
                 symbol, stage2.liquidity_reason
@@ -807,6 +1039,203 @@ _compute_liquidity_grade_from_enriched = _compute_liquidity_grade_from_opra
 
 
 # ============================================================================
+# Liquidity gates (Phase 3.2.2)
+# ============================================================================
+
+def compute_underlying_liquidity_gates(stage1: Optional["Stage1Result"]) -> Dict[str, Any]:
+    """
+    Compute underlying liquidity gate results: spread_pct = (ask - bid) / price,
+    enforce MIN_UNDERLYING_VOLUME and MAX_UNDERLYING_SPREAD_PCT.
+    Returns dict with spread_pct, volume, min_volume_required, max_spread_pct_allowed,
+    volume_ok, spread_ok, passed (all gates), reason (if failed).
+    """
+    min_vol = WHEEL_CONFIG[MIN_UNDERLYING_VOLUME]
+    max_spread = WHEEL_CONFIG[MAX_UNDERLYING_SPREAD_PCT]
+    out: Dict[str, Any] = {
+        "spread_pct": None,
+        "volume": None,
+        "min_volume_required": min_vol,
+        "max_spread_pct_allowed": max_spread,
+        "volume_ok": False,
+        "spread_ok": False,
+        "passed": False,
+        "reason": "Stage 1 not run",
+    }
+    if stage1 is None:
+        return out
+    # Volume: prefer avg_stock_volume_20d (config is "average daily share volume")
+    vol = stage1.avg_stock_volume_20d
+    if vol is None:
+        vol = stage1.volume
+    if vol is not None:
+        try:
+            vol_int = int(vol)
+        except (TypeError, ValueError):
+            vol_int = 0
+    else:
+        vol_int = None
+    out["volume"] = vol_int
+    out["volume_ok"] = (vol_int is not None and vol_int >= min_vol) if vol_int is not None else False
+    # Spread: (ask - bid) / price
+    bid, ask, price = stage1.bid, stage1.ask, stage1.price
+    if bid is not None and ask is not None and price is not None and price > 0:
+        spread_pct = (ask - bid) / price
+        out["spread_pct"] = round(spread_pct, 6)
+        out["spread_ok"] = spread_pct <= max_spread
+    else:
+        out["reason"] = "Missing bid, ask, or price for spread"
+        return out
+    out["passed"] = out["volume_ok"] and out["spread_ok"]
+    if not out["volume_ok"]:
+        out["reason"] = f"Volume {vol_int} < {min_vol}"
+    elif not out["spread_ok"]:
+        out["reason"] = f"Underlying spread {out['spread_pct']:.4%} > {max_spread:.4%}"
+    else:
+        out["reason"] = None
+    return out
+
+
+def compute_option_liquidity_gates(contract: Optional[Any]) -> Dict[str, Any]:
+    """
+    Compute option liquidity gate results: option_spread_pct = (ask - bid) / mid,
+    enforce MIN_OPTION_OI and MAX_OPTION_SPREAD_PCT. contract is OptionContract or None.
+    Returns dict with option_spread_pct, open_interest, min_oi_required,
+    max_spread_pct_allowed, oi_ok, spread_ok, passed, reason.
+    """
+    min_oi = WHEEL_CONFIG[MIN_OPTION_OI]
+    max_spread = WHEEL_CONFIG[MAX_OPTION_SPREAD_PCT]
+    out: Dict[str, Any] = {
+        "option_spread_pct": None,
+        "open_interest": None,
+        "min_oi_required": min_oi,
+        "max_spread_pct_allowed": max_spread,
+        "oi_ok": False,
+        "spread_ok": False,
+        "passed": False,
+        "reason": "No selected contract",
+    }
+    if contract is None:
+        return out
+    # OptionContract has bid, ask, mid as FieldValue; also open_interest
+    bid_val = contract.bid.value if getattr(contract.bid, "is_valid", False) and contract.bid.value is not None else None
+    ask_val = contract.ask.value if getattr(contract.ask, "is_valid", False) and contract.ask.value is not None else None
+    mid_val = contract.mid.value if getattr(contract.mid, "is_valid", False) and contract.mid.value is not None else None
+    if mid_val is None and bid_val is not None and ask_val is not None:
+        mid_val = (bid_val + ask_val) / 2
+    oi_val = None
+    if getattr(contract, "open_interest", None) is not None and getattr(contract.open_interest, "value", None) is not None:
+        oi_val = contract.open_interest.value
+    if oi_val is not None:
+        try:
+            oi_val = int(oi_val)
+        except (TypeError, ValueError):
+            oi_val = 0
+    out["open_interest"] = oi_val
+    out["oi_ok"] = (oi_val is not None and oi_val >= min_oi) if oi_val is not None else False
+    # Ensure numeric types (avoid MagicMock or other mocks in tests)
+    try:
+        bid_f = float(bid_val) if bid_val is not None and isinstance(bid_val, (int, float)) else None
+        ask_f = float(ask_val) if ask_val is not None and isinstance(ask_val, (int, float)) else None
+        mid_f = float(mid_val) if mid_val is not None and isinstance(mid_val, (int, float)) else None
+    except (TypeError, ValueError):
+        bid_f = ask_f = mid_f = None
+    if bid_f is not None and ask_f is not None and mid_f is not None and mid_f > 0:
+        option_spread_pct = (ask_f - bid_f) / mid_f
+        out["option_spread_pct"] = round(option_spread_pct, 6)
+        out["spread_ok"] = option_spread_pct <= max_spread
+    else:
+        out["reason"] = "Missing bid, ask, or mid for option spread"
+        return out
+    out["passed"] = out["oi_ok"] and out["spread_ok"]
+    if not out["oi_ok"]:
+        out["reason"] = f"OI {oi_val} < {min_oi}"
+    elif not out["spread_ok"]:
+        out["reason"] = f"Option spread {out['option_spread_pct']:.4%} > {max_spread:.4%}"
+    else:
+        out["reason"] = None
+    return out
+
+
+# ============================================================================
+# Eligibility layers (Phase 3.0.2)
+# ============================================================================
+
+def build_eligibility_layers(
+    stage1: Optional["Stage1Result"],
+    stage2: Optional["Stage2Result"],
+    fetched_at_iso: Optional[str],
+    market_open: bool,
+) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    """
+    Build split eligibility layers from stage1/stage2.
+    Returns (symbol_eligibility, contract_data, contract_eligibility).
+
+    - Symbol eligibility: Stage-1 required snapshot fields only (PASS/FAIL).
+    - Contract data: available is True ONLY if selected_candidates exist and at least one
+      has all REQUIRED_CHAIN_FIELDS (required_fields_present True). Otherwise available
+      False, source NONE; never available=True when required_fields_present=False.
+    - Contract eligibility: UNAVAILABLE when no enriched chain or required fields missing;
+      else PASS/FAIL from liquidity.
+    """
+    if stage1 is None:
+        symbol_eligibility = {"status": "FAIL", "reasons": ["Stage 1 not run"]}
+    else:
+        passed = stage1.stock_verdict == StockVerdict.QUALIFIED
+        symbol_eligibility = {
+            "status": "PASS" if passed else "FAIL",
+            "reasons": [] if passed else [stage1.stock_verdict_reason or "Stage 1 did not qualify"],
+        }
+        if stage1.missing_fields and not passed:
+            symbol_eligibility["reasons"].append(f"Missing required fields: {', '.join(stage1.missing_fields)}")
+
+    if stage2 is None:
+        contract_data = {"available": False, "as_of": None, "source": "NONE"}
+        contract_eligibility = {"status": "UNAVAILABLE", "reasons": []}
+    else:
+        # available = True ONLY if selected_candidates exist and at least one has all REQUIRED_CHAIN_FIELDS
+        required_fields_present = len(getattr(stage2, "chain_missing_fields", []) or []) == 0
+        candidates = getattr(stage2, "selected_candidates", []) or []
+        has_enriched_chain = bool(candidates) and required_fields_present
+        option_type_counts = getattr(stage2, "option_type_counts", None) or {}
+        if not has_enriched_chain:
+            # No enriched chain or no selected contract with all required fields
+            contract_data = {
+                "available": False,
+                "as_of": fetched_at_iso,
+                "source": "NONE",
+                "expiration_count": getattr(stage2, "expirations_evaluated", 0),
+                "contract_count": getattr(stage2, "contracts_evaluated", 0),
+                "required_fields_present": required_fields_present,
+                "option_type_counts": option_type_counts,
+            }
+            contract_eligibility = {"status": "UNAVAILABLE", "reasons": []}
+        else:
+            contract_data = {
+                "available": True,
+                "as_of": fetched_at_iso,
+                "source": "LIVE" if market_open else "EOD_SNAPSHOT",
+                "expiration_count": getattr(stage2, "expirations_evaluated", 0),
+                "contract_count": getattr(stage2, "contracts_evaluated", 0),
+                "required_fields_present": True,
+                "option_type_counts": option_type_counts,
+            }
+            passed = stage2.liquidity_ok
+            reasons = []
+            if not passed:
+                sel_reasons = getattr(stage2, "contract_selection_reasons", None) or []
+                if sel_reasons:
+                    reasons = list(sel_reasons)
+                else:
+                    reasons = [stage2.liquidity_reason or "Options liquidity check failed"]
+            contract_eligibility = {
+                "status": "PASS" if passed else "FAIL",
+                "reasons": reasons,
+            }
+
+    return symbol_eligibility, contract_data, contract_eligibility
+
+
+# ============================================================================
 # Full 2-Stage Evaluation
 # ============================================================================
 
@@ -829,7 +1258,12 @@ def evaluate_symbol_full(
     result = FullEvaluationResult(symbol=symbol, source="ORATS")
     now_iso = datetime.now(timezone.utc).isoformat()
     result.fetched_at = now_iso
-    
+    try:
+        from app.market.market_hours import is_market_open
+        market_open = is_market_open()
+    except Exception:
+        market_open = True
+
     # Stage 1
     stage1 = evaluate_stage1(symbol)
     result.stage1 = stage1
@@ -852,6 +1286,9 @@ def evaluate_symbol_full(
     result.field_sources = getattr(stage1, "field_sources", {}).copy()
     result.quote_date = stage1.quote_date
     result.iv_rank = stage1.iv_rank
+
+    # Phase 3.2.2: Underlying liquidity gates (always compute from stage1)
+    underlying_gates = compute_underlying_liquidity_gates(stage1)
     
     # Add stage 1 gate
     result.gates.append({
@@ -878,8 +1315,11 @@ def evaluate_symbol_full(
         
         result.primary_reason = stage1.stock_verdict_reason
         result.score = stage1.stage1_score
+        result.liquidity_gates = {"underlying": underlying_gates, "option": compute_option_liquidity_gates(None)}
+        se, cd, ce = build_eligibility_layers(stage1, None, now_iso, market_open)
+        result.symbol_eligibility, result.contract_data, result.contract_eligibility = se, cd, ce
         return result
-    
+
     # Skip stage 2 if requested
     if skip_stage2:
         result.options_available = True
@@ -888,8 +1328,13 @@ def evaluate_symbol_full(
         result.verdict = "HOLD"
         result.primary_reason = "Stock qualified, chain pending"
         result.score = stage1.stage1_score
+        result.liquidity_gates = {"underlying": underlying_gates, "option": compute_option_liquidity_gates(None)}
+        se, cd, ce = build_eligibility_layers(stage1, None, now_iso, market_open)
+        result.symbol_eligibility, result.contract_data, result.contract_eligibility = se, cd, ce
+        if not underlying_gates["passed"] and result.symbol_eligibility:
+            result.symbol_eligibility = {"status": "FAIL", "reasons": [underlying_gates.get("reason") or "Underlying liquidity gates failed"]}
         return result
-    
+
     # Stage 2
     stage2 = evaluate_stage2(symbol, stage1, chain_provider)
     
@@ -906,6 +1351,11 @@ def evaluate_symbol_full(
     
     result.stage2 = stage2
     result.stage_reached = EvaluationStage.STAGE2_CHAIN
+
+    # Phase 3.2.2: Option liquidity gates (selected contract)
+    option_contract = stage2.selected_contract.contract if stage2.selected_contract else None
+    option_gates = compute_option_liquidity_gates(option_contract)
+    result.liquidity_gates = {"underlying": underlying_gates, "option": option_gates}
     
     # Stage 1 required fields (price, bid, ask, volume, quote_date, iv_rank) are HARD required.
     # No waiver: if any were missing, Stage 1 would have BLOCKed and we would not reach Stage 2.
@@ -962,10 +1412,10 @@ def evaluate_symbol_full(
         result.primary_reason = f"Chain evaluation error: {stage2.error}"
         result.error = stage2.error
     elif stage2.chain_missing_fields:
-        # DATA_INCOMPLETE only when OPRA failed or returned zero valid contracts (liquidity_ok is False)
+        # Option-chain fields only; do not imply stock bid/ask missing
         result.final_verdict = FinalVerdict.HOLD
         result.verdict = "HOLD"
-        result.primary_reason = f"DATA_INCOMPLETE: missing {', '.join(stage2.chain_missing_fields)}"
+        result.primary_reason = f"OPTION_CHAIN_MISSING_FIELDS: {', '.join(stage2.chain_missing_fields)}"
     else:
         result.final_verdict = FinalVerdict.HOLD
         result.verdict = "HOLD"
@@ -1000,7 +1450,14 @@ def evaluate_symbol_full(
         result.notional_pct = breakdown.notional_pct
     except Exception as e:
         logger.debug("[EVAL] Score breakdown for %s: %s", result.symbol, e)
-    
+
+    se, cd, ce = build_eligibility_layers(stage1, result.stage2, now_iso, market_open)
+    result.symbol_eligibility, result.contract_data, result.contract_eligibility = se, cd, ce
+    # Phase 3.2.2: Enforce liquidity gates in eligibility
+    if not underlying_gates["passed"] and result.symbol_eligibility:
+        result.symbol_eligibility = {"status": "FAIL", "reasons": [underlying_gates.get("reason") or "Underlying liquidity gates failed"]}
+    if not option_gates["passed"] and result.contract_eligibility and result.contract_eligibility.get("status") != "UNAVAILABLE":
+        result.contract_eligibility = {"status": "FAIL", "reasons": [option_gates.get("reason") or "Option liquidity gates failed"]}
     return result
 
 
@@ -1122,7 +1579,14 @@ def evaluate_universe_staged(
         "[STAGED_EVAL] Stage 1 complete: %d qualified, advancing top %d to stage 2",
         len(qualified), len(top_candidates)
     )
-    
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    try:
+        from app.market.market_hours import is_market_open
+        _market_open = is_market_open()
+    except Exception:
+        _market_open = True
+
     # Build results for non-qualified (stage 1 only)
     for symbol, stage1 in stage1_results.items():
         if symbol not in [s for s, _ in top_candidates]:
@@ -1161,8 +1625,10 @@ def evaluate_universe_staged(
             result.primary_reason = stage1.stock_verdict_reason
             result.options_available = False
             result.options_reason = "Not in top K candidates"
+            se, cd, ce = build_eligibility_layers(stage1, None, now_iso, _market_open)
+            result.symbol_eligibility, result.contract_data, result.contract_eligibility = se, cd, ce
             results[symbol] = result
-    
+
     # Stage 2: Evaluate top candidates with bounded concurrency
     with ThreadPoolExecutor(max_workers=max_stage2_concurrent) as executor:
         future_to_symbol = {}
@@ -1188,8 +1654,10 @@ def evaluate_universe_staged(
                 result.verdict = "UNKNOWN"
                 result.primary_reason = f"Stage 2 error: {e}"
                 result.error = str(e)
+                se, cd, ce = build_eligibility_layers(stage1, None, now_iso, _market_open)
+                result.symbol_eligibility, result.contract_data, result.contract_eligibility = se, cd, ce
                 results[symbol] = result
-    
+
     # Phase 7: Apply market regime gate (index-based). Cap scores and force HOLD when RISK_OFF.
     market_regime_value = "NEUTRAL"
     try:

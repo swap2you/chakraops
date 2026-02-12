@@ -20,6 +20,7 @@ from app.core.models.data_quality import (
     compute_data_completeness,
     build_data_incomplete_reason,
 )
+from app.core.config.wheel_strategy_config import WHEEL_CONFIG, EARNINGS_WINDOW_DAYS
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,8 @@ class SymbolEvaluationResult:
     stage_reached: str = "STAGE1_ONLY"  # NOT_STARTED, STAGE1_ONLY, STAGE2_CHAIN
     selected_contract: Optional[Dict[str, Any]] = None  # Selected contract details from stage 2
     selected_expiration: Optional[str] = None  # Expiration date of selected contract
+    selected_candidates: List[Dict[str, Any]] = field(default_factory=list)  # Phase 3.2.4: top 1–3
+    contract_selection_reasons: List[str] = field(default_factory=list)  # When no contract passes
     # Phase 9: Position awareness
     position_open: bool = False
     position_reason: Optional[str] = None
@@ -97,6 +100,12 @@ class SymbolEvaluationResult:
     csp_notional: Optional[float] = None
     notional_pct: Optional[float] = None
     band_reason: Optional[str] = None
+    # Phase 3.0.2: Split eligibility layers
+    symbol_eligibility: Optional[Dict[str, Any]] = None  # { status: PASS|FAIL, reasons: [] }
+    contract_data: Optional[Dict[str, Any]] = None       # { available, as_of, source }
+    contract_eligibility: Optional[Dict[str, Any]] = None  # { status: PASS|FAIL|UNAVAILABLE, reasons: [] }
+    # Phase 3.2.2: Explicit liquidity gate results (underlying + option)
+    liquidity_gates: Optional[Dict[str, Any]] = None  # { underlying: {...}, option: {...} }
 
 
 @dataclass
@@ -146,9 +155,9 @@ _EVAL_LOCK = threading.Lock()
 _IS_RUNNING = False
 _CURRENT_RUN_ID: Optional[str] = None
 
-# Configurable thresholds
+# Configurable thresholds (earnings window from wheel_strategy_config)
 SHORTLIST_SCORE_THRESHOLD = 70
-EARNINGS_WARN_DAYS = 7
+EARNINGS_WARN_DAYS = WHEEL_CONFIG[EARNINGS_WINDOW_DAYS]
 LIQUIDITY_MIN_OI = 100
 LIQUIDITY_MIN_VOLUME = 1000
 
@@ -603,20 +612,19 @@ def _evaluate_single_symbol(symbol: str) -> SymbolEvaluationResult:
             for name, fv in field_quality.items():
                 result.data_quality_details[name] = str(fv.quality)
 
-            # IV and other metrics for context
+            # IV and other metrics for context (Phase 3.2.3: IVR bands only)
             iv_rank = iv_rank_fv.value
-
-            # Determine regime/risk from IV (simplified heuristic)
-            if iv_rank is not None:
-                if iv_rank < 30:
-                    result.regime = "BULL"
-                    result.risk = "LOW"
-                elif iv_rank > 70:
-                    result.regime = "BEAR"
-                    result.risk = "HIGH"
-                else:
-                    result.regime = "NEUTRAL"
-                    result.risk = "MODERATE"
+            from app.core.eval.volatility import get_ivr_band
+            ivr_band = get_ivr_band(iv_rank)
+            if ivr_band == "LOW":
+                result.regime = "LOW_VOL"
+                result.risk = "LOW"
+            elif ivr_band == "MID":
+                result.regime = "NEUTRAL"
+                result.risk = "MODERATE"
+            elif ivr_band == "HIGH":
+                result.regime = "HIGH_VOL"
+                result.risk = "HIGH"
             else:
                 result.regime = "UNKNOWN"
                 result.risk = "UNKNOWN"
@@ -882,13 +890,20 @@ def run_universe_evaluation_staged(universe_symbols: List[str], use_staged: bool
                 csp_notional=getattr(sr, "csp_notional", None),
                 notional_pct=getattr(sr, "notional_pct", None),
                 band_reason=getattr(sr, "band_reason", None),
+                symbol_eligibility=getattr(sr, "symbol_eligibility", None),
+                contract_data=getattr(sr, "contract_data", None),
+                contract_eligibility=getattr(sr, "contract_eligibility", None),
+                liquidity_gates=getattr(sr, "liquidity_gates", None),
             )
-            
+
             # Add selected contract if available
             if sr.stage2 and sr.stage2.selected_contract:
                 sym_result.selected_contract = sr.stage2.selected_contract.to_dict()
                 if sr.stage2.selected_expiration:
                     sym_result.selected_expiration = sr.stage2.selected_expiration.isoformat()
+                sym_result.selected_candidates = [c.to_dict() for c in getattr(sr.stage2, "selected_candidates", [])]
+            if sr.stage2:
+                sym_result.contract_selection_reasons = getattr(sr.stage2, "contract_selection_reasons", []) or []
             
             # Convert candidate_trades from dicts to CandidateTrade
             for ct_dict in sr.candidate_trades:

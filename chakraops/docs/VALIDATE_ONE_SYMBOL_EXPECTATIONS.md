@@ -59,16 +59,35 @@ The following fields **must** be present and non-null in the canonical snapshot 
 - The script prints the BLOCK reason (e.g. `DATA_STALE: quote_date is N day(s) old`).
 - Exit code **3**.
 
+### 6. Symbol-diagnostics must include eligibility and contract structure (Phase 3.3.1)
+
+- **symbol_eligibility** must be present (dict) in the symbol-diagnostics response.
+- **contract_data** must be present (dict).
+- **contract_eligibility** must be present (dict).
+- If any of these is missing or not a dict, the script reports the error and exits **2** (required structure missing).
+
+### 7. When contract_data.available is true — required chain fields
+
+- When `contract_data.available` is true, `contract_data` must include: **expiration_count**, **contract_count**, **required_fields_present**.
+- **required_fields_present** must be true (chain must not be missing required fields).
+- If any required chain field is missing or `required_fields_present` is false, the script reports and exits **4** (contract missing fields).
+
+### 8. Contract unavailable but expected (exit 5)
+
+- If **symbol_eligibility.status** is **PASS** but **contract_data.available** is false, the script reports and exits **5** (contract unavailable but expected).
+
 ---
 
 ## Exit Codes (contract assertion)
 
 | Code | Meaning |
 |------|---------|
-| **0** | All required fields present and non-null; quote_date fresh; Stage-1 would PASS. |
+| **0** | All required fields present and non-null; quote_date fresh; Stage-1 would PASS; eligibility/contract checks OK. |
 | **1** | Request/IO error (e.g. connection refused, non-200, invalid JSON). |
-| **2** | One or more required fields missing or null. |
+| **2** | One or more required fields missing or null; or symbol_eligibility / contract_data / contract_eligibility missing. |
 | **3** | Stage-1 verdict BLOCKED (e.g. quote_date stale). |
+| **4** | Contract missing fields (contract_data.available but required chain fields missing or required_fields_present false). |
+| **5** | Contract unavailable but expected (symbol_eligibility PASS but contract_data not available). |
 
 ---
 

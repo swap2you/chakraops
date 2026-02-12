@@ -34,6 +34,23 @@ from app.core.options.chain_provider import (
 logger = logging.getLogger(__name__)
 
 
+def normalize_put_call(raw: Any) -> Optional[OptionType]:
+    """
+    Normalize raw put/call string to OptionType. Handles case and common variants.
+    - PUT: "P", "PUT", "PUTS"
+    - CALL: "C", "CALL", "CALLS"
+    - else: None
+    """
+    if raw is None:
+        return None
+    s = str(raw).strip().upper()
+    if s in ("P", "PUT", "PUTS"):
+        return OptionType.PUT
+    if s in ("C", "CALL", "CALLS"):
+        return OptionType.CALL
+    return None
+
+
 # ============================================================================
 # Rate Limiting
 # ============================================================================
@@ -122,11 +139,23 @@ _CHAIN_CACHE = ChainCache(ttl_seconds=300)
 # ORATS Chain Provider
 # ============================================================================
 
+def _resolve_chain_source(override: Optional[str]) -> str:
+    """Single routing rule: OPEN → LIVE, else → DELAYED. Used everywhere."""
+    if override is not None and override in ("LIVE", "DELAYED"):
+        return override
+    try:
+        from app.market.market_hours import get_chain_source
+        return get_chain_source()
+    except Exception:
+        return "DELAYED"
+
+
 class OratsChainProvider:
     """
     ORATS-based implementation of OptionsChainProvider.
     
-    Uses ORATS /live/strikes endpoint to fetch chain data.
+    Chain source: LIVE when market OPEN (/datav2/live/…); DELAYED otherwise
+    (/datav2/strikes + /datav2/strikes/options with full enrichment).
     """
     
     def __init__(
@@ -134,10 +163,12 @@ class OratsChainProvider:
         rate_limiter: Optional[RateLimiter] = None,
         cache: Optional[ChainCache] = None,
         use_cache: bool = True,
+        chain_source: Optional[str] = None,
     ):
         self._rate_limiter = rate_limiter or _ORATS_RATE_LIMITER
         self._cache = cache or _CHAIN_CACHE
         self._use_cache = use_cache
+        self._chain_source = _resolve_chain_source(chain_source)
     
     @property
     def name(self) -> str:
@@ -146,9 +177,48 @@ class OratsChainProvider:
     def get_expirations(self, symbol: str) -> List[ExpirationInfo]:
         """
         Get available expiration dates for a symbol.
-        
-        Fetches strikes and extracts unique expirations.
+        LIVE: /datav2/live/strikes. DELAYED: /datav2/strikes (pipeline).
         """
+        if self._chain_source == "DELAYED":
+            return self._get_expirations_delayed(symbol)
+        return self._get_expirations_live(symbol)
+    
+    def _get_expirations_delayed(self, symbol: str) -> List[ExpirationInfo]:
+        """Expirations from pipeline /datav2/strikes (DELAYED)."""
+        from app.core.config.wheel_strategy_config import WHEEL_CONFIG, DTE_MIN, DTE_MAX
+        from app.core.options.orats_chain_pipeline import fetch_base_chain
+        dte_min = WHEEL_CONFIG.get(DTE_MIN, 30)
+        dte_max = WHEEL_CONFIG.get(DTE_MAX, 45)
+        self._rate_limiter.acquire()
+        try:
+            base_contracts, _, err = fetch_base_chain(
+                symbol, dte_min=dte_min, dte_max=dte_max, chain_mode="DELAYED"
+            )
+        except Exception as e:
+            logger.warning("[ORATS_CHAIN] DELAYED expirations failed for %s: %s", symbol, e)
+            return []
+        if err or not base_contracts:
+            return []
+        today = date.today()
+        expirations_map: Dict[date, int] = defaultdict(int)
+        for c in base_contracts:
+            if getattr(c, "expiration", None):
+                expirations_map[c.expiration] += 1
+        results = []
+        for exp_date, count in sorted(expirations_map.items()):
+            dte = (exp_date - today).days
+            is_monthly = exp_date.weekday() == 4 and 15 <= exp_date.day <= 21
+            results.append(ExpirationInfo(
+                expiration=exp_date,
+                dte=dte,
+                is_weekly=not is_monthly,
+                is_monthly=is_monthly,
+                contract_count=count,
+            ))
+        return results
+    
+    def _get_expirations_live(self, symbol: str) -> List[ExpirationInfo]:
+        """Expirations from /datav2/live/strikes (LIVE)."""
         from app.core.data.orats_client import get_orats_live_strikes, OratsUnavailableError
         
         self._rate_limiter.acquire()
@@ -198,6 +268,7 @@ class OratsChainProvider:
     def get_chain(self, symbol: str, expiration: date) -> ChainProviderResult:
         """
         Get options chain for a symbol and expiration.
+        LIVE: /datav2/live/strikes + summaries. DELAYED: pipeline with /datav2/strikes + /datav2/strikes/options.
         """
         # Check cache
         if self._use_cache:
@@ -205,7 +276,17 @@ class OratsChainProvider:
             if cached is not None:
                 logger.debug("[ORATS_CHAIN] Cache hit for %s %s", symbol, expiration)
                 return cached
-        
+        if self._chain_source == "DELAYED":
+            batch = self.get_chains_batch(symbol, [expiration], max_concurrent=1)
+            return batch.get(expiration, ChainProviderResult(
+                success=False,
+                error="No chain for expiration",
+                data_quality=DataQuality.MISSING,
+            ))
+        return self._get_chain_live(symbol, expiration)
+    
+    def _get_chain_live(self, symbol: str, expiration: date) -> ChainProviderResult:
+        """Single chain from /datav2/live/strikes + summaries (LIVE)."""
         from app.core.data.orats_client import get_orats_live_strikes, get_orats_live_summaries, OratsUnavailableError
         
         self._rate_limiter.acquire()
@@ -305,16 +386,12 @@ class OratsChainProvider:
             data_quality=data_quality,
             missing_fields=list(missing_fields_set),
         )
-        
-        # Cache the result
         if self._use_cache:
             self._cache.set(symbol, expiration, result)
-        
         logger.info(
             "[ORATS_CHAIN] Fetched %s %s: %d contracts, completeness=%.1f%%, %dms",
             symbol, exp_str, len(contracts), completeness * 100, fetch_duration_ms
         )
-        
         return result
     
     def get_chains_batch(
@@ -325,12 +402,12 @@ class OratsChainProvider:
     ) -> Dict[date, ChainProviderResult]:
         """
         Get multiple chains for a symbol (batch operation).
-        
-        Uses thread pool for concurrent fetching with bounds.
+        DELAYED: one fetch_option_chain (strikes + strikes/options) then split by expiration.
+        LIVE: concurrent get_chain per expiration.
         """
+        if self._chain_source == "DELAYED":
+            return self._get_chains_batch_delayed(symbol, expirations)
         results: Dict[date, ChainProviderResult] = {}
-        
-        # First, check cache for all
         uncached_expirations = []
         for exp in expirations:
             if self._use_cache:
@@ -339,22 +416,20 @@ class OratsChainProvider:
                     results[exp] = cached
                     continue
             uncached_expirations.append(exp)
-        
         if not uncached_expirations:
             return results
-        
-        # Fetch uncached in parallel (bounded)
         with ThreadPoolExecutor(max_workers=min(max_concurrent, len(uncached_expirations))) as executor:
             future_to_exp = {
-                executor.submit(self.get_chain, symbol, exp): exp
+                executor.submit(self._get_chain_live, symbol, exp): exp
                 for exp in uncached_expirations
             }
-            
             for future in as_completed(future_to_exp):
                 exp = future_to_exp[future]
                 try:
                     result = future.result()
                     results[exp] = result
+                    if self._use_cache and result.success:
+                        self._cache.set(symbol, exp, result)
                 except Exception as e:
                     logger.exception("[ORATS_CHAIN] Error fetching chain for %s %s: %s", symbol, exp, e)
                     results[exp] = ChainProviderResult(
@@ -362,8 +437,91 @@ class OratsChainProvider:
                         error=str(e),
                         data_quality=DataQuality.ERROR,
                     )
-        
         return results
+    
+    def _get_chains_batch_delayed(self, symbol: str, expirations: List[date]) -> Dict[date, ChainProviderResult]:
+        """One pipeline call (strikes + strikes/options) then split by expiration."""
+        from app.core.config.wheel_strategy_config import WHEEL_CONFIG, DTE_MIN, DTE_MAX
+        from app.core.options.orats_chain_pipeline import fetch_option_chain
+        dte_min = WHEEL_CONFIG.get(DTE_MIN, 30)
+        dte_max = WHEEL_CONFIG.get(DTE_MAX, 45)
+        self._rate_limiter.acquire()
+        try:
+            chain_result = fetch_option_chain(
+                symbol, dte_min=dte_min, dte_max=dte_max, chain_mode="DELAYED"
+            )
+        except Exception as e:
+            logger.warning("[ORATS_CHAIN] DELAYED pipeline failed for %s: %s", symbol, e)
+            return {exp: ChainProviderResult(success=False, error=str(e), data_quality=DataQuality.ERROR) for exp in expirations}
+        if chain_result.error or not chain_result.contracts:
+            err = chain_result.error or "No contracts"
+            return {exp: ChainProviderResult(success=False, error=err, data_quality=DataQuality.MISSING) for exp in expirations}
+        exp_set = set(expirations)
+        by_exp: Dict[date, List[Any]] = defaultdict(list)
+        for c in chain_result.contracts:
+            exp = getattr(c, "expiration", None)
+            if exp and exp in exp_set:
+                by_exp[exp].append(c)
+        results = {}
+        for exp in expirations:
+            contracts_list = by_exp.get(exp, [])
+            if not contracts_list:
+                results[exp] = ChainProviderResult(
+                    success=False,
+                    error=f"No contracts for {exp}",
+                    data_quality=DataQuality.MISSING,
+                )
+                continue
+            option_contracts = [self._enriched_to_option_contract(ec, symbol) for ec in contracts_list]
+            for oc in option_contracts:
+                oc.compute_derived_fields()
+            underlying = chain_result.underlying_price
+            uv = wrap_field_float(underlying, "underlying_price") if underlying is not None else FieldValue(None, DataQuality.MISSING, "", "underlying_price")
+            chain = OptionsChain(
+                symbol=symbol.upper(),
+                expiration=exp,
+                underlying_price=uv,
+                contracts=option_contracts,
+                fetched_at=chain_result.fetched_at or datetime.now(timezone.utc).isoformat(),
+                source="ORATS",
+                fetch_duration_ms=chain_result.fetch_duration_ms or 0,
+            )
+            completeness, missing = chain.compute_data_completeness()
+            dq = DataQuality.VALID if completeness >= 0.8 else (DataQuality.MISSING if completeness >= 0.5 else DataQuality.ERROR)
+            results[exp] = ChainProviderResult(
+                success=True,
+                chain=chain,
+                data_quality=dq,
+                missing_fields=list(missing),
+            )
+            if self._use_cache:
+                self._cache.set(symbol, exp, results[exp])
+        return results
+    
+    def _enriched_to_option_contract(self, ec: Any, symbol: str) -> OptionContract:
+        """Convert pipeline EnrichedContract to chain_provider OptionContract. PUT/CALL from option_type via normalize_put_call."""
+        raw = getattr(ec, "option_type", None) or getattr(ec, "putCall", None) or getattr(ec, "callPut", None) or ""
+        option_type = normalize_put_call(raw) or OptionType.CALL
+        return OptionContract(
+            symbol=symbol.upper(),
+            expiration=ec.expiration,
+            strike=float(getattr(ec, "strike", 0)),
+            option_type=option_type,
+            bid=wrap_field_float(getattr(ec, "bid", None), "bid"),
+            ask=wrap_field_float(getattr(ec, "ask", None), "ask"),
+            mid=wrap_field_float(getattr(ec, "mid", None), "mid"),
+            last=FieldValue(None, DataQuality.MISSING, "", "last"),
+            open_interest=wrap_field_int(getattr(ec, "open_interest", None), "open_interest"),
+            volume=wrap_field_int(getattr(ec, "volume", None), "volume"),
+            delta=wrap_field_float(getattr(ec, "delta", None), "delta"),
+            gamma=wrap_field_float(getattr(ec, "gamma", None), "gamma"),
+            theta=wrap_field_float(getattr(ec, "theta", None), "theta"),
+            vega=wrap_field_float(getattr(ec, "vega", None), "vega"),
+            iv=wrap_field_float(getattr(ec, "iv", None), "iv"),
+            dte=int(getattr(ec, "dte", 0)),
+            fetched_at=getattr(ec, "fetched_at", None),
+            source="ORATS",
+        )
     
     def _parse_strike_to_contract(
         self,
@@ -377,12 +535,9 @@ class OratsChainProvider:
         
         IMPORTANT: Use proper DataQuality tracking, not fake zeros.
         """
-        # Determine option type
-        put_call = strike_data.get("putCall", "") or strike_data.get("callPut", "")
-        if put_call.upper() in ("P", "PUT"):
-            option_type = OptionType.PUT
-        else:
-            option_type = OptionType.CALL
+        # Determine option type (normalize put/call variants)
+        put_call = strike_data.get("putCall") or strike_data.get("callPut")
+        option_type = normalize_put_call(put_call) or OptionType.CALL
         
         # Extract strike price
         strike = float(strike_data.get("strike", 0))
@@ -442,9 +597,9 @@ class OratsChainProvider:
 # Factory Function
 # ============================================================================
 
-def get_chain_provider() -> OratsChainProvider:
-    """Get the default chain provider instance."""
-    return OratsChainProvider()
+def get_chain_provider(chain_source: Optional[str] = None) -> OratsChainProvider:
+    """Get the default chain provider instance. chain_source: LIVE | DELAYED (default from get_chain_source())."""
+    return OratsChainProvider(chain_source=chain_source)
 
 
 __all__ = [
@@ -452,4 +607,5 @@ __all__ = [
     "RateLimiter",
     "ChainCache",
     "get_chain_provider",
+    "normalize_put_call",
 ]

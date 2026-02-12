@@ -69,12 +69,22 @@ def build_rationale_from_staged(
     else:
         bullets.append(f"Market regime: {market_regime}")
 
-    # Stage 1 / trend
+    # Stage 1 / IVR band (Phase 3.2.3: bands only, no trend logic)
     if stage1:
         if getattr(stage1, "regime", None):
-            bullets.append(f"Trend/IV regime: {stage1.regime}")
-        if getattr(stage1, "iv_rank", None) is not None:
-            bullets.append(f"IV Rank favorable ({stage1.iv_rank:.0f})")
+            bullets.append(f"IV regime: {stage1.regime}")
+        iv_rank = getattr(stage1, "iv_rank", None)
+        ivr_band = getattr(stage1, "ivr_band", None)
+        if iv_rank is not None:
+            if ivr_band == "LOW":
+                bullets.append(f"IV Rank low ({iv_rank:.0f}) — premium penalized")
+            elif ivr_band == "MID":
+                bullets.append(f"IV Rank neutral ({iv_rank:.0f})")
+            elif ivr_band == "HIGH":
+                bullets.append(f"IV Rank high ({iv_rank:.0f}) — favorable premium")
+                bullets.append("High IV Rank: favorable premium but elevated tail risk (larger moves).")
+            else:
+                bullets.append(f"IV Rank: {iv_rank:.0f}")
         sv = getattr(stage1, "stock_verdict", None)
         sv_val = getattr(sv, "value", str(sv)) if sv else ""
         if sv and sv_val != "QUALIFIED":

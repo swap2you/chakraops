@@ -19,7 +19,10 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from app.core.market.stock_models import StockSnapshot
+from app.core.config.wheel_strategy_config import WHEEL_CONFIG, MIN_UNDERLYING_VOLUME
 from app.data.stock_snapshot_provider import StockSnapshotProvider
+
+_DEFAULT_MIN_AVG_STOCK_VOLUME: int = WHEEL_CONFIG[MIN_UNDERLYING_VOLUME]
 
 
 @dataclass(frozen=True)
@@ -41,7 +44,7 @@ class StockUniverseManager:
         allow_etfs: bool = False,
         min_price: float = 20.0,
         max_price: float = 500.0,
-        min_avg_stock_volume: int = 1_500_000,
+        min_avg_stock_volume: int = _DEFAULT_MIN_AVG_STOCK_VOLUME,
         curated: Optional[List[UniverseSymbol]] = None,
         symbols_from_db: Optional[List[str]] = None,
     ) -> None:

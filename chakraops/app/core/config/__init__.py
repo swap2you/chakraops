@@ -12,5 +12,6 @@ from __future__ import annotations
 
 # Re-export modules for backward compatibility
 from . import risk_overrides  # noqa: F401
+from . import wheel_strategy_config  # noqa: F401
 
-__all__ = ["risk_overrides"]
+__all__ = ["risk_overrides", "wheel_strategy_config"]

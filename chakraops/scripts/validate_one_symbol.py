@@ -10,10 +10,12 @@ Usage:
 Requires: Server running (e.g. uvicorn app.api.server:app --port 8000). Does NOT auto-start.
 
 Exit codes:
-  0 - All required fields present, Stage-1 would PASS (not stale).
+  0 - All required fields present, Stage-1 would PASS (not stale); eligibility/contract checks OK.
   1 - Request/IO error (e.g. connection refused, non-200).
   2 - One or more required fields missing/null (see docs/VALIDATE_ONE_SYMBOL_EXPECTATIONS.md).
   3 - Stage-1 verdict would be BLOCKED (e.g. stale quote_date).
+  4 - Contract missing fields (contract_data.available but required chain fields missing).
+  5 - Contract unavailable but expected (symbol_eligibility PASS but contract_data not available).
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from datetime import date
 from pathlib import Path
 
@@ -63,6 +66,15 @@ def _get(url: str, timeout: int = 30) -> tuple[dict | None, int, str]:
         return None, 0, f"JSON decode: {e}"
     except Exception as e:
         return None, 0, str(e)
+
+
+def _get_universe_with_retry(url: str, timeout: int = 10, retry_sleep: float = 1.0) -> tuple[dict | None, int, str]:
+    """GET universe URL with 10s timeout; retry once after 1s on failure (resilience, not fallback)."""
+    data, code, err = _get(url, timeout=timeout)
+    if code == 200 and data is not None:
+        return data, code, err
+    time.sleep(retry_sleep)
+    return _get(url, timeout=timeout)
 
 
 def _trading_days_since(as_of_date: date | None) -> int | None:
@@ -123,6 +135,64 @@ def _contract_assert(snapshot: dict, missing_reasons: dict, stale_threshold_days
     return missing_fields, block_reasons, is_stale
 
 
+# Required chain fields when contract_data.available (Phase 3.3.1)
+REQUIRED_CONTRACT_DATA_KEYS = ("expiration_count", "contract_count", "required_fields_present")
+
+
+def _eligibility_and_contract_assert(diagnostics: dict) -> tuple[int | None, list[str]]:
+    """
+    Validate symbol_eligibility, contract_data, contract_eligibility present and,
+    when contract_data.available, required chain fields exist.
+    Returns (exit_code or None, list of error messages).
+    None = no exit; 4 = contract missing fields; 5 = contract unavailable but expected.
+    """
+    errs: list[str] = []
+    if not isinstance(diagnostics, dict):
+        return 2, ["diagnostics response is not a dict"]
+
+    # 1) symbol_eligibility present
+    se = diagnostics.get("symbol_eligibility")
+    if se is None:
+        errs.append("symbol_eligibility missing")
+    elif not isinstance(se, dict):
+        errs.append("symbol_eligibility is not a dict")
+
+    # 2) contract_data present
+    cd = diagnostics.get("contract_data")
+    if cd is None:
+        errs.append("contract_data missing")
+    elif not isinstance(cd, dict):
+        errs.append("contract_data is not a dict")
+
+    # 3) contract_eligibility present
+    ce = diagnostics.get("contract_eligibility")
+    if ce is None:
+        errs.append("contract_eligibility missing")
+    elif not isinstance(ce, dict):
+        errs.append("contract_eligibility is not a dict")
+
+    if errs:
+        return 2, errs  # required structure missing (symbol_eligibility / contract_data / contract_eligibility)
+
+    # 4) If contract_data.available: ensure required chain fields exist
+    available = cd.get("available") is True
+    if available:
+        for key in REQUIRED_CONTRACT_DATA_KEYS:
+            if key not in cd:
+                errs.append(f"contract_data.available but missing key: {key}")
+        if cd.get("required_fields_present") is False:
+            errs.append("contract_data.required_fields_present is False (chain missing required fields)")
+        if errs:
+            return 4, errs
+
+    # 5) Contract unavailable but expected: symbol_eligibility PASS but contract_data not available
+    se_status = (se or {}).get("status") if isinstance(se, dict) else None
+    if se_status == "PASS" and not available:
+        return 5, ["symbol_eligibility is PASS but contract_data.available is False (contract unavailable but expected)"]
+
+    return None, []
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Validate one symbol: call API, save artifacts, run contract assertion. Server must be running."
@@ -165,9 +235,9 @@ def main() -> int:
     else:
         print(f"symbol-diagnostics failed: {err_diag}", file=sys.stderr)
 
-    # 3) GET /api/view/universe
+    # 3) GET /api/view/universe (10s timeout, retry once after 1s)
     url_universe = f"{base}/api/view/universe"
-    data_univ, code_univ, err_univ = _get(url_universe)
+    data_univ, code_univ, err_univ = _get_universe_with_retry(url_universe)
     out_univ = out_dir / "universe.json"
     if data_univ is not None:
         with open(out_univ, "w", encoding="utf-8") as f:
@@ -270,6 +340,13 @@ def main() -> int:
     # Stage-1 BLOCKED (e.g. stale) => exit 3
     if is_stale:
         return 3
+    # Phase 3.3.1: eligibility and contract checks (symbol_eligibility, contract_data, contract_eligibility)
+    if data_diag is not None:
+        exit_ec, msg_list = _eligibility_and_contract_assert(data_diag)
+        if exit_ec is not None:
+            for m in msg_list:
+                print(m, file=sys.stderr)
+            return exit_ec
     return 0
 
 

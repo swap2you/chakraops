@@ -47,6 +47,14 @@ def is_market_open(utc_now: datetime | None = None) -> bool:
     return get_market_phase(utc_now) == "OPEN"
 
 
+def get_chain_source(utc_now: datetime | None = None) -> str:
+    """
+    Single routing rule for ORATS chain endpoints.
+    OPEN → LIVE (/datav2/live/…). Else (PRE/POST/CLOSED/HOLIDAY/WEEKEND) → DELAYED (/datav2/strikes, /datav2/strikes/options).
+    """
+    return "LIVE" if get_market_phase(utc_now) == "OPEN" else "DELAYED"
+
+
 def get_polling_interval_seconds(utc_now: datetime | None = None) -> int:
     """Market open => 30s; market closed => 300s (5 min)."""
     return POLL_INTERVAL_OPEN_SEC if is_market_open(utc_now) else POLL_INTERVAL_CLOSED_SEC
@@ -69,6 +77,7 @@ def get_mode_label(provider_name: str, market_open: bool) -> str:
 __all__ = [
     "is_market_open",
     "get_market_phase",
+    "get_chain_source",
     "get_polling_interval_seconds",
     "get_eval_interval_seconds",
     "get_mode_label",

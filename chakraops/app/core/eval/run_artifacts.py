@@ -72,6 +72,45 @@ def _get_run_dir(run_id: str, completed_at: Optional[str] = None) -> Path:
     return root / date_str / run_folder
 
 
+def _write_eod_chain_artifacts(run: EvaluationRunFull, run_dir: Path) -> None:
+    """
+    Write EOD chain metadata files under run_dir/chains/ for symbols with
+    contract_data.source == "EOD_SNAPSHOT". File naming: SYMBOL_chain_YYYYMMDD_1600ET.json.
+    Metadata: symbol, as_of, source, expiration_count, contract_count, required_fields_present.
+    No provider fallback; ORATS only.
+    """
+    try:
+        date_part = run.run_id[5:13] if len(run.run_id) >= 13 else datetime.now(timezone.utc).strftime("%Y%m%d")
+        chains_dir = run_dir / "chains"
+        chains_dir.mkdir(parents=True, exist_ok=True)
+        written = 0
+        for s in run.symbols:
+            contract_data = (s.get("contract_data") or {})
+            if contract_data.get("source") != "EOD_SNAPSHOT" or not contract_data.get("available"):
+                continue
+            symbol = (s.get("symbol") or "UNKNOWN").strip()
+            if not symbol or symbol == "UNKNOWN":
+                continue
+            meta = {
+                "symbol": symbol,
+                "as_of": contract_data.get("as_of"),
+                "source": "EOD_SNAPSHOT",
+                "expiration_count": contract_data.get("expiration_count", 0),
+                "contract_count": contract_data.get("contract_count", 0),
+                "required_fields_present": bool(contract_data.get("required_fields_present", False)),
+            }
+            filename = f"{symbol}_chain_{date_part}_1600ET.json"
+            path = chains_dir / filename
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(meta, f, indent=2, default=str)
+                f.flush()
+            written += 1
+        if written > 0:
+            logger.info("[RUN_ARTIFACTS] Wrote %d EOD chain metadata file(s) to %s", written, chains_dir)
+    except Exception as e:
+        logger.warning("[RUN_ARTIFACTS] EOD chain artifacts write failed: %s", e)
+
+
 def _build_snapshot_payload(run: EvaluationRunFull) -> Dict[str, Any]:
     """
     Canonical snapshot for UI: one object per symbol (keyed by symbol).
@@ -96,12 +135,23 @@ def _build_snapshot_payload(run: EvaluationRunFull) -> Dict[str, Any]:
             "verdict": s.get("verdict"),
             "score": s.get("score"),
             "fetched_at": s.get("fetched_at"),
+            "symbol_eligibility": s.get("symbol_eligibility"),
+            "contract_data": s.get("contract_data"),
+            "contract_eligibility": s.get("contract_eligibility"),
+            "liquidity_gates": s.get("liquidity_gates"),
         }
     return out
 
 
 def _build_summary_md(run: EvaluationRunFull, run_dir_path: str) -> str:
     """Human-readable summary markdown."""
+    # Eligibility layer counts (Phase 3.0.2)
+    sym_ok = sum(1 for s in run.symbols if (s.get("symbol_eligibility") or {}).get("status") == "PASS")
+    contract_avail = sum(1 for s in run.symbols if (s.get("contract_data") or {}).get("available"))
+    ce_pass = sum(1 for s in run.symbols if (s.get("contract_eligibility") or {}).get("status") == "PASS")
+    ce_fail = sum(1 for s in run.symbols if (s.get("contract_eligibility") or {}).get("status") == "FAIL")
+    ce_unavail = sum(1 for s in run.symbols if (s.get("contract_eligibility") or {}).get("status") == "UNAVAILABLE")
+
     lines = [
         f"# Evaluation Run: {run.run_id}",
         "",
@@ -113,6 +163,10 @@ def _build_summary_md(run: EvaluationRunFull, run_dir_path: str) -> str:
         "## Counts",
         f"- Total: {run.total} | Evaluated: {run.evaluated} | Eligible: {run.eligible} | Shortlisted: {run.shortlisted}",
         f"- Stage1 pass: {run.stage1_pass} | Stage2 pass: {run.stage2_pass} | Holds: {run.holds} | Blocks: {run.blocks}",
+        "",
+        "## Eligibility layers (Phase 3.0.2)",
+        f"- Symbol eligibility PASS: {sym_ok} | Contract data available: {contract_avail}",
+        f"- Contract eligibility: PASS={ce_pass} | FAIL={ce_fail} | UNAVAILABLE={ce_unavail}",
         "",
         f"- **Artifact path:** `{run_dir_path}`",
         "",
@@ -152,6 +206,8 @@ def write_run_artifacts(run: EvaluationRunFull) -> Optional[Path]:
 
         summary_md = _build_summary_md(run, run_dir_str)
         (run_dir / "summary.md").write_text(summary_md, encoding="utf-8")
+
+        _write_eod_chain_artifacts(run, run_dir)
 
         logger.info("[RUN_ARTIFACTS] Wrote run artifacts to %s", run_dir)
         return run_dir
@@ -227,10 +283,20 @@ def update_latest_and_recent(run: EvaluationRunFull, run_dir: Optional[Path]) ->
     update_recent_manifest(run.run_id, run_dir, completed_at)
 
 
+def _rmtree_safe(path: Path) -> None:
+    """Recursively remove directory contents and the directory. Used for run_folder (includes chains/)."""
+    for f in path.iterdir():
+        if f.is_dir():
+            _rmtree_safe(f)
+        else:
+            f.unlink()
+    path.rmdir()
+
+
 def purge_old_runs(keep_days: int = PURGE_KEEP_DAYS) -> int:
     """
     Delete run directories older than keep_days.
-    Scans artifacts/runs/YYYY-MM-DD/ and removes run_* folders (and date dirs if empty)
+    Scans artifacts/runs/YYYY-MM-DD/ and removes run_* folders (including chains/ and all contents)
     older than (today - keep_days). Returns number of run directories removed.
     """
     root = _artifacts_runs_root()
@@ -251,19 +317,23 @@ def purge_old_runs(keep_days: int = PURGE_KEEP_DAYS) -> int:
         for run_folder in list(date_dir.iterdir()):
             if run_folder.is_dir() and run_folder.name.startswith("run_"):
                 try:
-                    for f in run_folder.iterdir():
-                        f.unlink()
-                    run_folder.rmdir()
+                    _rmtree_safe(run_folder)
                     removed += 1
                 except OSError as e:
                     logger.warning("[RUN_ARTIFACTS] Failed to remove %s: %s", run_folder, e)
+        eod_chain_dir = date_dir / "eod_chain"
+        if eod_chain_dir.is_dir():
+            try:
+                _rmtree_safe(eod_chain_dir)
+            except OSError as e:
+                logger.warning("[RUN_ARTIFACTS] Failed to remove eod_chain %s: %s", eod_chain_dir, e)
         try:
             if not any(date_dir.iterdir()):
                 date_dir.rmdir()
         except OSError:
             pass
     if removed > 0:
-        logger.info("[RUN_ARTIFACTS] Purged %d run directories older than %d days", removed, keep_days)
+        logger.info("[RUN_ARTIFACTS] Purged %d run directories (including chain artifacts) older than %d days", removed, keep_days)
     return removed
 
 
@@ -332,6 +402,58 @@ def build_latest_response_from_artifacts() -> Optional[Dict[str, Any]]:
     }
 
 
+def build_universe_from_latest_artifact() -> Optional[Dict[str, Any]]:
+    """
+    Build universe response for /api/view/universe from latest run artifact.
+    Same shape as fetch_universe_from_canonical_snapshot (symbols + excluded + updated_at)
+    plus as_of and run_id. Returns None if no valid artifact.
+    """
+    run_dir = get_latest_run_dir()
+    if not run_dir:
+        return None
+    eval_path = run_dir / "evaluation.json"
+    if not eval_path.exists():
+        return None
+    try:
+        with open(eval_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        logger.warning("[RUN_ARTIFACTS] Failed to read evaluation.json for universe: %s", e)
+        return None
+    if data.get("status") != "COMPLETED":
+        return None
+    run_id = data.get("run_id", "")
+    completed_at = data.get("completed_at") or datetime.now(timezone.utc).isoformat()
+    symbols_raw = data.get("symbols", [])
+    symbols_out: List[Dict[str, Any]] = []
+    excluded: List[Dict[str, Any]] = []
+    for s in symbols_raw:
+        sym = (s.get("symbol") or "UNKNOWN").strip().upper()
+        if not sym or sym == "UNKNOWN":
+            continue
+        symbols_out.append({
+            "symbol": sym,
+            "source": s.get("source") or "artifact_run",
+            "last_price": s.get("price"),
+            "fetched_at": s.get("fetched_at") or completed_at,
+            "exclusion_reason": s.get("exclusion_reason"),
+            "stock_volume_today": s.get("stock_volume_today"),
+            "avg_option_volume_20d": s.get("avg_option_volume_20d"),
+            "avg_stock_volume_20d": s.get("avg_stock_volume_20d"),
+            "quote_as_of": s.get("quote_date") or s.get("fetched_at") or completed_at,
+            "field_sources": s.get("field_sources") if isinstance(s.get("field_sources"), dict) else {},
+            "missing_reasons": s.get("missing_reasons") if isinstance(s.get("missing_reasons"), dict) else {},
+        })
+    return {
+        "symbols": symbols_out,
+        "excluded": excluded,
+        "all_failed": len(symbols_out) == 0,
+        "updated_at": completed_at,
+        "as_of": completed_at,
+        "run_id": run_id,
+    }
+
+
 __all__ = [
     "write_run_artifacts",
     "write_latest_manifest",
@@ -340,6 +462,7 @@ __all__ = [
     "purge_old_runs",
     "get_latest_run_dir",
     "build_latest_response_from_artifacts",
+    "build_universe_from_latest_artifact",
     "RECENT_RUNS_COUNT",
     "PURGE_KEEP_DAYS",
     "_artifacts_runs_root",

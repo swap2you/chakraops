@@ -22,6 +22,8 @@ All paths are under **`artifacts/runs/`** (repository root = `chakraops/`).
 | `…/run_…/snapshot.json` | Canonical per-symbol snapshot for UI (run_id, completed_at, symbols keyed by symbol). |
 | `…/run_…/evaluation.json` | Full evaluation run (same shape as evaluation store). |
 | `…/run_…/summary.md` | Human-readable summary (counts, status, path). |
+| `…/run_…/chains/` | EOD chain metadata (Phase 3.1.2). One file per symbol when `contract_data.source == "EOD_SNAPSHOT"`. |
+| `…/run_…/chains/SYMBOL_chain_YYYYMMDD_1600ET.json` | Metadata: symbol, as_of, source, expiration_count, contract_count, required_fields_present. ORATS only; no provider fallback. |
 | `artifacts/runs/latest.json` | Manifest: `{ "run_id", "path", "completed_at" }` pointing to latest run. |
 | `artifacts/runs/recent.json` | List of last **3** runs: `[{ "run_id", "path", "completed_at" }, ...]`. |
 
@@ -44,7 +46,7 @@ Manual run writes to both:
 
 ## How to purge
 
-- **Automatic:** After each completed run, `purge_old_runs(keep_days=10)` is called. Run directories older than **10 days** are deleted (by date folder `YYYY-MM-DD`).
+- **Automatic:** After each completed run, `purge_old_runs(keep_days=10)` is called. Run directories (including `chains/` and all contents) older than **10 days** are deleted recursively.
 - **Programmatic:** From code, call `app.core.eval.run_artifacts.purge_old_runs(keep_days=10)` (default 10). Returns the number of run directories removed.
 - **Manual:** Delete `artifacts/runs/YYYY-MM-DD/` folders for dates you want to remove; then optionally trim `recent.json` by hand (or leave it; stale paths are ignored when missing).
 

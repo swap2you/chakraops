@@ -67,7 +67,7 @@ Generated from code scan; each row cites variable name, source field, calculatio
 | regime_score | scoring.py | RISK_ON=100, NEUTRAL=65, RISK_OFF=50, else 50 | — | Component 0–100 | score_breakdown.regime_score |
 | options_liquidity_score | scoring.py | !liquidity_ok → 20; grade A=100, B=80, C=60, else 40 | — | Component 0–100 | score_breakdown.options_liquidity_score |
 | strategy_fit_score | scoring.py | ELIGIBLE & !position_open=100; ELIGIBLE & position_open=70; HOLD=50; BLOCKED/UNKNOWN=20 | — | Component 0–100 | score_breakdown.strategy_fit_score |
-| capital_efficiency_score | scoring.py | 100 − penalties; notional_pct vs warn/heavy/cap; price vs high_price_penalty_above | warn_above 0.05, heavy_above 0.10, cap_above 0.20; high_price default 400 | Component 0–100; capital_penalties list | score_breakdown.capital_efficiency_score |
+| capital_efficiency_score | scoring.py | 100 − penalties; notional_pct vs warn/heavy/cap only (config-driven) | warn_above 0.05, heavy_above 0.10, cap_above 0.20 | Component 0–100; capital_penalties list | score_breakdown.capital_efficiency_score |
 | composite_score | scoring.py | weighted sum of 5 components; max(0, min(100, composite)) | — | Final 0–100 | score_breakdown.composite_score, rank |
 | band_a_min_score | config/scoring.yaml | Default 78 | composite >= 78 → Band A | Band | Band / rank |
 | band_b_min_score | config/scoring.yaml | Default 60 | composite >= 60 → Band B | Band | Band / rank |

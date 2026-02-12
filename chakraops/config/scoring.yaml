@@ -27,11 +27,6 @@ notional_penalties:
   heavy: 15
   cap: 30
 
-# Ultra-high underlying price: penalize even if eligible (e.g. COST at $900).
-# Price above this (USD) gets a flat penalty on capital_efficiency component.
-high_price_penalty_above: 400
-high_price_penalty_points: 10
-
 # Band assignment: minimum component/gate requirements.
 # Band A: all gates pass and composite score >= band_a_min_score.
 # Band B: eligible or score in range; else Band C.

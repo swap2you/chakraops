@@ -1448,8 +1448,8 @@ def _diagnostics_primary_reason(result: Dict[str, Any], full_result: Any) -> str
     """
     Phase 3.3.2: Set primary_reason from eligibility layers only.
     - Symbol FAIL: Stage-1 reasons only (no Stage-2 "missing bid/ask").
-    - Contract unavailable: CONTRACT_UNAVAILABLE with Stage-2 reasons or "No enriched chain candidates".
-    - Contract FAIL: Stage-2 reason (delta/OI/spread gate).
+    - Chain truly unavailable: CHAIN_UNAVAILABLE (Stage-2 did not run or returned no contracts).
+    - Chain available but selection FAIL: CONTRACT_SELECTION_FAILED with reasons.
     """
     se = result.get("symbol_eligibility") or {}
     cd = result.get("contract_data") or {}
@@ -1461,18 +1461,16 @@ def _diagnostics_primary_reason(result: Dict[str, Any], full_result: Any) -> str
     if se_status == "FAIL":
         reasons = se.get("reasons") or []
         return "; ".join(reasons) if reasons else "Stage 1 did not qualify"
-    if not cd_available:
-        # Contract unavailable: use contract_eligibility or Stage-2 contract_selection_reasons
-        stage2 = getattr(full_result, "stage2", None)
-        sel_reasons = list(getattr(stage2, "contract_selection_reasons", None) or []) if stage2 else []
-        if sel_reasons:
-            return f"CONTRACT_UNAVAILABLE: {'; '.join(sel_reasons[:3])}"
-        if ce_status == "UNAVAILABLE":
-            return "CONTRACT_UNAVAILABLE (after-hours or no eligible contract)"
-        return "CONTRACT_UNAVAILABLE: No enriched chain candidates"
+    if ce_status == "UNAVAILABLE":
+        return "CHAIN_UNAVAILABLE: Stage-2 did not execute or returned no contracts"
     if ce_status == "FAIL":
         reasons = ce.get("reasons") or []
-        return "; ".join(reasons) if reasons else "Options liquidity check failed"
+        first = reasons[0] if reasons else "No contracts passed option liquidity gates"
+        return f"CONTRACT_SELECTION_FAILED: {first}"
+    if ce_status == "PASS":
+        return full_result.primary_reason or ""
+    if not cd_available:
+        return "CHAIN_UNAVAILABLE: Stage-2 did not execute or returned no contracts"
     return full_result.primary_reason or ""
 
 
@@ -1749,6 +1747,9 @@ def api_view_symbol_diagnostics(symbol: str = Query(..., min_length=1, max_lengt
         result["options"]["option_type_counts"] = getattr(s2, "option_type_counts", None) or {"puts_seen": 0, "calls_seen": 0, "unknown_seen": 0}
         result["options"]["delta_distribution"] = getattr(s2, "delta_distribution", None)
         result["options"]["top_rejection_reasons"] = getattr(s2, "top_rejection_reasons", None)
+        result["options"]["total_puts_in_chain"] = getattr(s2, "total_puts_in_chain", None)
+        result["options"]["puts_with_required_fields"] = getattr(s2, "puts_with_required_fields", None)
+        result["options"]["required_fields_present"] = getattr(s2, "required_fields_present", None)
     else:
         result["options"]["option_type_counts"] = {"puts_seen": 0, "calls_seen": 0, "unknown_seen": 0}
     result["options"]["expirations_count"] = expirations_count

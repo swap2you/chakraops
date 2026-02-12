@@ -86,7 +86,8 @@ def _write_eod_chain_artifacts(run: EvaluationRunFull, run_dir: Path) -> None:
         written = 0
         for s in run.symbols:
             contract_data = (s.get("contract_data") or {})
-            if contract_data.get("source") != "EOD_SNAPSHOT" or not contract_data.get("available"):
+            src = contract_data.get("source")
+            if src not in ("EOD_SNAPSHOT", "DELAYED") or not contract_data.get("available"):
                 continue
             symbol = (s.get("symbol") or "UNKNOWN").strip()
             if not symbol or symbol == "UNKNOWN":
@@ -94,10 +95,12 @@ def _write_eod_chain_artifacts(run: EvaluationRunFull, run_dir: Path) -> None:
             meta = {
                 "symbol": symbol,
                 "as_of": contract_data.get("as_of"),
-                "source": "EOD_SNAPSHOT",
+                "source": contract_data.get("source", "EOD_SNAPSHOT"),
                 "expiration_count": contract_data.get("expiration_count", 0),
                 "contract_count": contract_data.get("contract_count", 0),
                 "required_fields_present": bool(contract_data.get("required_fields_present", False)),
+                "total_puts_in_chain": contract_data.get("total_puts_in_chain"),
+                "puts_with_required_fields": contract_data.get("puts_with_required_fields"),
             }
             filename = f"{symbol}_chain_{date_part}_1600ET.json"
             path = chains_dir / filename

@@ -174,21 +174,29 @@ def _eligibility_and_contract_assert(diagnostics: dict) -> tuple[int | None, lis
     if errs:
         return 2, errs  # required structure missing (symbol_eligibility / contract_data / contract_eligibility)
 
-    # 4) If contract_data.available: ensure required chain fields exist
+    # 4) If contract_data.available: check schema. Do NOT treat required_fields_present==False
+    #    as hard failure when chain exists - log as WARN and exit 0 (selection may have failed for other reasons).
     available = cd.get("available") is True
     if available:
         for key in REQUIRED_CONTRACT_DATA_KEYS:
             if key not in cd:
                 errs.append(f"contract_data.available but missing key: {key}")
-        if cd.get("required_fields_present") is False:
-            errs.append("contract_data.required_fields_present is False (chain missing required fields)")
         if errs:
             return 4, errs
+        # required_fields_present==False: log but do not fail (exit 0) - chain exists, may be selection failure
+        if cd.get("required_fields_present") is False:
+            return None, ["WARN: contract_data.required_fields_present is False (chain has puts but none with all required fields) - check puts_with_required_fields"]
 
-    # 5) Contract unavailable but expected: symbol_eligibility PASS but contract_data not available
+    # 5) Exit 5 ONLY when chain truly unavailable: Stage-1 PASS but Stage-2 did not run or returned no contracts.
+    #    Do NOT exit 5 when contract_data.available=True and contract_eligibility.status=FAIL — that's normal
+    #    (chain fetched, but no contract passed filters).
     se_status = (se or {}).get("status") if isinstance(se, dict) else None
+    ce_status = (ce or {}).get("status") if isinstance(ce, dict) else None
     if se_status == "PASS" and not available:
-        return 5, ["symbol_eligibility is PASS but contract_data.available is False (contract unavailable but expected)"]
+        return 5, ["EXIT 5: Stage-1 PASS but chain truly unavailable (contract_data.available=False)"]
+    # Log info when chain available but no contract passed (not an error)
+    if se_status == "PASS" and available and ce_status == "FAIL":
+        return None, []  # INFO handled by caller if desired; no exit
 
     return None, []
 
@@ -347,6 +355,14 @@ def main() -> int:
             for m in msg_list:
                 print(m, file=sys.stderr)
             return exit_ec
+        for m in msg_list:
+            print(m, file=sys.stderr)  # WARN messages (e.g. required_fields_present False)
+        # When chain available but no contract passed (FAIL), that's informational, not an error
+        cd = data_diag.get("contract_data") or {}
+        ce = data_diag.get("contract_eligibility") or {}
+        if cd.get("available") is True and (ce or {}).get("status") == "FAIL":
+            print("INFO: Chain available but no contracts passed filters.")
+            print(f"  Reasons: {ce.get('reasons', [])}")
     return 0
 
 

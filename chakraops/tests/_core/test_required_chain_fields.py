@@ -111,7 +111,7 @@ class TestComputeRequiredChainFieldsFromCandidates:
 
 def test_required_chain_fields_present_true_for_spy():
     """
-    When Stage2Result has at least one selected_candidate with all REQUIRED_CHAIN_FIELDS,
+    When Stage2Result has required_fields_present=True (at least one PUT in chain has all fields),
     contract_data.required_fields_present must be True (e.g. SPY live evaluation).
     """
     contract = _make_contract_with_all_required_fields()
@@ -130,7 +130,9 @@ def test_required_chain_fields_present_true_for_spy():
         selected_candidates=[sc],
         liquidity_ok=True,
         liquidity_reason="OK",
-        chain_missing_fields=[],  # Set by _compute_required_chain_fields_from_candidates in real path
+        chain_missing_fields=[],
+        required_fields_present=True,
+        chain_source_used="DELAYED",
     )
     stage1 = Stage1Result(
         symbol="SPY",
@@ -150,8 +152,9 @@ def test_required_chain_fields_present_true_for_spy():
 
 def test_contract_unavailable_when_no_enriched_chain():
     """
-    When no enriched chain exists (no selected_candidates or required_fields_present false),
-    contract_data.available must be False, source NONE, contract_eligibility UNAVAILABLE.
+    Semantics fix: chain fetched + no candidates → available=True, status=FAIL (not UNAVAILABLE).
+    Chain fetched + candidates + missing chain fields → available=True, status=PASS.
+    Truly UNAVAILABLE covered in test_contract_eligibility_semantics.
     """
     stage1 = Stage1Result(
         symbol="SPY",
@@ -159,6 +162,7 @@ def test_contract_unavailable_when_no_enriched_chain():
         stock_verdict_reason="",
     )
     # Case 1: stage2 with no selected_candidates (chain fetched but no contract passed)
+    # Semantics: chain exists (available=True), selection FAIL (filters rejected all)
     stage2_no_candidates = Stage2Result(
         symbol="SPY",
         expirations_available=3,
@@ -166,20 +170,25 @@ def test_contract_unavailable_when_no_enriched_chain():
         contracts_evaluated=100,
         selected_contract=None,
         selected_candidates=[],
+        contract_selection_reasons=["No contracts passed option liquidity gates (OI>=500, spread<=10%)"],
         liquidity_ok=False,
         liquidity_reason="No contracts meeting criteria",
         chain_missing_fields=["open_interest"],
+        required_fields_present=False,
+        chain_source_used="DELAYED",
     )
     _, contract_data, contract_eligibility = build_eligibility_layers(
         stage1, stage2_no_candidates, "2026-02-10T16:00:00Z", market_open=False
     )
-    assert contract_data["available"] is False
-    assert contract_data["source"] == "NONE"
+    assert contract_data["available"] is True
+    assert contract_data["source"] == "DELAYED"
     assert contract_data["required_fields_present"] is False
-    assert contract_eligibility["status"] == "UNAVAILABLE"
-    assert contract_eligibility["reasons"] == []
+    assert contract_eligibility["status"] == "FAIL"
+    assert contract_eligibility["reasons"]
+    assert "No contracts" in (contract_eligibility["reasons"][0] or "")
 
-    # Case 2: stage2 with selected_candidates but required_fields_present false (missing fields on selected)
+    # Case 2: stage2 with selected_candidates but chain_missing_fields (required_fields_present false)
+    # Semantics: chain exists (available=True), we have candidates, liquidity_ok; required_fields_present from chain
     contract_missing_oi = _make_contract_with_all_required_fields()
     contract_missing_oi.open_interest = FieldValue(None, DataQuality.MISSING, "", "open_interest")
     sc = SelectedContract(
@@ -198,12 +207,13 @@ def test_contract_unavailable_when_no_enriched_chain():
         liquidity_ok=True,
         liquidity_reason="OK",
         chain_missing_fields=["open_interest"],
+        required_fields_present=False,
+        chain_source_used="DELAYED",
     )
     _, contract_data2, contract_eligibility2 = build_eligibility_layers(
         stage1, stage2_missing_fields, "2026-02-10T16:00:00Z", market_open=True
     )
-    assert contract_data2["available"] is False
-    assert contract_data2["source"] == "NONE"
+    assert contract_data2["available"] is True
+    assert contract_data2["source"] == "DELAYED"  # Stage-2 always uses DELAYED
     assert contract_data2["required_fields_present"] is False
-    assert contract_eligibility2["status"] == "UNAVAILABLE"
-    assert contract_eligibility2["reasons"] == []
+    assert contract_eligibility2["status"] == "PASS"

@@ -24,6 +24,7 @@ Performance:
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -115,7 +116,8 @@ SHORTLIST_SCORE_THRESHOLD = 70
 DATA_INCOMPLETE_SCORE_CAP = 60
 
 # Required chain fields for Wheel strategy (Phase 3.3.1). required_fields_present is True
-# iff at least one selected_candidate has all of these non-null and numeric; no extra fields.
+# iff at least one PUT in the fetched chain has all of these non-null and numeric (computed
+# from chain contracts before selection, NOT from selected_candidates).
 REQUIRED_CHAIN_FIELDS = [
     "strike",
     "expiration",
@@ -203,9 +205,13 @@ class Stage2Result:
     liquidity_reason: str = ""
     liquidity_ok: bool = False
     
-    # Chain data quality
+    # Chain data quality (computed from chain PUTs, not selected_candidates)
     chain_completeness: float = 0.0
     chain_missing_fields: List[str] = field(default_factory=list)
+    required_fields_present: bool = False  # At least one PUT in chain has all REQUIRED_CHAIN_FIELDS
+    total_puts_in_chain: int = 0
+    puts_with_required_fields: int = 0
+    chain_source_used: Optional[str] = None  # LIVE | DELAYED from provider
     
     # Metadata
     chains_fetched_at: Optional[str] = None
@@ -566,9 +572,8 @@ def _select_csp_candidates(
     symbol: str,
 ) -> Tuple[List[SelectedContract], List[str], Dict[str, int], List[Dict[str, Any]]]:
     """
-    Filter by option_type==PUT, 30–45 DTE, delta magnitude in [delta_lo, delta_hi],
-    then option liquidity gates. Returns (candidates, failure_reasons, rejection_counts, sample_rejected_due_to_delta).
-    Delta filter uses magnitude so both +0.25 and -0.25 puts are in-range.
+    Filter by option_type==PUT, 30–45 DTE, then required fields, delta, OI, spread.
+    Order: (a) required fields, (b) delta, (c) OI, (d) spread. Missing fields never masquerade as low OI.
     """
     reasons: List[str] = []
     rejection_counts: Dict[str, int] = {
@@ -579,7 +584,7 @@ def _select_csp_candidates(
     }
     sample_rejected_due_to_delta: List[Dict[str, Any]] = []
 
-    # Collect put contracts from chains in DTE range (identify puts by option_type, not delta sign)
+    # Collect put contracts from chains in DTE range
     all_puts: List[Tuple[OptionContract, date]] = []
     for exp_date, chain_result in chains.items():
         if not chain_result.success or chain_result.chain is None:
@@ -597,9 +602,15 @@ def _select_csp_candidates(
         reasons.append("No contracts in 30–45 DTE range")
         return [], reasons, rejection_counts, sample_rejected_due_to_delta
 
-    # Filter by delta range using magnitude (0.15 <= |delta| <= 0.35)
-    in_delta: List[Tuple[OptionContract, date]] = []
+    # Apply filters in order: (a) required fields, (b) delta, (c) OI, (d) spread
+    passed: List[Tuple[OptionContract, date]] = []
     for c, exp in all_puts:
+        # (a) Required fields first - missing/invalid -> rejected_due_to_missing_fields
+        has_all, _ = _contract_has_all_required_chain_fields(c)
+        if not has_all:
+            rejection_counts["rejected_due_to_missing_fields"] += 1
+            continue
+        # (b) Delta filter
         delta_mag = _delta_magnitude(c)
         if delta_mag is None:
             rejection_counts["rejected_due_to_missing_fields"] += 1
@@ -614,27 +625,15 @@ def _select_csp_candidates(
                     "option_type": getattr(c.option_type, "value", str(c.option_type)),
                 })
             continue
-        in_delta.append((c, exp))
-
-    if not in_delta:
-        reasons.append(f"No contracts in delta range [{delta_lo}, {delta_hi}] (puts)")
-        return [], reasons, rejection_counts, sample_rejected_due_to_delta
-
-    # Apply option liquidity gates: OI >= min_oi, spread_pct <= max_spread_pct
-    passed: List[Tuple[OptionContract, date]] = []
-    for c, exp in in_delta:
-        oi = 0
-        if getattr(c.open_interest, "is_valid", False) and c.open_interest.value is not None:
-            try:
-                oi = int(c.open_interest.value)
-            except (TypeError, ValueError):
-                pass
-        sp = 1.0
-        if getattr(c.spread_pct, "is_valid", False) and c.spread_pct.value is not None:
-            sp = float(c.spread_pct.value)
+        # (c) OI filter - OI is valid numeric at this point (required-field check passed)
+        _, oi_val = _is_valid_numeric_field(getattr(c, "open_interest", None))
+        oi = int(oi_val) if oi_val is not None else 0
         if oi < min_oi:
             rejection_counts["rejected_due_to_oi"] += 1
             continue
+        # (d) Spread filter
+        _, sp_val = _is_valid_numeric_field(getattr(c, "spread_pct", None))
+        sp = float(sp_val) if sp_val is not None else 1.0
         if sp > max_spread_pct:
             rejection_counts["rejected_due_to_spread"] += 1
             continue
@@ -678,15 +677,35 @@ def _select_csp_candidates(
     return candidates, [], rejection_counts, sample_rejected_due_to_delta
 
 
+def _is_valid_numeric_field(field_value: Any) -> Tuple[bool, Optional[float]]:
+    """
+    Return (True, numeric) only if the field exists AND is numeric AND not NaN.
+    Return (False, None) if missing/invalid. Do NOT coerce invalid to 0.
+    """
+    if field_value is None:
+        return (False, None)
+    # Handle FieldValue wrapper
+    val = getattr(field_value, "value", field_value)
+    if val is None:
+        return (False, None)
+    if not isinstance(val, (int, float)):
+        return (False, None)
+    if isinstance(val, float) and math.isnan(val):
+        return (False, None)
+    return (True, float(val))
+
+
 def _contract_has_all_required_chain_fields(contract: OptionContract) -> Tuple[bool, List[str]]:
     """
-    Return (True, []) if all REQUIRED_CHAIN_FIELDS are non-null and numeric; else (False, list of missing).
-    Used for required_fields_present: no missing_reasons for these Wheel strategy fields.
+    Return (True, []) if all REQUIRED_CHAIN_FIELDS are present and valid numeric.
+    Uses _is_valid_numeric_field: missing/invalid -> fail; present numeric (including OI=0) -> pass.
+    Liquidity thresholds (OI>=500) are applied separately in selection.
     """
     missing: List[str] = []
     for fn in REQUIRED_CHAIN_FIELDS:
         if fn == "strike":
-            if contract.strike is None or not isinstance(contract.strike, (int, float)):
+            ok, _ = _is_valid_numeric_field(contract.strike)
+            if not ok:
                 missing.append(fn)
             continue
         if fn == "expiration":
@@ -694,19 +713,12 @@ def _contract_has_all_required_chain_fields(contract: OptionContract) -> Tuple[b
                 missing.append(fn)
             continue
         fv = getattr(contract, fn, None)
-        if fv is None or not getattr(fv, "is_valid", False):
+        if fv is None:
             missing.append(fn)
             continue
-        val = getattr(fv, "value", None)
-        if val is None:
+        ok, _ = _is_valid_numeric_field(fv)
+        if not ok:
             missing.append(fn)
-            continue
-        if fn == "open_interest":
-            if not isinstance(val, (int, float)):
-                missing.append(fn)
-        else:
-            if not isinstance(val, (int, float)):
-                missing.append(fn)
     return (len(missing) == 0, missing)
 
 
@@ -715,9 +727,8 @@ def _compute_required_chain_fields_from_candidates(
     current_chain_missing: List[str],
 ) -> Tuple[bool, List[str]]:
     """
-    Compute required_fields_present and chain_missing_fields from selected_candidates.
-    Returns (required_fields_present, chain_missing_fields).
-    True iff at least one contract in selected_candidates has all REQUIRED_CHAIN_FIELDS non-null and numeric.
+    Legacy: compute from selected_candidates. Prefer _compute_required_fields_from_chain_puts
+    for required_fields_present (chain completeness).
     """
     if not selected_candidates:
         return False, current_chain_missing
@@ -731,6 +742,33 @@ def _compute_required_chain_fields_from_candidates(
             return True, []
         all_missing.update(missing)
     return False, list(all_missing)
+
+
+def _compute_required_fields_from_chain_puts(
+    chains: Dict[date, Any],
+) -> Tuple[bool, List[str], int, int]:
+    """
+    From chain PUTs (not selected_candidates): at least one PUT has all REQUIRED_CHAIN_FIELDS.
+    Compute immediately after chain fetch, before selection.
+    Returns (required_fields_present, chain_missing_fields, total_puts, puts_with_required_fields).
+    """
+    put_contracts: List[OptionContract] = []
+    for chain_result in chains.values():
+        if not chain_result.success or chain_result.chain is None:
+            continue
+        for c in chain_result.chain.contracts:
+            if c.option_type == OptionType.PUT:
+                put_contracts.append(c)
+    total_puts = len(put_contracts)
+    puts_with_required = 0
+    all_missing: set = set()
+    for c in put_contracts:
+        ok, missing = _contract_has_all_required_chain_fields(c)
+        if ok:
+            puts_with_required += 1
+            return (True, [], total_puts, puts_with_required)
+        all_missing.update(missing)
+    return (False, list(all_missing), total_puts, puts_with_required)
 
 
 # ============================================================================
@@ -752,15 +790,15 @@ def evaluate_stage2(
     result.chains_fetched_at = now_iso
 
     # Stage-2 MUST use DELAYED chain (strikes + strikes/options) for per-contract option_type/delta/OI.
-    # LIVE /datav2/live/strikes does not provide per-contract put/call; would yield puts_seen=0.
     provider = chain_provider or get_chain_provider(chain_source=get_stage2_chain_source())
+    chain_source_used = getattr(provider, "_chain_source", "DELAYED")
+    result.chain_source_used = chain_source_used
     try:
         from app.market.market_hours import get_market_phase
         market_phase = get_market_phase()
-        chain_source = getattr(provider, "_chain_source", "DELAYED")
-        logger.info("[STAGE2_MODE] market_phase=%s chain_source=%s", market_phase, chain_source)
+        logger.info("[STAGE2_MODE] market_phase=%s chain_source=%s", market_phase, chain_source_used)
     except Exception:
-        logger.info("[STAGE2_MODE] market_phase=UNKNOWN chain_source=%s", getattr(provider, "_chain_source", "DELAYED"))
+        logger.info("[STAGE2_MODE] market_phase=UNKNOWN chain_source=%s", chain_source_used)
     start_time = time.time()
     
     try:
@@ -810,12 +848,13 @@ def evaluate_stage2(
                 else:
                     unknown_seen += 1
         result.option_type_counts = {"puts_seen": puts_seen, "calls_seen": calls_seen, "unknown_seen": unknown_seen}
-        all_missing_fields = set()
-        for chain_result in chains.values():
-            if chain_result.success and chain_result.chain:
-                _, missing = chain_result.chain.compute_data_completeness()
-                all_missing_fields.update(missing)
-        result.chain_missing_fields = list(all_missing_fields)
+        # required_fields_present from chain PUTs (before selection), not from selected_candidates
+        req_present, chain_missing, total_puts, puts_with_req = _compute_required_fields_from_chain_puts(chains)
+        result.required_fields_present = req_present
+        result.chain_missing_fields = chain_missing
+        result.total_puts_in_chain = total_puts
+        result.puts_with_required_fields = puts_with_req
+        all_missing_fields = set(chain_missing)
         result.chain_completeness = 1.0 - (len(all_missing_fields) / 4) if all_missing_fields else 1.0
 
         candidates, failure_reasons, rejection_counts, sample_rejected_due_to_delta = _select_csp_candidates(
@@ -852,11 +891,7 @@ def evaluate_stage2(
             result.liquidity_grade = result.selected_contract.contract.get_liquidity_grade().value
             result.liquidity_ok = True
             result.liquidity_reason = result.selected_contract.selection_reason
-            # required_fields_present: True iff at least one selected_candidate has all REQUIRED_CHAIN_FIELDS
-            _present, _missing = _compute_required_chain_fields_from_candidates(
-                result.selected_candidates, result.chain_missing_fields
-            )
-            result.chain_missing_fields = _missing
+            # required_fields_present already set from chain PUTs (not overwritten by selection)
         else:
             result.liquidity_ok = False
             result.liquidity_reason = failure_reasons[0] if failure_reasons else "No contracts meeting criteria"
@@ -1038,11 +1073,7 @@ def _enhance_liquidity_with_pipeline(
             total_options = len(result.options)
             valid_total = result.total_valid
             stage2.chain_completeness = valid_total / total_options if total_options > 0 else 0.0
-            # required_fields_present from selected_candidates (same rule as main path)
-            _present, _missing = _compute_required_chain_fields_from_candidates(
-                stage2.selected_candidates, stage2.chain_missing_fields
-            )
-            stage2.chain_missing_fields = _missing
+            # required_fields_present/chain_missing_fields stay from chain PUTs (not overwritten)
 
             logger.info(
                 "[STAGE2_ENHANCE] %s: SUCCESS - liquidity_ok=True, reason='%s'",
@@ -1213,11 +1244,10 @@ def build_eligibility_layers(
     Returns (symbol_eligibility, contract_data, contract_eligibility).
 
     - Symbol eligibility: Stage-1 required snapshot fields only (PASS/FAIL).
-    - Contract data: available is True ONLY if selected_candidates exist and at least one
-      has all REQUIRED_CHAIN_FIELDS (required_fields_present True). Otherwise available
-      False, source NONE; never available=True when required_fields_present=False.
-    - Contract eligibility: UNAVAILABLE when no enriched chain or required fields missing;
-      else PASS/FAIL from liquidity.
+    - Contract data.available: True when Stage-2 ran AND ORATS returned contracts (chain exists).
+      NOT tied to selection outcome. UNAVAILABLE only when chain truly not fetched.
+    - Contract eligibility: UNAVAILABLE (chain not fetched), FAIL (chain fetched, no candidates),
+      or PASS (chain fetched, at least one candidate passed).
     """
     if stage1 is None:
         symbol_eligibility = {"status": "FAIL", "reasons": ["Stage 1 not run"]}
@@ -1232,41 +1262,55 @@ def build_eligibility_layers(
 
     if stage2 is None:
         contract_data = {"available": False, "as_of": None, "source": "NONE"}
-        contract_eligibility = {"status": "UNAVAILABLE", "reasons": []}
+        contract_eligibility = {"status": "UNAVAILABLE", "reasons": ["Stage-2 did not execute or returned no contracts"]}
     else:
-        # available = True ONLY if selected_candidates exist and at least one has all REQUIRED_CHAIN_FIELDS
-        required_fields_present = len(getattr(stage2, "chain_missing_fields", []) or []) == 0
-        candidates = getattr(stage2, "selected_candidates", []) or []
-        has_enriched_chain = bool(candidates) and required_fields_present
+        # Step 1: Chain available = Stage-2 ran, no fetch error, and ORATS returned contracts
+        contracts_evaluated = getattr(stage2, "contracts_evaluated", 0) or 0
+        fetch_error = getattr(stage2, "error", None)
+        stage2_ran = stage2 is not None and not fetch_error and contracts_evaluated > 0
+
         option_type_counts = getattr(stage2, "option_type_counts", None) or {}
         delta_dist = getattr(stage2, "delta_distribution", None)
         top_rej = getattr(stage2, "top_rejection_reasons", None)
-        if not has_enriched_chain:
-            # No enriched chain or no selected contract with all required fields
-            contract_data = {
-                "available": False,
-                "as_of": fetched_at_iso,
-                "source": "NONE",
-                "expiration_count": getattr(stage2, "expirations_evaluated", 0),
-                "contract_count": getattr(stage2, "contracts_evaluated", 0),
-                "required_fields_present": required_fields_present,
-                "option_type_counts": option_type_counts,
-                "delta_distribution": delta_dist,
-                "top_rejection_reasons": top_rej,
+        chain_missing_fields = getattr(stage2, "chain_missing_fields", []) or []
+        required_fields_present = getattr(stage2, "required_fields_present", False)
+        total_puts = getattr(stage2, "total_puts_in_chain", 0) or 0
+        puts_with_req = getattr(stage2, "puts_with_required_fields", 0) or 0
+        chain_source_used = getattr(stage2, "chain_source_used", None) or "DELAYED"
+        candidates = getattr(stage2, "selected_candidates", []) or []
+
+        # Step 2: contract_data.available = chain existence, not selection outcome
+        # source from actual Stage-2 provider mode (chain_source_used), not market hours
+        contract_data = {
+            "available": stage2_ran,
+            "as_of": fetched_at_iso,
+            "source": "NONE" if not stage2_ran else chain_source_used,
+            "expiration_count": getattr(stage2, "expirations_evaluated", 0),
+            "contract_count": contracts_evaluated,
+            "required_fields_present": required_fields_present if stage2_ran else False,
+            "total_puts_in_chain": total_puts,
+            "puts_with_required_fields": puts_with_req,
+            "option_type_counts": option_type_counts,
+            "delta_distribution": delta_dist,
+            "top_rejection_reasons": top_rej,
+        }
+
+        # Step 3: contract_eligibility 3-way logic
+        if not stage2_ran:
+            contract_eligibility = {
+                "status": "UNAVAILABLE",
+                "reasons": ["Stage-2 did not execute or returned no contracts"],
             }
-            contract_eligibility = {"status": "UNAVAILABLE", "reasons": []}
+        elif not candidates:
+            # Chain exists but no contract passed filters
+            sel_reasons = getattr(stage2, "contract_selection_reasons", None) or []
+            if sel_reasons:
+                reasons = list(sel_reasons)
+            else:
+                reasons = [stage2.liquidity_reason or "No contracts passed option liquidity gates"]
+            contract_eligibility = {"status": "FAIL", "reasons": reasons}
         else:
-            contract_data = {
-                "available": True,
-                "as_of": fetched_at_iso,
-                "source": "LIVE" if market_open else "EOD_SNAPSHOT",
-                "expiration_count": getattr(stage2, "expirations_evaluated", 0),
-                "contract_count": getattr(stage2, "contracts_evaluated", 0),
-                "required_fields_present": True,
-                "option_type_counts": option_type_counts,
-                "delta_distribution": delta_dist,
-                "top_rejection_reasons": top_rej,
-            }
+            # We have selected candidates
             passed = stage2.liquidity_ok
             reasons = []
             if not passed:

@@ -274,6 +274,13 @@ def trigger_evaluation(
                     update_latest_pointer(run_id, run.completed_at)
                     logger.info("[EVAL] Run %s completed and persisted", run_id)
                 try:
+                    from app.core.eval.run_artifacts import write_run_artifacts, update_latest_and_recent, purge_old_runs
+                    run_dir = write_run_artifacts(run)
+                    update_latest_and_recent(run, run_dir)
+                    purge_old_runs()
+                except Exception as art_err:
+                    logger.warning("[EVAL] Run artifacts write/purge failed (non-fatal): %s", art_err)
+                try:
                     from app.core.alerts.alert_engine import process_run_completed
                     process_run_completed(run)
                 except Exception as alert_err:

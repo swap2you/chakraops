@@ -59,8 +59,8 @@ _jobs_lock = threading.Lock()
 # BACKGROUND SCHEDULER FOR UNIVERSE EVALUATION
 # ============================================================================
 
-# Scheduler interval: default 15 minutes. Recommended 15, 30, or 60. Set UNIVERSE_EVAL_MINUTES (1-120).
-_UNIVERSE_EVAL_MINUTES_RAW = int(os.getenv("UNIVERSE_EVAL_MINUTES", "15"))
+# Scheduler interval: default 30 minutes during market hours. Set UNIVERSE_EVAL_MINUTES (1-120).
+_UNIVERSE_EVAL_MINUTES_RAW = int(os.getenv("UNIVERSE_EVAL_MINUTES", "30"))
 UNIVERSE_EVAL_MINUTES = max(1, min(120, _UNIVERSE_EVAL_MINUTES_RAW))
 _scheduler_stop_event: Optional[threading.Event] = None
 _scheduler_thread: Optional[threading.Thread] = None
@@ -695,10 +695,11 @@ def api_ops_snapshot(symbol: Optional[str] = Query(default=None)) -> Dict[str, A
         except Exception:
             pass  # Keep default 0
 
-        # SINGLE SOURCE OF TRUTH: Load from persisted evaluation run
+        # SINGLE SOURCE OF TRUTH: Load from canonical artifacts or evaluation store
         try:
+            from app.core.eval.run_artifacts import build_latest_response_from_artifacts
             from app.core.eval.evaluation_store import build_latest_response
-            persisted_run = build_latest_response()
+            persisted_run = build_latest_response_from_artifacts() or build_latest_response()
             has_completed_run = persisted_run.get("has_completed_run", False) if persisted_run else False
             
             if has_completed_run and persisted_run:
@@ -1762,6 +1763,13 @@ def api_ops_evaluate_now() -> Dict[str, Any]:
         save_run(run)
         if run.status == "COMPLETED" and run.completed_at:
             update_latest_pointer(run_id, run.completed_at)
+        try:
+            from app.core.eval.run_artifacts import write_run_artifacts, update_latest_and_recent, purge_old_runs
+            run_dir = write_run_artifacts(run)
+            update_latest_and_recent(run, run_dir)
+            purge_old_runs()
+        except Exception as art_err:
+            logger.warning("[EVAL] Run artifacts write/purge failed (non-fatal): %s", art_err)
         logger.info("[EVAL] Run %s completed and persisted status=%s", run_id, run.status)
         try:
             from app.core.alerts.alert_engine import process_run_completed
@@ -2153,12 +2161,12 @@ async def api_tts_speech(request: Request) -> Response:
 def api_view_evaluation_latest() -> Dict[str, Any]:
     """
     Get the latest COMPLETED evaluation run.
-    Returns counts, top candidates, and metadata.
-    All screens should use this for consistent truth.
+    Reads from canonical artifacts when available (single source of truth), else from evaluation store.
     """
     try:
+        from app.core.eval.run_artifacts import build_latest_response_from_artifacts
         from app.core.eval.evaluation_store import build_latest_response
-        return build_latest_response()
+        return build_latest_response_from_artifacts() or build_latest_response()
     except ImportError as e:
         return {
             "has_completed_run": False,
@@ -3087,11 +3095,12 @@ def api_ops_notify_slack(request: Request):
         if run_id != "?":
             text += f"_Run: {run_id[-12:] if len(str(run_id)) > 12 else run_id}_"
     
-    # If still no text, try to build from latest evaluation run
+    # If still no text, try to build from latest evaluation run (artifacts or store)
     if not text:
         try:
+            from app.core.eval.run_artifacts import build_latest_response_from_artifacts
             from app.core.eval.evaluation_store import build_latest_response
-            latest = build_latest_response()
+            latest = build_latest_response_from_artifacts() or build_latest_response()
             if latest.get("has_completed_run"):
                 run_id = latest.get("run_id", "unknown")
                 counts = latest.get("counts", {})

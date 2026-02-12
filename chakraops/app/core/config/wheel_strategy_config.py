@@ -40,9 +40,9 @@ WHEEL_CONFIG: Dict[str, Any] = {
     # too far out; keeps premium and assignment risk in a target range.
     DTE_MAX: 45,
 
-    # (min_delta, max_delta) for put selection, as absolute delta (e.g. 0.15–0.35).
-    # Short puts in this range balance premium vs. probability of assignment.
-    TARGET_DELTA_RANGE: (0.15, 0.35),
+    # (min_delta, max_delta) for CSP/CC selection, as absolute delta (0.20–0.40).
+    # Short puts/calls in this range balance premium vs. probability of assignment.
+    TARGET_DELTA_RANGE: (0.20, 0.40),
 
     # Minimum average daily share volume (20d or similar) for the underlying.
     # Ensures liquid underlyings; below this the symbol is excluded from Wheel.

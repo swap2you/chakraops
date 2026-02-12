@@ -127,6 +127,8 @@ REQUIRED_CHAIN_FIELDS = [
     "delta",
     "open_interest",
 ]
+# Phase 3.1: For selection eligibility, OI is optional (counted but null OI does not wipe candidates).
+REQUIRED_CHAIN_FIELDS_FOR_SELECTION = ["strike", "expiration", "bid", "ask", "delta"]
 
 
 @dataclass
@@ -233,6 +235,12 @@ class Stage2Result:
     sample_missing_required_contract: Optional[Dict[str, Any]] = None  # first rejected PUT: option_symbol (OCC), option_type, values_seen, raw_keys
     # Telemetry from /strikes/options (endpoint_used, non_null counts, sample symbols)
     strikes_options_telemetry: Optional[Dict[str, Any]] = None
+    # Stage-2 trace (pipeline acquisition + samples) for validate_one_symbol / harness comparison
+    stage2_trace: Optional[Dict[str, Any]] = None
+    # Phase 3.1: OTM and delta-band counts (from chain + spot)
+    otm_puts_in_dte: int = 0
+    otm_puts_in_delta_band: int = 0
+    spot_used: Optional[float] = None
 
 
 @dataclass
@@ -587,8 +595,18 @@ def _select_csp_candidates(
         "rejected_due_to_oi": 0,
         "rejected_due_to_spread": 0,
         "rejected_due_to_missing_fields": 0,
+        "rejected_due_to_itm": 0,
     }
     sample_rejected_due_to_delta: List[Dict[str, Any]] = []
+
+    # Spot from first chain (for OTM gating)
+    spot: Optional[float] = None
+    for chain_result in chains.values():
+        if chain_result.success and chain_result.chain and chain_result.chain.underlying_price is not None:
+            uv = chain_result.chain.underlying_price
+            if getattr(uv, "value", None) is not None:
+                spot = float(uv.value)
+                break
 
     # Collect put contracts from chains in DTE range
     all_puts: List[Tuple[OptionContract, date]] = []
@@ -608,15 +626,27 @@ def _select_csp_candidates(
         reasons.append("No contracts in 30–45 DTE range")
         return [], reasons, rejection_counts, sample_rejected_due_to_delta
 
-    # Apply filters in order: (a) required fields, (b) delta, (c) OI, (d) spread
-    passed: List[Tuple[OptionContract, date]] = []
+    # Phase 3.1: OTM gate — CSP (sell PUT): OTM means strike < spot. Filter before other gates.
+    otm_puts: List[Tuple[OptionContract, date]] = []
     for c, exp in all_puts:
-        # (a) Required fields first - missing/invalid -> rejected_due_to_missing_fields
-        has_all, _ = _contract_has_all_required_chain_fields(c)
+        if spot is not None and c.strike >= spot:
+            rejection_counts["rejected_due_to_itm"] += 1
+            continue
+        otm_puts.append((c, exp))
+
+    if not otm_puts:
+        reasons.append("No OTM puts (strike < spot)" if spot is not None else "No puts after filters")
+        return [], reasons, rejection_counts, sample_rejected_due_to_delta
+
+    # Apply filters in order: (a) required fields (bid/ask/delta; OI optional), (b) delta, (c) OI, (d) spread
+    passed: List[Tuple[OptionContract, date]] = []
+    for c, exp in otm_puts:
+        # (a) Required fields for selection (no OI) — missing -> rejected_due_to_missing_fields
+        has_all, _ = _contract_has_required_fields_for_selection(c)
         if not has_all:
             rejection_counts["rejected_due_to_missing_fields"] += 1
             continue
-        # (b) Delta filter
+        # (b) Delta filter (abs(delta) in band 0.20–0.40)
         delta_mag = _delta_magnitude(c)
         if delta_mag is None:
             rejection_counts["rejected_due_to_missing_fields"] += 1
@@ -709,6 +739,29 @@ def _contract_has_all_required_chain_fields(contract: OptionContract) -> Tuple[b
     """
     missing: List[str] = []
     for fn in REQUIRED_CHAIN_FIELDS:
+        if fn == "strike":
+            ok, _ = _is_valid_numeric_field(contract.strike)
+            if not ok:
+                missing.append(fn)
+            continue
+        if fn == "expiration":
+            if contract.expiration is None:
+                missing.append(fn)
+            continue
+        fv = getattr(contract, fn, None)
+        if fv is None:
+            missing.append(fn)
+            continue
+        ok, _ = _is_valid_numeric_field(fv)
+        if not ok:
+            missing.append(fn)
+    return (len(missing) == 0, missing)
+
+
+def _contract_has_required_fields_for_selection(contract: OptionContract) -> Tuple[bool, List[str]]:
+    """Phase 3.1: Required for CSP/CC selection (bid, ask, delta, strike, expiration). OI optional."""
+    missing: List[str] = []
+    for fn in REQUIRED_CHAIN_FIELDS_FOR_SELECTION:
         if fn == "strike":
             ok, _ = _is_valid_numeric_field(contract.strike)
             if not ok:
@@ -906,7 +959,8 @@ def evaluate_stage2(
             result.contracts_evaluated = 0
             return result
 
-        exp_dates = [e.expiration for e in target_expirations[:5]]  # Fetch up to 5
+        # Phase 3.1: Request ALL expirations in DTE window (match harness behavior)
+        exp_dates = [e.expiration for e in target_expirations]
         acq_delta_lo, acq_delta_hi = get_acquisition_delta_range()
         chains = provider.get_chains_batch(
             symbol, exp_dates, max_concurrent=STAGE2_MAX_CONCURRENT,
@@ -915,10 +969,14 @@ def evaluate_stage2(
         result.expirations_evaluated = len(chains)
         total_contracts = sum(len(cr.chain.contracts) for cr in chains.values() if cr.success and cr.chain)
         result.contracts_evaluated = total_contracts
-        # Capture /strikes/options telemetry from first available chain result
+        # Capture /strikes/options telemetry and stage2_trace from first available chain result
         for cr in chains.values():
             if getattr(cr, "telemetry", None):
                 result.strikes_options_telemetry = cr.telemetry
+                break
+        for cr in chains.values():
+            if getattr(cr, "stage2_trace", None):
+                result.stage2_trace = cr.stage2_trace
                 break
         # Count option types in chain contracts (before filtering) for diagnostics
         puts_seen = calls_seen = unknown_seen = 0
@@ -941,6 +999,25 @@ def evaluate_stage2(
         result.puts_with_required_fields = puts_with_req
         all_missing_fields = set(chain_missing)
         result.chain_completeness = 1.0 - (len(all_missing_fields) / 4) if all_missing_fields else 1.0
+
+        # Phase 3.1: OTM and delta-band counts (spot from first chain)
+        spot_used = None
+        for cr in chains.values():
+            if cr.success and cr.chain and getattr(cr.chain, "underlying_price", None) is not None:
+                uv = cr.chain.underlying_price
+                if getattr(uv, "value", None) is not None:
+                    spot_used = float(uv.value)
+                    break
+        result.spot_used = spot_used
+        if spot_used is not None:
+            puts_in_dte_list = _collect_puts_in_dte_range(chains, dte_min, dte_max)
+            otm_puts_list = [(c, _) for c, _ in puts_in_dte_list if c.strike < spot_used]
+            result.otm_puts_in_dte = len(otm_puts_list)
+            delta_lo, delta_hi = get_target_delta_range()
+            result.otm_puts_in_delta_band = sum(
+                1 for c, _ in otm_puts_list
+                if _delta_magnitude(c) is not None and delta_lo <= _delta_magnitude(c) <= delta_hi
+            )
 
         # Missing-required-fields diagnostics on same 30–45 DTE PUT population as selection
         puts_in_dte = _collect_puts_in_dte_range(chains, dte_min, dte_max)
@@ -1324,6 +1401,19 @@ def compute_option_liquidity_gates(contract: Optional[Any]) -> Dict[str, Any]:
 # Eligibility layers (Phase 3.0.2)
 # ============================================================================
 
+def _merge_stage2_trace_with_rejections(
+    stage2_trace: Optional[Dict[str, Any]],
+    rejection_counts: Optional[Dict[str, int]],
+) -> Optional[Dict[str, Any]]:
+    """Return a copy of stage2_trace with rejection_counts merged (for validate_one_symbol artifact)."""
+    if stage2_trace is None:
+        return None
+    import copy
+    out = copy.deepcopy(stage2_trace)
+    out["rejection_counts"] = dict(rejection_counts) if rejection_counts else {}
+    return out
+
+
 def build_eligibility_layers(
     stage1: Optional["Stage1Result"],
     stage2: Optional["Stage2Result"],
@@ -1389,6 +1479,10 @@ def build_eligibility_layers(
             "missing_required_fields_counts": getattr(stage2, "missing_required_fields_counts", None) or {},
             "sample_missing_required_contract": getattr(stage2, "sample_missing_required_contract", None),
             "strikes_options_telemetry": getattr(stage2, "strikes_options_telemetry", None),
+            "stage2_trace": _merge_stage2_trace_with_rejections(getattr(stage2, "stage2_trace", None), getattr(stage2, "rejection_counts", None)),
+            "otm_puts_in_dte": getattr(stage2, "otm_puts_in_dte", 0),
+            "otm_puts_in_delta_band": getattr(stage2, "otm_puts_in_delta_band", 0),
+            "spot_used": getattr(stage2, "spot_used", None),
         }
 
         # Step 3: contract_eligibility 3-way logic

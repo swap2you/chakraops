@@ -290,7 +290,9 @@ class OptionChainResult:
     
     # Telemetry from /strikes/options (endpoint_used, counts, sample symbols)
     strikes_options_telemetry: Optional[Dict[str, Any]] = None
-    
+    # Stage-2 trace for validate_one_symbol / harness comparison (endpoints, counts, samples, delta stats)
+    stage2_trace: Optional[Dict[str, Any]] = None
+
     @property
     def puts(self) -> List[EnrichedContract]:
         """Get all put contracts."""
@@ -604,26 +606,32 @@ def fetch_base_chain(
         len(expiry_strikes), len(sorted_expiries), underlying_price or 0
     )
     
-    # For each expiry, select bounded strikes near target moneyness
+    # Phase 3.1: OTM-directional strike selection. CSP: strikes BELOW spot. CC: strikes ABOVE spot.
+    # Deterministic: OTM put strikes (below spot) + ATM + OTM call strikes (above spot).
+    OTM_PUT_STRIKES = 30
+    OTM_CALL_STRIKES = 30
+    ATM_STRIKES = 5
+
     for expiration in sorted_expiries:
         rows_for_expiry = expiry_strikes[expiration]
-        
-        # Sort strikes by proximity to target moneyness
-        if underlying_price:
-            target_put_strike = underlying_price * target_moneyness_put
-            target_call_strike = underlying_price * target_moneyness_call
+        strikes_all = sorted(set(float(r.get("strike", 0)) for r in rows_for_expiry))
+        spot = underlying_price
+        if not spot or not strikes_all:
+            selected_rows = rows_for_expiry[:max_strikes_per_expiry]
         else:
-            # Fallback: use middle of strike range
-            strikes = [float(r.get("strike", 0)) for r in rows_for_expiry]
-            target_put_strike = target_call_strike = sum(strikes) / len(strikes) if strikes else 0
-        
-        # Sort by distance to put target and select top N
-        rows_for_expiry_sorted = sorted(
-            rows_for_expiry,
-            key=lambda r: abs(float(r.get("strike", 0)) - target_put_strike)
-        )
-        selected_rows = rows_for_expiry_sorted[:max_strikes_per_expiry]
-        
+            # OTM puts: strike < spot, sort descending (closest to spot first)
+            below = [s for s in strikes_all if s < spot]
+            below = sorted(below, reverse=True)[:OTM_PUT_STRIKES]
+            # ATM: in [spot*0.99, spot*1.01]
+            atm = [s for s in strikes_all if spot * 0.99 <= s <= spot * 1.01][:ATM_STRIKES]
+            # OTM calls: strike > spot, sort ascending (closest to spot first)
+            above = [s for s in strikes_all if s > spot]
+            above = sorted(above)[:OTM_CALL_STRIKES]
+            strike_set = set(below) | set(atm) | set(above)
+            selected_rows = [r for r in rows_for_expiry if float(r.get("strike", 0)) in strike_set]
+            if not selected_rows:
+                selected_rows = rows_for_expiry[:max_strikes_per_expiry]
+
         for row in selected_rows:
             try:
                 strike = float(row.get("strike"))
@@ -1171,7 +1179,117 @@ def fetch_option_chain(
         f"{max_ad:.3f}" if max_ad is not None else "n/a",
         [round(x, 3) for x in sample],
     )
-    
+
+    # Stage-2 trace for validate_one_symbol / harness comparison
+    try:
+        puts_list = result.puts
+        required_attrs = ("opra_symbol", "expiration", "strike", "delta", "bid", "ask", "open_interest")
+        def _present(c: Any, name: str) -> bool:
+            v = getattr(c, name, None)
+            if name == "opra_symbol" and v is None:
+                v = getattr(c, "option_symbol", None)
+            return v is not None and (not isinstance(v, (int, float)) or True)
+        puts_with_req = sum(1 for p in puts_list if all(_present(p, a) for a in required_attrs))
+        missing_bid = sum(1 for p in puts_list if not _present(p, "bid"))
+        missing_ask = sum(1 for p in puts_list if not _present(p, "ask"))
+        missing_oi = sum(1 for p in puts_list if not _present(p, "open_interest"))
+        missing_delta = sum(1 for p in puts_list if not _present(p, "delta"))
+        sorted_abs_d = sorted(abs_deltas) if abs_deltas else []
+        n = len(sorted_abs_d)
+        def _pct(p: float) -> Optional[float]:
+            if not n:
+                return None
+            idx = max(0, min(n - 1, int(n * p / 100.0)))
+            return round(sorted_abs_d[idx], 4)
+        base_url = OratsDataMode.get_base_url(mode)
+        strikes_path = f"{base_url.rstrip('/')}{ORATS_STRIKES}"
+        options_path = f"{base_url.rstrip('/')}{ORATS_STRIKES_OPTIONS}"
+        tel = result.strikes_options_telemetry or {}
+        spot = result.underlying_price
+        # Phase 3.1: OTM counts and samples (CSP: strike < spot, CC: strike > spot)
+        otm_puts = [p for p in puts_list if (getattr(p, "strike", None) or 0) < (spot or 0)]
+        calls_list = result.calls
+        otm_calls = [c for c in calls_list if (getattr(c, "strike", None) or 0) > (spot or 0)]
+        DELTA_LO, DELTA_HI = 0.20, 0.40
+        def _in_delta_band(c: Any) -> bool:
+            d = getattr(c, "delta", None)
+            if d is None:
+                return False
+            try:
+                return DELTA_LO <= abs(float(d)) <= DELTA_HI
+            except (TypeError, ValueError):
+                return False
+        otm_puts_in_delta_band = sum(1 for p in otm_puts if _in_delta_band(p))
+        otm_calls_in_delta_band = sum(1 for c in otm_calls if _in_delta_band(c))
+        calls_with_req = sum(1 for c in calls_list if all(_present(c, a) for a in required_attrs))
+        expirations_in_window = sorted(set(getattr(c, "expiration", None) for c in result.contracts if getattr(c, "expiration", None)))
+        expirations_in_window = [e.isoformat()[:10] if hasattr(e, "isoformat") else str(e) for e in expirations_in_window]
+        def _sample_row(c: Any) -> Dict[str, Any]:
+            return {
+                "strike": getattr(c, "strike", None),
+                "abs_delta": round(abs(float(getattr(c, "delta", 0) or 0)), 4) if getattr(c, "delta", None) is not None else None,
+                "bid": getattr(c, "bid", None),
+                "ask": getattr(c, "ask", None),
+                "open_interest": getattr(c, "open_interest", None),
+            }
+        sample_otm_puts = [_sample_row(p) for p in otm_puts[:10]]
+        sample_otm_calls = [_sample_row(c) for c in otm_calls[:10]]
+        otm_put_deltas = [abs(float(getattr(p, "delta", 0))) for p in otm_puts if getattr(p, "delta", None) is not None]
+        otm_call_deltas = [abs(float(getattr(c, "delta", 0))) for c in otm_calls if getattr(c, "delta", None) is not None]
+        def _delta_stats(deltas: List[float]) -> Dict[str, Any]:
+            if not deltas:
+                return {"min": None, "median": None, "max": None}
+            s = sorted(deltas)
+            n = len(s)
+            return {
+                "min": round(s[0], 4),
+                "median": round(s[n // 2], 4),
+                "max": round(s[-1], 4),
+            }
+        result.stage2_trace = {
+            "spot": spot,
+            "dte_window": [dte_min, dte_max],
+            "expirations_in_window": expirations_in_window,
+            "endpoints_used": [
+                {"path": strikes_path, "mode": mode},
+                {"path": tel.get("endpoint_used") or options_path, "mode": mode},
+            ],
+            "strikes_rows_count": base_strikes_rows_count,
+            "strikes_options_rows_count": tel.get("response_rows") or result.enriched_count,
+            "merged_count": len(result.contracts),
+            "total_contracts_fetched": len(result.contracts),
+            "puts_in_dte_count": len(puts_list),
+            "otm_puts_in_dte": len(otm_puts),
+            "otm_puts_in_delta_band": otm_puts_in_delta_band,
+            "puts_with_required_fields": puts_with_req,
+            "calls_in_dte_count": len(calls_list),
+            "otm_calls_in_dte": len(otm_calls),
+            "otm_calls_in_delta_band": otm_calls_in_delta_band,
+            "calls_with_required_fields": calls_with_req,
+            "puts_with_required_fields_count": puts_with_req,
+            "missing_counts": {"bid": missing_bid, "ask": missing_ask, "open_interest": missing_oi, "delta": missing_delta},
+            "delta_abs_stats": {
+                "min": round(min_ad, 4) if min_ad is not None else None,
+                "p25": _pct(25),
+                "median": _pct(50),
+                "p75": _pct(75),
+                "max": round(max_ad, 4) if max_ad is not None else None,
+            },
+            "delta_abs_otm_puts": _delta_stats(otm_put_deltas),
+            "delta_abs_otm_calls": _delta_stats(otm_call_deltas),
+            "sample_otm_puts": sample_otm_puts,
+            "sample_otm_calls": sample_otm_calls,
+            "sample_option_symbols": {
+                "pre_merge": [getattr(c, "opra_symbol", None) or getattr(c, "option_symbol", None) for c in base_contracts[:10]],
+                "post_merge": [getattr(c, "opra_symbol", None) or getattr(c, "option_symbol", None) for c in result.contracts[:10]],
+                "post_dte": [getattr(c, "opra_symbol", None) or getattr(c, "option_symbol", None) for c in puts_list[:10]],
+            },
+            "rejection_counts": {},  # Filled by evaluator when building contract_data
+        }
+    except Exception as e:
+        logger.warning("[CHAIN_PIPELINE] %s: stage2_trace build failed: %s", symbol.upper(), e)
+        result.stage2_trace = {"error": str(e), "message": "Trace build failed"}
+
     result.fetch_duration_ms = int((time.time() - start_time) * 1000)
     
     logger.info(

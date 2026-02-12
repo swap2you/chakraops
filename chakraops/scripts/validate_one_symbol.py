@@ -240,6 +240,16 @@ def main() -> int:
         with open(out_diag, "w", encoding="utf-8") as f:
             json.dump(data_diag, f, indent=2)
         print(f"Wrote {out_diag}")
+        # Stage-2 trace for harness comparison (Phase 3.0); always write file
+        trace = data_diag.get("stage2_trace")
+        out_trace = out_dir / f"{symbol}_stage2_trace.json"
+        if isinstance(trace, dict):
+            with open(out_trace, "w", encoding="utf-8") as f:
+                json.dump(trace, f, indent=2, default=str)
+        else:
+            with open(out_trace, "w", encoding="utf-8") as f:
+                json.dump({"symbol": symbol, "stage2_trace": None, "message": "Trace not available (LIVE mode or pipeline did not return trace)."}, f, indent=2)
+        print(f"Wrote {out_trace}")
     else:
         print(f"symbol-diagnostics failed: {err_diag}", file=sys.stderr)
 

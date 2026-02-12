@@ -480,6 +480,7 @@ class OratsChainProvider:
                 )
                 continue
             telemetry = getattr(chain_result, "strikes_options_telemetry", None) if chain_result else None
+            stage2_trace = getattr(chain_result, "stage2_trace", None) if chain_result else None
             option_contracts = [self._enriched_to_option_contract(ec, symbol) for ec in contracts_list]
             for oc in option_contracts:
                 oc.compute_derived_fields()
@@ -502,6 +503,7 @@ class OratsChainProvider:
                 data_quality=dq,
                 missing_fields=list(missing),
                 telemetry=telemetry,
+                stage2_trace=stage2_trace,
             )
             if self._use_cache:
                 self._cache.set(symbol, exp, results[exp])

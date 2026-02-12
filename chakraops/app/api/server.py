@@ -1724,6 +1724,8 @@ def api_view_symbol_diagnostics(symbol: str = Query(..., min_length=1, max_lengt
         result["symbol_eligibility"] = full_result.symbol_eligibility
     if getattr(full_result, "contract_data", None):
         result["contract_data"] = full_result.contract_data
+    if full_result.contract_data and full_result.contract_data.get("stage2_trace"):
+        result["stage2_trace"] = full_result.contract_data["stage2_trace"]
     if getattr(full_result, "contract_eligibility", None):
         result["contract_eligibility"] = full_result.contract_eligibility
     result["gates"] = list(full_result.gates) if full_result.gates else result["gates"]

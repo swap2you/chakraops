@@ -300,6 +300,19 @@ def main() -> int:
         for k in REQUIRED_FIELDS:
             analysis_lines.append(f"- **{k}**: " + (missing_reasons.get(k) or "—"))
     analysis_lines.append("")
+    # Stage-2 /strikes/options telemetry (endpoint and non-null counts)
+    cd = (data_diag or {}).get("contract_data") or {}
+    opt = (data_diag or {}).get("options") or {}
+    tel = cd.get("strikes_options_telemetry") or opt.get("strikes_options_telemetry")
+    if tel and isinstance(tel, dict):
+        analysis_lines.append("## /strikes/options telemetry")
+        analysis_lines.append(f"- **endpoint_used**: {tel.get('endpoint_used', '—')}")
+        analysis_lines.append(f"- **requested_tickers_count**: {tel.get('requested_tickers_count', '—')}")
+        analysis_lines.append(f"- **response_rows**: {tel.get('response_rows', '—')}")
+        analysis_lines.append(f"- **non_null_bidask**: {tel.get('non_null_bidask', '—')}")
+        analysis_lines.append(f"- **non_null_oi**: {tel.get('non_null_oi', '—')}")
+        analysis_lines.append(f"- **non_null_vol**: {tel.get('non_null_vol', '—')}")
+        analysis_lines.append("")
     analysis_lines.append("## Stage-1 verdict")
     if missing_fields:
         analysis_lines.append("**BLOCK** — required field(s) missing: " + ", ".join(missing_fields))

@@ -9,17 +9,12 @@ STEP 1: Discover option chain via /datav2/strikes
   - Input: underlying ticker (e.g., AAPL)
   - Output: list of (expirDate, strike, optionType) tuples
 
-STEP 2: Enrich with liquidity via /datav2/strikes/options
-  - Input: OPRA symbols (e.g., AAPL  260320C00175000)
+STEP 2: Enrich with liquidity via /datav2/strikes/options (non-derived only)
+  - Input: OCC option symbols (e.g., AAPL260320C00175000) via tickers= param
   - Output: bid, ask, volume, openInterest, greeks
 
-OPRA Symbol Format:
-  - Root: 6 chars, left-aligned, space-padded (e.g., "AAPL  ")
-  - Expiration: YYMMDD (e.g., "260320" for 2026-03-20)
-  - Type: "C" or "P"
-  - Strike: 8 digits, strike * 1000, zero-padded (e.g., "00175000" for $175)
-
-Example: AAPL $175 Put expiring 2026-03-20 → "AAPL  260320P00175000"
+OCC Symbol Format (no space padding; must match request and response for merge):
+  - ROOT + YYMMDD + C/P + STRIKE*1000 (8 digits). Example: SPY260320P00691000
 
 Data Modes:
   - delayed: https://api.orats.io/datav2 (15-min delay, includes OPRA fields)
@@ -168,25 +163,15 @@ class BaseContract:
     @property
     def opra_symbol(self) -> str:
         """
-        Build OPRA symbol for this contract.
-        
-        Format: ROOT(6) + YYMMDD + C/P + STRIKE*1000(8)
-        Example: "AAPL  260320P00175000"
+        Build OCC option symbol for this contract (same format as ORATS /strikes/options).
+        CRITICAL: Use NO space padding on root so request and response keys match.
+        Format: ROOT + YYMMDD + C/P + STRIKE*1000(8)  e.g. "SPY260320P00691000"
         """
-        # Root: 6 chars, left-aligned, space-padded
-        root = self.symbol.upper().ljust(6)
-        
-        # Expiration: YYMMDD
-        exp_str = self.expiration.strftime("%y%m%d")
-        
-        # Type: C or P
-        opt_type = "C" if self.option_type == "CALL" else "P"
-        
-        # Strike: multiply by 1000, pad to 8 digits
-        strike_int = int(self.strike * 1000)
-        strike_str = str(strike_int).zfill(8)
-        
-        return f"{root}{exp_str}{opt_type}{strike_str}"
+        from app.core.orats.orats_opra import build_orats_option_symbol
+        root = self.symbol.upper().strip()
+        exp_str = self.expiration.strftime("%Y-%m-%d")
+        opt_char = "C" if self.option_type == "CALL" else "P"
+        return build_orats_option_symbol(root, exp_str, opt_char, self.strike)
 
 
 @dataclass
@@ -302,6 +287,9 @@ class OptionChainResult:
     
     # Error tracking
     error: Optional[str] = None
+    
+    # Telemetry from /strikes/options (endpoint_used, counts, sample symbols)
+    strikes_options_telemetry: Optional[Dict[str, Any]] = None
     
     @property
     def puts(self) -> List[EnrichedContract]:
@@ -456,9 +444,9 @@ def _check_opra_fields_in_response(rows: List[Dict]) -> Tuple[bool, int, int, in
     non_null_vol = 0
     
     for row in rows:
-        bid = row.get("bidPrice")
-        ask = row.get("askPrice")
-        oi = row.get("openInt") or row.get("openInterest")
+        bid = row.get("bidPrice") or row.get("bid")
+        ask = row.get("askPrice") or row.get("ask")
+        oi = row.get("openInt") or row.get("openInterest") or row.get("open_interest") or row.get("oi")
         vol = row.get("volume")
         
         if bid is not None and ask is not None:
@@ -705,17 +693,50 @@ def build_opra_symbols(contracts: List[BaseContract]) -> Dict[str, BaseContract]
 # STEP 3: Enrich with Liquidity from /datav2/strikes/options
 # ============================================================================
 
+def _normalize_occ_symbol(s: Optional[str]) -> str:
+    """Normalize OCC symbol for consistent merge key (strip, remove spaces)."""
+    if not s or not isinstance(s, str):
+        return ""
+    return s.replace(" ", "").strip()
+
+
+def _build_opra_symbol_from_row(row: Dict[str, Any]) -> Optional[str]:
+    """Build OCC option symbol from API row so merge key matches BaseContract.opra_symbol."""
+    from app.core.orats.orats_opra import build_orats_option_symbol
+    root = (row.get("ticker") or "").strip().upper()
+    exp_str = row.get("expirDate") or row.get("expiration")
+    strike_raw = row.get("strike")
+    opt_type = (
+        row.get("optionType") or row.get("option_type") or
+        row.get("putCall") or row.get("callPut") or
+        row.get("put_call") or row.get("call_put") or ""
+    )
+    if not root or not exp_str or strike_raw is None:
+        return None
+    try:
+        exp_str = exp_str[:10] if isinstance(exp_str, str) else str(exp_str)
+        strike = float(strike_raw)
+        opt_char = "C" if str(opt_type).strip().upper().startswith("C") else ("P" if str(opt_type).strip().upper().startswith("P") else None)
+        if opt_char is None:
+            return None
+        return build_orats_option_symbol(root, exp_str, opt_char, strike)
+    except (ValueError, TypeError):
+        return None
+
+
 def fetch_enriched_contracts(
     opra_symbols: List[str],
     batch_size: int = OPRA_BATCH_SIZE,
     require_opra_fields: bool = True,
     chain_mode: Optional[str] = None,
-) -> Dict[str, Dict[str, Any]]:
+) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Any]]:
     """
     STEP 3 (OPRA lookup): Fetch liquidity data for OCC option symbols from /datav2/strikes/options.
+    Uses non-derived endpoint only (derived returns null bid/ask per ORATS docs).
     
     INVARIANT: /datav2/strikes/options MUST ONLY be called with fully-formed OCC option
     symbols. Underlying-only or mixed underlying+option calls are forbidden and will raise.
+    Merge keys use normalized OCC (no space padding) so request and response match.
     
     Args:
         opra_symbols: List of OCC option symbols only (built from chain data)
@@ -724,14 +745,15 @@ def fetch_enriched_contracts(
         chain_mode: Override: "DELAYED" | "LIVE". When None, use ORATS_DATA_MODE env.
     
     Returns:
-        Dict mapping OPRA symbol -> enrichment data
+        Tuple of (enrichment_map, telemetry). enrichment_map: OCC symbol -> enrichment data.
+        telemetry: endpoint_used, requested_tickers_count, response_rows, non_null_bidask, non_null_oi, non_null_vol, sample_request_symbols, sample_response_optionSymbols.
         
     Raises:
         OratsChainError: If any symbol is not a valid OCC option symbol
-        OratsOpraModeError: If mode is live_derived and require_opra_fields=True
+        OratsOpraModeError: If mode is live_derived or base URL contains 'derived'
     """
     if not opra_symbols:
-        return {}
+        return {}, _empty_telemetry()
     
     # FAIL FAST: Reject any non-OCC symbol (e.g. underlying ticker). No silent fallbacks.
     from app.core.orats.orats_opra import is_occ_option_symbol
@@ -748,7 +770,11 @@ def fetch_enriched_contracts(
     else:
         mode = OratsDataMode.get_current_mode()
     
-    # FAIL FAST: Check if mode supports OPRA fields
+    base_url = OratsDataMode.get_base_url(mode)
+    # FAIL FAST: Do NOT use derived endpoint for Stage-2; derived returns null bid/ask per ORATS.
+    if require_opra_fields and "derived" in base_url.lower():
+        logger.error("[ORATS_OPTIONS] FAIL FAST: derived endpoint does not return OPRA bid/ask/OI")
+        raise OratsOpraModeError(mode)
     if require_opra_fields and not OratsDataMode.supports_opra_fields(mode):
         logger.error(
             "[ORATS_OPTIONS] FAIL FAST: mode=%s does not support OPRA liquidity fields",
@@ -756,15 +782,16 @@ def fetch_enriched_contracts(
         )
         raise OratsOpraModeError(mode)
     
-    base_url = OratsDataMode.get_base_url(mode)
     token = _get_orats_token()
     param_name = get_strikes_options_param_name()
+    endpoint_used = f"{base_url.rstrip('/')}{ORATS_STRIKES_OPTIONS}"
     
     enrichment_map: Dict[str, Dict[str, Any]] = {}
     total_rows = 0
     total_with_bidask = 0
     total_with_oi = 0
     total_with_vol = 0
+    sample_response_option_symbols: List[str] = []
     
     # Process in batches
     for i in range(0, len(opra_symbols), batch_size):
@@ -772,7 +799,6 @@ def fetch_enriched_contracts(
         
         _RATE_LIMITER.acquire()
         
-        # Join OPRA symbols with commas
         tickers_param = ",".join(batch)
         
         url = f"{base_url}{ORATS_STRIKES_OPTIONS}"
@@ -781,10 +807,9 @@ def fetch_enriched_contracts(
             param_name: tickers_param,
         }
         
-        # Log request
         logger.info(
-            "[ORATS_REQ] base=%s path=%s mode=%s params=%s",
-            base_url, ORATS_STRIKES_OPTIONS, mode, _redact_token(params)
+            "[ORATS_REQ] endpoint=%s requested_tickers=%d batch_size=%d sample_request=%s",
+            endpoint_used, len(opra_symbols), len(batch), batch[:3],
         )
         
         t0 = time.perf_counter()
@@ -802,7 +827,7 @@ def fetch_enriched_contracts(
         
         if r.status_code != 200:
             logger.warning(
-                "[ORATS_RESP] status=%d latency_ms=%d rows=0 has_opra_fields=false",
+                "[ORATS_RESP] status=%d latency_ms=%d rows=0",
                 r.status_code, latency_ms
             )
             continue
@@ -813,7 +838,6 @@ def fetch_enriched_contracts(
             logger.warning("[ORATS_RESP] status=%d latency_ms=%d error=invalid_json", r.status_code, latency_ms)
             continue
         
-        # Extract rows
         if isinstance(raw, list):
             rows = raw
         elif isinstance(raw, dict) and "data" in raw:
@@ -821,68 +845,38 @@ def fetch_enriched_contracts(
         else:
             rows = []
         
-        # Check OPRA fields
         has_opra, non_null_bidask, non_null_oi, non_null_vol = _check_opra_fields_in_response(rows)
         
-        # Log response
         logger.info(
-            "[ORATS_RESP] status=%d latency_ms=%d rows=%d has_opra_fields=%s",
-            r.status_code, latency_ms, len(rows), has_opra
+            "[ORATS_RESP] endpoint=%s response_rows=%d non_null_bidask=%d non_null_oi=%d non_null_vol=%d latency_ms=%d sample_response_optionSymbols=%s",
+            endpoint_used, len(rows), non_null_bidask, non_null_oi, non_null_vol, latency_ms,
+            [(_normalize_occ_symbol(r.get("optionSymbol")) or _build_opra_symbol_from_row(r)) for r in rows[:3]],
         )
-        
-        # Log parse info
-        if rows:
-            row0_keys = list(rows[0].keys())
-            logger.info(
-                "[ORATS_PARSE] row0_keys=%s valid_contracts=%d "
-                "non_null_bidask=%d non_null_oi=%d non_null_vol=%d",
-                row0_keys, len(rows), non_null_bidask, non_null_oi, non_null_vol
-            )
         
         total_rows += len(rows)
         total_with_bidask += non_null_bidask
         total_with_oi += non_null_oi
         total_with_vol += non_null_vol
         
-        # Map rows back to OPRA symbols (optionSymbol is OCC, ticker is underlying)
         for row in rows:
-            opra = row.get("optionSymbol") or row.get("ticker", "")
+            # Key by normalized OCC so merge matches BaseContract.opra_symbol (no space padding)
+            opra_raw = row.get("optionSymbol") or ""
+            opra = _normalize_occ_symbol(opra_raw) if opra_raw else None
+            if not opra or len(opra) < 16:
+                opra = _build_opra_symbol_from_row(row)
+            if not opra:
+                continue
+            if len(sample_response_option_symbols) < 5:
+                sample_response_option_symbols.append(opra)
             
-            # If opra matches one of our batch symbols, use it
-            if opra in batch:
-                pass  # opra already set
-            else:
-                # Try to reconstruct from row data (optionSymbol preferred; API returns ticker=underlying)
-                root = (row.get("ticker") or "").split()[0] if row.get("ticker") else ""
-                exp_str = row.get("expirDate", "")
-                strike = row.get("strike")
-                opt_type = (
-                    row.get("optionType") or row.get("option_type") or
-                    row.get("putCall") or row.get("callPut") or
-                    row.get("put_call") or row.get("call_put") or ""
-                )
-                
-                if root and exp_str and strike is not None:
-                    try:
-                        exp_date = datetime.strptime(exp_str, "%Y-%m-%d").date()
-                        opt_char = "C" if str(opt_type).strip().upper().startswith("C") else ("P" if str(opt_type).strip().upper().startswith("P") else None)
-                        if opt_char is None:
-                            continue
-                        root_padded = root.upper().ljust(6)
-                        exp_yymmdd = exp_date.strftime("%y%m%d")
-                        strike_int = int(float(strike) * 1000)
-                        strike_padded = str(strike_int).zfill(8)
-                        opra = f"{root_padded}{exp_yymmdd}{opt_char}{strike_padded}"
-                    except (ValueError, TypeError):
-                        continue
-                else:
-                    continue
-            
+            bid = row.get("bidPrice") or row.get("bid")
+            ask = row.get("askPrice") or row.get("ask")
+            oi = row.get("openInt") or row.get("openInterest") or row.get("open_interest") or row.get("oi")
             enrichment_map[opra] = {
-                "bid": row.get("bidPrice"),
-                "ask": row.get("askPrice"),
+                "bid": bid,
+                "ask": ask,
                 "volume": row.get("volume"),
-                "open_interest": row.get("openInt") or row.get("openInterest"),
+                "open_interest": oi,
                 "delta": row.get("delta"),
                 "gamma": row.get("gamma"),
                 "theta": row.get("theta"),
@@ -896,19 +890,41 @@ def fetch_enriched_contracts(
                 "call_put": row.get("call_put"),
             }
     
-    # Log summary; "ORATS OK" in caller only when total_with_bidask > 0.
+    telemetry = {
+        "endpoint_used": endpoint_used,
+        "requested_tickers_count": len(opra_symbols),
+        "response_rows": total_rows,
+        "non_null_bidask": total_with_bidask,
+        "non_null_oi": total_with_oi,
+        "non_null_vol": total_with_vol,
+        "sample_request_symbols": opra_symbols[:5],
+        "sample_response_optionSymbols": sample_response_option_symbols[:5],
+    }
     if total_with_bidask > 0:
         logger.info(
-            "[ORATS_OPTIONS] SUMMARY ORATS OK enriched=%d/%d total_with_bidask=%d",
-            len(enrichment_map), len(opra_symbols), total_with_bidask,
+            "[ORATS_OPTIONS] SUMMARY enriched=%d/%d total_with_bidask=%d endpoint=%s",
+            len(enrichment_map), len(opra_symbols), total_with_bidask, endpoint_used,
         )
     else:
         logger.info(
-            "[ORATS_OPTIONS] SUMMARY enriched=%d/%d total_rows=%d contracts_with_bidask=0",
-            len(enrichment_map), len(opra_symbols), total_rows,
+            "[ORATS_OPTIONS] SUMMARY enriched=%d/%d total_rows=%d contracts_with_bidask=0 endpoint=%s",
+            len(enrichment_map), len(opra_symbols), total_rows, endpoint_used,
         )
-    
-    return enrichment_map
+    return enrichment_map, telemetry
+
+
+def _empty_telemetry() -> Dict[str, Any]:
+    """Return empty telemetry dict for no-op path."""
+    return {
+        "endpoint_used": None,
+        "requested_tickers_count": 0,
+        "response_rows": 0,
+        "non_null_bidask": 0,
+        "non_null_oi": 0,
+        "non_null_vol": 0,
+        "sample_request_symbols": [],
+        "sample_response_optionSymbols": [],
+    }
 
 
 # ============================================================================
@@ -969,9 +985,10 @@ def merge_chain_and_liquidity(
         opra = base.opra_symbol
         enrichment = enrichment_map.get(opra, {})
         
-        # Extract liquidity data (may be None if not enriched)
-        bid = enrichment.get("bid")
-        ask = enrichment.get("ask")
+        # Extract liquidity data (may be None if not enriched); map ORATS key variants
+        bid = enrichment.get("bid") or enrichment.get("bidPrice")
+        ask = enrichment.get("ask") or enrichment.get("askPrice")
+        open_interest = enrichment.get("open_interest") or enrichment.get("openInterest") or enrichment.get("oi")
         
         # Compute mid if bid/ask available
         mid = None
@@ -993,7 +1010,7 @@ def merge_chain_and_liquidity(
             ask=_safe_float(ask),
             mid=_safe_float(mid),
             volume=_safe_int(enrichment.get("volume")),
-            open_interest=_safe_int(enrichment.get("open_interest")),
+            open_interest=_safe_int(open_interest),
             delta=_safe_float(enrichment.get("delta")) or base.delta,
             gamma=_safe_float(enrichment.get("gamma")),
             theta=_safe_float(enrichment.get("theta")),
@@ -1114,12 +1131,13 @@ def fetch_option_chain(
         symbol.upper(), len(opra_symbols_to_enrich)
     )
     
-    # STEP 3: Enrich with liquidity
+    # STEP 3: Enrich with liquidity (non-derived endpoint only)
     logger.info("[CHAIN_PIPELINE] %s: STEP 3 - Enriching with liquidity...", symbol.upper())
-    enrichment_map = fetch_enriched_contracts(
+    enrichment_map, strikes_telemetry = fetch_enriched_contracts(
         opra_symbols_to_enrich, require_opra_fields=True, chain_mode=chain_mode
     )
     result.enriched_count = len(enrichment_map)
+    result.strikes_options_telemetry = strikes_telemetry
     
     logger.info(
         "[CHAIN_PIPELINE] %s: STEP 3 COMPLETE - %d contracts enriched",

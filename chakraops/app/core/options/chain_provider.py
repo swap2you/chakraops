@@ -72,10 +72,11 @@ class OptionContract:
     Fields use FieldValue wrapper to track data quality.
     """
     # Identifiers
-    symbol: str
+    symbol: str  # Underlying ticker (e.g. SPY, AAPL)
     expiration: date
     strike: float
     option_type: OptionType
+    option_symbol: Optional[str] = None  # OCC option symbol (e.g. SPY260320P00691000) for diagnostics and merge
     
     # Pricing (wrapped with data quality)
     bid: FieldValue[float] = field(default_factory=lambda: FieldValue(None, DataQuality.MISSING, "not fetched", "bid"))
@@ -140,6 +141,7 @@ class OptionContract:
         """Convert to dictionary for API serialization."""
         return {
             "symbol": self.symbol,
+            "option_symbol": getattr(self, "option_symbol", None),
             "expiration": self.expiration.isoformat(),
             "strike": self.strike,
             "option_type": self.option_type.value,
@@ -166,6 +168,7 @@ class OptionContract:
         """Convert to simplified dictionary with raw values."""
         return {
             "symbol": self.symbol,
+            "option_symbol": getattr(self, "option_symbol", None),
             "expiration": self.expiration.isoformat(),
             "strike": self.strike,
             "option_type": self.option_type.value,
@@ -309,7 +312,7 @@ class ExpirationInfo:
     contract_count: int = 0
 
 
-@dataclass 
+@dataclass
 class ChainProviderResult:
     """Result from a chain provider operation."""
     success: bool
@@ -317,6 +320,8 @@ class ChainProviderResult:
     error: Optional[str] = None
     data_quality: DataQuality = DataQuality.VALID
     missing_fields: List[str] = field(default_factory=list)
+    # Telemetry from /strikes/options (endpoint_used, counts); set on first result when batch from pipeline
+    telemetry: Optional[Dict[str, Any]] = None
 
 
 # ============================================================================

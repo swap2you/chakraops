@@ -101,6 +101,10 @@ def _write_eod_chain_artifacts(run: EvaluationRunFull, run_dir: Path) -> None:
                 "required_fields_present": bool(contract_data.get("required_fields_present", False)),
                 "total_puts_in_chain": contract_data.get("total_puts_in_chain"),
                 "puts_with_required_fields": contract_data.get("puts_with_required_fields"),
+                "chain_missing_fields": contract_data.get("chain_missing_fields"),
+                "rejection_counts": contract_data.get("rejection_counts"),
+                "missing_required_fields_counts": contract_data.get("missing_required_fields_counts"),
+                "sample_missing_required_contract": contract_data.get("sample_missing_required_contract"),
             }
             filename = f"{symbol}_chain_{date_part}_1600ET.json"
             path = chains_dir / filename

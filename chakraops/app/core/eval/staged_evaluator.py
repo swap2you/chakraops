@@ -23,6 +23,7 @@ Performance:
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import math
 import threading
@@ -227,6 +228,11 @@ class Stage2Result:
     delta_distribution: Optional[Dict[str, Any]] = None  # min_abs_put_delta, max_abs_put_delta, sample_abs_deltas
     # Top rejection reasons with sample contracts (for diagnostics)
     top_rejection_reasons: Optional[Dict[str, Any]] = None  # rejection_counts + sample_rejected_due_to_delta
+    # Missing required-fields diagnostics (30–45 DTE PUTs, same population as selection)
+    missing_required_fields_counts: Dict[str, int] = field(default_factory=dict)  # field -> count of PUTs missing it
+    sample_missing_required_contract: Optional[Dict[str, Any]] = None  # first rejected PUT: option_symbol (OCC), option_type, values_seen, raw_keys
+    # Telemetry from /strikes/options (endpoint_used, non_null counts, sample symbols)
+    strikes_options_telemetry: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -771,6 +777,80 @@ def _compute_required_fields_from_chain_puts(
     return (False, list(all_missing), total_puts, puts_with_required)
 
 
+def _collect_puts_in_dte_range(
+    chains: Dict[date, Any],
+    dte_min: int,
+    dte_max: int,
+) -> List[Tuple[OptionContract, date]]:
+    """
+    Collect PUT contracts in 30–45 DTE from chains (exact same population as _select_csp_candidates).
+    """
+    all_puts: List[Tuple[OptionContract, date]] = []
+    for exp_date, chain_result in chains.items():
+        if not chain_result.success or chain_result.chain is None:
+            continue
+        chain = chain_result.chain
+        for c in chain.contracts:
+            if c.option_type != OptionType.PUT:
+                continue
+            if not (dte_min <= c.dte <= dte_max):
+                continue
+            c.compute_derived_fields()
+            all_puts.append((c, exp_date))
+    return all_puts
+
+
+def _contract_values_seen(contract: OptionContract) -> Dict[str, Any]:
+    """Extract values for REQUIRED_CHAIN_FIELDS from an OptionContract (for diagnostics)."""
+    values: Dict[str, Any] = {}
+    for fn in REQUIRED_CHAIN_FIELDS:
+        if fn == "strike":
+            values[fn] = getattr(contract, "strike", None)
+            continue
+        if fn == "expiration":
+            exp = getattr(contract, "expiration", None)
+            values[fn] = exp.isoformat() if exp else None
+            continue
+        fv = getattr(contract, fn, None)
+        if fv is None:
+            values[fn] = None
+            continue
+        val = getattr(fv, "value", fv)
+        values[fn] = val
+    return values
+
+
+def _contract_raw_keys(contract: OptionContract) -> List[str]:
+    """Return list of attribute names on OptionContract (for diagnostics)."""
+    return [f.name for f in dataclasses.fields(contract)]
+
+
+def _compute_missing_required_fields_diagnostics(
+    puts_in_dte: List[Tuple[OptionContract, date]],
+) -> Tuple[Dict[str, int], Optional[Dict[str, Any]]]:
+    """
+    For PUTs in 30–45 DTE (same population as selection): aggregate missing-required-field counts
+    and capture the first rejected contract sample.
+    Returns (missing_required_fields_counts, sample_missing_required_contract).
+    """
+    missing_counts: Dict[str, int] = {f: 0 for f in REQUIRED_CHAIN_FIELDS}
+    sample: Optional[Dict[str, Any]] = None
+    for c, exp_date in puts_in_dte:
+        has_all, missing_list = _contract_has_all_required_chain_fields(c)
+        for f in missing_list:
+            missing_counts[f] = missing_counts.get(f, 0) + 1
+        if not has_all and sample is None:
+            option_symbol = getattr(c, "option_symbol", None) or getattr(c, "symbol", None) or ""
+            option_type = getattr(getattr(c, "option_type", None), "value", str(getattr(c, "option_type", "")))
+            sample = {
+                "option_symbol": option_symbol,
+                "option_type": option_type,
+                "values_seen": _contract_values_seen(c),
+                "raw_keys": _contract_raw_keys(c),
+            }
+    return missing_counts, sample
+
+
 # ============================================================================
 # Stage 2: Chain Evaluation
 # ============================================================================
@@ -835,6 +915,11 @@ def evaluate_stage2(
         result.expirations_evaluated = len(chains)
         total_contracts = sum(len(cr.chain.contracts) for cr in chains.values() if cr.success and cr.chain)
         result.contracts_evaluated = total_contracts
+        # Capture /strikes/options telemetry from first available chain result
+        for cr in chains.values():
+            if getattr(cr, "telemetry", None):
+                result.strikes_options_telemetry = cr.telemetry
+                break
         # Count option types in chain contracts (before filtering) for diagnostics
         puts_seen = calls_seen = unknown_seen = 0
         for chain_result in chains.values():
@@ -856,6 +941,12 @@ def evaluate_stage2(
         result.puts_with_required_fields = puts_with_req
         all_missing_fields = set(chain_missing)
         result.chain_completeness = 1.0 - (len(all_missing_fields) / 4) if all_missing_fields else 1.0
+
+        # Missing-required-fields diagnostics on same 30–45 DTE PUT population as selection
+        puts_in_dte = _collect_puts_in_dte_range(chains, dte_min, dte_max)
+        missing_counts, sample_contract = _compute_missing_required_fields_diagnostics(puts_in_dte)
+        result.missing_required_fields_counts = missing_counts
+        result.sample_missing_required_contract = sample_contract
 
         candidates, failure_reasons, rejection_counts, sample_rejected_due_to_delta = _select_csp_candidates(
             chains, dte_min, dte_max, delta_lo, delta_hi, min_oi, max_spread_pct, symbol,
@@ -1293,6 +1384,11 @@ def build_eligibility_layers(
             "option_type_counts": option_type_counts,
             "delta_distribution": delta_dist,
             "top_rejection_reasons": top_rej,
+            "chain_missing_fields": getattr(stage2, "chain_missing_fields", []) or [],
+            "rejection_counts": getattr(stage2, "rejection_counts", None) or {},
+            "missing_required_fields_counts": getattr(stage2, "missing_required_fields_counts", None) or {},
+            "sample_missing_required_contract": getattr(stage2, "sample_missing_required_contract", None),
+            "strikes_options_telemetry": getattr(stage2, "strikes_options_telemetry", None),
         }
 
         # Step 3: contract_eligibility 3-way logic

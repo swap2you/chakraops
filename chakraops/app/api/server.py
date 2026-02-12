@@ -1750,6 +1750,9 @@ def api_view_symbol_diagnostics(symbol: str = Query(..., min_length=1, max_lengt
         result["options"]["total_puts_in_chain"] = getattr(s2, "total_puts_in_chain", None)
         result["options"]["puts_with_required_fields"] = getattr(s2, "puts_with_required_fields", None)
         result["options"]["required_fields_present"] = getattr(s2, "required_fields_present", None)
+        result["options"]["missing_required_fields_counts"] = getattr(s2, "missing_required_fields_counts", None) or {}
+        result["options"]["sample_missing_required_contract"] = getattr(s2, "sample_missing_required_contract", None)
+        result["options"]["strikes_options_telemetry"] = getattr(s2, "strikes_options_telemetry", None)
     else:
         result["options"]["option_type_counts"] = {"puts_seen": 0, "calls_seen": 0, "unknown_seen": 0}
     result["options"]["expirations_count"] = expirations_count

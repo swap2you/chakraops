@@ -479,6 +479,7 @@ class OratsChainProvider:
                     data_quality=DataQuality.MISSING,
                 )
                 continue
+            telemetry = getattr(chain_result, "strikes_options_telemetry", None) if chain_result else None
             option_contracts = [self._enriched_to_option_contract(ec, symbol) for ec in contracts_list]
             for oc in option_contracts:
                 oc.compute_derived_fields()
@@ -500,9 +501,11 @@ class OratsChainProvider:
                 chain=chain,
                 data_quality=dq,
                 missing_fields=list(missing),
+                telemetry=telemetry,
             )
             if self._use_cache:
                 self._cache.set(symbol, exp, results[exp])
+            telemetry = None  # Attach only to first expiration result
         return results
     
     def _enriched_to_option_contract(self, ec: Any, symbol: str) -> OptionContract:
@@ -522,6 +525,7 @@ class OratsChainProvider:
             expiration=ec.expiration,
             strike=float(getattr(ec, "strike", 0)),
             option_type=option_type,
+            option_symbol=getattr(ec, "opra_symbol", None),
             bid=wrap_field_float(getattr(ec, "bid", None), "bid"),
             ask=wrap_field_float(getattr(ec, "ask", None), "ask"),
             mid=wrap_field_float(getattr(ec, "mid", None), "mid"),
@@ -557,9 +561,9 @@ class OratsChainProvider:
         # Extract strike price
         strike = float(strike_data.get("strike", 0))
         
-        # Wrap all fields with proper data quality tracking
-        bid = wrap_field_float(strike_data.get("bid"), "bid")
-        ask = wrap_field_float(strike_data.get("ask"), "ask")
+        # Wrap all fields with proper data quality tracking; map ORATS key variants
+        bid = wrap_field_float(strike_data.get("bid") or strike_data.get("bidPrice"), "bid")
+        ask = wrap_field_float(strike_data.get("ask") or strike_data.get("askPrice"), "ask")
         last = wrap_field_float(strike_data.get("last"), "last")
         
         # Mid - may be provided or computed
@@ -570,8 +574,11 @@ class OratsChainProvider:
             # Will be computed from bid/ask later
             mid = FieldValue(None, DataQuality.MISSING, "not provided, will compute", "mid")
         
-        # Liquidity fields
-        open_interest = wrap_field_int(strike_data.get("openInt") or strike_data.get("openInterest"), "open_interest")
+        # Liquidity fields: openInterest, open_interest, oi -> canonical open_interest
+        open_interest = wrap_field_int(
+            strike_data.get("openInt") or strike_data.get("openInterest") or strike_data.get("open_interest") or strike_data.get("oi"),
+            "open_interest",
+        )
         volume = wrap_field_int(strike_data.get("volume"), "volume")
         
         # Greeks - ORATS may or may not provide all

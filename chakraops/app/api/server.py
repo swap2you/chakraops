@@ -1372,6 +1372,8 @@ def api_view_symbol_diagnostics(symbol: str = Query(..., min_length=1, max_lengt
         
         # Notes
         "notes": [],
+        # Phase 2B: always live evaluation (no persisted run)
+        "live_evaluation": True,
     }
     
     # Check universe membership
@@ -1407,88 +1409,76 @@ def api_view_symbol_diagnostics(symbol: str = Query(..., min_length=1, max_lengt
     except Exception as e:
         result["notes"].append(f"Universe check failed: {e}")
     
-    # SINGLE SOURCE OF TRUTH: Check persisted evaluation run FIRST
-    # If symbol was evaluated, use that as the canonical verdict/reason/bands
-    persisted_symbol_data = None
-    persisted_run_id = None
-    persisted_evaluated_at = None
-    try:
-        from app.core.eval.evaluation_store import load_latest_run
-        latest = load_latest_run()
-        if latest and getattr(latest, "symbols", None):
-            persisted_run_id = getattr(latest, "run_id", None)
-            persisted_evaluated_at = getattr(latest, "completed_at", None)
-            for s in latest.symbols:
-                if isinstance(s, dict) and (s.get("symbol") or "").strip().upper() == sym:
-                    persisted_symbol_data = s
-                    break
-    except Exception as e:
-        result["notes"].append(f"Could not load persisted run: {e}")
-    
-    # Fill from decision artifact (for regime/risk context)
+    # Fill from decision artifact (for regime/risk context only; verdict comes from live evaluation)
     try:
         artifact = load_decision_artifact()
         _fill_diagnostics_from_artifact_extended(result, sym, artifact)
     except Exception as e:
         result["notes"].append(f"Diagnostics partial: {e}")
-    
-    # If we have persisted evaluation data, use it as the SINGLE SOURCE OF TRUTH
-    if persisted_symbol_data:
-        result["eligibility"]["verdict"] = persisted_symbol_data.get("verdict", "UNKNOWN")
-        result["eligibility"]["primary_reason"] = persisted_symbol_data.get("primary_reason", "")
-        result["eligibility"]["confidence_score"] = persisted_symbol_data.get("confidence")
-        result["eligibility"]["score"] = persisted_symbol_data.get("score", 0)
-        if persisted_symbol_data.get("rationale"):
-            result["eligibility"]["rationale"] = persisted_symbol_data["rationale"]
-        if "position_open" in persisted_symbol_data:
-            result["eligibility"]["position_open"] = persisted_symbol_data["position_open"]
-        if "position_reason" in persisted_symbol_data:
-            result["eligibility"]["position_reason"] = persisted_symbol_data["position_reason"]
-        if persisted_symbol_data.get("capital_hint"):
-            result["eligibility"]["capital_hint"] = persisted_symbol_data["capital_hint"]
-        # Phase 3: Score breakdown and rank reasons (Ticker page explainability)
-        if persisted_symbol_data.get("score_breakdown") is not None:
-            result["eligibility"]["score_breakdown"] = persisted_symbol_data["score_breakdown"]
-        if persisted_symbol_data.get("rank_reasons") is not None:
-            result["eligibility"]["rank_reasons"] = persisted_symbol_data["rank_reasons"]
-        if persisted_symbol_data.get("csp_notional") is not None:
-            result["eligibility"]["csp_notional"] = persisted_symbol_data["csp_notional"]
-        if persisted_symbol_data.get("notional_pct") is not None:
-            result["eligibility"]["notional_pct"] = persisted_symbol_data["notional_pct"]
-        if persisted_symbol_data.get("band_reason") is not None:
-            result["eligibility"]["band_reason"] = persisted_symbol_data["band_reason"]
-        if persisted_symbol_data.get("verdict_reason_code"):
-            result["eligibility"]["verdict_reason_code"] = persisted_symbol_data["verdict_reason_code"]
-        if persisted_symbol_data.get("data_incomplete_type"):
-            result["eligibility"]["data_incomplete_type"] = persisted_symbol_data["data_incomplete_type"]
-        # Copy gates and blockers from persisted run
-        if persisted_symbol_data.get("gates"):
-            result["gates"] = persisted_symbol_data["gates"]
-        if persisted_symbol_data.get("blockers"):
-            result["blockers"] = persisted_symbol_data["blockers"]
-        if persisted_symbol_data.get("candidate_trades"):
-            result["candidate_trades"] = persisted_symbol_data["candidate_trades"]
-        # Mark that this came from persisted run
-        result["eligibility"]["from_persisted_run"] = True
-        result["eligibility"]["run_id"] = persisted_run_id
-        result["eligibility"]["evaluated_at"] = persisted_evaluated_at
-        result["recommendation"] = persisted_symbol_data.get("verdict", "UNKNOWN")
-        result["notes"].append(f"Verdict from persisted run {persisted_run_id or 'unknown'}")
-    else:
-        # No persisted data - compute verdict (fallback for non-evaluated symbols)
-        _compute_eligibility_verdict(result)
-        result["eligibility"]["from_persisted_run"] = False
-        result["notes"].append("Symbol not in latest evaluation run - computed independently")
-    
-    # Generate candidate trades if eligible and none provided from persisted run
-    stock_price = result["stock"].get("price")
-    orats_payload = {}
-    if result["eligibility"]["verdict"] == "ELIGIBLE" and not result["candidate_trades"]:
-        if stock_price is not None and float(stock_price) > 0:
-            _generate_candidate_trades(result, float(stock_price), orats_payload)
-        else:
-            result["notes"].append("Candidate trades not generated: missing stock price")
 
+    # LIVE EVALUATION: always evaluate fresh from snapshot + live chain (no persisted run)
+    try:
+        from app.core.eval.staged_evaluator import evaluate_symbol_full
+        full_result = evaluate_symbol_full(sym, skip_stage2=False)
+    except Exception as e:
+        logger.exception("[DIAGNOSTICS] Live evaluation failed for %s: %s", sym, e)
+        result["eligibility"]["verdict"] = "UNKNOWN"
+        result["eligibility"]["primary_reason"] = f"Live evaluation failed: {e}"
+        result["notes"].append(f"Live evaluation failed: {e}")
+        result["live_evaluation"] = True
+        return result
+
+    # Map live evaluation result to diagnostics
+    result["eligibility"]["verdict"] = full_result.verdict
+    result["eligibility"]["primary_reason"] = full_result.primary_reason or ""
+    result["eligibility"]["confidence_score"] = full_result.confidence
+    result["eligibility"]["score"] = full_result.score
+    if getattr(full_result, "rationale", None):
+        result["eligibility"]["rationale"] = full_result.rationale.to_dict() if hasattr(full_result.rationale, "to_dict") else full_result.rationale
+    result["eligibility"]["position_open"] = getattr(full_result, "position_open", False)
+    result["eligibility"]["position_reason"] = getattr(full_result, "position_reason", None)
+    if getattr(full_result, "capital_hint", None):
+        result["eligibility"]["capital_hint"] = full_result.capital_hint.to_dict() if hasattr(full_result.capital_hint, "to_dict") else full_result.capital_hint
+    if full_result.score_breakdown is not None:
+        result["eligibility"]["score_breakdown"] = full_result.score_breakdown
+    if full_result.rank_reasons is not None:
+        result["eligibility"]["rank_reasons"] = full_result.rank_reasons
+    if full_result.csp_notional is not None:
+        result["eligibility"]["csp_notional"] = full_result.csp_notional
+    if full_result.notional_pct is not None:
+        result["eligibility"]["notional_pct"] = full_result.notional_pct
+    if full_result.band_reason is not None:
+        result["eligibility"]["band_reason"] = full_result.band_reason
+    if getattr(full_result, "verdict_reason_code", None):
+        result["eligibility"]["verdict_reason_code"] = full_result.verdict_reason_code
+    if getattr(full_result, "data_incomplete_type", None):
+        result["eligibility"]["data_incomplete_type"] = full_result.data_incomplete_type
+    result["gates"] = list(full_result.gates) if full_result.gates else result["gates"]
+    result["blockers"] = list(full_result.blockers) if full_result.blockers else result["blockers"]
+    result["candidate_trades"] = list(full_result.candidate_trades) if full_result.candidate_trades else []
+    result["recommendation"] = full_result.verdict
+
+    # Options counts from live stage-2
+    expirations_count = 0
+    contracts_count = None
+    if full_result.stage2 is not None:
+        expirations_count = getattr(full_result.stage2, "expirations_available", 0) or 0
+        contracts_count = getattr(full_result.stage2, "contracts_evaluated", None)
+    result["options"]["expirations_count"] = expirations_count
+    result["options"]["contracts_count"] = contracts_count
+
+    # Logging and assertions
+    chain_len = contracts_count if contracts_count is not None else 0
+    logger.info(
+        "LIVE_EVALUATION_EXECUTED symbol=%s expirations_count=%s chain_length=%s verdict=%s",
+        sym, expirations_count, chain_len, full_result.verdict,
+    )
+    if expirations_count == 0:
+        logger.warning("[DIAGNOSTICS] %s: expirations_count == 0", sym)
+    if contracts_count is None and full_result.stage2 is not None:
+        logger.error("[DIAGNOSTICS] %s: contracts_count is null after stage-2", sym)
+
+    result["live_evaluation"] = True
     return result
 
 

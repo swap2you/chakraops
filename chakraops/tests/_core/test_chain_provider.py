@@ -288,8 +288,8 @@ class TestContractSelection:
 class TestOratsChainProvider:
     """Tests for ORATS-based chain provider. Patch orats_client so get_chain sees mocks."""
     
-    @patch("app.core.orats.orats_client.get_orats_live_strikes")
-    @patch("app.core.orats.orats_client.get_orats_live_summaries")
+    @patch("app.core.data.orats_client.get_orats_live_strikes")
+    @patch("app.core.data.orats_client.get_orats_live_summaries")
     def test_get_expirations(self, mock_summaries, mock_strikes, mock_orats_strikes):
         """Test fetching available expirations."""
         mock_strikes.return_value = mock_orats_strikes
@@ -302,8 +302,8 @@ class TestOratsChainProvider:
         assert all(isinstance(e, ExpirationInfo) for e in expirations)
         assert all(e.dte > 0 for e in expirations)
     
-    @patch("app.core.orats.orats_client.get_orats_live_strikes")
-    @patch("app.core.orats.orats_client.get_orats_live_summaries")
+    @patch("app.core.data.orats_client.get_orats_live_strikes")
+    @patch("app.core.data.orats_client.get_orats_live_summaries")
     def test_get_chain(self, mock_summaries, mock_strikes, mock_orats_strikes):
         """Test fetching a chain."""
         mock_strikes.return_value = mock_orats_strikes
@@ -317,7 +317,7 @@ class TestOratsChainProvider:
         assert result.chain is not None
         assert len(result.chain.contracts) > 0
     
-    @patch("app.core.orats.orats_client.get_orats_live_strikes")
+    @patch("app.core.data.orats_client.get_orats_live_strikes")
     def test_missing_chain_returns_data_incomplete(self, mock_strikes):
         """Test missing chain produces DATA_INCOMPLETE."""
         mock_strikes.return_value = []  # No data
@@ -329,8 +329,8 @@ class TestOratsChainProvider:
         assert result.data_quality in (DataQuality.MISSING, DataQuality.ERROR)
         assert "strikes" in result.missing_fields or result.error is not None
     
-    @patch("app.core.orats.orats_client.get_orats_live_strikes")
-    @patch("app.core.orats.orats_client.get_orats_live_summaries")
+    @patch("app.core.data.orats_client.get_orats_live_strikes")
+    @patch("app.core.data.orats_client.get_orats_live_summaries")
     def test_missing_fields_tracked(self, mock_summaries, mock_strikes):
         """Test that missing fields in strikes are tracked."""
         exp_date = (date.today() + timedelta(days=30)).isoformat()
@@ -609,8 +609,8 @@ class TestStagedEvaluator:
 class TestChainSelectionIntegration:
     """Integration tests for chain provider and contract selection. Patch orats_client."""
     
-    @patch("app.core.orats.orats_client.get_orats_live_strikes")
-    @patch("app.core.orats.orats_client.get_orats_live_summaries")
+    @patch("app.core.data.orats_client.get_orats_live_strikes")
+    @patch("app.core.data.orats_client.get_orats_live_summaries")
     def test_evaluator_selects_correct_contract(self, mock_summaries, mock_strikes, mock_orats_strikes):
         """Test evaluator selects correct contract by delta and DTE."""
         mock_strikes.return_value = mock_orats_strikes

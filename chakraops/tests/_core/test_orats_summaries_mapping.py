@@ -12,6 +12,7 @@ Validates that:
 Stage 1 uses get_snapshot (symbol_snapshot_service). All tests patch get_snapshot to avoid live ORATS.
 """
 
+from datetime import date
 from unittest.mock import patch
 
 import pytest
@@ -133,7 +134,7 @@ def test_stage1_missing_fields_list_is_accurate(mock_get_snapshot):
 def test_stage1_qualifies_with_price_and_iv_rank(mock_get_snapshot):
     """Stage 1 should QUALIFY when required fields present (price, bid, ask, volume, quote_date, iv_rank)."""
     mock_get_snapshot.return_value = _make_canonical_snapshot(
-        price=275.45, bid=275.4, ask=275.5, volume=1_000_000, iv_rank=50.0, quote_date="2026-02-05"
+        price=275.45, bid=275.4, ask=275.5, volume=1_000_000, iv_rank=50.0, quote_date=date.today().isoformat()
     )
 
     from app.core.eval.staged_evaluator import evaluate_stage1, StockVerdict

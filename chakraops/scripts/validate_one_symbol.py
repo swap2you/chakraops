@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 """
-Single-ticker validation: call API (server must already be running at http://127.0.0.1:8000),
-save real JSON to artifacts/validate/, and print a compact summary.
+Single-ticker runtime validation: proves we fetch required fields from ORATS and wire
+the same snapshot through all endpoints. Calls API (server must already be running).
+Writes JSON artifacts and a human-readable markdown analysis. No cached DB reads.
 
 Usage:
-  python scripts/validate_one_symbol.py [--symbol AMD] [--base http://127.0.0.1:8000]
+  python scripts/validate_one_symbol.py [--symbol SPY] [--base http://127.0.0.1:8000]
 
 Requires: Server running (e.g. uvicorn app.api.server:app --port 8000). Does NOT auto-start.
+
+Exit codes:
+  0 - All required fields present, Stage-1 would PASS (not stale).
+  1 - Request/IO error (e.g. connection refused, non-200).
+  2 - One or more required fields missing/null (see docs/VALIDATE_ONE_SYMBOL_EXPECTATIONS.md).
+  3 - Stage-1 verdict would be BLOCKED (e.g. stale quote_date).
 """
 
 from __future__ import annotations
@@ -14,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import date
 from pathlib import Path
 
 try:
@@ -24,7 +32,12 @@ except ImportError:
 
 
 BASE_DEFAULT = "http://127.0.0.1:8000"
-SYMBOL_DEFAULT = "AMD"
+SYMBOL_DEFAULT = "SPY"
+
+# Required Stage-1 fields (must match data_requirements.REQUIRED_STAGE1_FIELDS)
+REQUIRED_FIELDS = ("price", "bid", "ask", "volume", "quote_date", "iv_rank")
+# Snapshot keys: API may expose quote_as_of for display; quote_date is the canonical date
+QUOTE_DATE_KEYS = ("quote_date", "quote_as_of")
 
 
 def _get(url: str, timeout: int = 30) -> tuple[dict | None, int, str]:
@@ -52,17 +65,74 @@ def _get(url: str, timeout: int = 30) -> tuple[dict | None, int, str]:
         return None, 0, str(e)
 
 
+def _trading_days_since(as_of_date: date | None) -> int | None:
+    """Use app's market calendar so staleness matches Stage-1 exactly."""
+    if as_of_date is None:
+        return None
+    try:
+        from app.core.environment.market_calendar import trading_days_since as _tds
+        return _tds(as_of_date)
+    except Exception:
+        # Fallback: calendar days (no holiday awareness)
+        today = date.today()
+        if as_of_date > today:
+            return None
+        return max(0, (today - as_of_date).days)
+
+
+def _parse_quote_date(snapshot: dict) -> date | None:
+    """Parse quote date from snapshot dict (quote_date or quote_as_of, YYYY-MM-DD)."""
+    raw = snapshot.get("quote_date") or snapshot.get("quote_as_of")
+    if not raw:
+        return None
+    s = str(raw).strip()[:10]
+    if len(s) != 10 or s[4] != "-" or s[7] != "-":
+        return None
+    try:
+        return date(int(s[:4]), int(s[5:7]), int(s[8:10]))
+    except (ValueError, TypeError):
+        return None
+
+
+def _contract_assert(snapshot: dict, missing_reasons: dict, stale_threshold_days: int = 1) -> tuple[list[str], list[str], bool]:
+    """
+    Returns (missing_fields, block_reasons, is_stale).
+    missing_fields: required fields that are null or in missing_reasons.
+    block_reasons: human-readable reasons (missing field or stale).
+    is_stale: True if quote_date is older than stale_threshold_days.
+    """
+    missing_fields: list[str] = []
+    block_reasons: list[str] = []
+
+    for f in REQUIRED_FIELDS:
+        val = snapshot.get(f)
+        if f == "quote_date":
+            val = val or snapshot.get("quote_as_of")
+        # volume=0 is valid; only None/missing counts as missing
+        if val is None:
+            missing_fields.append(f)
+            reason = missing_reasons.get(f) or "not provided"
+            block_reasons.append(f"missing: {f} ({reason})")
+
+    quote_parsed = _parse_quote_date(snapshot)
+    days_since = _trading_days_since(quote_parsed) if quote_parsed else None
+    is_stale = days_since is not None and days_since > stale_threshold_days
+    if is_stale and "quote_date" not in missing_fields:
+        block_reasons.append(f"DATA_STALE: quote_date is {days_since} day(s) old (threshold {stale_threshold_days})")
+
+    return missing_fields, block_reasons, is_stale
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Validate one symbol: call API, save artifacts, print summary. Server must be running."
+        description="Validate one symbol: call API, save artifacts, run contract assertion. Server must be running."
     )
-    parser.add_argument("--symbol", default=SYMBOL_DEFAULT, help="Ticker (default: AMD)")
+    parser.add_argument("--symbol", default=SYMBOL_DEFAULT, help=f"Ticker (default: {SYMBOL_DEFAULT})")
     parser.add_argument("--base", default=BASE_DEFAULT, help=f"API base URL (default: {BASE_DEFAULT})")
     args = parser.parse_args()
     base = args.base.rstrip("/")
     symbol = (args.symbol or SYMBOL_DEFAULT).strip().upper()
 
-    # Repo root: script in scripts/ -> parent is chakraops
     repo_root = Path(__file__).resolve().parent.parent
     out_dir = repo_root / "artifacts" / "validate"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -76,7 +146,7 @@ def main() -> int:
         errors.append(f"ops/snapshot: {code_snap} {err_snap or 'non-200'}")
     out_snap = out_dir / f"{symbol}_ops_snapshot.json"
     if data_snap is not None:
-        with open(out_snap, "w") as f:
+        with open(out_snap, "w", encoding="utf-8") as f:
             json.dump(data_snap, f, indent=2)
         print(f"Wrote {out_snap}")
     else:
@@ -89,47 +159,117 @@ def main() -> int:
         errors.append(f"symbol-diagnostics: {code_diag} {err_diag or 'non-200'}")
     out_diag = out_dir / f"{symbol}_symbol_diagnostics.json"
     if data_diag is not None:
-        with open(out_diag, "w") as f:
+        with open(out_diag, "w", encoding="utf-8") as f:
             json.dump(data_diag, f, indent=2)
         print(f"Wrote {out_diag}")
     else:
         print(f"symbol-diagnostics failed: {err_diag}", file=sys.stderr)
 
-    # 3) Optional: GET /api/view/universe
+    # 3) GET /api/view/universe
     url_universe = f"{base}/api/view/universe"
     data_univ, code_univ, err_univ = _get(url_universe)
     out_univ = out_dir / "universe.json"
-    if code_univ == 200 and data_univ is not None:
-        with open(out_univ, "w") as f:
+    if data_univ is not None:
+        with open(out_univ, "w", encoding="utf-8") as f:
             json.dump(data_univ, f, indent=2)
         print(f"Wrote {out_univ}")
     else:
-        if code_univ != 200:
-            print(f"universe: {code_univ} (optional, skipped)", file=sys.stderr)
+        with open(out_univ, "w", encoding="utf-8") as f:
+            json.dump({"error": err_univ or str(code_univ), "symbols": [], "updated_at": None}, f, indent=2)
+        print(f"Wrote {out_univ} (universe returned non-200 or invalid JSON)")
+    if code_univ != 200:
+        errors.append(f"universe: {code_univ} {err_univ or 'non-200'}")
 
-    # Compact summary from ops/snapshot or symbol-diagnostics
+    # --- Snapshot for contract checks ---
+    snap_obj = (data_snap or {}).get("snapshot")
+    if not isinstance(snap_obj, dict):
+        snap_obj = (data_diag or {}).get("stock") if data_diag else {}
+    if not isinstance(snap_obj, dict):
+        snap_obj = {}
+    missing_reasons = (data_snap or {}).get("missing_reasons") or (snap_obj.get("missing_reasons") or {})
+    missing_reasons = missing_reasons if isinstance(missing_reasons, dict) else {}
+
+    try:
+        from app.core.data.data_requirements import STAGE1_STALE_TRADING_DAYS
+        stale_threshold = STAGE1_STALE_TRADING_DAYS
+    except Exception:
+        stale_threshold = 1
+    missing_fields, block_reasons, is_stale = _contract_assert(snap_obj, missing_reasons, stale_threshold_days=stale_threshold)
+
+    # --- Markdown analysis ---
+    analysis_lines = [
+        f"# Validation: {symbol}",
+        "",
+        "## Endpoints",
+        f"- `GET {url_snapshot}` → {out_snap.name}",
+        f"- `GET {url_diag}` → {out_diag.name}",
+        f"- `GET {url_universe}` → {out_univ.name}",
+        "",
+        "## Required fields (Stage-1)",
+        f"Expected: {', '.join(REQUIRED_FIELDS)}.",
+        "",
+    ]
+    for f in REQUIRED_FIELDS:
+        key = f if f != "quote_date" else ("quote_date / quote_as_of")
+        val = snap_obj.get(f) if f != "quote_date" else (snap_obj.get("quote_date") or snap_obj.get("quote_as_of"))
+        status = "MISSING" if f in missing_fields else "present"
+        analysis_lines.append(f"- **{key}**: {val!r} ({status})")
+    analysis_lines.append("")
+    analysis_lines.append("## missing_reasons (required fields)")
+    if not missing_reasons:
+        analysis_lines.append("(empty — expected when ORATS returns all required data)")
+    else:
+        for k in REQUIRED_FIELDS:
+            analysis_lines.append(f"- **{k}**: " + (missing_reasons.get(k) or "—"))
+    analysis_lines.append("")
+    analysis_lines.append("## Stage-1 verdict")
+    if missing_fields:
+        analysis_lines.append("**BLOCK** — required field(s) missing: " + ", ".join(missing_fields))
+        for r in block_reasons:
+            analysis_lines.append(f"- {r}")
+    elif is_stale:
+        analysis_lines.append("**BLOCK** — quote_date stale")
+        for r in block_reasons:
+            analysis_lines.append(f"- {r}")
+    else:
+        analysis_lines.append("**PASS** — all required fields present and quote_date fresh.")
+    analysis_lines.append("")
+
+    out_md = out_dir / f"{symbol}_analysis.md"
+    with open(out_md, "w", encoding="utf-8") as f:
+        f.write("\n".join(analysis_lines))
+    print(f"Wrote {out_md}")
+
+    # --- Console summary ---
     print("\n--- Summary ---")
     snapshot_time = (data_snap or {}).get("snapshot_time") or (data_diag or {}).get("fetched_at") or "N/A"
-    snap_obj = (data_snap or {}).get("snapshot")
-    stock_obj = (data_diag or {}).get("stock") if data_diag else None
-    stock = snap_obj if isinstance(snap_obj, dict) else (stock_obj if isinstance(stock_obj, dict) else {})
-    missing = (data_snap or {}).get("missing_reasons") or (stock.get("missing_reasons") if isinstance(stock, dict) else {}) or {}
-    fs = (data_snap or {}).get("field_sources") or (stock.get("field_sources") if isinstance(stock, dict) else {}) or {}
     print(f"snapshot_time: {snapshot_time}")
-    if stock:
-        print(f"stock.price: {stock.get('price')}")
-        print(f"stock.bid: {stock.get('bid')}")
-        print(f"stock.ask: {stock.get('ask')}")
-        print(f"stock.volume: {stock.get('volume')}")
-        print(f"quote_as_of: {stock.get('quote_as_of')}")
-        print(f"iv_rank: {stock.get('iv_rank')}")
-    print(f"missing_reasons keys: {list(missing.keys()) if missing else []}")
-    print(f"field_sources keys: {list(fs.keys()) if fs else []}")
+    if snap_obj:
+        print(f"price: {snap_obj.get('price')}")
+        print(f"bid: {snap_obj.get('bid')}")
+        print(f"ask: {snap_obj.get('ask')}")
+        print(f"volume: {snap_obj.get('volume')}")
+        print(f"quote_as_of / quote_date: {snap_obj.get('quote_as_of') or snap_obj.get('quote_date')}")
+        print(f"iv_rank: {snap_obj.get('iv_rank')}")
+    print(f"missing_reasons (required keys): {[k for k in REQUIRED_FIELDS if (missing_reasons or {}).get(k)] or []}")
+    if missing_fields:
+        print(f"BLOCK reason: required field(s) missing: {missing_fields}", file=sys.stderr)
+    if is_stale and not missing_fields:
+        print("BLOCK reason: quote_date stale (Stage-1)", file=sys.stderr)
+    for r in block_reasons:
+        print(f"  {r}", file=sys.stderr)
 
+    # --- Exit code: request errors first ---
     if errors:
         for e in errors:
             print(e, file=sys.stderr)
         return 1
+    # Required field missing => exit 2
+    if missing_fields:
+        return 2
+    # Stage-1 BLOCKED (e.g. stale) => exit 3
+    if is_stale:
+        return 3
     return 0
 
 

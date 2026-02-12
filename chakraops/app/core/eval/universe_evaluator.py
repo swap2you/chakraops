@@ -497,9 +497,9 @@ def _generate_alerts(result: SymbolEvaluationResult) -> List[Alert]:
                 "missing_liquidity_fields": missing_liquidity_fields,
             },
         ))
-    elif not result.liquidity_ok and result.verdict != "BLOCKED":
-        # Generate LIQUIDITY_WARN only when fields are VALID but values fail threshold
-        # This means we have data, but the liquidity is actually low
+    elif not result.liquidity_ok and result.verdict != "BLOCKED" and not missing_liquidity_fields:
+        # Generate LIQUIDITY_WARN only when fields are VALID but values fail threshold.
+        # Never emit LIQUIDITY_WARN when data is missing (missing => BLOCK/DATA_INCOMPLETE).
         alerts.append(Alert(
             id=f"{base_id}_liquidity",
             type="LIQUIDITY_WARN",

@@ -113,8 +113,8 @@ class TestDataIncompleteReason:
 class TestEvaluatorMissingDataHandling:
     """Tests for evaluator behavior with missing data."""
 
-    @patch("app.core.orats.orats_client.get_orats_live_summaries")
-    @patch("app.core.orats.orats_client.get_orats_live_strikes")
+    @patch("app.core.data.orats_client.get_orats_live_summaries")
+    @patch("app.core.data.orats_client.get_orats_live_strikes")
     def test_missing_liquidity_fields_produces_data_incomplete(
         self, mock_strikes, mock_summaries
     ):
@@ -151,8 +151,8 @@ class TestEvaluatorMissingDataHandling:
         assert result.verdict == "HOLD"
         assert "DATA_INCOMPLETE" in result.primary_reason
 
-    @patch("app.core.orats.orats_client.get_orats_live_summaries")
-    @patch("app.core.orats.orats_client.get_orats_live_strikes")
+    @patch("app.core.data.orats_client.get_orats_live_summaries")
+    @patch("app.core.data.orats_client.get_orats_live_strikes")
     def test_valid_low_liquidity_produces_liquidity_warn(
         self, mock_strikes, mock_summaries
     ):
@@ -189,8 +189,8 @@ class TestEvaluatorMissingDataHandling:
             missing_liq = meta.get("missing_liquidity_fields", [])
             assert len(missing_liq) == 0, "Should not have missing_liquidity_fields in DATA_INCOMPLETE"
 
-    @patch("app.core.orats.orats_client.get_orats_live_summaries")
-    @patch("app.core.orats.orats_client.get_orats_live_strikes")
+    @patch("app.core.data.orats_client.get_orats_live_summaries")
+    @patch("app.core.data.orats_client.get_orats_live_strikes")
     def test_score_capped_with_incomplete_data(
         self, mock_strikes, mock_summaries
     ):
@@ -217,8 +217,8 @@ class TestEvaluatorMissingDataHandling:
         # Score should be capped
         assert result.score <= DATA_INCOMPLETE_SCORE_CAP, f"Score {result.score} should be capped at {DATA_INCOMPLETE_SCORE_CAP}"
 
-    @patch("app.core.orats.orats_client.get_orats_live_summaries")
-    @patch("app.core.orats.orats_client.get_orats_live_strikes")
+    @patch("app.core.data.orats_client.get_orats_live_summaries")
+    @patch("app.core.data.orats_client.get_orats_live_strikes")
     def test_zero_volume_is_valid_not_missing(
         self, mock_strikes, mock_summaries
     ):
@@ -251,8 +251,8 @@ class TestEvaluatorMissingDataHandling:
 class TestDataQualityDetails:
     """Tests for data_quality_details tracking."""
 
-    @patch("app.core.orats.orats_client.get_orats_live_summaries")
-    @patch("app.core.orats.orats_client.get_orats_live_strikes")
+    @patch("app.core.data.orats_client.get_orats_live_summaries")
+    @patch("app.core.data.orats_client.get_orats_live_strikes")
     def test_data_quality_details_populated(
         self, mock_strikes, mock_summaries
     ):

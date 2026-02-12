@@ -277,8 +277,8 @@ class TestSignalEngineIntegration:
         # Serialize result
         actual_dict = serialize_result_for_comparison(result)
 
-        # Load golden JSON
-        test_dir = Path(__file__).parent
+        # Load golden JSON (fixtures live under tests/fixtures)
+        test_dir = Path(__file__).parent.parent  # tests/
         golden_file = test_dir / "fixtures" / "golden_signals.json"
 
         if golden_file.exists():

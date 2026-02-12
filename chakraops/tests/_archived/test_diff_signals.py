@@ -32,7 +32,7 @@ class TestDiffSignals:
 
     def test_load_json_file(self) -> None:
         """Test loading JSON file."""
-        test_dir = Path(__file__).parent
+        test_dir = Path(__file__).parent.parent  # tests/
         fixture_file = test_dir / "fixtures" / "signals_baseline.json"
 
         data = load_json_file(fixture_file)
@@ -179,7 +179,7 @@ class TestDiffSignals:
 
     def test_diff_signals_integration(self) -> None:
         """Test full diff_signals integration with fixture files."""
-        test_dir = Path(__file__).parent
+        test_dir = Path(__file__).parent.parent  # tests/
         file1 = test_dir / "fixtures" / "signals_baseline.json"
         file2 = test_dir / "fixtures" / "signals_comparison.json"
 
@@ -198,7 +198,7 @@ class TestDiffSignals:
 
     def test_diff_signals_identical(self) -> None:
         """Test diff_signals with identical files."""
-        test_dir = Path(__file__).parent
+        test_dir = Path(__file__).parent.parent  # tests/
         file1 = test_dir / "fixtures" / "signals_baseline.json"
         file2 = test_dir / "fixtures" / "signals_baseline.json"
 
@@ -209,7 +209,7 @@ class TestDiffSignals:
 
     def test_diff_signals_deterministic(self) -> None:
         """Test that diff output is deterministic."""
-        test_dir = Path(__file__).parent
+        test_dir = Path(__file__).parent.parent  # tests/
         file1 = test_dir / "fixtures" / "signals_baseline.json"
         file2 = test_dir / "fixtures" / "signals_comparison.json"
 
@@ -221,7 +221,7 @@ class TestDiffSignals:
 
     def test_diff_signals_reverse_order(self) -> None:
         """Test that diff works in reverse order (file2 vs file1)."""
-        test_dir = Path(__file__).parent
+        test_dir = Path(__file__).parent.parent  # tests/
         file1 = test_dir / "fixtures" / "signals_baseline.json"
         file2 = test_dir / "fixtures" / "signals_comparison.json"
 

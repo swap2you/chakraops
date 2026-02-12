@@ -20,3 +20,10 @@
 {"ts": "2026-02-11T02:37:27.727802+00:00", "action_type": "manual_execution_intent", "position_id": "pos_20260211_023727_264231c0", "symbol": "SPY", "strategy": "CSP", "account_id": "test-acct", "contracts": 2}
 {"ts": "2026-02-11T02:45:50.420039+00:00", "action_type": "manual_execution_intent", "position_id": "pos_20260211_024550_9d2b7e87", "symbol": "SPY", "strategy": "CSP", "account_id": "test-acct", "contracts": 2}
 {"ts": "2026-02-11T02:48:43.461356+00:00", "action_type": "manual_execution_intent", "position_id": "pos_20260211_024843_59d59821", "symbol": "SPY", "strategy": "CSP", "account_id": "test-acct", "contracts": 2}
+{"ts": "2026-02-11T22:07:24.729781+00:00", "action_type": "manual_execution_intent", "position_id": "pos_20260211_220724_c541befa", "symbol": "SPY", "strategy": "CSP", "account_id": "test-acct", "contracts": 2}
+{"ts": "2026-02-11T22:13:16.055783+00:00", "action_type": "manual_execution_intent", "position_id": "pos_20260211_221316_fdbb406f", "symbol": "SPY", "strategy": "CSP", "account_id": "test-acct", "contracts": 2}
+{"ts": "2026-02-11T22:14:04.428534+00:00", "action_type": "manual_execution_intent", "position_id": "pos_20260211_221404_fc15f368", "symbol": "SPY", "strategy": "CSP", "account_id": "test-acct", "contracts": 2}
+{"ts": "2026-02-11T22:20:33.397266+00:00", "action_type": "manual_execution_intent", "position_id": "pos_20260211_222033_1d69db9f", "symbol": "SPY", "strategy": "CSP", "account_id": "test-acct", "contracts": 2}
+{"ts": "2026-02-11T23:29:49.701639+00:00", "action_type": "manual_execution_intent", "position_id": "pos_20260211_232949_71186b68", "symbol": "SPY", "strategy": "CSP", "account_id": "test-acct", "contracts": 2}
+{"ts": "2026-02-11T23:38:44.117992+00:00", "action_type": "manual_execution_intent", "position_id": "pos_20260211_233844_b81c6d62", "symbol": "SPY", "strategy": "CSP", "account_id": "test-acct", "contracts": 2}
+{"ts": "2026-02-11T23:41:12.897391+00:00", "action_type": "manual_execution_intent", "position_id": "pos_20260211_234112_7f69f794", "symbol": "SPY", "strategy": "CSP", "account_id": "test-acct", "contracts": 2}

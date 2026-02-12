@@ -142,9 +142,10 @@ RATE_LIMIT_CALLS_PER_SEC = 5.0
 # Batch size for OPRA symbols (ORATS recommends max 10)
 OPRA_BATCH_SIZE = 10
 
-# Bounded strike selection (reduce API load)
-MAX_STRIKES_PER_EXPIRY = 5  # Max strikes to select per expiration
-MAX_EXPIRIES = 3  # Max expirations within DTE window
+# Bounded strike selection. Stage-2 needs enough strikes for delta-range filtering
+# after enrichment; delta filter must NOT be applied at /strikes (chain discovery only).
+MAX_STRIKES_PER_EXPIRY = 20  # Strikes per expiration (was 5; 30 contracts too few for SPY)
+MAX_EXPIRIES = 5  # Expirations in DTE window
 
 
 # ============================================================================
@@ -484,12 +485,14 @@ def fetch_base_chain(
     target_moneyness_put: float = 0.85,  # 15% below for puts
     target_moneyness_call: float = 1.10,  # 10% above for calls
     chain_mode: Optional[str] = None,
-) -> Tuple[List[BaseContract], Optional[float], Optional[str]]:
+    delta_lo: Optional[float] = None,
+    delta_hi: Optional[float] = None,
+) -> Tuple[List[BaseContract], Optional[float], Optional[str], int]:
     """
     STEP 1: Fetch base option chain from /datav2/strikes (or /datav2/live when chain_mode=LIVE).
     
-    This endpoint returns the chain structure (strikes, expirations) 
-    but NO liquidity data.
+    Params: ticker, dte (window). Optional delta_lo/delta_hi (e.g. 0.10, 0.45) constrain strikes
+    to OTM region for Stage-2 CSP selection. Per-contract delta comes from /strikes/options.
     
     Applies bounded selection: max N strikes per expiry, max M expiries.
     
@@ -502,9 +505,11 @@ def fetch_base_chain(
         target_moneyness_put: Target moneyness for puts (e.g., 0.85 = 15% OTM)
         target_moneyness_call: Target moneyness for calls (e.g., 1.10 = 10% OTM)
         chain_mode: Override: "DELAYED" | "LIVE" (from get_chain_source()). When None, use ORATS_DATA_MODE env.
+        delta_lo: Optional min |delta| for ORATS delta filter (e.g. 0.10 for wider acquisition)
+        delta_hi: Optional max |delta| for ORATS delta filter (e.g. 0.45 for wider acquisition)
     
     Returns:
-        Tuple of (contracts, underlying_price, error)
+        Tuple of (contracts, underlying_price, error, raw_rows_count)
     """
     _RATE_LIMITER.acquire()
     if chain_mode is not None:
@@ -520,6 +525,8 @@ def fetch_base_chain(
         "ticker": symbol.upper(),
         "dte": f"{dte_min},{dte_max}",
     }
+    if delta_lo is not None and delta_hi is not None:
+        params["delta"] = f"{delta_lo},{delta_hi}"
     
     # Log request
     logger.info(
@@ -536,7 +543,7 @@ def fetch_base_chain(
             "[ORATS_RESP] status=ERROR latency_ms=%d error=%s",
             latency_ms, e
         )
-        return [], None, f"Request failed: {e}"
+        return [], None, f"Request failed: {e}", 0
     
     latency_ms = int((time.perf_counter() - t0) * 1000)
     
@@ -545,13 +552,13 @@ def fetch_base_chain(
             "[ORATS_RESP] status=%d latency_ms=%d rows=0 has_opra_fields=false",
             r.status_code, latency_ms
         )
-        return [], None, f"HTTP {r.status_code}: {r.text[:200]}"
+        return [], None, f"HTTP {r.status_code}: {r.text[:200]}", 0
     
     try:
         raw = r.json()
     except ValueError as e:
         logger.warning("[ORATS_RESP] status=%d latency_ms=%d error=invalid_json", r.status_code, latency_ms)
-        return [], None, f"Invalid JSON: {e}"
+        return [], None, f"Invalid JSON: {e}", 0
     
     # Extract rows
     if isinstance(raw, list):
@@ -573,7 +580,7 @@ def fetch_base_chain(
         logger.info("[ORATS_PARSE] row0_keys=%s", row0_keys)
     
     if not rows:
-        return [], None, "No strikes data returned"
+        return [], None, "No strikes data returned", 0
     
     # Parse rows into BaseContract objects (initially all)
     all_contracts = []
@@ -670,7 +677,7 @@ def fetch_base_chain(
         len(all_contracts), len(sorted_expiries), max_strikes_per_expiry
     )
     
-    return all_contracts, underlying_price, None
+    return all_contracts, underlying_price, None, len(rows)
 
 
 # ============================================================================
@@ -837,24 +844,30 @@ def fetch_enriched_contracts(
         total_with_oi += non_null_oi
         total_with_vol += non_null_vol
         
-        # Map rows back to OPRA symbols
+        # Map rows back to OPRA symbols (optionSymbol is OCC, ticker is underlying)
         for row in rows:
-            ticker = row.get("ticker", "")
+            opra = row.get("optionSymbol") or row.get("ticker", "")
             
-            # If ticker matches one of our batch symbols, use it
-            if ticker in batch:
-                opra = ticker
+            # If opra matches one of our batch symbols, use it
+            if opra in batch:
+                pass  # opra already set
             else:
-                # Try to reconstruct from row data
-                root = row.get("ticker", "").split()[0] if row.get("ticker") else ""
+                # Try to reconstruct from row data (optionSymbol preferred; API returns ticker=underlying)
+                root = (row.get("ticker") or "").split()[0] if row.get("ticker") else ""
                 exp_str = row.get("expirDate", "")
                 strike = row.get("strike")
-                opt_type = row.get("callPut", "") or row.get("optionType", "")
+                opt_type = (
+                    row.get("optionType") or row.get("option_type") or
+                    row.get("putCall") or row.get("callPut") or
+                    row.get("put_call") or row.get("call_put") or ""
+                )
                 
                 if root and exp_str and strike is not None:
                     try:
                         exp_date = datetime.strptime(exp_str, "%Y-%m-%d").date()
-                        opt_char = "C" if opt_type.upper().startswith("C") else "P"
+                        opt_char = "C" if str(opt_type).strip().upper().startswith("C") else ("P" if str(opt_type).strip().upper().startswith("P") else None)
+                        if opt_char is None:
+                            continue
                         root_padded = root.upper().ljust(6)
                         exp_yymmdd = exp_date.strftime("%y%m%d")
                         strike_int = int(float(strike) * 1000)
@@ -875,6 +888,12 @@ def fetch_enriched_contracts(
                 "theta": row.get("theta"),
                 "vega": row.get("vega"),
                 "iv": row.get("iv") or row.get("smvVol"),
+                "optionType": row.get("optionType"),
+                "option_type": row.get("option_type"),
+                "putCall": row.get("putCall"),
+                "callPut": row.get("callPut"),
+                "put_call": row.get("put_call"),
+                "call_put": row.get("call_put"),
             }
     
     # Log summary; "ORATS OK" in caller only when total_with_bidask > 0.
@@ -895,6 +914,36 @@ def fetch_enriched_contracts(
 # ============================================================================
 # STEP 4: Merge Chain and Liquidity
 # ============================================================================
+
+def _resolve_option_type_from_sources(
+    enrichment: Dict[str, Any],
+    base_option_type: str,
+    opra: str,
+) -> str:
+    """
+    Resolve option type from enrichment (all known keys), then base, then OCC symbol.
+    Returns "PUT", "CALL", or "UNKNOWN" — never default to CALL when unknown.
+    """
+    OPTION_TYPE_KEYS = ("optionType", "option_type", "putCall", "callPut", "put_call", "call_put")
+    for key in OPTION_TYPE_KEYS:
+        raw = enrichment.get(key)
+        if raw is None:
+            continue
+        s = str(raw).strip().upper()
+        if s in ("P", "PUT", "PUTS"):
+            return "PUT"
+        if s in ("C", "CALL", "CALLS"):
+            return "CALL"
+    if base_option_type and str(base_option_type).upper() in ("PUT", "CALL"):
+        return str(base_option_type).upper()
+    if opra and len(opra) >= 13:
+        c = opra[12].upper()  # OCC: ROOT(6)+YYMMDD(6)+C|P(1)
+        if c == "P":
+            return "PUT"
+        if c == "C":
+            return "CALL"
+    return "UNKNOWN"
+
 
 def merge_chain_and_liquidity(
     base_contracts: List[BaseContract],
@@ -929,11 +978,14 @@ def merge_chain_and_liquidity(
         if bid is not None and ask is not None:
             mid = (bid + ask) / 2
         
+        resolved_type = _resolve_option_type_from_sources(
+            enrichment, base.option_type, opra
+        )
         contract = EnrichedContract(
             symbol=base.symbol,
             expiration=base.expiration,
             strike=base.strike,
-            option_type=base.option_type,
+            option_type=resolved_type,
             opra_symbol=opra,
             dte=base.dte,
             stock_price=underlying_price,
@@ -967,6 +1019,8 @@ def fetch_option_chain(
     max_strikes_per_expiry: int = MAX_STRIKES_PER_EXPIRY,
     max_expiries: int = MAX_EXPIRIES,
     chain_mode: Optional[str] = None,
+    delta_lo: Optional[float] = None,
+    delta_hi: Optional[float] = None,
 ) -> OptionChainResult:
     """
     Fetch complete option chain with liquidity data using two-step pipeline.
@@ -1020,9 +1074,11 @@ def fetch_option_chain(
         "[CHAIN_PIPELINE] %s: STEP 1 - Fetching base chain (mode=%s, max_expiries=%d, max_strikes=%d)...",
         symbol.upper(), mode, max_expiries, max_strikes_per_expiry
     )
-    base_contracts, underlying_price, error = fetch_base_chain(
+    base_contracts, underlying_price, error, base_strikes_rows_count = fetch_base_chain(
         symbol, dte_min, dte_max, max_strikes_per_expiry, max_expiries,
         chain_mode=chain_mode,
+        delta_lo=delta_lo,
+        delta_hi=delta_hi,
     )
     
     if error:
@@ -1078,6 +1134,25 @@ def fetch_option_chain(
     
     # Count contracts with valid liquidity
     result.contracts_with_liquidity = len([c for c in result.contracts if c.has_valid_liquidity])
+    
+    # DEBUG: One-line diagnostic for chain acquisition (confirms we have a real chain)
+    puts_with_delta = [c for c in result.contracts if c.option_type == "PUT" and c.delta is not None and isinstance(c.delta, (int, float))]
+    abs_deltas = [abs(float(d)) for d in (c.delta for c in puts_with_delta)]
+    min_ad = min(abs_deltas) if abs_deltas else None
+    max_ad = max(abs_deltas) if abs_deltas else None
+    sample = sorted(abs_deltas)[:5] if abs_deltas else []
+    logger.debug(
+        "[CHAIN_ACQ] %s base_strikes_rows=%d occ_symbols=%d strikes_options_rows=%d merged=%d puts_with_delta=%d min_abs_put_delta=%s max_abs_put_delta=%s sample_abs_put_deltas=%s",
+        symbol.upper(),
+        base_strikes_rows_count,
+        result.opra_symbols_generated,
+        result.enriched_count,
+        len(result.contracts),
+        len(puts_with_delta),
+        f"{min_ad:.3f}" if min_ad is not None else "n/a",
+        f"{max_ad:.3f}" if max_ad is not None else "n/a",
+        [round(x, 3) for x in sample],
+    )
     
     result.fetch_duration_ms = int((time.time() - start_time) * 1000)
     

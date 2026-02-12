@@ -49,10 +49,20 @@ def is_market_open(utc_now: datetime | None = None) -> bool:
 
 def get_chain_source(utc_now: datetime | None = None) -> str:
     """
-    Single routing rule for ORATS chain endpoints.
+    Single routing rule for ORATS chain endpoints (Stage-1, expirations, etc.).
     OPEN → LIVE (/datav2/live/…). Else (PRE/POST/CLOSED/HOLIDAY/WEEKEND) → DELAYED (/datav2/strikes, /datav2/strikes/options).
     """
     return "LIVE" if get_market_phase(utc_now) == "OPEN" else "DELAYED"
+
+
+def get_stage2_chain_source(utc_now: datetime | None = None) -> str:
+    """
+    Chain source for Stage-2 option chain evaluation.
+    Returns DELAYED always. The LIVE /datav2/live/strikes endpoint does not provide per-contract
+    option_type (put/call), delta, bid, ask, OI in the shape our selector requires.
+    DELAYED pipeline (/datav2/strikes + /datav2/strikes/options) yields full per-option records.
+    """
+    return "DELAYED"
 
 
 def get_polling_interval_seconds(utc_now: datetime | None = None) -> int:
@@ -78,6 +88,7 @@ __all__ = [
     "is_market_open",
     "get_market_phase",
     "get_chain_source",
+    "get_stage2_chain_source",
     "get_polling_interval_seconds",
     "get_eval_interval_seconds",
     "get_mode_label",

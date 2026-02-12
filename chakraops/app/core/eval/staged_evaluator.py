@@ -49,6 +49,7 @@ from app.core.options.chain_provider import (
     select_contract,
 )
 from app.core.options.orats_chain_provider import OratsChainProvider, get_chain_provider
+from app.market.market_hours import get_stage2_chain_source
 from app.core.config.wheel_strategy_config import (
     WHEEL_CONFIG,
     DTE_MIN,
@@ -63,6 +64,7 @@ from app.core.config.wheel_strategy_config import (
     IVR_HIGH,
     get_dte_range,
     get_target_delta_range,
+    get_acquisition_delta_range,
 )
 from app.core.eval.volatility import get_ivr_band
 
@@ -215,6 +217,10 @@ class Stage2Result:
     rejection_counts: Dict[str, int] = field(default_factory=dict)
     # Option type counts from chain contracts (before filtering) for diagnostics
     option_type_counts: Dict[str, int] = field(default_factory=dict)  # puts_seen, calls_seen, unknown_seen
+    # Delta distribution for PUTs in fetched chain (for diagnostics when contract unavailable)
+    delta_distribution: Optional[Dict[str, Any]] = None  # min_abs_put_delta, max_abs_put_delta, sample_abs_deltas
+    # Top rejection reasons with sample contracts (for diagnostics)
+    top_rejection_reasons: Optional[Dict[str, Any]] = None  # rejection_counts + sample_rejected_due_to_delta
 
 
 @dataclass
@@ -558,10 +564,10 @@ def _select_csp_candidates(
     min_oi: int,
     max_spread_pct: float,
     symbol: str,
-) -> Tuple[List[SelectedContract], List[str], Dict[str, int]]:
+) -> Tuple[List[SelectedContract], List[str], Dict[str, int], List[Dict[str, Any]]]:
     """
     Filter by option_type==PUT, 30–45 DTE, delta magnitude in [delta_lo, delta_hi],
-    then option liquidity gates. Returns (candidates, failure_reasons, rejection_counts).
+    then option liquidity gates. Returns (candidates, failure_reasons, rejection_counts, sample_rejected_due_to_delta).
     Delta filter uses magnitude so both +0.25 and -0.25 puts are in-range.
     """
     reasons: List[str] = []
@@ -571,6 +577,7 @@ def _select_csp_candidates(
         "rejected_due_to_spread": 0,
         "rejected_due_to_missing_fields": 0,
     }
+    sample_rejected_due_to_delta: List[Dict[str, Any]] = []
 
     # Collect put contracts from chains in DTE range (identify puts by option_type, not delta sign)
     all_puts: List[Tuple[OptionContract, date]] = []
@@ -588,7 +595,7 @@ def _select_csp_candidates(
 
     if not all_puts:
         reasons.append("No contracts in 30–45 DTE range")
-        return [], reasons, rejection_counts
+        return [], reasons, rejection_counts, sample_rejected_due_to_delta
 
     # Filter by delta range using magnitude (0.15 <= |delta| <= 0.35)
     in_delta: List[Tuple[OptionContract, date]] = []
@@ -599,12 +606,19 @@ def _select_csp_candidates(
             continue
         if not (delta_lo <= delta_mag <= delta_hi):
             rejection_counts["rejected_due_to_delta"] += 1
+            if len(sample_rejected_due_to_delta) < 3:
+                sample_rejected_due_to_delta.append({
+                    "strike": c.strike,
+                    "expiration": exp.isoformat(),
+                    "abs_delta": round(delta_mag, 4),
+                    "option_type": getattr(c.option_type, "value", str(c.option_type)),
+                })
             continue
         in_delta.append((c, exp))
 
     if not in_delta:
         reasons.append(f"No contracts in delta range [{delta_lo}, {delta_hi}] (puts)")
-        return [], reasons, rejection_counts
+        return [], reasons, rejection_counts, sample_rejected_due_to_delta
 
     # Apply option liquidity gates: OI >= min_oi, spread_pct <= max_spread_pct
     passed: List[Tuple[OptionContract, date]] = []
@@ -628,7 +642,7 @@ def _select_csp_candidates(
 
     if not passed:
         reasons.append(f"No contracts passed option liquidity gates (OI≥{min_oi}, spread≤{max_spread_pct:.0%})")
-        return [], reasons, rejection_counts
+        return [], reasons, rejection_counts, sample_rejected_due_to_delta
 
     # Rank by premium/capital_required and liquidity quality
     def rank_key(item: Tuple[OptionContract, date]) -> Tuple[float, int]:
@@ -661,7 +675,7 @@ def _select_csp_candidates(
             criteria_results={"dte_in_range": True, "liquidity_ok": True},
         )
         candidates.append(sel)
-    return candidates, [], rejection_counts
+    return candidates, [], rejection_counts, sample_rejected_due_to_delta
 
 
 def _contract_has_all_required_chain_fields(contract: OptionContract) -> Tuple[bool, List[str]]:
@@ -737,7 +751,9 @@ def evaluate_stage2(
     now_iso = datetime.now(timezone.utc).isoformat()
     result.chains_fetched_at = now_iso
 
-    provider = chain_provider or get_chain_provider()
+    # Stage-2 MUST use DELAYED chain (strikes + strikes/options) for per-contract option_type/delta/OI.
+    # LIVE /datav2/live/strikes does not provide per-contract put/call; would yield puts_seen=0.
+    provider = chain_provider or get_chain_provider(chain_source=get_stage2_chain_source())
     try:
         from app.market.market_hours import get_market_phase
         market_phase = get_market_phase()
@@ -773,7 +789,11 @@ def evaluate_stage2(
             return result
 
         exp_dates = [e.expiration for e in target_expirations[:5]]  # Fetch up to 5
-        chains = provider.get_chains_batch(symbol, exp_dates, max_concurrent=STAGE2_MAX_CONCURRENT)
+        acq_delta_lo, acq_delta_hi = get_acquisition_delta_range()
+        chains = provider.get_chains_batch(
+            symbol, exp_dates, max_concurrent=STAGE2_MAX_CONCURRENT,
+            delta_lo=acq_delta_lo, delta_hi=acq_delta_hi,
+        )
         result.expirations_evaluated = len(chains)
         total_contracts = sum(len(cr.chain.contracts) for cr in chains.values() if cr.success and cr.chain)
         result.contracts_evaluated = total_contracts
@@ -798,10 +818,32 @@ def evaluate_stage2(
         result.chain_missing_fields = list(all_missing_fields)
         result.chain_completeness = 1.0 - (len(all_missing_fields) / 4) if all_missing_fields else 1.0
 
-        candidates, failure_reasons, rejection_counts = _select_csp_candidates(
+        candidates, failure_reasons, rejection_counts, sample_rejected_due_to_delta = _select_csp_candidates(
             chains, dte_min, dte_max, delta_lo, delta_hi, min_oi, max_spread_pct, symbol,
         )
         result.rejection_counts = rejection_counts
+        result.top_rejection_reasons = {
+            "rejection_counts": dict(rejection_counts),
+            "sample_rejected_due_to_delta": sample_rejected_due_to_delta,
+        }
+        # Delta distribution for PUTs in fetched chain (diagnostics)
+        put_deltas: List[float] = []
+        for chain_result in chains.values():
+            if not chain_result.success or chain_result.chain is None:
+                continue
+            for c in chain_result.chain.contracts:
+                if c.option_type == OptionType.PUT:
+                    dm = _delta_magnitude(c)
+                    if dm is not None:
+                        put_deltas.append(dm)
+        if put_deltas:
+            put_deltas.sort()
+            sample = put_deltas[:: max(1, len(put_deltas) // 10)][:10]  # ~10 evenly spaced
+            result.delta_distribution = {
+                "min_abs_put_delta": round(min(put_deltas), 4),
+                "max_abs_put_delta": round(max(put_deltas), 4),
+                "sample_abs_deltas": [round(x, 4) for x in sample],
+            }
 
         if candidates:
             result.selected_contract = candidates[0]
@@ -1197,6 +1239,8 @@ def build_eligibility_layers(
         candidates = getattr(stage2, "selected_candidates", []) or []
         has_enriched_chain = bool(candidates) and required_fields_present
         option_type_counts = getattr(stage2, "option_type_counts", None) or {}
+        delta_dist = getattr(stage2, "delta_distribution", None)
+        top_rej = getattr(stage2, "top_rejection_reasons", None)
         if not has_enriched_chain:
             # No enriched chain or no selected contract with all required fields
             contract_data = {
@@ -1207,6 +1251,8 @@ def build_eligibility_layers(
                 "contract_count": getattr(stage2, "contracts_evaluated", 0),
                 "required_fields_present": required_fields_present,
                 "option_type_counts": option_type_counts,
+                "delta_distribution": delta_dist,
+                "top_rejection_reasons": top_rej,
             }
             contract_eligibility = {"status": "UNAVAILABLE", "reasons": []}
         else:
@@ -1218,6 +1264,8 @@ def build_eligibility_layers(
                 "contract_count": getattr(stage2, "contracts_evaluated", 0),
                 "required_fields_present": True,
                 "option_type_counts": option_type_counts,
+                "delta_distribution": delta_dist,
+                "top_rejection_reasons": top_rej,
             }
             passed = stage2.liquidity_ok
             reasons = []
@@ -1522,15 +1570,14 @@ def evaluate_universe_staged(
 ) -> List[FullEvaluationResult]:
     """
     Run 2-stage evaluation across universe.
-    
+
     1. Run stage 1 for all symbols
     2. Select top K candidates
     3. Run stage 2 for top K (with concurrency limits)
-    
-    Returns:
-        List of FullEvaluationResult for all symbols
+
+    Stage-2 always uses DELAYED chain for reliable per-contract option_type/delta/OI.
     """
-    provider = chain_provider or get_chain_provider()
+    provider = chain_provider or get_chain_provider(chain_source=get_stage2_chain_source())
     results: Dict[str, FullEvaluationResult] = {}
     
     logger.info("[STAGED_EVAL] Starting 2-stage evaluation for %d symbols", len(symbols))

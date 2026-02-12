@@ -483,7 +483,7 @@ class TestFetchBaseChainMocked:
         with patch("app.core.options.orats_chain_pipeline.requests.get") as mock_get:
             mock_get.return_value = mock_response
             
-            contracts, price, error = fetch_base_chain("AAPL")
+            contracts, price, error, raw_count = fetch_base_chain("AAPL")
             
             assert error is None
             assert price == 180.0
@@ -507,7 +507,7 @@ class TestFetchBaseChainMocked:
         with patch("app.core.options.orats_chain_pipeline.requests.get") as mock_get:
             mock_get.return_value = mock_response
             
-            contracts, price, error = fetch_base_chain("AAPL")
+            contracts, price, error, raw_count = fetch_base_chain("AAPL")
             
             assert contracts == []
             assert price is None

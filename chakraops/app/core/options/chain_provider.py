@@ -37,9 +37,10 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 class OptionType(str, Enum):
-    """Option type: PUT or CALL."""
+    """Option type: PUT, CALL, or UNKNOWN (do not default unknown to CALL)."""
     PUT = "PUT"
     CALL = "CALL"
+    UNKNOWN = "UNKNOWN"
 
 
 class ContractLiquidityGrade(str, Enum):
@@ -368,6 +369,8 @@ class OptionsChainProvider(Protocol):
         symbol: str, 
         expirations: List[date],
         max_concurrent: int = 3,
+        delta_lo: Optional[float] = None,
+        delta_hi: Optional[float] = None,
     ) -> Dict[date, ChainProviderResult]:
         """
         Get multiple chains for a symbol (batch operation).
@@ -376,6 +379,8 @@ class OptionsChainProvider(Protocol):
             symbol: Stock ticker symbol
             expirations: List of expiration dates
             max_concurrent: Maximum concurrent requests
+            delta_lo: Optional min |delta| for ORATS delta filter (Stage-2 CSP: 0.10)
+            delta_hi: Optional max |delta| for ORATS delta filter (Stage-2 CSP: 0.45)
             
         Returns:
             Dict mapping expiration -> ChainProviderResult

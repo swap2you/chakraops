@@ -191,7 +191,7 @@ class OratsChainProvider:
         dte_max = WHEEL_CONFIG.get(DTE_MAX, 45)
         self._rate_limiter.acquire()
         try:
-            base_contracts, _, err = fetch_base_chain(
+            base_contracts, _, err, _ = fetch_base_chain(
                 symbol, dte_min=dte_min, dte_max=dte_max, chain_mode="DELAYED"
             )
         except Exception as e:
@@ -399,6 +399,8 @@ class OratsChainProvider:
         symbol: str,
         expirations: List[date],
         max_concurrent: int = 3,
+        delta_lo: Optional[float] = None,
+        delta_hi: Optional[float] = None,
     ) -> Dict[date, ChainProviderResult]:
         """
         Get multiple chains for a symbol (batch operation).
@@ -406,7 +408,7 @@ class OratsChainProvider:
         LIVE: concurrent get_chain per expiration.
         """
         if self._chain_source == "DELAYED":
-            return self._get_chains_batch_delayed(symbol, expirations)
+            return self._get_chains_batch_delayed(symbol, expirations, delta_lo=delta_lo, delta_hi=delta_hi)
         results: Dict[date, ChainProviderResult] = {}
         uncached_expirations = []
         for exp in expirations:
@@ -439,7 +441,11 @@ class OratsChainProvider:
                     )
         return results
     
-    def _get_chains_batch_delayed(self, symbol: str, expirations: List[date]) -> Dict[date, ChainProviderResult]:
+    def _get_chains_batch_delayed(
+        self, symbol: str, expirations: List[date],
+        delta_lo: Optional[float] = None,
+        delta_hi: Optional[float] = None,
+    ) -> Dict[date, ChainProviderResult]:
         """One pipeline call (strikes + strikes/options) then split by expiration."""
         from app.core.config.wheel_strategy_config import WHEEL_CONFIG, DTE_MIN, DTE_MAX
         from app.core.options.orats_chain_pipeline import fetch_option_chain
@@ -448,7 +454,8 @@ class OratsChainProvider:
         self._rate_limiter.acquire()
         try:
             chain_result = fetch_option_chain(
-                symbol, dte_min=dte_min, dte_max=dte_max, chain_mode="DELAYED"
+                symbol, dte_min=dte_min, dte_max=dte_max, chain_mode="DELAYED",
+                delta_lo=delta_lo, delta_hi=delta_hi,
             )
         except Exception as e:
             logger.warning("[ORATS_CHAIN] DELAYED pipeline failed for %s: %s", symbol, e)
@@ -499,9 +506,17 @@ class OratsChainProvider:
         return results
     
     def _enriched_to_option_contract(self, ec: Any, symbol: str) -> OptionContract:
-        """Convert pipeline EnrichedContract to chain_provider OptionContract. PUT/CALL from option_type via normalize_put_call."""
-        raw = getattr(ec, "option_type", None) or getattr(ec, "putCall", None) or getattr(ec, "callPut", None) or ""
-        option_type = normalize_put_call(raw) or OptionType.CALL
+        """Convert pipeline EnrichedContract to chain_provider OptionContract. Read option type from ALL known keys; never default to CALL."""
+        OPTION_TYPE_KEYS = ("optionType", "option_type", "putCall", "callPut", "put_call", "call_put")
+        raw = None
+        for key in OPTION_TYPE_KEYS:
+            v = getattr(ec, key, None) if hasattr(ec, key) else (ec.get(key) if isinstance(ec, dict) else None)
+            if v is not None and str(v).strip():
+                raw = v
+                break
+        if raw is None:
+            raw = getattr(ec, "option_type", None)
+        option_type = normalize_put_call(raw) or OptionType.UNKNOWN
         return OptionContract(
             symbol=symbol.upper(),
             expiration=ec.expiration,

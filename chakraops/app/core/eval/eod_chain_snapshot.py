@@ -55,7 +55,7 @@ def run_eod_chain_snapshot(as_of_date: date, symbols: List[str]) -> dict:
             continue
         sym = symbol.strip().upper()
         try:
-            contracts, _, err = fetch_base_chain(sym)
+            contracts, _, err, _ = fetch_base_chain(sym)
             if err:
                 logger.warning("[EOD_CHAIN] No chain for %s: %s", sym, err)
                 skipped += 1

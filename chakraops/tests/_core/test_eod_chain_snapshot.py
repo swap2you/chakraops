@@ -61,7 +61,7 @@ def test_run_eod_chain_snapshot_no_chain_log_warning_only(tmp_path):
             from app.core.options.orats_chain_pipeline import BaseContract
 
             m_fetch.side_effect = [
-                ([], None, "No strikes data"),  # no chain for first symbol
+                ([], None, "No strikes data", 0),  # no chain for first symbol
                 (
                     [
                         BaseContract(
@@ -76,6 +76,7 @@ def test_run_eod_chain_snapshot_no_chain_log_warning_only(tmp_path):
                     ],
                     175.0,
                     None,
+                    1,
                 ),
             ]
             result = run_eod_chain_snapshot(date(2026, 2, 10), ["NOCHAIN", "AAPL"])

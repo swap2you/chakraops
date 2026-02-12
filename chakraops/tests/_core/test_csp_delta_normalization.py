@@ -124,7 +124,7 @@ class TestCspSelectionDeltaRange:
         put = _make_put(0.25)
         put.compute_derived_fields()
         chains = self._chains_with_put(put)
-        candidates, reasons, counts = _select_csp_candidates(
+        candidates, reasons, counts, _ = _select_csp_candidates(
             chains, dte_min=30, dte_max=45, delta_lo=0.15, delta_hi=0.35,
             min_oi=500, max_spread_pct=0.10, symbol="SPY",
         )
@@ -136,7 +136,7 @@ class TestCspSelectionDeltaRange:
         put = _make_put(-0.25)
         put.compute_derived_fields()
         chains = self._chains_with_put(put)
-        candidates, reasons, counts = _select_csp_candidates(
+        candidates, reasons, counts, _ = _select_csp_candidates(
             chains, dte_min=30, dte_max=45, delta_lo=0.15, delta_hi=0.35,
             min_oi=500, max_spread_pct=0.10, symbol="SPY",
         )
@@ -147,7 +147,7 @@ class TestCspSelectionDeltaRange:
         call = _make_call(0.25)
         call.compute_derived_fields()
         chains = self._chains_with_put(call)
-        candidates, reasons, _ = _select_csp_candidates(
+        candidates, reasons, _, _ = _select_csp_candidates(
             chains, dte_min=30, dte_max=45, delta_lo=0.15, delta_hi=0.35,
             min_oi=500, max_spread_pct=0.10, symbol="SPY",
         )
@@ -157,7 +157,7 @@ class TestCspSelectionDeltaRange:
         put = _make_put(0.10)
         put.compute_derived_fields()
         chains = self._chains_with_put(put)
-        _, reasons, counts = _select_csp_candidates(
+        _, reasons, counts, _ = _select_csp_candidates(
             chains, dte_min=30, dte_max=45, delta_lo=0.15, delta_hi=0.35,
             min_oi=500, max_spread_pct=0.10, symbol="SPY",
         )

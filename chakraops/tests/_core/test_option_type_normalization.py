@@ -126,3 +126,67 @@ def test_delayed_enriched_option_type_call_maps_to_call():
     provider = OratsChainProvider(chain_source="DELAYED")
     oc = provider._enriched_to_option_contract(ec, "SPY")
     assert oc.option_type == OptionType.CALL
+
+
+def test_delayed_enriched_optionType_key_maps_to_put():
+    """ORATS /strikes/options returns optionType='Put'; must map to OptionType.PUT."""
+    exp = date.today() + timedelta(days=40)
+    ec = SimpleNamespace(
+        optionType="Put",  # ORATS camelCase
+        option_type=None,
+        expiration=exp,
+        strike=500.0,
+        bid=1.0,
+        ask=1.1,
+        mid=1.05,
+        delta=-0.25,
+        open_interest=100,
+        volume=10,
+        dte=40,
+    )
+    provider = OratsChainProvider(chain_source="DELAYED")
+    oc = provider._enriched_to_option_contract(ec, "SPY")
+    assert oc.option_type == OptionType.PUT
+
+
+def test_delayed_enriched_unknown_option_type_not_default_to_call():
+    """Unrecognized option type must yield OptionType.UNKNOWN, never default to CALL."""
+    exp = date.today() + timedelta(days=40)
+    ec = SimpleNamespace(
+        option_type="???",
+        putCall=None,
+        optionType=None,
+        expiration=exp,
+        strike=500.0,
+        bid=1.0,
+        ask=1.1,
+        mid=1.05,
+        delta=-0.25,
+        open_interest=100,
+        volume=10,
+        dte=40,
+    )
+    provider = OratsChainProvider(chain_source="DELAYED")
+    oc = provider._enriched_to_option_contract(ec, "SPY")
+    assert oc.option_type == OptionType.UNKNOWN
+
+
+def test_delayed_enriched_reads_putCall_key():
+    """EnrichedContract with putCall='P' (alternative key) maps to PUT."""
+    exp = date.today() + timedelta(days=40)
+    ec = SimpleNamespace(
+        option_type=None,
+        putCall="P",
+        expiration=exp,
+        strike=500.0,
+        bid=1.0,
+        ask=1.1,
+        mid=1.05,
+        delta=-0.25,
+        open_interest=100,
+        volume=10,
+        dte=40,
+    )
+    provider = OratsChainProvider(chain_source="DELAYED")
+    oc = provider._enriched_to_option_contract(ec, "SPY")
+    assert oc.option_type == OptionType.PUT

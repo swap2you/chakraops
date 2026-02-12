@@ -98,7 +98,7 @@ def main():
     # STEP 1: Fetch base chain
     print(f"\n[STEP 1] Fetching base chain from /strikes...")
     t0 = time.perf_counter()
-    base_contracts, underlying_price, error = fetch_base_chain(
+    base_contracts, underlying_price, error, _ = fetch_base_chain(
         symbol, args.dte_min, args.dte_max,
         max_strikes_per_expiry=args.max_strikes,
         max_expiries=args.max_expiries,

@@ -1743,11 +1743,12 @@ def api_view_symbol_diagnostics(symbol: str = Query(..., min_length=1, max_lengt
     expirations_count = 0
     contracts_count = None
     if full_result.stage2 is not None:
-        expirations_count = getattr(full_result.stage2, "expirations_available", 0) or 0
-        contracts_count = getattr(full_result.stage2, "contracts_evaluated", None)
-        result["options"]["option_type_counts"] = getattr(
-            full_result.stage2, "option_type_counts", None
-        ) or {"puts_seen": 0, "calls_seen": 0, "unknown_seen": 0}
+        s2 = full_result.stage2
+        expirations_count = getattr(s2, "expirations_available", 0) or 0
+        contracts_count = getattr(s2, "contracts_evaluated", None)
+        result["options"]["option_type_counts"] = getattr(s2, "option_type_counts", None) or {"puts_seen": 0, "calls_seen": 0, "unknown_seen": 0}
+        result["options"]["delta_distribution"] = getattr(s2, "delta_distribution", None)
+        result["options"]["top_rejection_reasons"] = getattr(s2, "top_rejection_reasons", None)
     else:
         result["options"]["option_type_counts"] = {"puts_seen": 0, "calls_seen": 0, "unknown_seen": 0}
     result["options"]["expirations_count"] = expirations_count

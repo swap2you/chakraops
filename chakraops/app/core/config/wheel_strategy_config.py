@@ -14,6 +14,9 @@ from typing import Any, Dict, Tuple
 DTE_MIN = "DTE_MIN"
 DTE_MAX = "DTE_MAX"
 TARGET_DELTA_RANGE = "TARGET_DELTA_RANGE"
+# Wider band for chain acquisition (ORATS delta filter) to avoid edge misses; selection stays in TARGET_DELTA_RANGE
+ACQUISITION_DELTA_LO = 0.10
+ACQUISITION_DELTA_HI = 0.45
 MIN_UNDERLYING_VOLUME = "MIN_UNDERLYING_VOLUME"
 MAX_UNDERLYING_SPREAD_PCT = "MAX_UNDERLYING_SPREAD_PCT"
 MIN_OPTION_OI = "MIN_OPTION_OI"
@@ -94,6 +97,11 @@ def get_dte_range() -> Tuple[int, int]:
 def get_target_delta_range() -> Tuple[float, float]:
     """Return (min_delta, max_delta) for put selection."""
     return tuple(WHEEL_CONFIG[TARGET_DELTA_RANGE])  # type: ignore[return-value]
+
+
+def get_acquisition_delta_range() -> Tuple[float, float]:
+    """Return (lo, hi) for ORATS chain acquisition delta filter. Wider than selection to avoid edge misses."""
+    return (ACQUISITION_DELTA_LO, ACQUISITION_DELTA_HI)
 
 
 def get_ivr_bands() -> Dict[str, Tuple[float, float]]:

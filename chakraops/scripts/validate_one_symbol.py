@@ -10,12 +10,13 @@ Usage:
 Requires: Server running (e.g. uvicorn app.api.server:app --port 8000). Does NOT auto-start.
 
 Exit codes:
-  0 - All required fields present, Stage-1 would PASS (not stale); eligibility/contract checks OK.
+  0 - All required fields present, Stage-1 would PASS (not stale); eligibility/contract checks OK; mode integrity PASS.
   1 - Request/IO error (e.g. connection refused, non-200).
   2 - One or more required fields missing/null (see docs/VALIDATE_ONE_SYMBOL_EXPECTATIONS.md).
   3 - Stage-1 verdict would be BLOCKED (e.g. stale quote_date).
   4 - Contract missing fields (contract_data.available but required chain fields missing).
   5 - Contract unavailable but expected (symbol_eligibility PASS but contract_data not available).
+  6 - Mode integrity FAIL (CSP run has calls / CC run has puts).
 """
 
 from __future__ import annotations
@@ -457,6 +458,65 @@ def main() -> int:
     print("\n--- Acceptance Block ---")
     print(acceptance_block.strip())
 
+    # Phase 3.8: Mode Integrity — read contract_data.stage2_trace; CSP/CC rules; OCC type at index -9.
+    # Only fail (exit 6) when one of the conditions fails. No changes to selected_trade, request_counts, candidate_trades.
+    cd_for_integrity = (data_diag or {}).get("contract_data") or {}
+    trace_integrity = cd_for_integrity.get("stage2_trace") or trace
+    if not isinstance(trace_integrity, dict):
+        trace_integrity = {}
+    req_counts_integrity = trace_integrity.get("request_counts") or {}
+    puts_req_i = req_counts_integrity.get("puts_requested")
+    calls_req_i = req_counts_integrity.get("calls_requested")
+    if puts_req_i is None:
+        puts_req_i = 0
+    if calls_req_i is None:
+        calls_req_i = 0
+    sample_symbols_integrity = trace_integrity.get("sample_request_symbols") or []
+    mode_integrity_pass = True
+    mode_integrity_fail_reason = None
+    has_trace = isinstance(trace_integrity, dict) and (req_counts_integrity or sample_symbols_integrity)
+    if has_trace:
+        m = (mode or "csp").strip().upper()
+        if m == "CSP":
+            if calls_req_i != 0:
+                mode_integrity_pass = False
+                mode_integrity_fail_reason = f"MODE_INTEGRITY_FAIL: CSP found calls_requested={calls_req_i} (must be 0)"
+            elif puts_req_i <= 0:
+                mode_integrity_pass = False
+                mode_integrity_fail_reason = f"MODE_INTEGRITY_FAIL: CSP found puts_requested={puts_req_i} (must be > 0)"
+            else:
+                for s in sample_symbols_integrity:
+                    if isinstance(s, str) and len(s) >= 9 and s[-9] != "P":
+                        mode_integrity_pass = False
+                        mode_integrity_fail_reason = f"MODE_INTEGRITY_FAIL: CSP found call symbol {s}"
+                        break
+        elif m == "CC":
+            if puts_req_i != 0:
+                mode_integrity_pass = False
+                mode_integrity_fail_reason = f"MODE_INTEGRITY_FAIL: CC found puts_requested > 0"
+            elif calls_req_i <= 0:
+                mode_integrity_pass = False
+                mode_integrity_fail_reason = f"MODE_INTEGRITY_FAIL: CC found calls_requested={calls_req_i} (must be > 0)"
+            else:
+                for s in sample_symbols_integrity:
+                    if isinstance(s, str) and len(s) >= 9 and s[-9] != "C":
+                        mode_integrity_pass = False
+                        mode_integrity_fail_reason = f"MODE_INTEGRITY_FAIL: CC found put symbol {s}"
+                        break
+    first_3 = (trace.get("sample_request_symbols") or [])[:3]
+    mode_integrity_line = (
+        f"Mode Integrity: mode={mode.upper()} puts_requested={puts_req} calls_requested={calls_req} "
+        f"sample_symbols[0:3]={first_3} -> {'PASS' if mode_integrity_pass else 'FAIL'}"
+    )
+    analysis_lines.append("\n## Mode Integrity\n\n" + mode_integrity_line + "\n")
+    print("\n--- Mode Integrity ---")
+    if mode_integrity_pass:
+        print("Mode Integrity: PASS")
+    else:
+        print(mode_integrity_line)
+        if mode_integrity_fail_reason:
+            print(mode_integrity_fail_reason, file=sys.stderr)
+
     # Top Candidates Table (10 rows)
     top_candidates = trace.get("top_candidates_table") or trace.get("top_candidates") or []
     if not top_candidates and (opt.get("top_rejection_reasons") or {}).get("sample_rejected_candidates"):
@@ -537,6 +597,10 @@ def main() -> int:
         print(f"  stage2_trace.json is real (not fallback)= {not is_fallback}")
         if req_strikes:
             print(f"  requested_put_strikes= {req_strikes}")
+
+    # Phase 3.8: Mode integrity FAIL => exit 6 (reason already printed to stderr in Mode Integrity section)
+    if not mode_integrity_pass:
+        return 6
 
     # Phase 3.3.1: eligibility and contract checks (symbol_eligibility, contract_data, contract_eligibility)
     if data_diag is not None:

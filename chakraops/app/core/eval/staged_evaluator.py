@@ -1446,50 +1446,50 @@ def build_eligibility_layers(
         contract_data = {"available": False, "as_of": None, "source": "NONE"}
         contract_eligibility = {"status": "UNAVAILABLE", "reasons": ["Stage-2 did not execute or returned no contracts"]}
     else:
-        # Step 1: Chain available = Stage-2 ran, no fetch error, and ORATS returned contracts
-        contracts_evaluated = getattr(stage2, "contracts_evaluated", 0) or 0
-        fetch_error = getattr(stage2, "error", None)
-        stage2_ran = stage2 is not None and not fetch_error and contracts_evaluated > 0
+        # Phase 3.8: Single writer — contract_data from v2_stage2_response_builder when V2 trace present
+        trace = getattr(stage2, "stage2_trace", None)
+        if isinstance(trace, dict) and trace:
+            from app.core.eval.v2_stage2_response_builder import build_canonical_payload, build_contract_data_from_canonical
+            strategy_mode = (trace.get("mode") or "CSP").strip().upper()
+            canonical = build_canonical_payload(strategy_mode, trace, fetched_at_iso)
+            contract_data = build_contract_data_from_canonical(canonical)
+        else:
+            contracts_evaluated = getattr(stage2, "contracts_evaluated", 0) or 0
+            fetch_error = getattr(stage2, "error", None)
+            stage2_ran = stage2 is not None and not fetch_error and contracts_evaluated > 0
+            option_type_counts = getattr(stage2, "option_type_counts", None) or {}
+            delta_dist = getattr(stage2, "delta_distribution", None)
+            top_rej = getattr(stage2, "top_rejection_reasons", None)
+            required_fields_present = getattr(stage2, "required_fields_present", False)
+            chain_source_used = getattr(stage2, "chain_source_used", None) or "DELAYED"
+            contract_data = {
+                "available": stage2_ran,
+                "as_of": fetched_at_iso,
+                "source": "NONE" if not stage2_ran else chain_source_used,
+                "expiration_count": getattr(stage2, "expirations_evaluated", 0),
+                "contract_count": contracts_evaluated,
+                "required_fields_present": required_fields_present if stage2_ran else False,
+                "total_puts_in_chain": getattr(stage2, "total_puts_in_chain", 0) or 0,
+                "puts_with_required_fields": getattr(stage2, "puts_with_required_fields", 0) or 0,
+                "option_type_counts": option_type_counts,
+                "delta_distribution": delta_dist,
+                "top_rejection_reasons": top_rej,
+                "chain_missing_fields": getattr(stage2, "chain_missing_fields", []) or [],
+                "rejection_counts": getattr(stage2, "rejection_counts", None) or {},
+                "missing_required_fields_counts": getattr(stage2, "missing_required_fields_counts", None) or {},
+                "sample_missing_required_contract": getattr(stage2, "sample_missing_required_contract", None),
+                "strikes_options_telemetry": getattr(stage2, "strikes_options_telemetry", None),
+                "stage2_trace": _ensure_stage2_trace(
+                    _merge_stage2_trace_with_rejections(getattr(stage2, "stage2_trace", None), getattr(stage2, "rejection_counts", None)),
+                    stage2,
+                ),
+                "otm_puts_in_dte": getattr(stage2, "otm_puts_in_dte", 0),
+                "otm_puts_in_delta_band": getattr(stage2, "otm_puts_in_delta_band", 0),
+                "spot_used": getattr(stage2, "spot_used", None),
+            }
 
-        option_type_counts = getattr(stage2, "option_type_counts", None) or {}
-        delta_dist = getattr(stage2, "delta_distribution", None)
-        top_rej = getattr(stage2, "top_rejection_reasons", None)
-        chain_missing_fields = getattr(stage2, "chain_missing_fields", []) or []
-        required_fields_present = getattr(stage2, "required_fields_present", False)
-        total_puts = getattr(stage2, "total_puts_in_chain", 0) or 0
-        puts_with_req = getattr(stage2, "puts_with_required_fields", 0) or 0
-        chain_source_used = getattr(stage2, "chain_source_used", None) or "DELAYED"
         candidates = getattr(stage2, "selected_candidates", []) or []
-
-        # Step 2: contract_data.available = chain existence, not selection outcome
-        # source from actual Stage-2 provider mode (chain_source_used), not market hours
-        contract_data = {
-            "available": stage2_ran,
-            "as_of": fetched_at_iso,
-            "source": "NONE" if not stage2_ran else chain_source_used,
-            "expiration_count": getattr(stage2, "expirations_evaluated", 0),
-            "contract_count": contracts_evaluated,
-            "required_fields_present": required_fields_present if stage2_ran else False,
-            "total_puts_in_chain": total_puts,
-            "puts_with_required_fields": puts_with_req,
-            "option_type_counts": option_type_counts,
-            "delta_distribution": delta_dist,
-            "top_rejection_reasons": top_rej,
-            "chain_missing_fields": getattr(stage2, "chain_missing_fields", []) or [],
-            "rejection_counts": getattr(stage2, "rejection_counts", None) or {},
-            "missing_required_fields_counts": getattr(stage2, "missing_required_fields_counts", None) or {},
-            "sample_missing_required_contract": getattr(stage2, "sample_missing_required_contract", None),
-            "strikes_options_telemetry": getattr(stage2, "strikes_options_telemetry", None),
-            "stage2_trace": _ensure_stage2_trace(
-                _merge_stage2_trace_with_rejections(getattr(stage2, "stage2_trace", None), getattr(stage2, "rejection_counts", None)),
-                stage2,
-            ),
-            "otm_puts_in_dte": getattr(stage2, "otm_puts_in_dte", 0),
-            "otm_puts_in_delta_band": getattr(stage2, "otm_puts_in_delta_band", 0),
-            "spot_used": getattr(stage2, "spot_used", None),
-        }
-
-        # R3: No telemetry inconsistency logic. contract_data derived from stage2 (V2 trace).
+        stage2_ran = contract_data.get("available", False)
 
         # Step 3: contract_eligibility 3-way logic
         if not stage2_ran:
@@ -1671,19 +1671,20 @@ def evaluate_symbol_full(
         result.missing_fields.extend(stage2.chain_missing_fields)
         result.data_completeness = min(result.data_completeness, stage2.chain_completeness)
     
-    # Build candidate trade if contract selected
-    if stage2.selected_contract and stage2.selected_expiration:
-        contract = stage2.selected_contract.contract
-        result.candidate_trades.append({
-            "strategy": "CSP",
-            "expiry": stage2.selected_expiration.isoformat(),
-            "strike": contract.strike,
-            "delta": contract.delta.value if contract.delta.is_valid else None,
-            "credit_estimate": contract.bid.value if contract.bid.is_valid else None,
-            "max_loss": (contract.strike * 100) - ((contract.bid.value or 0) * 100) if contract.bid.is_valid else None,
-            "why_this_trade": stage2.selected_contract.selection_reason,
-            "liquidity_grade": contract.get_liquidity_grade().value,
-        })
+    # Phase 3.8: Single writer — candidate_trades from v2_stage2_response_builder only; strategy matches mode
+    from app.core.eval.v2_stage2_response_builder import (
+        build_canonical_payload,
+        build_contract_data_from_canonical,
+        build_candidate_trades_list,
+    )
+    trace = getattr(stage2, "stage2_trace", None) or {}
+    strategy_mode = (trace.get("mode") or mode or "CSP").strip().upper()
+    selected_trade_dict = trace.get("selected_trade") if isinstance(trace, dict) else None
+    result.candidate_trades = build_candidate_trades_list(
+        strategy_mode,
+        selected_trade_dict,
+        selected_contract_legacy=stage2.selected_contract,
+    )
     
     # Determine final verdict
     # Check for ELIGIBLE: either selected_contract exists OR liquidity was confirmed via enhancement

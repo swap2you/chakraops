@@ -1453,15 +1453,18 @@ def api_ops_evaluate_status(job_id: str) -> Dict[str, Any]:
     }
 
 
-def _symbol_diagnostics_greeks_summary(iv_rank: Any) -> Dict[str, Any]:
-    """Build greeks_summary dict from wheel_strategy_config (no hardcoded DTE/delta/IVR)."""
+def _symbol_diagnostics_greeks_summary(iv_rank: Any, strategy_mode: Optional[str] = None) -> Dict[str, Any]:
+    """Build greeks_summary dict; mode-aware (no 'for CSP' when strategy is CC)."""
     from app.core.config.wheel_strategy_config import get_dte_range, get_target_delta_range
     dte_min, dte_max = get_dte_range()
     delta_lo, delta_hi = get_target_delta_range()
+    mode = (strategy_mode or "CSP").strip().upper()
+    if mode not in ("CSP", "CC"):
+        mode = "CSP"
     return {
         "iv_rank": iv_rank,
         "iv_percentile": None,
-        "delta_target_range": f"{delta_lo:.2f}-{delta_hi:.2f} for CSP",
+        "delta_target_range": f"abs_delta {delta_lo:.2f}-{delta_hi:.2f} ({mode})",
         "dte_target": f"{dte_min}-{dte_max} DTE (Wheel strategy)",
     }
 
@@ -1676,8 +1679,8 @@ def api_view_symbol_diagnostics(
             "underlying_price": snap.price,
         },
         
-        # Greeks summary (iv_rank from canonical snapshot delayed ivrank endpoint)
-        "greeks_summary": _symbol_diagnostics_greeks_summary(snap.iv_rank),
+        # Greeks summary (mode-aware: no "for CSP" when strategy is CC)
+        "greeks_summary": _symbol_diagnostics_greeks_summary(snap.iv_rank, strategy_mode),
         
         # Candidate trades
         "candidate_trades": [],

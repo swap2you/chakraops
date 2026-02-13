@@ -27,15 +27,21 @@ def build_alert_payload(
     stage2_trace: Optional[Dict[str, Any]],
     candles_meta: Optional[Dict[str, Any]],
     config_meta: Optional[Dict[str, Any]],
+    score_dict: Optional[Dict[str, Any]] = None,
+    tier: Optional[str] = None,
+    priority_rank: Optional[int] = None,
+    severity_dict: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Build alert payload dict from existing traces. Never include secrets.
+    Phase 6.1: optional score_dict, tier, priority_rank (diagnostic only).
     """
     now = datetime.now(timezone.utc).isoformat()
     el = eligibility_trace or {}
     st2 = stage2_trace or {}
     candles_meta = candles_meta or {}
     config_meta = config_meta or {}
+    score_dict = score_dict or {}
 
     payload: Dict[str, Any] = {
         "run_id": run_id,
@@ -92,5 +98,18 @@ def build_alert_payload(
         "candles_as_of": candles_meta.get("last_date") or candles_meta.get("last_ts"),
         "chain_as_of": st2.get("chain_as_of") or st2.get("fetched_at"),
     }
+
+    # Phase 6.1: scoring summary (diagnostic only)
+    payload["composite_score"] = score_dict.get("composite_score")
+    payload["tier"] = tier
+    payload["priority_rank"] = priority_rank
+    payload["notional_pct_of_account"] = score_dict.get("notional_pct_of_account")
+
+    # Phase 6.3: severity (informational only)
+    sev = severity_dict or {}
+    payload["severity"] = sev.get("severity")
+    payload["severity_reason"] = sev.get("reason")
+    payload["distance_metric_used"] = sev.get("distance_metric_used")
+    payload["threshold_used"] = sev.get("threshold_used")
 
     return payload

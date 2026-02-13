@@ -383,6 +383,18 @@ def run_health_gate_for_symbol(
     sym_dir = out_dir / symbol
     sym_dir.mkdir(parents=True, exist_ok=True)
 
+    # Phase 6.1: add score block to trace; Phase 6.3: severity
+    try:
+        from app.core.scoring.signal_score import compute_signal_score
+        from app.core.scoring.tiering import assign_tier
+        from app.core.scoring.severity import compute_alert_severity
+        el_for_score = eligibility_trace or {}
+        score_dict = compute_signal_score(el_for_score, stage2_trace, spot_used)
+        tier = assign_tier(el_for_score.get("mode_decision") or "NONE", score_dict.get("composite_score", 0))
+        severity_dict = compute_alert_severity(el_for_score, score_dict, tier, spot_used)
+        eligibility_trace = {**el_for_score, "score": score_dict, "tier": tier, "severity": severity_dict}
+    except Exception:
+        pass
     el_path = sym_dir / f"{symbol}_eligibility_trace.json"
     try:
         with open(el_path, "w", encoding="utf-8") as f:
@@ -497,7 +509,10 @@ def main() -> int:
                 if isinstance(cands, list) and cands:
                     candles_meta["first_date"] = str(cands[0].get("ts") or cands[0].get("tradeDate") or "N/A")[:10]
                     candles_meta["last_date"] = str(cands[-1].get("ts") or cands[-1].get("tradeDate") or "N/A")[:10]
-            payload = build_alert_payload(symbol, run_id, el_trace, st2_trace, candles_meta, {"source": "health_gate_phase5"})
+            score_dict = (el_trace or {}).get("score") or {}
+            tier = (el_trace or {}).get("tier")
+            severity_dict = (el_trace or {}).get("severity") or {}
+            payload = build_alert_payload(symbol, run_id, el_trace, st2_trace, candles_meta, {"source": "health_gate_phase5"}, score_dict=score_dict, tier=tier, severity_dict=severity_dict)
             path = save_alert_payload(payload, base_dir=str(repo_root / "artifacts" / "alerts"))
             print(f"ALERT_PAYLOAD saved: {path}")
     except Exception as e:

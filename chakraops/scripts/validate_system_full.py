@@ -2,11 +2,13 @@
 """
 Full sequential system validation: ORATS candles, indicators, regime, eligibility, Stage-2.
 Uses eligibility mode only (no CLI --mode override). Prints a summary block.
+Phase 6.1/6.2: scoring, tiering, ranking (informational only). Top 10 candidates when --symbols.
 
 Run after: pip install -e .  (from chakraops root)
 
 Usage:
   python scripts/validate_system_full.py
+  python scripts/validate_system_full.py --symbols SPY,NVDA,AAPL,MSFT
 """
 from __future__ import annotations
 
@@ -15,185 +17,273 @@ import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Full system validation (ORATS, indicators, regime, eligibility, Stage-2)")
-    parser.add_argument("--symbol", default="SPY", help="Symbol to validate (default: SPY)")
-    args = parser.parse_args()
-    symbol = (args.symbol or "SPY").strip().upper()
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + uuid.uuid4().hex[:8]
-    repo_root = Path(__file__).resolve().parents[1]
-
+def _run_one_symbol(symbol: str, lookback: int = 400) -> Dict[str, Any]:
+    """Run validation for one symbol. Returns result dict with ok flags, traces, and payload for ranking."""
     from app.core.eligibility.candles import get_candles
     from app.core.eligibility.indicators import atr, atr_pct, ema, rsi_wilder
     from app.core.eligibility.eligibility_engine import run as run_eligibility, classify_regime
     from app.core.eligibility.config import RSI_PERIOD, EMA_FAST, EMA_MID, ATR_PERIOD
 
-    candles_ok = False
-    indicators_ok = False
-    regime_ok = False
-    eligibility_ok = False
-    stage2_ok = False
+    out: Dict[str, Any] = {
+        "symbol": symbol,
+        "candles_ok": False,
+        "indicators_ok": False,
+        "regime_ok": False,
+        "eligibility_ok": False,
+        "stage2_ok": False,
+        "eligibility_trace": None,
+        "stage2_trace": None,
+        "cands": [],
+        "mode_decision": "NONE",
+    }
 
-    lookback = 400
-
-    # 1) Validate ORATS provider
     try:
         cands = get_candles(symbol, "daily", lookback)
-        if not cands:
-            print("CANDLES: FAIL (no data)")
-        else:
-            n = len(cands)
-            if n < 300:
-                print(f"CANDLES: FAIL (rows={n} < 300)")
-            else:
-                ts_list = [c.get("ts") for c in cands if c.get("ts")]
-                sorted_ts = sorted(ts_list)
-                if sorted_ts != ts_list:
-                    print("CANDLES: FAIL (not sorted ascending)")
-                else:
-                    candles_ok = True
-                    first_date = ts_list[0] if ts_list else "?"
-                    last_date = ts_list[-1] if ts_list else "?"
-                    print(f"CANDLES: PASS (rows={n}, first={first_date}, last={last_date})")
     except Exception as e:
-        print(f"CANDLES: FAIL ({e})")
+        print(f"[{symbol}] CANDLES: FAIL ({e})")
+        return out
 
-    if not candles_ok:
-        _print_summary(candles_ok, indicators_ok, regime_ok, eligibility_ok, stage2_ok)
-        return 1
+    if not cands:
+        print(f"[{symbol}] CANDLES: FAIL (no data)")
+        return out
+    n = len(cands)
+    if n < 300:
+        print(f"[{symbol}] CANDLES: FAIL (rows={n} < 300)")
+        return out
+    ts_list = [c.get("ts") for c in cands if c.get("ts")]
+    if sorted(ts_list) != ts_list:
+        print(f"[{symbol}] CANDLES: FAIL (not sorted)")
+        return out
+    out["candles_ok"] = True
+    out["cands"] = cands
+    print(f"[{symbol}] CANDLES: PASS (rows={n})")
 
-    cands = get_candles(symbol, "daily", lookback)
     closes = [float(c["close"]) for c in cands if c.get("close") is not None]
     highs = [float(c["high"]) for c in cands if c.get("high") is not None]
     lows = [float(c["low"]) for c in cands if c.get("low") is not None]
 
-    # 2) Validate indicators
     try:
         rsi = rsi_wilder(closes, RSI_PERIOD)
         ema20 = ema(closes, EMA_FAST)
         ema50 = ema(closes, EMA_MID)
         atr14 = atr(highs, lows, closes, ATR_PERIOD)
         if rsi is None or ema20 is None or ema50 is None or atr14 is None:
-            print("INDICATORS: FAIL (one or more None)")
+            print(f"[{symbol}] INDICATORS: FAIL")
         elif not (0 <= rsi <= 100):
-            print(f"INDICATORS: FAIL (RSI={rsi} not in [0,100])")
+            print(f"[{symbol}] INDICATORS: FAIL (RSI={rsi})")
         else:
-            indicators_ok = True
-            print("INDICATORS: PASS (RSI, EMA20, EMA50, ATR14 present; RSI in [0,100])")
+            out["indicators_ok"] = True
+            print(f"[{symbol}] INDICATORS: PASS")
     except Exception as e:
-        print(f"INDICATORS: FAIL ({e})")
+        print(f"[{symbol}] INDICATORS: FAIL ({e})")
 
-    # 3) Validate regime (from eligibility engine)
     try:
         from app.core.eligibility.indicators import ema_slope
         from app.core.eligibility.config import EMA_SLOW
-        _ema20 = ema(closes, EMA_FAST)
-        _ema50 = ema(closes, EMA_MID)
         ema200 = ema(closes, EMA_SLOW)
         ema50_slope = ema_slope(closes, EMA_MID, 5)
-        regime = classify_regime(closes, _ema20, _ema50, ema200, ema50_slope)
+        regime = classify_regime(closes, ema(closes, EMA_FAST), ema(closes, EMA_MID), ema200, ema50_slope)
         if regime not in ("UP", "DOWN", "SIDEWAYS"):
-            print(f"REGIME: FAIL (regime={regime!r})")
+            print(f"[{symbol}] REGIME: FAIL ({regime!r})")
         else:
-            regime_ok = True
-            print(f"REGIME: PASS ({regime})")
+            out["regime_ok"] = True
+            print(f"[{symbol}] REGIME: PASS ({regime})")
     except Exception as e:
-        print(f"REGIME: FAIL ({e})")
+        print(f"[{symbol}] REGIME: FAIL ({e})")
 
-    # 4) Validate eligibility (Phase 5.0: support_level, resistance_level, method, window, tolerance_used)
-    eligibility_trace = None
-    mode_decision = "NONE"
     try:
         mode_decision, eligibility_trace = run_eligibility(symbol, holdings={}, lookback=255)
-        if not eligibility_trace:
-            print("ELIGIBILITY: FAIL (no eligibility_trace)")
-        elif not isinstance(eligibility_trace.get("rejection_reason_codes"), list):
-            print("ELIGIBILITY: FAIL (rejection_reason_codes not a list)")
+        out["mode_decision"] = mode_decision
+        out["eligibility_trace"] = eligibility_trace
+        if not eligibility_trace or not isinstance(eligibility_trace.get("rejection_reason_codes"), list):
+            print(f"[{symbol}] ELIGIBILITY: FAIL")
         else:
-            eligibility_ok = True
-            print(f"ELIGIBILITY: PASS (mode_decision={mode_decision}, rejection_reason_codes present)")
-            sl = eligibility_trace.get("support_level")
-            rl = eligibility_trace.get("resistance_level")
-            method = eligibility_trace.get("method", "?")
-            window = eligibility_trace.get("window", "?")
-            tol = eligibility_trace.get("tolerance_used", "?")
-            print(f"  support_level={sl} resistance_level={rl} method={method} window={window} tolerance_used={tol}")
-            primary = eligibility_trace.get("primary_reason_code")
-            print(f"  primary_reason_code={primary}")
-            failing = [r for r in eligibility_trace.get("rule_checks") or [] if not r.get("passed")]
-            for r in failing[:3]:
-                name = r.get("name", "?")
-                actual = r.get("actual", r.get("value", "?"))
-                thresh = r.get("threshold", "?")
-                print(f"  failing: {name} actual={actual} vs threshold={thresh}")
-            # Phase 5.2: intraday diagnostics when enabled
-            intraday = eligibility_trace.get("intraday") or {}
-            if intraday.get("enabled"):
-                print(f"  intraday: timeframe={intraday.get('timeframe')} data_present={intraday.get('data_present')} "
-                      f"intraday_regime={intraday.get('intraday_regime')} alignment_pass={intraday.get('alignment_pass')} "
-                      f"reason_code={intraday.get('reason_code')}")
+            out["eligibility_ok"] = True
+            print(f"[{symbol}] ELIGIBILITY: PASS (mode={mode_decision})")
     except Exception as e:
-        print(f"ELIGIBILITY: FAIL ({e})")
+        print(f"[{symbol}] ELIGIBILITY: FAIL ({e})")
 
-    # 5) Validate Stage-2 (only when mode_decision != NONE)
     stage2_trace = None
-    if eligibility_ok and mode_decision and mode_decision != "NONE":
+    if out["eligibility_ok"] and mode_decision and mode_decision != "NONE":
         try:
             from app.core.eval.staged_evaluator import evaluate_symbol_full
             from app.core.options.orats_chain_provider import get_chain_provider
-            provider = get_chain_provider()
-            result = evaluate_symbol_full(symbol, chain_provider=provider, skip_stage2=False)
-            trace = getattr(result.stage2, "stage2_trace", None) or {}
-            stage2_trace = trace
-            req_counts = trace.get("request_counts") or {}
-            puts_requested = trace.get("puts_requested") or req_counts.get("puts_requested")
-            calls_requested = trace.get("calls_requested") or req_counts.get("calls_requested")
-            if puts_requested is None:
-                counts = getattr(result.stage2, "option_type_counts", None) or {}
-                puts_requested = counts.get("puts_seen", counts.get("puts_requested", 0)) or 0
-            if calls_requested is None:
-                counts = getattr(result.stage2, "option_type_counts", None) or {}
-                calls_requested = counts.get("calls_seen", counts.get("calls_requested", 0)) or 0
-            if mode_decision == "CSP":
-                if puts_requested <= 0:
-                    print(f"STAGE2: FAIL (CSP but puts_requested={puts_requested})")
-                else:
-                    stage2_ok = True
-                    print(f"STAGE2: PASS (CSP, puts_requested={puts_requested})")
-            elif mode_decision == "CC":
-                if calls_requested <= 0:
-                    print(f"STAGE2: FAIL (CC but calls_requested={calls_requested})")
-                else:
-                    stage2_ok = True
-                    print(f"STAGE2: PASS (CC, calls_requested={calls_requested})")
+            result = evaluate_symbol_full(symbol, chain_provider=get_chain_provider(), skip_stage2=False)
+            stage2_trace = getattr(result.stage2, "stage2_trace", None) or {}
+            req = stage2_trace.get("request_counts") or {}
+            puts_req = req.get("puts_requested") or 0
+            calls_req = req.get("calls_requested") or 0
+            if mode_decision == "CSP" and puts_req <= 0:
+                print(f"[{symbol}] STAGE2: FAIL (puts_requested=0)")
+            elif mode_decision == "CC" and calls_req <= 0:
+                print(f"[{symbol}] STAGE2: FAIL (calls_requested=0)")
             else:
-                stage2_ok = True
-                print("STAGE2: PASS (mode not CSP/CC, skip check)")
+                out["stage2_ok"] = True
+                print(f"[{symbol}] STAGE2: PASS")
         except Exception as e:
-            print(f"STAGE2: FAIL ({e})")
+            print(f"[{symbol}] STAGE2: FAIL ({e})")
     else:
-        stage2_ok = True
-        print("STAGE2: PASS (mode_decision is NONE; skip Stage-2 request check)")
+        out["stage2_ok"] = True
+        print(f"[{symbol}] STAGE2: PASS (skip)")
 
-    _print_summary(candles_ok, indicators_ok, regime_ok, eligibility_ok, stage2_ok)
+    out["stage2_trace"] = stage2_trace
+    return out
 
-    # Phase 6.0: Alert payload (artifact only; no Slack)
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Full system validation (ORATS, indicators, regime, eligibility, Stage-2)")
+    parser.add_argument("--symbol", default="SPY", help="Single symbol (default: SPY)")
+    parser.add_argument("--symbols", default="", help="Comma-separated symbols for ranking (e.g. SPY,NVDA,AAPL,MSFT)")
+    args = parser.parse_args()
+    if (args.symbols or "").strip():
+        symbols = [s.strip().upper() for s in args.symbols.strip().split(",") if s.strip()]
+    else:
+        symbols = [(args.symbol or "SPY").strip().upper()]
+
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + uuid.uuid4().hex[:8]
+    repo_root = Path(__file__).resolve().parents[1]
+    lookback = 400
+
+    results: List[Dict[str, Any]] = []
+    for symbol in symbols:
+        r = _run_one_symbol(symbol, lookback=lookback)
+        results.append(r)
+
+    # Phase 6.1: score + tier per result; Phase 6.3: severity
+    from app.core.scoring.signal_score import compute_signal_score
+    from app.core.scoring.tiering import assign_tier
+    from app.core.scoring.ranking import rank_candidates
+    from app.core.scoring.severity import compute_alert_severity
+
+    candidates: List[Dict[str, Any]] = []
+    for r in results:
+        el = r.get("eligibility_trace") or {}
+        st2 = r.get("stage2_trace") or {}
+        spot = st2.get("spot_used") or (el.get("computed") or {}).get("close")
+        if spot is None and r.get("cands"):
+            try:
+                spot = float(r["cands"][-1].get("close"))
+            except (TypeError, ValueError):
+                pass
+        score_dict = compute_signal_score(el, st2, spot)
+        tier = assign_tier(r.get("mode_decision") or "NONE", score_dict.get("composite_score", 0))
+        severity_dict = compute_alert_severity(el, score_dict, tier, spot)
+        sel = st2.get("selected_trade") if isinstance(st2, dict) else None
+        dist_pct = severity_dict.get("distance_metric_used")
+        payload = {
+            "symbol": r["symbol"],
+            "mode_decision": (r.get("mode_decision") or "NONE").strip().upper(),
+            "tier": tier,
+            "severity": severity_dict.get("severity"),
+            "severity_dict": severity_dict,
+            "distance_pct": dist_pct,
+            "score": score_dict,
+            "composite_score": score_dict.get("composite_score"),
+            "notional_pct_of_account": score_dict.get("notional_pct_of_account"),
+            "strike": sel.get("strike") if isinstance(sel, dict) else None,
+            "delta": sel.get("abs_delta") if isinstance(sel, dict) else None,
+            "dte": sel.get("dte") if isinstance(sel, dict) else None,
+            "spread_pct": sel.get("spread_pct") if isinstance(sel, dict) else None,
+            "expiration": sel.get("exp") if isinstance(sel, dict) else None,
+        }
+        candidates.append(payload)
+
+    ranked = rank_candidates(candidates)
+
+    # Top 10 table
+    print()
+    print("===== TOP 10 CANDIDATES (ranked) =====")
+    fmt = "%4s %6s %4s %4s %8s %12s %8s %8s %6s %10s"
+    print(fmt % ("rank", "symbol", "mode", "tier", "score", "notional_pct", "strike", "delta", "dte", "spread_pct"))
+    print("-" * 82)
+    for p in ranked[:10]:
+        npct = p.get("notional_pct_of_account")
+        npct_s = f"{npct:.4f}" if npct is not None else "N/A"
+        strike_s = str(p.get("strike")) if p.get("strike") is not None else "N/A"
+        delta_s = str(p.get("delta")) if p.get("delta") is not None else "N/A"
+        dte_s = str(p.get("dte")) if p.get("dte") is not None else "N/A"
+        sp_s = f"{p.get('spread_pct'):.4f}" if p.get("spread_pct") is not None else "N/A"
+        score_s = str(p.get("composite_score")) if p.get("composite_score") is not None else "N/A"
+        print(fmt % (
+            p.get("priority_rank", "?"),
+            p.get("symbol", "?"),
+            p.get("mode_decision", "?"),
+            p.get("tier", "?"),
+            score_s,
+            npct_s,
+            strike_s,
+            delta_s,
+            dte_s,
+            sp_s,
+        ))
+
+    # Phase 6.3: ALERT READINESS (sorted by priority_rank)
+    print()
+    print("===== ALERT READINESS =====")
+    rfmt = "%4s %6s %4s %4s %8s %12s"
+    print(rfmt % ("rank", "symbol", "mode", "tier", "severity", "distance_pct"))
+    print("-" * 44)
+    for p in ranked[:10]:
+        dp = p.get("distance_pct")
+        dp_s = f"{dp:.6f}" if dp is not None else "N/A"
+        print(rfmt % (
+            p.get("priority_rank", "?"),
+            p.get("symbol", "?"),
+            p.get("mode_decision", "?"),
+            p.get("tier", "?"),
+            p.get("severity", "?"),
+            dp_s,
+        ))
+
+    # Summary (single-symbol: first result)
+    co = results[0]["candles_ok"]
+    io = results[0]["indicators_ok"]
+    ro = results[0]["regime_ok"]
+    eo = results[0]["eligibility_ok"]
+    so = results[0]["stage2_ok"]
+    _print_summary(co, io, ro, eo, so)
+
+    # Alert payload per symbol with priority_rank from ranking
+    rank_by_symbol = {p["symbol"]: p.get("priority_rank", 0) for p in ranked}
     try:
         from app.core.alerts.alert_payload import build_alert_payload
         from app.core.alerts.alert_store import save_alert_payload
-        candles_meta = {}
-        if cands:
-            candles_meta["first_date"] = str(cands[0].get("ts") or "N/A")[:10]
-            candles_meta["last_date"] = str(cands[-1].get("ts") or "N/A")[:10]
-        payload = build_alert_payload(symbol, run_id, eligibility_trace, stage2_trace, candles_meta, {"source": "validate_system_full"})
-        path = save_alert_payload(payload, base_dir=str(repo_root / "artifacts" / "alerts"))
-        print(f"ALERT_PAYLOAD saved: {path}")
+        for r in results:
+            symbol = r["symbol"]
+            el = r.get("eligibility_trace")
+            st2 = r.get("stage2_trace")
+            cands = r.get("cands") or []
+            candles_meta = {}
+            if cands:
+                candles_meta["first_date"] = str(cands[0].get("ts") or "N/A")[:10]
+                candles_meta["last_date"] = str(cands[-1].get("ts") or "N/A")[:10]
+            spot = (st2 or {}).get("spot_used") or (el or {}).get("computed", {}).get("close")
+            if not spot and cands:
+                try:
+                    spot = float(cands[-1].get("close"))
+                except (TypeError, ValueError):
+                    pass
+            score_dict = compute_signal_score(el, st2, spot)
+            tier = assign_tier(r.get("mode_decision") or "NONE", score_dict.get("composite_score", 0))
+            severity_dict = compute_alert_severity(el, score_dict, tier, spot)
+            priority_rank = rank_by_symbol.get(symbol, 1)
+            payload = build_alert_payload(
+                symbol, run_id, el, st2, candles_meta, {"source": "validate_system_full"},
+                score_dict=score_dict, tier=tier, priority_rank=priority_rank, severity_dict=severity_dict,
+            )
+            path = save_alert_payload(payload, base_dir=str(repo_root / "artifacts" / "alerts"))
+            print(f"ALERT_PAYLOAD saved: {path}")
     except Exception as e:
         print(f"ALERT_PAYLOAD save failed: {e}", file=sys.stderr)
 
-    return 0 if all((candles_ok, indicators_ok, regime_ok, eligibility_ok, stage2_ok)) else 1
+    all_ok = all([
+        results[0]["candles_ok"], results[0]["indicators_ok"], results[0]["regime_ok"],
+        results[0]["eligibility_ok"], results[0]["stage2_ok"],
+    ])
+    return 0 if all_ok else 1
 
 
 def _print_summary(

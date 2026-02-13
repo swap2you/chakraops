@@ -304,9 +304,22 @@ def main() -> int:
         with open(out_trace, "w", encoding="utf-8") as f:
             json.dump(to_write, f, indent=2, default=str)
         print(f"Wrote {out_trace}")
-        # Phase 4: Persist eligibility_trace
+        # Phase 4: Persist eligibility_trace (with Phase 6.1 score block)
         el_trace = data_diag.get("eligibility_trace")
         if isinstance(el_trace, dict):
+            try:
+                from app.core.scoring.signal_score import compute_signal_score
+                from app.core.scoring.tiering import assign_tier
+                from app.core.scoring.severity import compute_alert_severity
+                cd = data_diag.get("contract_data") or {}
+                stock = data_diag.get("stock") or {}
+                spot = cd.get("spot_used") or stock.get("price")
+                score_dict = compute_signal_score(el_trace, trace if isinstance(trace, dict) else None, spot)
+                tier = assign_tier(el_trace.get("mode_decision") or "NONE", score_dict.get("composite_score", 0))
+                severity_dict = compute_alert_severity(el_trace, score_dict, tier, spot)
+                el_trace = {**el_trace, "score": score_dict, "tier": tier, "severity": severity_dict}
+            except Exception:
+                pass
             out_el = out_dir / f"{symbol}_eligibility_trace.json"
             with open(out_el, "w", encoding="utf-8") as f:
                 json.dump(el_trace, f, indent=2, default=str)
@@ -348,17 +361,26 @@ def main() -> int:
     print("\n--- Candle Diagnostics ---")
     print(f"rows={len(candles_list)} first_date={candles_first_date} last_date={candles_last_date}")
 
-    # Phase 6.0: Alert payload (artifact only; no Slack)
+    # Phase 6.0: Alert payload (artifact only; no Slack). Phase 6.1: score/tier. Phase 6.3: severity.
     try:
         from app.core.alerts.alert_payload import build_alert_payload
         from app.core.alerts.alert_store import save_alert_payload
+        from app.core.scoring.signal_score import compute_signal_score
+        from app.core.scoring.tiering import assign_tier
+        from app.core.scoring.severity import compute_alert_severity
         el_trace = (data_diag or {}).get("eligibility_trace")
         st2_trace = (data_diag or {}).get("stage2_trace")
+        spot = ((data_diag or {}).get("stock") or {}).get("price") or ((data_diag or {}).get("contract_data") or {}).get("spot_used")
+        score_dict = compute_signal_score(el_trace, st2_trace, spot) if el_trace else {}
+        tier = assign_tier((el_trace or {}).get("mode_decision") or "NONE", (score_dict or {}).get("composite_score", 0))
+        severity_dict = compute_alert_severity(el_trace, score_dict, tier, spot)
         candles_meta = {"first_date": candles_first_date, "last_date": candles_last_date}
         config_meta = {"source": "validate_one_symbol"}
-        payload = build_alert_payload(symbol, run_id, el_trace, st2_trace, candles_meta, config_meta)
+        payload = build_alert_payload(symbol, run_id, el_trace, st2_trace, candles_meta, config_meta, score_dict=score_dict, tier=tier, priority_rank=1, severity_dict=severity_dict)
         path = save_alert_payload(payload, base_dir=str(repo_root / "artifacts" / "alerts"))
         print(f"ALERT_PAYLOAD saved: {path}")
+        print("\n--- Severity ---")
+        print(f"  severity={severity_dict.get('severity')} reason={severity_dict.get('reason')} distance_metric_used={severity_dict.get('distance_metric_used')} threshold_used={severity_dict.get('threshold_used')}")
     except Exception as e:
         print(f"ALERT_PAYLOAD save failed: {e}", file=sys.stderr)
 

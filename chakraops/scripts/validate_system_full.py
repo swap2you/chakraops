@@ -271,22 +271,54 @@ def main() -> int:
             dp_s,
         ))
 
-    # Phase 7.2: Slack SIGNAL alerts (tier A/B, severity READY/NOW, contracts_suggested > 0)
+    # Phase 7.2/7.3: Slack SIGNAL alerts (tier A/B, severity READY/NOW, contracts_suggested > 0); structured payload with exit plan
     try:
         from app.core.alerts.slack_dispatcher import route_alert
+        from app.core.lifecycle.exit_planner import build_exit_plan
         slack_state_path = repo_root / "artifacts" / "alerts" / "last_sent_state.json"
+        results_by_sym = {r["symbol"]: r for r in results}
         for p in ranked:
             tier = (p.get("tier") or "").strip().upper()
             severity = (p.get("severity") or "").strip().upper()
             ctrs = p.get("contracts_suggested")
             if tier in ("A", "B") and severity in ("READY", "NOW") and (ctrs is not None and ctrs > 0):
                 sym = (p.get("symbol") or "?").strip().upper()
-                route_alert(
-                    "SIGNAL",
-                    {"symbol": sym, "tier": tier, "severity": severity, "composite_score": p.get("composite_score"), "strike": p.get("strike")},
-                    event_key=f"signal:{sym}",
-                    state_path=slack_state_path,
-                )
+                res = results_by_sym.get(sym)
+                exit_base, exit_ext, t1, t2 = None, None, None, None
+                if res:
+                    el, st2, cands = res.get("eligibility_trace"), res.get("stage2_trace"), res.get("cands") or []
+                    spot = (st2 or {}).get("spot_used") or (el or {}).get("computed", {}).get("close")
+                    if not spot and cands:
+                        try:
+                            spot = float(cands[-1].get("close"))
+                        except (TypeError, ValueError):
+                            pass
+                    candles_meta = {}
+                    if cands:
+                        candles_meta["first_date"] = str(cands[0].get("ts") or "N/A")[:10]
+                        candles_meta["last_date"] = str(cands[-1].get("ts") or "N/A")[:10]
+                    ep = build_exit_plan(sym, p.get("mode_decision") or "NONE", spot, el, st2, candles_meta, ACCOUNT_EQUITY_DEFAULT)
+                    if ep and ep.get("enabled"):
+                        pp = ep.get("premium_plan") or {}
+                        sp = ep.get("structure_plan") or {}
+                        exit_base, exit_ext = pp.get("base_target_pct"), pp.get("extension_target_pct")
+                        t1, t2 = sp.get("T1"), sp.get("T2")
+                payload = {
+                    "symbol": sym,
+                    "tier": tier,
+                    "severity": severity,
+                    "composite_score": p.get("composite_score"),
+                    "strike": p.get("strike"),
+                    "dte": p.get("dte"),
+                    "delta": p.get("delta"),
+                    "capital_required_estimate": p.get("capital_required_estimate"),
+                    "exit_base_target_pct": exit_base,
+                    "exit_extension_target_pct": exit_ext,
+                    "exit_T1": t1,
+                    "exit_T2": t2,
+                    "mode": p.get("mode_decision"),
+                }
+                route_alert("SIGNAL", payload, event_key=f"signal:{sym}", state_path=slack_state_path)
     except Exception as e:
         pass  # do not crash; Slack optional
 
@@ -383,15 +415,23 @@ def main() -> int:
                 pct_s = f"{ev['premium_capture_pct']:.2%}" if ev.get("premium_capture_pct") is not None else "N/A"
                 dte_s = str(ev["dte"]) if ev.get("dte") is not None else "N/A"
                 print(fmt_ps % (sym, pct_s, dte_s, ev.get("exit_signal", "?"), ev.get("exit_reason", "?")))
-                # Phase 7.2: Position alerts (EXIT_NOW -> CRITICAL, else SIGNAL)
+                # Phase 7.3: Position alerts (POSITION event; routing by exit_priority in slack_dispatcher)
                 exit_sig = ev.get("exit_signal")
                 if exit_sig in ("EXIT_NOW", "TAKE_PROFIT", "ROLL_SUGGESTED"):
                     try:
                         from app.core.alerts.slack_dispatcher import route_alert
-                        event_type = "CRITICAL" if exit_sig == "EXIT_NOW" else "SIGNAL"
                         route_alert(
-                            event_type,
-                            {"symbol": sym, "position_id": pos.get("position_id", ""), "exit_signal": exit_sig, "exit_reason": ev.get("exit_reason")},
+                            "POSITION",
+                            {
+                                "symbol": sym,
+                                "mode": (pos.get("mode") or ev.get("mode") or "CSP"),
+                                "position_id": pos.get("position_id", ""),
+                                "exit_signal": exit_sig,
+                                "exit_reason": ev.get("exit_reason"),
+                                "exit_priority": ev.get("exit_priority"),
+                                "premium_capture_pct": ev.get("premium_capture_pct"),
+                                "dte": ev.get("dte"),
+                            },
                             event_key=f"position:{pos.get('position_id', '')}",
                             state_path=repo_root / "artifacts" / "alerts" / "last_sent_state.json",
                         )
@@ -449,22 +489,56 @@ def main() -> int:
     except Exception as e:
         print(f"ALERT_PAYLOAD save failed: {e}", file=sys.stderr)
 
-    # Phase 7.2: Optional DAILY summary Slack alert
+    # Phase 7.3: Optional DAILY summary Slack alert (enriched: total_capital_used, exposure_pct, average_premium_capture, exit_alerts_today, top_signals)
     if getattr(args, "daily_summary", False):
         try:
             from app.core.positions.position_ledger import load_open_positions
             from app.core.alerts.slack_dispatcher import route_alert
             open_positions = load_open_positions(repo_root / "artifacts" / "positions" / "open_positions.json")
             top5 = ranked[:5] if ranked else []
+            top_signals = [{"symbol": p.get("symbol"), "tier": p.get("tier"), "severity": p.get("severity")} for p in top5]
+            total_capital_used = None
+            for pos in open_positions:
+                strike = pos.get("strike")
+                contracts = pos.get("contracts") or 1
+                if strike is not None:
+                    cap = float(strike) * 100 * int(contracts)
+                    total_capital_used = (total_capital_used or 0) + cap
+            account_equity = getattr(args, "account_equity", None) or ACCOUNT_EQUITY_DEFAULT
             exposure_pct = None
-            if top5:
-                pcts = [p.get("capital_pct_of_account") or p.get("notional_pct_of_account") for p in top5]
-                pcts = [x for x in pcts if x is not None]
-                if pcts:
-                    exposure_pct = sum(pcts) * 100.0
+            if total_capital_used is not None and account_equity and float(account_equity) > 0:
+                exposure_pct = 100.0 * total_capital_used / float(account_equity)
+            average_premium_capture = None
+            exit_alerts_today = 0
+            eval_dir = repo_root / "artifacts" / "positions" / "evaluations"
+            if eval_dir.exists():
+                import json as _json
+                captures = []
+                for f in eval_dir.glob("*.json"):
+                    try:
+                        with open(f, encoding="utf-8") as _f:
+                            ev = _json.load(_f)
+                        pct = ev.get("premium_capture_pct")
+                        if pct is not None:
+                            captures.append(pct)
+                        if ev.get("exit_signal") in ("EXIT_NOW", "TAKE_PROFIT", "ROLL_SUGGESTED"):
+                            exit_alerts_today += 1
+                    except (OSError, _json.JSONDecodeError):
+                        pass
+                if captures:
+                    average_premium_capture = sum(captures) / len(captures)
             route_alert(
                 "DAILY",
-                {"top_count": len(top5), "open_positions_count": len(open_positions), "exposure_pct": exposure_pct, "alerts_count": 0},
+                {
+                    "top_signals": top_signals,
+                    "top_count": len(top5),
+                    "open_positions_count": len(open_positions),
+                    "total_capital_used": total_capital_used,
+                    "exposure_pct": exposure_pct,
+                    "average_premium_capture": average_premium_capture,
+                    "exit_alerts_today": exit_alerts_today,
+                    "alerts_count": exit_alerts_today,
+                },
                 event_key="daily:summary",
                 state_path=repo_root / "artifacts" / "alerts" / "last_sent_state.json",
             )

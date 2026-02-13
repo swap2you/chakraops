@@ -432,7 +432,19 @@ def _scheduler_loop(stop_event: threading.Event, interval_minutes: int) -> None:
         
         if stop_event.is_set():
             break
-        
+
+        # Phase 7.3: Watchdog check (non-blocking; SCHEDULER_STALLED if last run too old)
+        try:
+            from app.core.system.watchdog import run_watchdog_checks
+            run_watchdog_checks(
+                _last_scheduled_eval_at,
+                interval_minutes,
+                orats_rolling_avg_ms=None,
+                has_signals_in_24h=True,
+            )
+        except Exception as e:
+            logger.debug("[SCHEDULER] Watchdog check skipped: %s", e)
+
         # Attempt scheduled evaluation
         _run_scheduled_evaluation()
     
@@ -3402,6 +3414,69 @@ def _persist_slack_delivery(sent: bool, status_code: Optional[int], reason: str,
             f.write(_json.dumps(record, default=str) + "\n")
     except Exception as e:
         logger.warning("[SLACK] Failed to persist delivery status: %s", e)
+
+
+@app.post("/api/ops/send-trade-alert")
+def api_ops_send_trade_alert(request: Request):
+    """
+    Phase 7.3: UI-triggered manual Slack trade alert. Payload: {"symbol": "NVDA"}.
+    Pulls latest eligibility/alert payload for symbol; requires tier in (A,B) and severity in (READY, NOW).
+    Builds formatted SIGNAL message and routes to SIGNALS webhook. Returns {"sent": true/false}. 400 if not eligible.
+    """
+    import asyncio
+    try:
+        body = asyncio.get_event_loop().run_until_complete(request.json())
+    except Exception:
+        body = {}
+    symbol = (body.get("symbol") or "").strip().upper()
+    if not symbol:
+        raise HTTPException(status_code=400, detail={"reason": "symbol required", "symbol": None})
+    try:
+        from app.core.alerts.alert_store import load_latest_alert_payload
+        payload = load_latest_alert_payload(symbol)
+    except Exception as e:
+        logger.warning("[send-trade-alert] load_latest_alert_payload failed: %s", e)
+        payload = None
+    if not payload:
+        raise HTTPException(
+            status_code=400,
+            detail={"reason": "No latest alert payload for symbol", "symbol": symbol},
+        )
+    tier = (payload.get("tier") or "").strip().upper()
+    severity = (payload.get("severity") or "").strip().upper()
+    if tier not in ("A", "B") or severity not in ("READY", "NOW"):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "reason": "Not eligible for trade alert (tier must be A/B, severity READY/NOW)",
+                "symbol": symbol,
+                "tier": tier,
+                "severity": severity,
+            },
+        )
+    st2 = payload.get("stage2_summary") or {}
+    signal_payload = {
+        "symbol": symbol,
+        "tier": tier,
+        "severity": severity,
+        "composite_score": payload.get("composite_score"),
+        "strike": st2.get("strike") or payload.get("strike"),
+        "dte": payload.get("exit_dte"),
+        "delta": st2.get("delta"),
+        "capital_required_estimate": payload.get("capital_required_estimate"),
+        "exit_base_target_pct": payload.get("exit_base_target_pct"),
+        "exit_extension_target_pct": payload.get("exit_extension_target_pct"),
+        "exit_T1": payload.get("exit_T1"),
+        "exit_T2": payload.get("exit_T2"),
+        "mode": payload.get("mode_decision"),
+    }
+    sent = False
+    try:
+        from app.core.alerts.slack_dispatcher import route_alert
+        sent = route_alert("SIGNAL", signal_payload, event_key=None, state_path=Path("artifacts/alerts/last_sent_state.json"))
+    except Exception as e:
+        logger.warning("[send-trade-alert] route_alert failed: %s", e)
+    return {"sent": sent}
 
 
 @app.post("/api/ops/notify/slack")

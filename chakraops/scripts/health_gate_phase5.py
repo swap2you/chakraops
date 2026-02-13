@@ -501,19 +501,38 @@ def main() -> int:
     print(f"  Warn: {all_warn}")
     print(f"  Fail: {all_fail}")
 
-    # Phase 7.2: HEALTH Slack alert when OVERALL != PASS
+    # Phase 7.2/7.3: HEALTH Slack alert when OVERALL != PASS (structured format with timestamp)
     if all_fail or all_warn:
         try:
             from app.core.alerts.slack_dispatcher import route_alert
             failed_list = all_fail if all_fail else all_warn
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
             route_alert(
                 "HEALTH",
-                {"failed_symbols": failed_list, "failed": ",".join(failed_list)},
+                {"failed_symbols": failed_list, "failed": ",".join(failed_list), "timestamp": ts},
                 event_key="health:system",
                 state_path=repo_root / "artifacts" / "alerts" / "last_sent_state.json",
             )
         except Exception:
             pass
+
+    # Phase 7.3: Watchdog checks (scheduler stall, ORATS latency, no signals 24h). Non-blocking.
+    try:
+        from app.core.system.watchdog import run_watchdog_checks
+        try:
+            from app.api.market_status import read_market_status
+            status = read_market_status()
+            last_eval = status.get("last_evaluated_at")
+        except Exception:
+            last_eval = None
+        run_watchdog_checks(
+            last_eval,
+            interval_minutes=30,
+            orats_rolling_avg_ms=None,
+            has_signals_in_24h=True,
+        )
+    except Exception:
+        pass
 
     # Alert payload per symbol (Phase 6.0)
     try:

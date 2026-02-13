@@ -128,6 +128,7 @@ def evaluate_position(
 
     # Data missing: do not use premium in rules; return HOLD + data_missing
     if exit_signal_data is not None:
+        exit_priority_data = "NONE"
         out = {
             "position_id": pos_id,
             "symbol": symbol,
@@ -140,6 +141,7 @@ def evaluate_position(
             "exit_signal": exit_signal_data,
             "exit_reason": exit_reason_data,
             "risk_flags": risk_flags,
+            "exit_priority": exit_priority_data,
         }
         return out
 
@@ -183,6 +185,20 @@ def evaluate_position(
         exit_signal = EXIT_HOLD
         exit_reason = "hold"
 
+    # Phase 7.3: Exit escalation classification (observability only; no logic change)
+    if panic_flag:
+        exit_priority = "PANIC"
+    elif dte is not None and dte <= 3:
+        exit_priority = "EXPIRY_CRITICAL"
+    elif premium_capture_pct is not None and premium_capture_pct >= 0.90:
+        exit_priority = "FAST_CAPTURE"
+    elif exit_signal == EXIT_NOW:
+        exit_priority = "NORMAL_EXIT"
+    elif exit_signal in (EXIT_TAKE_PROFIT, EXIT_ROLL_SUGGESTED):
+        exit_priority = "ADVISORY"
+    else:
+        exit_priority = "NONE"
+
     out = {
         "position_id": pos_id,
         "symbol": symbol,
@@ -195,6 +211,7 @@ def evaluate_position(
         "exit_signal": exit_signal,
         "exit_reason": exit_reason,
         "risk_flags": risk_flags,
+        "exit_priority": exit_priority,
     }
     return out
 

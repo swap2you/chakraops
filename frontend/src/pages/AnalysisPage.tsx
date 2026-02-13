@@ -126,6 +126,44 @@ export function AnalysisPage() {
     setExecuteModalOpen(true);
   }, []);
 
+  // Phase 7.3: Send trade alert to Slack (symbol only; backend checks tier A/B, severity READY/NOW)
+  const [tradeAlertSending, setTradeAlertSending] = useState(false);
+  const sendTradeAlertToSlack = useCallback(async () => {
+    if (!symbol?.trim()) return;
+    const sym = symbol.trim().toUpperCase();
+    setTradeAlertSending(true);
+    try {
+      const result = await apiPost<{ sent: boolean }>(ENDPOINTS.sendTradeAlert, { symbol: sym });
+      if (result.sent) {
+        pushSystemNotification({
+          source: "system",
+          severity: "info",
+          title: "Trade alert sent",
+          message: `${sym} trade alert sent to Slack`,
+        });
+      } else {
+        pushSystemNotification({
+          source: "system",
+          severity: "warning",
+          title: "Trade alert not sent",
+          message: "Slack webhook may be missing or delivery failed",
+        });
+      }
+    } catch (e) {
+      const err = e as ApiError;
+      const detail = err.body && typeof err.body === "object" && "detail" in err.body ? (err.body as { detail?: { reason?: string } }).detail : null;
+      const reason = (detail && typeof detail === "object" && "reason" in detail ? (detail as { reason?: string }).reason : null) ?? err.message ?? "Request failed";
+      pushSystemNotification({
+        source: "system",
+        severity: "error",
+        title: "Trade alert failed",
+        message: reason,
+      });
+    } finally {
+      setTradeAlertSending(false);
+    }
+  }, [symbol]);
+
   // Send to Slack
   const sendToSlack = useCallback(async (trade: SymbolDiagnosticsCandidateTrade, sym: string) => {
     const key = `${sym}-${trade.strategy}-${trade.strike}`;
@@ -358,6 +396,18 @@ export function AnalysisPage() {
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
             {loading ? "Loading…" : "Analyze"}
           </button>
+          {mode === "LIVE" && symbol?.trim() && (
+            <button
+              type="button"
+              onClick={sendTradeAlertToSlack}
+              disabled={tradeAlertSending}
+              className="flex items-center gap-2 rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium hover:bg-secondary/80 disabled:opacity-50"
+              title="Send current symbol as trade alert to Slack (requires tier A/B, severity READY/NOW)"
+            >
+              {tradeAlertSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Send to Slack
+            </button>
+          )}
         </div>
         {/* Progressive loading indicator */}
         {loading && loadingIndicator && (

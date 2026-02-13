@@ -36,6 +36,8 @@ export const ENDPOINTS = {
   evaluationAlerts: `${BASE}/api/view/evaluation-alerts`,
   /** Send notification to Slack */
   notifySlack: `${BASE}/api/ops/notify/slack`,
+  /** Phase 7.3: Send trade alert to Slack (symbol only; requires tier A/B, severity READY/NOW) */
+  sendTradeAlert: `${BASE}/api/ops/send-trade-alert`,
   /** Strategy overview markdown (read-only) */
   strategyOverview: `${BASE}/api/view/strategy-overview`,
   /** Evaluation pipeline doc markdown (docs/EVALUATION_PIPELINE.md) */

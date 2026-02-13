@@ -67,7 +67,10 @@ from app.core.config.wheel_strategy_config import (
     get_dte_range,
     get_target_delta_range,
     get_acquisition_delta_range,
+    get_stage2_strategy_mode,
+    USE_STAGE2_V2_ONLY,
 )
+from app.core.models.data_quality import wrap_field_float, wrap_field_int
 from app.core.eval.volatility import get_ivr_band
 
 logger = logging.getLogger(__name__)
@@ -127,6 +130,8 @@ REQUIRED_CHAIN_FIELDS = [
     "delta",
     "open_interest",
 ]
+# Phase 3.1: For selection eligibility, OI is optional (counted but null OI does not wipe candidates).
+REQUIRED_CHAIN_FIELDS_FOR_SELECTION = ["strike", "expiration", "bid", "ask", "delta"]
 
 
 @dataclass
@@ -233,6 +238,12 @@ class Stage2Result:
     sample_missing_required_contract: Optional[Dict[str, Any]] = None  # first rejected PUT: option_symbol (OCC), option_type, values_seen, raw_keys
     # Telemetry from /strikes/options (endpoint_used, non_null counts, sample symbols)
     strikes_options_telemetry: Optional[Dict[str, Any]] = None
+    # Stage-2 trace (pipeline acquisition + samples) for validate_one_symbol / harness comparison
+    stage2_trace: Optional[Dict[str, Any]] = None
+    # Phase 3.1: OTM and delta-band counts (from chain + spot)
+    otm_puts_in_dte: int = 0
+    otm_puts_in_delta_band: int = 0
+    spot_used: Optional[float] = None
 
 
 @dataclass
@@ -576,47 +587,71 @@ def _select_csp_candidates(
     min_oi: int,
     max_spread_pct: float,
     symbol: str,
-) -> Tuple[List[SelectedContract], List[str], Dict[str, int], List[Dict[str, Any]]]:
+) -> Tuple[List[SelectedContract], List[str], Dict[str, int], List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
     Filter by option_type==PUT, 30–45 DTE, then required fields, delta, OI, spread.
     Order: (a) required fields, (b) delta, (c) OI, (d) spread. Missing fields never masquerade as low OI.
     """
     reasons: List[str] = []
     rejection_counts: Dict[str, int] = {
+        "rejected_due_to_wrong_type": 0,
         "rejected_due_to_delta": 0,
         "rejected_due_to_oi": 0,
         "rejected_due_to_spread": 0,
         "rejected_due_to_missing_fields": 0,
+        "rejected_due_to_itm": 0,
     }
     sample_rejected_due_to_delta: List[Dict[str, Any]] = []
 
-    # Collect put contracts from chains in DTE range
+    # Spot from first chain (for OTM gating)
+    spot: Optional[float] = None
+    for chain_result in chains.values():
+        if chain_result.success and chain_result.chain and chain_result.chain.underlying_price is not None:
+            uv = chain_result.chain.underlying_price
+            if getattr(uv, "value", None) is not None:
+                spot = float(uv.value)
+                break
+
+    # Collect put contracts from chains in DTE range; count wrong_type (CALL in CSP pool)
     all_puts: List[Tuple[OptionContract, date]] = []
     for exp_date, chain_result in chains.items():
         if not chain_result.success or chain_result.chain is None:
             continue
         chain = chain_result.chain
         for c in chain.contracts:
-            if c.option_type != OptionType.PUT:
-                continue
             if not (dte_min <= c.dte <= dte_max):
+                continue
+            if c.option_type != OptionType.PUT:
+                rejection_counts["rejected_due_to_wrong_type"] += 1
                 continue
             c.compute_derived_fields()
             all_puts.append((c, exp_date))
 
     if not all_puts:
         reasons.append("No contracts in 30–45 DTE range")
-        return [], reasons, rejection_counts, sample_rejected_due_to_delta
+        return [], reasons, rejection_counts, sample_rejected_due_to_delta, []
 
-    # Apply filters in order: (a) required fields, (b) delta, (c) OI, (d) spread
-    passed: List[Tuple[OptionContract, date]] = []
+    # Phase 3.1: OTM gate — CSP (sell PUT): OTM means strike < spot. Filter before other gates.
+    otm_puts: List[Tuple[OptionContract, date]] = []
     for c, exp in all_puts:
-        # (a) Required fields first - missing/invalid -> rejected_due_to_missing_fields
-        has_all, _ = _contract_has_all_required_chain_fields(c)
+        if spot is not None and c.strike >= spot:
+            rejection_counts["rejected_due_to_itm"] += 1
+            continue
+        otm_puts.append((c, exp))
+
+    if not otm_puts:
+        reasons.append("No OTM puts (strike < spot)" if spot is not None else "No puts after filters")
+        return [], reasons, rejection_counts, sample_rejected_due_to_delta, []
+
+    # Apply filters in order: (a) required fields (bid/ask/delta; OI optional), (b) delta, (c) OI, (d) spread
+    passed: List[Tuple[OptionContract, date]] = []
+    for c, exp in otm_puts:
+        # (a) Required fields for selection (no OI) — missing -> rejected_due_to_missing_fields
+        has_all, _ = _contract_has_required_fields_for_selection(c)
         if not has_all:
             rejection_counts["rejected_due_to_missing_fields"] += 1
             continue
-        # (b) Delta filter
+        # (b) Delta filter (abs(delta) in band 0.20–0.40)
         delta_mag = _delta_magnitude(c)
         if delta_mag is None:
             rejection_counts["rejected_due_to_missing_fields"] += 1
@@ -647,7 +682,19 @@ def _select_csp_candidates(
 
     if not passed:
         reasons.append(f"No contracts passed option liquidity gates (OI≥{min_oi}, spread≤{max_spread_pct:.0%})")
-        return [], reasons, rejection_counts, sample_rejected_due_to_delta
+        sample_rejected_candidates = []
+        for c, _ in otm_puts[:10]:
+            _, bid_v = _is_valid_numeric_field(getattr(c, "bid", None))
+            _, ask_v = _is_valid_numeric_field(getattr(c, "ask", None))
+            _, oi_v = _is_valid_numeric_field(getattr(c, "open_interest", None))
+            sample_rejected_candidates.append({
+                "strike": c.strike,
+                "abs_delta": round(_delta_magnitude(c) or 0, 4),
+                "bid": bid_v,
+                "ask": ask_v,
+                "oi": int(oi_v) if oi_v is not None else None,
+            })
+        return [], reasons, rejection_counts, sample_rejected_due_to_delta, sample_rejected_candidates
 
     # Rank by premium/capital_required and liquidity quality
     def rank_key(item: Tuple[OptionContract, date]) -> Tuple[float, int]:
@@ -680,7 +727,7 @@ def _select_csp_candidates(
             criteria_results={"dte_in_range": True, "liquidity_ok": True},
         )
         candidates.append(sel)
-    return candidates, [], rejection_counts, sample_rejected_due_to_delta
+    return candidates, [], rejection_counts, sample_rejected_due_to_delta, []
 
 
 def _is_valid_numeric_field(field_value: Any) -> Tuple[bool, Optional[float]]:
@@ -728,6 +775,29 @@ def _contract_has_all_required_chain_fields(contract: OptionContract) -> Tuple[b
     return (len(missing) == 0, missing)
 
 
+def _contract_has_required_fields_for_selection(contract: OptionContract) -> Tuple[bool, List[str]]:
+    """Phase 3.1: Required for CSP/CC selection (bid, ask, delta, strike, expiration). OI optional."""
+    missing: List[str] = []
+    for fn in REQUIRED_CHAIN_FIELDS_FOR_SELECTION:
+        if fn == "strike":
+            ok, _ = _is_valid_numeric_field(contract.strike)
+            if not ok:
+                missing.append(fn)
+            continue
+        if fn == "expiration":
+            if contract.expiration is None:
+                missing.append(fn)
+            continue
+        fv = getattr(contract, fn, None)
+        if fv is None:
+            missing.append(fn)
+            continue
+        ok, _ = _is_valid_numeric_field(fv)
+        if not ok:
+            missing.append(fn)
+    return (len(missing) == 0, missing)
+
+
 def _compute_required_chain_fields_from_candidates(
     selected_candidates: List[Any],
     current_chain_missing: List[str],
@@ -754,8 +824,8 @@ def _compute_required_fields_from_chain_puts(
     chains: Dict[date, Any],
 ) -> Tuple[bool, List[str], int, int]:
     """
-    From chain PUTs (not selected_candidates): at least one PUT has all REQUIRED_CHAIN_FIELDS.
-    Compute immediately after chain fetch, before selection.
+    From chain PUTs: required = strike, expiration, delta, bid, ask (OI optional).
+    required_fields_present = at least one PUT has all five. puts_with_required_fields = count with all five.
     Returns (required_fields_present, chain_missing_fields, total_puts, puts_with_required_fields).
     """
     put_contracts: List[OptionContract] = []
@@ -769,12 +839,12 @@ def _compute_required_fields_from_chain_puts(
     puts_with_required = 0
     all_missing: set = set()
     for c in put_contracts:
-        ok, missing = _contract_has_all_required_chain_fields(c)
+        ok, missing = _contract_has_required_fields_for_selection(c)
         if ok:
             puts_with_required += 1
-            return (True, [], total_puts, puts_with_required)
         all_missing.update(missing)
-    return (False, list(all_missing), total_puts, puts_with_required)
+    required_fields_present = puts_with_required > 0
+    return (required_fields_present, list(all_missing), total_puts, puts_with_required)
 
 
 def _collect_puts_in_dte_range(
@@ -829,14 +899,13 @@ def _compute_missing_required_fields_diagnostics(
     puts_in_dte: List[Tuple[OptionContract, date]],
 ) -> Tuple[Dict[str, int], Optional[Dict[str, Any]]]:
     """
-    For PUTs in 30–45 DTE (same population as selection): aggregate missing-required-field counts
-    and capture the first rejected contract sample.
+    For PUTs in 30–45 DTE: missing counts for required set (strike, expiration, delta, bid, ask) only.
     Returns (missing_required_fields_counts, sample_missing_required_contract).
     """
-    missing_counts: Dict[str, int] = {f: 0 for f in REQUIRED_CHAIN_FIELDS}
+    missing_counts: Dict[str, int] = {f: 0 for f in REQUIRED_CHAIN_FIELDS_FOR_SELECTION}
     sample: Optional[Dict[str, Any]] = None
     for c, exp_date in puts_in_dte:
-        has_all, missing_list = _contract_has_all_required_chain_fields(c)
+        has_all, missing_list = _contract_has_required_fields_for_selection(c)
         for f in missing_list:
             missing_counts[f] = missing_counts.get(f, 0) + 1
         if not has_all and sample is None:
@@ -859,6 +928,7 @@ def evaluate_stage2(
     symbol: str,
     stage1: Stage1Result,
     chain_provider: Optional[OratsChainProvider] = None,
+    strategy_mode: str = "CSP",
 ) -> Stage2Result:
     """
     Stage 2: Fetch chains and evaluate contracts.
@@ -889,130 +959,113 @@ def evaluate_stage2(
         min_oi = WHEEL_CONFIG[MIN_OPTION_OI]
         max_spread_pct = WHEEL_CONFIG[MAX_OPTION_SPREAD_PCT]
 
-        expirations = provider.get_expirations(symbol)
-        result.expirations_available = len(expirations)
+        # Phase 3.6/3.7: V2 ONLY — CSP and CC route to v2 engines. No legacy path.
+        if USE_STAGE2_V2_ONLY:
+            spot_used = getattr(stage1, "price", None)
+            if spot_used is None:
+                result.error = "TRACE_MISSING_BUG"
+                result.liquidity_reason = "V2 requires spot_used (stage1.price); missing"
+                result.stage2_trace = {"mode": (strategy_mode or "CSP"), "error": "TRACE_MISSING_BUG", "message": "spot_used required", "spot_used": None}
+                result.chain_fetch_duration_ms = int((time.time() - start_time) * 1000)
+                return result
 
-        if not expirations:
-            result.error = "No expirations available"
-            result.liquidity_reason = "No options chain data"
-            result.contract_selection_reasons = ["No expirations available"]
-            return result
+            mode = (strategy_mode or get_stage2_strategy_mode()) or "CSP"
+            from app.core.options.v2 import run_csp_stage2_v2, run_cc_stage2_v2
 
-        target_expirations = [e for e in expirations if dte_min <= e.dte <= dte_max]
-        if not target_expirations:
-            result.liquidity_ok = False
-            result.liquidity_reason = f"No expirations in {dte_min}-{dte_max} DTE"
-            result.contract_selection_reasons = [f"No expirations in {dte_min}-{dte_max} DTE"]
-            result.contracts_evaluated = 0
-            return result
+            if mode == "CC":
+                v2_result = run_cc_stage2_v2(
+                    symbol=symbol,
+                    spot_used=float(spot_used),
+                    snapshot_time=now_iso,
+                    quote_as_of=getattr(stage1, "quote_date", None) or getattr(stage1, "quote_as_of", None),
+                    dte_min=dte_min,
+                    dte_max=dte_max,
+                )
+                option_type = OptionType.CALL
+                delta_sign = 1.0
+            else:
+                v2_result = run_csp_stage2_v2(
+                    symbol=symbol,
+                    spot_used=float(spot_used),
+                    snapshot_time=now_iso,
+                    quote_as_of=getattr(stage1, "quote_date", None) or getattr(stage1, "quote_as_of", None),
+                    dte_min=dte_min,
+                    dte_max=dte_max,
+                )
+                option_type = OptionType.PUT
+                delta_sign = -1.0
 
-        exp_dates = [e.expiration for e in target_expirations[:5]]  # Fetch up to 5
-        acq_delta_lo, acq_delta_hi = get_acquisition_delta_range()
-        chains = provider.get_chains_batch(
-            symbol, exp_dates, max_concurrent=STAGE2_MAX_CONCURRENT,
-            delta_lo=acq_delta_lo, delta_hi=acq_delta_hi,
-        )
-        result.expirations_evaluated = len(chains)
-        total_contracts = sum(len(cr.chain.contracts) for cr in chains.values() if cr.success and cr.chain)
-        result.contracts_evaluated = total_contracts
-        # Capture /strikes/options telemetry from first available chain result
-        for cr in chains.values():
-            if getattr(cr, "telemetry", None):
-                result.strikes_options_telemetry = cr.telemetry
-                break
-        # Count option types in chain contracts (before filtering) for diagnostics
-        puts_seen = calls_seen = unknown_seen = 0
-        for chain_result in chains.values():
-            if not chain_result.success or chain_result.chain is None:
-                continue
-            for c in chain_result.chain.contracts:
-                if c.option_type == OptionType.PUT:
-                    puts_seen += 1
-                elif c.option_type == OptionType.CALL:
-                    calls_seen += 1
-                else:
-                    unknown_seen += 1
-        result.option_type_counts = {"puts_seen": puts_seen, "calls_seen": calls_seen, "unknown_seen": unknown_seen}
-        # required_fields_present from chain PUTs (before selection), not from selected_candidates
-        req_present, chain_missing, total_puts, puts_with_req = _compute_required_fields_from_chain_puts(chains)
-        result.required_fields_present = req_present
-        result.chain_missing_fields = chain_missing
-        result.total_puts_in_chain = total_puts
-        result.puts_with_required_fields = puts_with_req
-        all_missing_fields = set(chain_missing)
-        result.chain_completeness = 1.0 - (len(all_missing_fields) / 4) if all_missing_fields else 1.0
+            result.chain_fetch_duration_ms = int((time.time() - start_time) * 1000)
+            result.stage2_trace = v2_result.stage2_trace
+            if not v2_result.stage2_trace:
+                result.error = "TRACE_MISSING_BUG"
+                result.liquidity_reason = "V2 returned no stage2_trace"
+                result.stage2_trace = {"mode": mode, "error": "TRACE_MISSING_BUG", "message": "V2 must always return full trace"}
+                return result
 
-        # Missing-required-fields diagnostics on same 30–45 DTE PUT population as selection
-        puts_in_dte = _collect_puts_in_dte_range(chains, dte_min, dte_max)
-        missing_counts, sample_contract = _compute_missing_required_fields_diagnostics(puts_in_dte)
-        result.missing_required_fields_counts = missing_counts
-        result.sample_missing_required_contract = sample_contract
-
-        candidates, failure_reasons, rejection_counts, sample_rejected_due_to_delta = _select_csp_candidates(
-            chains, dte_min, dte_max, delta_lo, delta_hi, min_oi, max_spread_pct, symbol,
-        )
-        result.rejection_counts = rejection_counts
-        result.top_rejection_reasons = {
-            "rejection_counts": dict(rejection_counts),
-            "sample_rejected_due_to_delta": sample_rejected_due_to_delta,
-        }
-        # Delta distribution for PUTs in fetched chain (diagnostics)
-        put_deltas: List[float] = []
-        for chain_result in chains.values():
-            if not chain_result.success or chain_result.chain is None:
-                continue
-            for c in chain_result.chain.contracts:
-                if c.option_type == OptionType.PUT:
-                    dm = _delta_magnitude(c)
-                    if dm is not None:
-                        put_deltas.append(dm)
-        if put_deltas:
-            put_deltas.sort()
-            sample = put_deltas[:: max(1, len(put_deltas) // 10)][:10]  # ~10 evenly spaced
-            result.delta_distribution = {
-                "min_abs_put_delta": round(min(put_deltas), 4),
-                "max_abs_put_delta": round(max(put_deltas), 4),
-                "sample_abs_deltas": [round(x, 4) for x in sample],
+            trace = v2_result.stage2_trace
+            req = trace.get("request_counts") or {}
+            result.spot_used = v2_result.spot_used
+            result.expirations_available = trace.get("expirations_count") or 0
+            result.contracts_evaluated = v2_result.contract_count
+            result.otm_puts_in_dte = trace.get("otm_puts_in_dte") or trace.get("otm_contracts_in_dte") or 0
+            result.otm_puts_in_delta_band = trace.get("otm_puts_in_delta_band") or trace.get("otm_contracts_in_delta_band") or 0
+            result.puts_with_required_fields = trace.get("puts_with_required_fields") or 0
+            result.required_fields_present = (result.puts_with_required_fields > 0) or (trace.get("calls_with_required_fields", 0) > 0)
+            result.total_puts_in_chain = v2_result.contract_count if mode == "CSP" else 0
+            result.option_type_counts = {
+                "puts_seen": req.get("puts_requested", 0),
+                "calls_seen": req.get("calls_requested", 0),
+                "unknown_seen": 0,
             }
-
-        if candidates:
-            result.selected_contract = candidates[0]
-            result.selected_expiration = candidates[0].contract.expiration
-            result.selected_candidates = candidates[:CONTRACT_SELECTION_TOP_N]
-            result.liquidity_grade = result.selected_contract.contract.get_liquidity_grade().value
-            result.liquidity_ok = True
-            result.liquidity_reason = result.selected_contract.selection_reason
-            # required_fields_present already set from chain PUTs (not overwritten by selection)
-        else:
-            result.liquidity_ok = False
-            result.liquidity_reason = failure_reasons[0] if failure_reasons else "No contracts meeting criteria"
-            result.contract_selection_reasons = failure_reasons
-            if not failure_reasons and all_missing_fields:
-                # Check if missing fields are intraday-only (OI, volume) and market is closed
+            result.rejection_counts = trace.get("rejection_counts") or trace.get("rejected_counts") or {}
+            result.top_rejection_reasons = {
+                "rejection_counts": result.rejection_counts,
+                "sample_rejected_candidates": v2_result.sample_rejections,
+                "top_rejection_reason": v2_result.top_rejection or v2_result.top_rejection_reason,
+            }
+            result.strikes_options_telemetry = {
+                "response_rows": trace.get("response_rows"),
+                "puts_requested": req.get("puts_requested", 0),
+                "calls_requested": req.get("calls_requested", 0),
+                "sample_request_symbols": trace.get("sample_request_symbols"),
+            }
+            result.liquidity_ok = v2_result.success
+            result.liquidity_reason = (
+                f"delta={v2_result.selected_trade.get('abs_delta')}, bid=${v2_result.selected_trade.get('bid')}"
+                if v2_result.selected_trade else (v2_result.top_rejection or v2_result.top_rejection_reason or "No contract selected")
+            )
+            if v2_result.selected_trade:
+                st = v2_result.selected_trade
+                exp_raw = st.get("exp")
                 try:
-                    from app.core.eval.verdict_resolver import (
-                        classify_data_incompleteness,
-                        MarketStatus,
-                        DataIncompleteType,
-                        INTRADAY_ONLY_FIELDS,
-                    )
-                    from app.api.server import get_market_phase
-                    
-                    market_phase = get_market_phase()
-                    market_status = MarketStatus.CLOSED if market_phase != "OPEN" else MarketStatus.OPEN
-                    
-                    # Check if all missing fields are intraday-only
-                    missing_lower = {f.lower() for f in all_missing_fields}
-                    intraday_lower = {f.lower() for f in INTRADAY_ONLY_FIELDS} | {"oi", "openinterest", "open_interest"}
-                    
-                    if missing_lower.issubset(intraday_lower) and market_status == MarketStatus.CLOSED:
-                        result.liquidity_reason = f"DATA_INCOMPLETE_INTRADAY: missing {', '.join(all_missing_fields)} (non-fatal, market CLOSED)"
-                    else:
-                        result.liquidity_reason = f"DATA_INCOMPLETE: missing {', '.join(all_missing_fields)}"
-                except ImportError:
-                    result.liquidity_reason = f"DATA_INCOMPLETE: missing {', '.join(all_missing_fields)}"
-            result.chain_completeness = 0.5
-        
+                    exp_date = datetime.strptime(str(exp_raw)[:10], "%Y-%m-%d").date() if exp_raw else date.today()
+                except (ValueError, TypeError):
+                    exp_date = date.today()
+                abs_delta = st.get("abs_delta")
+                delta_val = (delta_sign * abs(float(abs_delta))) if abs_delta is not None else None
+                oc = OptionContract(
+                    symbol=symbol,
+                    expiration=exp_date,
+                    strike=float(st.get("strike", 0)),
+                    option_type=option_type,
+                    option_symbol=None,
+                    bid=wrap_field_float(st.get("bid"), "bid"),
+                    ask=wrap_field_float(st.get("ask"), "ask"),
+                    delta=wrap_field_float(delta_val, "delta"),
+                    open_interest=wrap_field_int(st.get("oi"), "open_interest"),
+                    dte=0,
+                )
+                oc.compute_derived_fields()
+                sel_reason = f"delta={abs_delta}, DTE=30-45, bid=${st.get('bid')} ({mode} V2)"
+                result.selected_contract = SelectedContract(contract=oc, selection_reason=sel_reason, meets_all_criteria=True, criteria_results={})
+                result.selected_expiration = exp_date
+                result.selected_candidates = [result.selected_contract]
+                result.liquidity_grade = "B"
+            else:
+                result.contract_selection_reasons = [v2_result.top_rejection or v2_result.top_rejection_reason or "No contract passed filters"]
+            return result
+
     except Exception as e:
         logger.exception("[STAGE2] Error evaluating %s: %s", symbol, e)
         result.error = str(e)
@@ -1324,6 +1377,44 @@ def compute_option_liquidity_gates(contract: Optional[Any]) -> Dict[str, Any]:
 # Eligibility layers (Phase 3.0.2)
 # ============================================================================
 
+def _merge_stage2_trace_with_rejections(
+    stage2_trace: Optional[Dict[str, Any]],
+    rejection_counts: Optional[Dict[str, int]],
+) -> Optional[Dict[str, Any]]:
+    """Return a copy of stage2_trace with rejection_counts merged (for validate_one_symbol artifact)."""
+    if stage2_trace is None:
+        return None
+    import copy
+    out = copy.deepcopy(stage2_trace)
+    out["rejection_counts"] = dict(rejection_counts) if rejection_counts else {}
+    return out
+
+
+def _ensure_stage2_trace(
+    stage2_trace: Optional[Dict[str, Any]],
+    stage2: Optional[Any],
+) -> Dict[str, Any]:
+    """Phase 3.2: Never return null trace when contract_data exists. Return trace or minimal from stage2."""
+    if isinstance(stage2_trace, dict) and stage2_trace:
+        return stage2_trace
+    minimal: Dict[str, Any] = {
+        "spot_used": getattr(stage2, "spot_used", None),
+        "expirations_in_window": getattr(stage2, "expirations_in_window", []) or [],
+        "requested_put_strikes": getattr(stage2, "requested_put_strikes", None),
+        "requested_tickers_count": None,
+        "sample_request_symbols": [],
+        "response_rows": None,
+        "otm_puts_in_dte": getattr(stage2, "otm_puts_in_dte", 0),
+        "otm_puts_in_delta_band": getattr(stage2, "otm_puts_in_delta_band", 0),
+        "delta_abs_stats_otm_puts": None,
+        "sample_otm_puts": [],
+        "message": "Minimal trace (pipeline did not return full trace)",
+    }
+    if stage2 and getattr(stage2, "rejection_counts", None):
+        minimal["rejection_counts"] = dict(stage2.rejection_counts)
+    return minimal
+
+
 def build_eligibility_layers(
     stage1: Optional["Stage1Result"],
     stage2: Optional["Stage2Result"],
@@ -1389,7 +1480,16 @@ def build_eligibility_layers(
             "missing_required_fields_counts": getattr(stage2, "missing_required_fields_counts", None) or {},
             "sample_missing_required_contract": getattr(stage2, "sample_missing_required_contract", None),
             "strikes_options_telemetry": getattr(stage2, "strikes_options_telemetry", None),
+            "stage2_trace": _ensure_stage2_trace(
+                _merge_stage2_trace_with_rejections(getattr(stage2, "stage2_trace", None), getattr(stage2, "rejection_counts", None)),
+                stage2,
+            ),
+            "otm_puts_in_dte": getattr(stage2, "otm_puts_in_dte", 0),
+            "otm_puts_in_delta_band": getattr(stage2, "otm_puts_in_delta_band", 0),
+            "spot_used": getattr(stage2, "spot_used", None),
         }
+
+        # R3: No telemetry inconsistency logic. contract_data derived from stage2 (V2 trace).
 
         # Step 3: contract_eligibility 3-way logic
         if not stage2_ran:
@@ -1431,6 +1531,7 @@ def evaluate_symbol_full(
     symbol: str,
     chain_provider: Optional[OratsChainProvider] = None,
     skip_stage2: bool = False,
+    strategy_mode: str = "CSP",
 ) -> FullEvaluationResult:
     """
     Run full 2-stage evaluation for a symbol.
@@ -1439,6 +1540,7 @@ def evaluate_symbol_full(
         symbol: Stock ticker
         chain_provider: Optional provider instance
         skip_stage2: If True, only run stage 1
+        strategy_mode: "CSP" or "CC" for Stage-2 flow (default CSP)
     
     Returns:
         FullEvaluationResult with complete evaluation data
@@ -1524,7 +1626,8 @@ def evaluate_symbol_full(
         return result
 
     # Stage 2
-    stage2 = evaluate_stage2(symbol, stage1, chain_provider)
+    mode = strategy_mode or get_stage2_strategy_mode()
+    stage2 = evaluate_stage2(symbol, stage1, chain_provider, strategy_mode=mode)
     
     # Log stage 2 result before enhancement
     logger.info(
@@ -1532,11 +1635,7 @@ def evaluate_symbol_full(
         symbol, stage2.liquidity_ok, stage2.liquidity_reason, stage2.chain_missing_fields
     )
     
-    # If liquidity check failed, try ORATS pipeline: chain discovery → OCC build → OPRA lookup
-    # /strikes/options is called ONLY with OCC symbols; liquidity validated after OPRA response
-    if not stage2.liquidity_ok:
-        stage2 = _enhance_liquidity_with_pipeline(symbol, stage2)
-    
+    # V2-only: No post-selection enhancement. V2 engines are single source of truth (R3).
     result.stage2 = stage2
     result.stage_reached = EvaluationStage.STAGE2_CHAIN
 
@@ -1548,11 +1647,18 @@ def evaluate_symbol_full(
     # Stage 1 required fields (price, bid, ask, volume, quote_date, iv_rank) are HARD required.
     # No waiver: if any were missing, Stage 1 would have BLOCKed and we would not reach Stage 2.
 
-    # Add stage 2 gate
+    # Add stage 2 gate (E: reason must match top rejection when FAIL)
+    gate_reason = stage2.liquidity_reason
+    if not stage2.liquidity_ok and getattr(stage2, "rejection_counts", None):
+        rc = stage2.rejection_counts
+        if rc:
+            top_key = max(rc, key=rc.get)
+            top_val = rc.get(top_key, 0)
+            gate_reason = f"{stage2.liquidity_reason or 'No contract selected'} (top: {top_key}={top_val})"
     result.gates.append({
         "name": "Options Liquidity (Stage 2)",
         "status": "PASS" if stage2.liquidity_ok else "FAIL",
-        "reason": stage2.liquidity_reason,
+        "reason": gate_reason,
     })
     
     result.liquidity_ok = stage2.liquidity_ok

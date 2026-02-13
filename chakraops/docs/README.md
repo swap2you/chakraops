@@ -6,7 +6,7 @@
 
 ## Where to start
 
-**Start with [RUNBOOK.md](./RUNBOOK.md) if operating the system.** The runbook is the single entry point for daily operation: quick start, daily workflow, smoke tests, debugging playbook, validation commands, and what not to do. You can operate the system using only the runbook and the links it provides.
+**Start with [RUNBOOK_EXECUTION.md](./RUNBOOK_EXECUTION.md) if operating the system.** That runbook is the entry point for daily operation: quick start, backend/frontend startup, smoke tests, and verification.
 
 ---
 
@@ -14,10 +14,13 @@
 
 | Need | Document |
 |------|----------|
-| **How to operate** | [RUNBOOK.md](./RUNBOOK.md) — run, verify, debug, validate |
-| **How the system works** | [ARCHITECTURE.md](./ARCHITECTURE.md) — evaluation pipeline, strategy model, risk & gating, decision lifecycle |
+| **How to operate** | [RUNBOOK_EXECUTION.md](./RUNBOOK_EXECUTION.md) — run, verify, debug, validate |
 | **Data rules** | [DATA_CONTRACT.md](./DATA_CONTRACT.md) — required/optional data, staleness, BLOCKED/WARN/PASS, overrides |
-| **ORATS fields & endpoints** | [ORATS_FIELD_TO_ENDPOINT_MAPPING.md](./ORATS_FIELD_TO_ENDPOINT_MAPPING.md) — field-to-endpoint mapping, known not-available fields |
-| **Historical records** | [history/](./history/) — phase summaries, validation reports, preconditions (not required for operation) |
+| **ORATS API** | [ORATS_API_Reference.md](./ORATS_API_Reference.md), [orats_endpoint_matrix.md](./orats_endpoint_matrix.md) |
+| **Keep list (cleanup)** | [phase0_keep_list.md](./phase0_keep_list.md) |
 
-Other references (scheduling, alerts, deployment, baseline, etc.) are linked from the runbook under **Further Reading**.
+---
+
+## Artifact retention
+
+`artifacts/` and `out/` are generated at runtime and are not committed. Retain only what you need for debugging; e.g. keep the last ~10 runs per type in `artifacts/runs/` and trim older `artifacts/validate/` and `artifacts/phase0*` files periodically. Do not commit `artifacts/` or `out/` to git.

@@ -290,7 +290,9 @@ class OptionChainResult:
     
     # Telemetry from /strikes/options (endpoint_used, counts, sample symbols)
     strikes_options_telemetry: Optional[Dict[str, Any]] = None
-    
+    # Stage-2 trace for validate_one_symbol / harness comparison (endpoints, counts, samples, delta stats)
+    stage2_trace: Optional[Dict[str, Any]] = None
+
     @property
     def puts(self) -> List[EnrichedContract]:
         """Get all put contracts."""
@@ -475,6 +477,7 @@ def fetch_base_chain(
     chain_mode: Optional[str] = None,
     delta_lo: Optional[float] = None,
     delta_hi: Optional[float] = None,
+    strategy_mode: str = "CSP",
 ) -> Tuple[List[BaseContract], Optional[float], Optional[str], int]:
     """
     STEP 1: Fetch base option chain from /datav2/strikes (or /datav2/live when chain_mode=LIVE).
@@ -513,8 +516,8 @@ def fetch_base_chain(
         "ticker": symbol.upper(),
         "dte": f"{dte_min},{dte_max}",
     }
-    if delta_lo is not None and delta_hi is not None:
-        params["delta"] = f"{delta_lo},{delta_hi}"
+    # CSP-only: do NOT pass delta to API; delta filter is for calls (strike > spot). We need all strikes
+    # and then select otm_put_strikes = [s for s in strikes if s < spot]. Passing delta would exclude them.
     
     # Log request
     logger.info(
@@ -596,54 +599,53 @@ def fetch_base_chain(
         except (ValueError, TypeError):
             continue
     
+    # Phase 3.4: Only CSP is implemented; CC is separate pipeline (no mixing).
+    if strategy_mode != "CSP":
+        return [], underlying_price, "CC_NOT_IMPLEMENTED", len(rows)
+
     # Sort expiries by date and take max_expiries
     sorted_expiries = sorted(expiry_strikes.keys())[:max_expiries]
     
     logger.info(
-        "[ORATS_PARSE] total_expiries=%d selected_expiries=%d underlying=$%.2f",
-        len(expiry_strikes), len(sorted_expiries), underlying_price or 0
+        "[ORATS_PARSE] total_expiries=%d selected_expiries=%d underlying=$%.2f strategy_mode=%s",
+        len(expiry_strikes), len(sorted_expiries), underlying_price or 0, strategy_mode
     )
     
-    # For each expiry, select bounded strikes near target moneyness
+    # Near-spot CSP: OTM = strike < spot; only strikes in [spot*MIN_OTM_STRIKE_PCT, spot); take last N per expiry.
+    CSP_OTM_PUT_STRIKES_PER_EXPIRY = 30
+    MIN_OTM_STRIKE_PCT = 0.80
+
     for expiration in sorted_expiries:
         rows_for_expiry = expiry_strikes[expiration]
-        
-        # Sort strikes by proximity to target moneyness
-        if underlying_price:
-            target_put_strike = underlying_price * target_moneyness_put
-            target_call_strike = underlying_price * target_moneyness_call
-        else:
-            # Fallback: use middle of strike range
-            strikes = [float(r.get("strike", 0)) for r in rows_for_expiry]
-            target_put_strike = target_call_strike = sum(strikes) / len(strikes) if strikes else 0
-        
-        # Sort by distance to put target and select top N
-        rows_for_expiry_sorted = sorted(
-            rows_for_expiry,
-            key=lambda r: abs(float(r.get("strike", 0)) - target_put_strike)
-        )
-        selected_rows = rows_for_expiry_sorted[:max_strikes_per_expiry]
-        
+        strikes_all = sorted(set(float(r.get("strike", 0)) for r in rows_for_expiry))
+        spot = underlying_price
+        if not spot or not strikes_all:
+            continue
+        otm_put_strikes = [s for s in strikes_all if s < spot]
+        if not otm_put_strikes:
+            continue
+        min_strike_floor = spot * MIN_OTM_STRIKE_PCT
+        near_otm = [s for s in otm_put_strikes if s >= min_strike_floor]
+        if not near_otm:
+            continue
+        # Last N (closest below spot)
+        selected_put_strikes = sorted(near_otm)[-CSP_OTM_PUT_STRIKES_PER_EXPIRY:]
+        strike_set = set(selected_put_strikes)
+        # CSP: only include PUT rows from /strikes (exclude CALL rows)
+        def _row_is_put(r: Dict[str, Any]) -> bool:
+            ot = (r.get("optionType") or r.get("option_type") or r.get("putCall") or "").strip().upper()
+            return ot in ("P", "PUT", "PUTS")
+        selected_rows = [
+            r for r in rows_for_expiry
+            if float(r.get("strike", 0)) in strike_set and _row_is_put(r)
+        ]
+
         for row in selected_rows:
             try:
                 strike = float(row.get("strike"))
                 dte = int(row.get("dte", 0))
                 delta = row.get("delta")
                 stock_price = row.get("stockPrice") or row.get("stkPx")
-                
-                # Create CALL contract
-                call_contract = BaseContract(
-                    symbol=symbol.upper(),
-                    expiration=expiration,
-                    strike=strike,
-                    option_type="CALL",
-                    dte=dte,
-                    delta=float(delta) if delta is not None else None,
-                    stock_price=float(stock_price) if stock_price else None,
-                )
-                all_contracts.append(call_contract)
-                
-                # Create PUT contract
                 put_delta = -float(delta) if delta is not None else None
                 put_contract = BaseContract(
                     symbol=symbol.upper(),
@@ -655,16 +657,27 @@ def fetch_base_chain(
                     stock_price=float(stock_price) if stock_price else None,
                 )
                 all_contracts.append(put_contract)
-                
             except (ValueError, TypeError) as e:
                 logger.debug("[ORATS_PARSE] skipping row: %s", e)
                 continue
-    
+
+    if not all_contracts:
+        return [], underlying_price, "CSP_NO_OTM_STRIKES", len(rows)
+
+    put_strikes_check = [c.strike for c in all_contracts]
+    if underlying_price is not None and put_strikes_check:
+        max_strike = max(put_strikes_check)
+        min_strike = min(put_strikes_check)
+        if max_strike >= underlying_price:
+            return [], underlying_price, f"CSP assert failed: max(selected_put_strikes)={max_strike} >= spot={underlying_price}", len(rows)
+        min_floor = underlying_price * MIN_OTM_STRIKE_PCT
+        if min_strike < min_floor:
+            return [], underlying_price, "REQUEST_SET_INVALID_CSP_STRIKE_RANGE", len(rows)
+
     logger.info(
-        "[ORATS_PARSE] valid_contracts=%d (bounded: %d expiries × %d strikes × 2 types)",
-        len(all_contracts), len(sorted_expiries), max_strikes_per_expiry
+        "[ORATS_PARSE] valid_contracts=%d (CSP-only OTM PUTs, %d expiries)",
+        len(all_contracts), len(sorted_expiries)
     )
-    
     return all_contracts, underlying_price, None, len(rows)
 
 
@@ -897,7 +910,7 @@ def fetch_enriched_contracts(
         "non_null_bidask": total_with_bidask,
         "non_null_oi": total_with_oi,
         "non_null_vol": total_with_vol,
-        "sample_request_symbols": opra_symbols[:5],
+        "sample_request_symbols": opra_symbols[:10],
         "sample_response_optionSymbols": sample_response_option_symbols[:5],
     }
     if total_with_bidask > 0:
@@ -1038,6 +1051,7 @@ def fetch_option_chain(
     chain_mode: Optional[str] = None,
     delta_lo: Optional[float] = None,
     delta_hi: Optional[float] = None,
+    strategy_mode: str = "CSP",
 ) -> OptionChainResult:
     """
     Fetch complete option chain with liquidity data using two-step pipeline.
@@ -1096,11 +1110,20 @@ def fetch_option_chain(
         chain_mode=chain_mode,
         delta_lo=delta_lo,
         delta_hi=delta_hi,
+        strategy_mode=strategy_mode,
     )
     
     if error:
-        result.error = f"Base chain fetch failed: {error}"
+        result.error = error  # Canonical code: CSP_NO_OTM_STRIKES, REQUEST_SET_INVALID_CSP_STRIKE_RANGE, CC_NOT_IMPLEMENTED
         result.fetch_duration_ms = int((time.time() - start_time) * 1000)
+        result.stage2_trace = {
+            "error": error,
+            "spot_used": underlying_price,
+            "expirations_in_window": [],
+            "requested_put_strikes": None,
+            "sample_request_symbols": [],
+            "message": "Base chain fetch failed",
+        }
         logger.warning("[CHAIN_PIPELINE] %s: STEP 1 FAILED - %s", symbol.upper(), error)
         return result
     
@@ -1116,21 +1139,46 @@ def fetch_option_chain(
     logger.info("[CHAIN_PIPELINE] %s: STEP 2 - Building OPRA symbols...", symbol.upper())
     opra_map = build_opra_symbols(base_contracts)
     result.opra_symbols_generated = len(opra_map)
-    
-    # Filter to only puts if not enriching all (for CSP strategy)
-    if enrich_all:
-        opra_symbols_to_enrich = list(opra_map.keys())
-    else:
-        opra_symbols_to_enrich = [
-            opra for opra, contract in opra_map.items()
-            if contract.option_type == "PUT"
-        ]
-    
+    opra_symbols_to_enrich = list(opra_map.keys())
+
+    # Phase 3.4: CSP fail-fast before /strikes/options — wrong type, ITM, or empty
+    spot_check = underlying_price
+    put_strikes_for_trace = [getattr(c, "strike", None) for c in base_contracts if getattr(c, "strike", None) is not None]
+    requested_put_strikes_trace = (
+        {"min": round(min(put_strikes_for_trace), 2), "max": round(max(put_strikes_for_trace), 2), "count": len(put_strikes_for_trace)}
+        if put_strikes_for_trace else {"min": None, "max": None, "count": 0}
+    )
+    sample_request_symbols_trace = list(opra_map.keys())[:10]
+    expirations_in_window_trace = sorted(
+        set(e.isoformat()[:10] if hasattr(e, "isoformat") else str(e) for e in set(getattr(c, "expiration", None) for c in base_contracts) if e is not None)
+    )
+    _trace_base = {
+        "spot_used": spot_check,
+        "expirations_in_window": expirations_in_window_trace,
+        "requested_put_strikes": requested_put_strikes_trace,
+        "sample_request_symbols": sample_request_symbols_trace,
+    }
+    for opra, contract in opra_map.items():
+        opt_type = getattr(contract, "option_type", "") or ""
+        strike_val = getattr(contract, "strike", None) or 0
+        if opt_type != "PUT":
+            result.error = "CSP_REQUEST_BUILT_CALLS"
+            result.fetch_duration_ms = int((time.time() - start_time) * 1000)
+            result.stage2_trace = {"error": "CSP_REQUEST_BUILT_CALLS", **_trace_base, "message": "CALL in CSP request set"}
+            logger.error("[CHAIN_PIPELINE] %s: CSP_REQUEST_BUILT_CALLS — option_type=%s", symbol.upper(), opt_type)
+            return result
+        if spot_check is not None and strike_val >= spot_check:
+            result.error = "CSP_REQUEST_INCLUDED_ITM"
+            result.fetch_duration_ms = int((time.time() - start_time) * 1000)
+            result.stage2_trace = {"error": "CSP_REQUEST_INCLUDED_ITM", **_trace_base, "message": "PUT strike >= spot in CSP request set"}
+            logger.error("[CHAIN_PIPELINE] %s: CSP_REQUEST_INCLUDED_ITM — strike %.2f >= spot %.2f", symbol.upper(), strike_val, spot_check)
+            return result
+
     logger.info(
         "[CHAIN_PIPELINE] %s: STEP 2 COMPLETE - %d OPRA symbols to enrich",
         symbol.upper(), len(opra_symbols_to_enrich)
     )
-    
+
     # STEP 3: Enrich with liquidity (non-derived endpoint only)
     logger.info("[CHAIN_PIPELINE] %s: STEP 3 - Enriching with liquidity...", symbol.upper())
     enrichment_map, strikes_telemetry = fetch_enriched_contracts(
@@ -1171,7 +1219,148 @@ def fetch_option_chain(
         f"{max_ad:.3f}" if max_ad is not None else "n/a",
         [round(x, 3) for x in sample],
     )
-    
+
+    # Stage-2 trace for validate_one_symbol / harness comparison (Phase 3.2: always populated)
+    try:
+        puts_list = result.puts
+        put_strikes_requested = [getattr(c, "strike", None) for c in base_contracts if getattr(c, "strike", None) is not None]
+        requested_put_strikes = (
+            {"min": round(min(put_strikes_requested), 2), "max": round(max(put_strikes_requested), 2), "count": len(put_strikes_requested)}
+            if put_strikes_requested else {"min": None, "max": None, "count": 0}
+        )
+        sample_request_symbols = list(opra_map.keys())[:10]
+        # CSP required for eligibility: strike, expiration, delta, bid, ask (OI optional)
+        REQUIRED_ATTRS_CSP = ("strike", "expiration", "delta", "bid", "ask")
+        def _present(c: Any, name: str) -> bool:
+            v = getattr(c, name, None)
+            if name == "opra_symbol" and v is None:
+                v = getattr(c, "option_symbol", None)
+            return v is not None and (not isinstance(v, (int, float)) or True)
+        puts_with_req = sum(1 for p in puts_list if all(_present(p, a) for a in REQUIRED_ATTRS_CSP))
+        missing_counts_csp: Dict[str, int] = {}
+        for fn in REQUIRED_ATTRS_CSP:
+            missing_counts_csp[fn] = sum(1 for p in puts_list if not _present(p, fn))
+        missing_bid = missing_counts_csp.get("bid", 0)
+        missing_ask = missing_counts_csp.get("ask", 0)
+        missing_delta = missing_counts_csp.get("delta", 0)
+        missing_oi = sum(1 for p in puts_list if not _present(p, "open_interest"))
+        sorted_abs_d = sorted(abs_deltas) if abs_deltas else []
+        n = len(sorted_abs_d)
+        def _pct(p: float) -> Optional[float]:
+            if not n:
+                return None
+            idx = max(0, min(n - 1, int(n * p / 100.0)))
+            return round(sorted_abs_d[idx], 4)
+        base_url = OratsDataMode.get_base_url(mode)
+        strikes_path = f"{base_url.rstrip('/')}{ORATS_STRIKES}"
+        options_path = f"{base_url.rstrip('/')}{ORATS_STRIKES_OPTIONS}"
+        tel = result.strikes_options_telemetry or {}
+        spot = result.underlying_price
+        # Phase 3.1: OTM counts and samples (CSP: strike < spot, CC: strike > spot)
+        otm_puts = [p for p in puts_list if (getattr(p, "strike", None) or 0) < (spot or 0)]
+        calls_list = result.calls
+        otm_calls = [c for c in calls_list if (getattr(c, "strike", None) or 0) > (spot or 0)]
+        DELTA_LO, DELTA_HI = 0.20, 0.40
+        def _in_delta_band(c: Any) -> bool:
+            d = getattr(c, "delta", None)
+            if d is None:
+                return False
+            try:
+                return DELTA_LO <= abs(float(d)) <= DELTA_HI
+            except (TypeError, ValueError):
+                return False
+        otm_puts_in_delta_band = sum(1 for p in otm_puts if _in_delta_band(p))
+        otm_calls_in_delta_band = sum(1 for c in otm_calls if _in_delta_band(c))
+        calls_with_req = sum(1 for c in calls_list if all(_present(c, a) for a in REQUIRED_ATTRS_CSP))
+        expirations_in_window = sorted(set(getattr(c, "expiration", None) for c in result.contracts if getattr(c, "expiration", None)))
+        expirations_in_window = [e.isoformat()[:10] if hasattr(e, "isoformat") else str(e) for e in expirations_in_window]
+        def _sample_row(c: Any) -> Dict[str, Any]:
+            return {
+                "strike": getattr(c, "strike", None),
+                "abs_delta": round(abs(float(getattr(c, "delta", 0) or 0)), 4) if getattr(c, "delta", None) is not None else None,
+                "bid": getattr(c, "bid", None),
+                "ask": getattr(c, "ask", None),
+                "open_interest": getattr(c, "open_interest", None),
+            }
+        sample_otm_puts = [_sample_row(p) for p in otm_puts[:10]]
+        sample_otm_calls = [_sample_row(c) for c in otm_calls[:10]]
+        otm_put_deltas = [abs(float(getattr(p, "delta", 0))) for p in otm_puts if getattr(p, "delta", None) is not None]
+        otm_call_deltas = [abs(float(getattr(c, "delta", 0))) for c in otm_calls if getattr(c, "delta", None) is not None]
+        def _delta_stats(deltas: List[float]) -> Dict[str, Any]:
+            if not deltas:
+                return {"min": None, "median": None, "max": None}
+            s = sorted(deltas)
+            n = len(s)
+            return {
+                "min": round(s[0], 4),
+                "median": round(s[n // 2], 4),
+                "max": round(s[-1], 4),
+            }
+        # Phase 3.4: request counts for truth telemetry (CSP = PUT-only, CC = CALL-only)
+        puts_requested = len(base_contracts) if mode == "CSP" else 0
+        calls_requested = 0 if mode == "CSP" else len(base_contracts)
+        result.stage2_trace = {
+            "spot": spot,
+            "spot_used": spot,
+            "dte_window": [dte_min, dte_max],
+            "expirations_in_window": expirations_in_window,
+            "requested_put_strikes": requested_put_strikes,
+            "requested_tickers_count": len(base_contracts),
+            "puts_requested": puts_requested,
+            "calls_requested": calls_requested,
+            "sample_request_symbols": sample_request_symbols,
+            "response_rows": tel.get("response_rows"),
+            "endpoints_used": [
+                {"path": strikes_path, "mode": mode},
+                {"path": tel.get("endpoint_used") or options_path, "mode": mode},
+            ],
+            "strikes_rows_count": base_strikes_rows_count,
+            "strikes_options_rows_count": tel.get("response_rows") or result.enriched_count,
+            "merged_count": len(result.contracts),
+            "total_contracts_fetched": len(result.contracts),
+            "puts_in_dte_count": len(puts_list),
+            "otm_puts_in_dte": len(otm_puts),
+            "otm_puts_in_delta_band": otm_puts_in_delta_band,
+            "puts_with_required_fields": puts_with_req,
+            "calls_in_dte_count": len(calls_list),
+            "otm_calls_in_dte": len(otm_calls),
+            "otm_calls_in_delta_band": otm_calls_in_delta_band,
+            "calls_with_required_fields": calls_with_req,
+            "puts_with_required_fields_count": puts_with_req,
+            "missing_counts": {"bid": missing_bid, "ask": missing_ask, "open_interest": missing_oi, "delta": missing_delta},
+            "missing_required_fields_counts": missing_counts_csp,
+            "delta_abs_stats": {
+                "min": round(min_ad, 4) if min_ad is not None else None,
+                "p25": _pct(25),
+                "median": _pct(50),
+                "p75": _pct(75),
+                "max": round(max_ad, 4) if max_ad is not None else None,
+            },
+            "delta_abs_otm_puts": _delta_stats(otm_put_deltas),
+            "delta_abs_stats_otm_puts": _delta_stats(otm_put_deltas),
+            "delta_abs_otm_calls": _delta_stats(otm_call_deltas),
+            "sample_otm_puts": sample_otm_puts,
+            "sample_otm_calls": sample_otm_calls,
+            "sample_option_symbols": {
+                "pre_merge": [getattr(c, "opra_symbol", None) or getattr(c, "option_symbol", None) for c in base_contracts[:10]],
+                "post_merge": [getattr(c, "opra_symbol", None) or getattr(c, "option_symbol", None) for c in result.contracts[:10]],
+                "post_dte": [getattr(c, "opra_symbol", None) or getattr(c, "option_symbol", None) for c in puts_list[:10]],
+            },
+            "rejection_counts": {},  # Filled by evaluator when building contract_data
+        }
+    except Exception as e:
+        logger.warning("[CHAIN_PIPELINE] %s: stage2_trace build failed: %s", symbol.upper(), e)
+        result.stage2_trace = {"error": str(e), "message": "Trace build failed"}
+
+    # Merge trace fields into telemetry so diagnostics can show PUT-only request set
+    if result.stage2_trace and isinstance(result.stage2_trace, dict):
+        tel = result.strikes_options_telemetry or {}
+        result.strikes_options_telemetry = {
+            **tel,
+            "requested_put_strikes": result.stage2_trace.get("requested_put_strikes"),
+            "sample_request_symbols": result.stage2_trace.get("sample_request_symbols") or tel.get("sample_request_symbols") or [],
+        }
+
     result.fetch_duration_ms = int((time.time() - start_time) * 1000)
     
     logger.info(

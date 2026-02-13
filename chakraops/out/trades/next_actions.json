@@ -1,9 +1,0 @@
-{
-  "trade_20260204_011521_e34a09ef": {
-    "action": "manual check",
-    "severity": "info",
-    "message": "CSP 50% profit target set; check if premium decay ~50%",
-    "rule_code": "PROFIT_T1",
-    "evaluated_at": "2026-02-12T00:01:20.497571+00:00"
-  }
-}

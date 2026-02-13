@@ -322,6 +322,8 @@ class ChainProviderResult:
     missing_fields: List[str] = field(default_factory=list)
     # Telemetry from /strikes/options (endpoint_used, counts); set on first result when batch from pipeline
     telemetry: Optional[Dict[str, Any]] = None
+    # Stage-2 trace (pipeline acquisition stats + samples); set when batch from pipeline for diagnostics
+    stage2_trace: Optional[Dict[str, Any]] = None
 
 
 # ============================================================================

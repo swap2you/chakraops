@@ -1,6 +1,6 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""Phase 3 HOTFIX: Stage-2 uses DELAYED chain; option_type_counts puts_seen > 0."""
+"""Phase 3.6/3.7: Stage-2 V2-only; evaluate_stage2 uses run_csp_stage2_v2 / run_cc_stage2_v2."""
 
 from __future__ import annotations
 
@@ -11,104 +11,136 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.core.eval.staged_evaluator import evaluate_stage2, Stage1Result, StockVerdict
-from app.core.options.orats_chain_provider import OratsChainProvider
-from app.core.options.orats_chain_pipeline import EnrichedContract, OptionChainResult
-from app.market.market_hours import get_stage2_chain_source
 
 
-def _make_qualified_stage1(symbol: str = "SPY") -> Stage1Result:
-    """Stage1 that qualifies for stage 2."""
-    return Stage1Result(
+def _make_qualified_stage1(symbol: str = "SPY", price: float = 505.0) -> Stage1Result:
+    """Stage1 that qualifies for stage 2 with price for spot_used."""
+    r = Stage1Result(
         symbol=symbol,
         stock_verdict=StockVerdict.QUALIFIED,
         stock_verdict_reason="qualified",
         stage1_score=70,
     )
+    r.price = price
+    return r
 
 
-def _make_enriched_put(exp: date, strike: float = 500.0, delta: float = -0.25) -> EnrichedContract:
-    """EnrichedContract with option_type=PUT for DELAYED pipeline mock."""
-    return EnrichedContract(
-        symbol="SPY",
-        expiration=exp,
-        strike=strike,
-        option_type="PUT",
-        opra_symbol="SPY  250321P00500000",
-        dte=35,
-        bid=2.50,
-        ask=2.70,
-        mid=2.60,
-        open_interest=600,
-        delta=delta,
-        enriched=True,
+def _make_v2_result(puts_requested: int = 10, selected: bool = True):
+    """Stage2V2Result-like object for mocking."""
+    trace = {
+        "mode": "CSP",
+        "spot_used": 505.0,
+        "expirations_in_window": ["2026-03-20"],
+        "expirations_count": 1,
+        "request_counts": {"puts_requested": puts_requested, "calls_requested": 0},
+        "response_rows": puts_requested,
+        "puts_with_required_fields": puts_requested,
+        "calls_with_required_fields": 0,
+        "otm_contracts_in_dte": puts_requested,
+        "otm_contracts_in_delta_band": 5,
+        "otm_puts_in_dte": puts_requested,
+        "otm_puts_in_delta_band": 5,
+        "delta_abs_stats": {"min": 0.20, "median": 0.30, "max": 0.40},
+        "rejection_counts": {},
+        "top_candidates_table": [],
+        "sample_request_symbols": ["SPY260320P00500000"],
+    }
+    st = {
+        "symbol": "SPY",
+        "exp": "2026-03-20",
+        "strike": 500.0,
+        "abs_delta": 0.25,
+        "bid": 2.50,
+        "ask": 2.70,
+        "credit_estimate": 2.50,
+        "spread_pct": 0.02,
+        "oi": 600,
+    } if selected else None
+    return SimpleNamespace(
+        success=selected,
+        error_code=None,
+        spot_used=505.0,
+        available=True,
+        selected_trade=st,
+        top_rejection=None if selected else "rejected_due_to_delta=5",
+        top_rejection_reason=None if selected else "rejected_due_to_delta=5",
+        sample_rejections=[],
+        top_candidates=[],
+        stage2_trace=trace,
+        contract_count=puts_requested,
     )
 
 
-@patch("app.core.options.orats_chain_pipeline.fetch_option_chain")
-@patch("app.core.options.orats_chain_pipeline.fetch_base_chain")
-def test_stage2_delayed_chain_produces_puts_seen(
-    mock_fetch_base,
-    mock_fetch_option,
-):
+@patch("app.core.options.v2.run_csp_stage2_v2")
+def test_stage2_v2_produces_puts_seen(mock_run_v2):
     """
-    DELAYED chain pipeline returns per-contract option_type; option_type_counts puts_seen > 0.
+    V2 path returns option_type_counts with puts_seen from request_counts.
     """
-    exp = date.today() + timedelta(days=35)
-    put_contract = _make_enriched_put(exp)
+    mock_run_v2.return_value = _make_v2_result(puts_requested=15, selected=True)
 
-    # get_expirations (fetch_base_chain) returns base contracts with expiration
-    base_contract = SimpleNamespace(expiration=exp, option_type="PUT", strike=500.0)
-    mock_fetch_base.return_value = ([base_contract], 505.0, None, 100)
+    stage1 = _make_qualified_stage1(price=505.0)
+    result = evaluate_stage2("SPY", stage1, chain_provider=None, strategy_mode="CSP")
 
-    # fetch_option_chain returns OptionChainResult with puts
-    chain_result = OptionChainResult(
-        symbol="SPY",
-        underlying_price=505.0,
-        contracts=[put_contract],
-        error=None,
+    assert result.option_type_counts["puts_seen"] == 15
+    assert result.option_type_counts["calls_seen"] == 0
+    assert result.contracts_evaluated == 15
+    assert result.liquidity_ok is True
+
+
+@patch("app.core.options.v2.run_csp_stage2_v2")
+def test_stage2_v2_uses_csp_engine(mock_run_v2):
+    """
+    When strategy_mode=CSP, evaluate_stage2 calls run_csp_stage2_v2.
+    """
+    mock_run_v2.return_value = _make_v2_result(puts_requested=10, selected=True)
+
+    stage1 = _make_qualified_stage1(price=505.0)
+    evaluate_stage2("SPY", stage1, chain_provider=None, strategy_mode="CSP")
+
+    mock_run_v2.assert_called_once()
+    call_kw = mock_run_v2.call_args[1]
+    assert call_kw["symbol"] == "SPY"
+    assert call_kw["spot_used"] == 505.0
+
+
+@patch("app.core.options.v2.run_cc_stage2_v2")
+def test_stage2_v2_uses_cc_engine_for_cc_mode(mock_run_cc):
+    """
+    When strategy_mode=CC, evaluate_stage2 calls run_cc_stage2_v2.
+    """
+    v2_result = SimpleNamespace(
+        success=True,
+        error_code=None,
+        spot_used=505.0,
+        available=True,
+        selected_trade={"symbol": "SPY", "exp": "2026-03-20", "strike": 510.0, "abs_delta": 0.30, "bid": 3.0, "ask": 3.1, "oi": 500},
+        top_rejection=None,
+        top_rejection_reason=None,
+        sample_rejections=[],
+        top_candidates=[],
+        stage2_trace={
+            "mode": "CC",
+            "request_counts": {"puts_requested": 0, "calls_requested": 20},
+            "response_rows": 20,
+            "otm_calls_in_delta_band": 5,
+            "expirations_count": 1,
+        },
+        contract_count=20,
     )
-    mock_fetch_option.return_value = chain_result
+    mock_run_cc.return_value = v2_result
 
-    provider = OratsChainProvider(use_cache=False, chain_source="DELAYED")
-    stage1 = _make_qualified_stage1()
-    result = evaluate_stage2("SPY", stage1, chain_provider=provider)
+    stage1 = _make_qualified_stage1(price=505.0)
+    result = evaluate_stage2("SPY", stage1, chain_provider=None, strategy_mode="CC")
 
-    assert result.option_type_counts["puts_seen"] > 0
-    assert result.option_type_counts["puts_seen"] >= 1
-    assert result.contracts_evaluated >= 1
+    mock_run_cc.assert_called_once()
+    assert result.option_type_counts["calls_seen"] == 20
+    assert result.option_type_counts["puts_seen"] == 0
 
 
-@patch("app.market.market_hours.get_market_phase", return_value="OPEN")
-def test_stage2_uses_delayed_when_no_provider_passed(mock_phase):
+def test_fetch_base_chain_omits_delta_param():
     """
-    When chain_provider=None, evaluate_stage2 uses get_chain_provider(chain_source=get_stage2_chain_source()).
-    Provider must be DELAYED even when market is OPEN.
-    """
-    with patch("app.core.options.orats_chain_pipeline.fetch_option_chain") as m_opt:
-        with patch("app.core.options.orats_chain_pipeline.fetch_base_chain") as m_base:
-            exp = date.today() + timedelta(days=35)
-            put_contract = _make_enriched_put(exp)
-            base_contract = SimpleNamespace(expiration=exp, option_type="PUT", strike=500.0)
-            m_base.return_value = ([base_contract], 505.0, None, 100)
-            m_opt.return_value = OptionChainResult(
-                symbol="SPY",
-                underlying_price=505.0,
-                contracts=[put_contract],
-                error=None,
-            )
-            stage1 = _make_qualified_stage1()
-            # Pass chain_provider=None so evaluate_stage2 resolves via get_stage2_chain_source
-            result = evaluate_stage2("SPY", stage1, chain_provider=None)
-    # If DELAYED was used, fetch_option_chain would be called (DELAYED path uses pipeline)
-    # If LIVE was used, get_orats_live_strikes would be called instead
-    m_opt.assert_called()
-    assert result.option_type_counts.get("puts_seen", 0) >= 1
-
-
-def test_fetch_base_chain_passes_delta_when_provided():
-    """
-    fetch_base_chain passes delta param to ORATS when delta_lo/delta_hi are provided (Stage-2).
-    When not provided, delta is omitted (chain discovery only).
+    fetch_base_chain does NOT pass delta to ORATS /strikes.
+    Delta filtering is applied post-fetch; ORATS /strikes returns all strikes.
     """
     from app.core.options.orats_chain_pipeline import fetch_base_chain
 
@@ -119,8 +151,7 @@ def test_fetch_base_chain_passes_delta_when_provided():
     with patch("app.core.options.orats_chain_pipeline.requests.get") as mock_get:
         mock_get.return_value = mock_response
         fetch_base_chain("SPY", dte_min=30, dte_max=45, chain_mode="DELAYED")
-        call_kw = mock_get.call_args[1]
-        params = call_kw.get("params", {})
+        params = mock_get.call_args[1].get("params", {})
         assert "delta" not in params
         assert "dte" in params
         assert "ticker" in params
@@ -131,8 +162,8 @@ def test_fetch_base_chain_passes_delta_when_provided():
             "SPY", dte_min=30, dte_max=45, chain_mode="DELAYED",
             delta_lo=0.10, delta_hi=0.45,
         )
-        call_kw = mock_get.call_args[1]
-        params = call_kw.get("params", {})
-        assert params.get("delta") in ("0.1,0.45", "0.10,0.45")  # float formatting may drop trailing zero
+        params = mock_get.call_args[1].get("params", {})
+        # Delta is used for local filtering, not sent to ORATS
+        assert "delta" not in params
         assert "dte" in params
         assert "ticker" in params

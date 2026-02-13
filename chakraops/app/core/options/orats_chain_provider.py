@@ -401,14 +401,16 @@ class OratsChainProvider:
         max_concurrent: int = 3,
         delta_lo: Optional[float] = None,
         delta_hi: Optional[float] = None,
+        strategy_mode: str = "CSP",
     ) -> Dict[date, ChainProviderResult]:
         """
         Get multiple chains for a symbol (batch operation).
         DELAYED: one fetch_option_chain (strikes + strikes/options) then split by expiration.
         LIVE: concurrent get_chain per expiration.
+        strategy_mode: CSP (default) or CC; no mixing.
         """
         if self._chain_source == "DELAYED":
-            return self._get_chains_batch_delayed(symbol, expirations, delta_lo=delta_lo, delta_hi=delta_hi)
+            return self._get_chains_batch_delayed(symbol, expirations, delta_lo=delta_lo, delta_hi=delta_hi, strategy_mode=strategy_mode)
         results: Dict[date, ChainProviderResult] = {}
         uncached_expirations = []
         for exp in expirations:
@@ -445,8 +447,9 @@ class OratsChainProvider:
         self, symbol: str, expirations: List[date],
         delta_lo: Optional[float] = None,
         delta_hi: Optional[float] = None,
+        strategy_mode: str = "CSP",
     ) -> Dict[date, ChainProviderResult]:
-        """One pipeline call (strikes + strikes/options) then split by expiration."""
+        """One pipeline call (strikes + strikes/options) then split by expiration. strategy_mode: CSP or CC."""
         from app.core.config.wheel_strategy_config import WHEEL_CONFIG, DTE_MIN, DTE_MAX
         from app.core.options.orats_chain_pipeline import fetch_option_chain
         dte_min = WHEEL_CONFIG.get(DTE_MIN, 30)
@@ -455,14 +458,18 @@ class OratsChainProvider:
         try:
             chain_result = fetch_option_chain(
                 symbol, dte_min=dte_min, dte_max=dte_max, chain_mode="DELAYED",
-                delta_lo=delta_lo, delta_hi=delta_hi,
+                delta_lo=delta_lo, delta_hi=delta_hi, strategy_mode=strategy_mode,
             )
         except Exception as e:
             logger.warning("[ORATS_CHAIN] DELAYED pipeline failed for %s: %s", symbol, e)
             return {exp: ChainProviderResult(success=False, error=str(e), data_quality=DataQuality.ERROR) for exp in expirations}
         if chain_result.error or not chain_result.contracts:
             err = chain_result.error or "No contracts"
-            return {exp: ChainProviderResult(success=False, error=err, data_quality=DataQuality.MISSING) for exp in expirations}
+            stage2_trace_err = getattr(chain_result, "stage2_trace", None)
+            return {
+                exp: ChainProviderResult(success=False, error=err, data_quality=DataQuality.MISSING, stage2_trace=stage2_trace_err)
+                for exp in expirations
+            }
         exp_set = set(expirations)
         by_exp: Dict[date, List[Any]] = defaultdict(list)
         for c in chain_result.contracts:
@@ -480,6 +487,7 @@ class OratsChainProvider:
                 )
                 continue
             telemetry = getattr(chain_result, "strikes_options_telemetry", None) if chain_result else None
+            stage2_trace = getattr(chain_result, "stage2_trace", None) if chain_result else None
             option_contracts = [self._enriched_to_option_contract(ec, symbol) for ec in contracts_list]
             for oc in option_contracts:
                 oc.compute_derived_fields()
@@ -502,6 +510,7 @@ class OratsChainProvider:
                 data_quality=dq,
                 missing_fields=list(missing),
                 telemetry=telemetry,
+                stage2_trace=stage2_trace,
             )
             if self._use_cache:
                 self._cache.set(symbol, exp, results[exp])

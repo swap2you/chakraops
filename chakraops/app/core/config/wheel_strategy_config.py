@@ -40,9 +40,9 @@ WHEEL_CONFIG: Dict[str, Any] = {
     # too far out; keeps premium and assignment risk in a target range.
     DTE_MAX: 45,
 
-    # (min_delta, max_delta) for put selection, as absolute delta (e.g. 0.15–0.35).
-    # Short puts in this range balance premium vs. probability of assignment.
-    TARGET_DELTA_RANGE: (0.15, 0.35),
+    # (min_delta, max_delta) for CSP/CC selection, as absolute delta (0.20–0.40).
+    # Short puts/calls in this range balance premium vs. probability of assignment.
+    TARGET_DELTA_RANGE: (0.20, 0.40),
 
     # Minimum average daily share volume (20d or similar) for the underlying.
     # Ensures liquid underlyings; below this the symbol is excluded from Wheel.
@@ -82,6 +82,33 @@ WHEEL_CONFIG: Dict[str, Any] = {
     # position size so a single assignment does not exceed this share of portfolio.
     MAX_POSITION_RISK_PCT: 0.05,
 }
+
+# Phase 3.4: Stage-2 strategy mode (CSP vs CC). No mixing; default CSP.
+STRATEGY_MODE_CSP = "CSP"
+STRATEGY_MODE_CC = "CC"
+
+# Phase 3.6/3.7: Stage-2 V2 ONLY. No legacy pipeline.
+USE_STAGE2_V2_ONLY = True
+
+# V2 OTM strike selection
+MIN_OTM_STRIKE_PCT_CSP = 0.80
+STRIKES_PER_EXPIRY_CSP = 30
+MIN_OTM_STRIKE_PCT_CC = 1.00  # strike > spot
+MAX_OTM_STRIKE_PCT_CC = 1.20  # strike <= spot * 1.20 to avoid far OTM
+STRIKES_PER_EXPIRY_CC = 30
+
+# Delta band (abs) for selection
+DELTA_BAND_MIN = 0.20
+DELTA_BAND_MAX = 0.40
+
+# Liquidity gates (enforced INSIDE V2 before selection)
+MIN_OPEN_INTEREST = 500
+MAX_SPREAD_PCT = 0.02  # 2%
+
+
+def get_stage2_strategy_mode() -> str:
+    """Return Stage-2 strategy mode: CSP (default) or CC. Used by pipeline and evaluator."""
+    return STRATEGY_MODE_CSP
 
 
 def get_wheel_config() -> Dict[str, Any]:

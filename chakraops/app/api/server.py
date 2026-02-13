@@ -634,10 +634,32 @@ def api_ops_routes() -> list:
     return _collect_api_routes(app)
 
 
+def _get_build_id() -> Optional[str]:
+    """Return git HEAD commit hash for server/build_id (port mismatch guard)."""
+    try:
+        repo = Path(__file__).resolve().parent.parent.parent
+        r = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        if r.returncode == 0 and r.stdout:
+            return r.stdout.strip()[:12]
+    except Exception:
+        pass
+    return os.environ.get("BUILD_ID")
+
+
 @app.get("/health")
 def health() -> Dict[str, Any]:
-    """Phase 7: Railway (and other) health checks. No auth required."""
-    return {"ok": True, "status": "healthy"}
+    """Phase 7: Railway (and other) health checks. No auth required. Includes build_id for validate_one_symbol."""
+    out: Dict[str, Any] = {"ok": True, "status": "healthy"}
+    bid = _get_build_id()
+    if bid:
+        out["build_id"] = bid
+    return out
 
 
 @app.get("/api/healthz")
@@ -1444,6 +1466,23 @@ def _symbol_diagnostics_greeks_summary(iv_rank: Any) -> Dict[str, Any]:
     }
 
 
+def _minimal_stage2_trace_from_contract_data(contract_data: Dict[str, Any], stage2: Optional[Any] = None) -> Dict[str, Any]:
+    """Phase 3.2: Build minimal trace when pipeline did not return one (trace always-on for validate_one_symbol)."""
+    return {
+        "spot_used": contract_data.get("spot_used"),
+        "expirations_in_window": getattr(stage2, "expirations_in_window", None) or [],
+        "requested_put_strikes": None,
+        "requested_tickers_count": None,
+        "sample_request_symbols": [],
+        "response_rows": None,
+        "otm_puts_in_dte": contract_data.get("otm_puts_in_dte", 0),
+        "otm_puts_in_delta_band": contract_data.get("otm_puts_in_delta_band", 0),
+        "delta_abs_stats_otm_puts": None,
+        "sample_otm_puts": [],
+        "message": "Minimal trace (server fallback)",
+    }
+
+
 def _diagnostics_primary_reason(result: Dict[str, Any], full_result: Any) -> str:
     """
     Phase 3.3.2: Set primary_reason from eligibility layers only.
@@ -1518,7 +1557,10 @@ def _diagnostics_liquidity_from_gates(result: Dict[str, Any], full_result: Any) 
 
 
 @app.get("/api/view/symbol-diagnostics")
-def api_view_symbol_diagnostics(symbol: str = Query(..., min_length=1, max_length=12)) -> Dict[str, Any]:
+def api_view_symbol_diagnostics(
+    symbol: str = Query(..., min_length=1, max_length=12),
+    mode: Optional[str] = Query(None, description="Stage-2 strategy mode: csp or cc (default csp)"),
+) -> Dict[str, Any]:
     """Symbol diagnostics with FULL EXPLAINABILITY for ANY valid ticker.
     
     Stock snapshot from canonical SymbolSnapshot service (delayed quote + core + optional derived).
@@ -1527,6 +1569,9 @@ def api_view_symbol_diagnostics(symbol: str = Query(..., min_length=1, max_lengt
     from datetime import datetime, timezone
     from app.core.data.symbol_snapshot_service import get_snapshot
     sym = symbol.strip().upper()
+    strategy_mode = (mode or "csp").strip().upper() if mode else "CSP"
+    if strategy_mode not in ("CSP", "CC"):
+        strategy_mode = "CSP"
     t0 = time.perf_counter()
     try:
         snap = get_snapshot(sym, derive_avg_stock_volume_20d=True, use_cache=True)
@@ -1686,7 +1731,7 @@ def api_view_symbol_diagnostics(symbol: str = Query(..., min_length=1, max_lengt
     # LIVE EVALUATION: always evaluate fresh from snapshot + live chain (no persisted run)
     try:
         from app.core.eval.staged_evaluator import evaluate_symbol_full
-        full_result = evaluate_symbol_full(sym, skip_stage2=False)
+        full_result = evaluate_symbol_full(sym, skip_stage2=False, strategy_mode=strategy_mode)
     except Exception as e:
         logger.exception("[DIAGNOSTICS] Live evaluation failed for %s: %s", sym, e)
         result["eligibility"]["verdict"] = "UNKNOWN"
@@ -1724,8 +1769,15 @@ def api_view_symbol_diagnostics(symbol: str = Query(..., min_length=1, max_lengt
         result["symbol_eligibility"] = full_result.symbol_eligibility
     if getattr(full_result, "contract_data", None):
         result["contract_data"] = full_result.contract_data
-    if full_result.contract_data and full_result.contract_data.get("stage2_trace"):
-        result["stage2_trace"] = full_result.contract_data["stage2_trace"]
+    # Phase 3.5: stage2_trace ALWAYS when Stage-2 ran (R3). Prefer contract_data, then stage2.stage2_trace.
+    if full_result.contract_data:
+        result["stage2_trace"] = (
+            full_result.contract_data.get("stage2_trace")
+            or getattr(full_result.stage2, "stage2_trace", None)
+            or _minimal_stage2_trace_from_contract_data(full_result.contract_data, getattr(full_result, "stage2", None))
+        )
+    elif getattr(full_result, "stage2", None) is not None:
+        result["stage2_trace"] = getattr(full_result.stage2, "stage2_trace", None) or {"error": "TRACE_MISSING_BUG", "message": "Stage-2 ran but trace missing"}
     if getattr(full_result, "contract_eligibility", None):
         result["contract_eligibility"] = full_result.contract_eligibility
     result["gates"] = list(full_result.gates) if full_result.gates else result["gates"]
@@ -1754,7 +1806,13 @@ def api_view_symbol_diagnostics(symbol: str = Query(..., min_length=1, max_lengt
         result["options"]["required_fields_present"] = getattr(s2, "required_fields_present", None)
         result["options"]["missing_required_fields_counts"] = getattr(s2, "missing_required_fields_counts", None) or {}
         result["options"]["sample_missing_required_contract"] = getattr(s2, "sample_missing_required_contract", None)
-        result["options"]["strikes_options_telemetry"] = getattr(s2, "strikes_options_telemetry", None)
+        tel = getattr(s2, "strikes_options_telemetry", None) or {}
+        trace = result.get("stage2_trace") or {}
+        result["options"]["strikes_options_telemetry"] = {
+            **tel,
+            "sample_request_symbols": trace.get("sample_request_symbols") or tel.get("sample_request_symbols") or [],
+            "requested_put_strikes": trace.get("requested_put_strikes") or tel.get("requested_put_strikes"),
+        }
     else:
         result["options"]["option_type_counts"] = {"puts_seen": 0, "calls_seen": 0, "unknown_seen": 0}
     result["options"]["expirations_count"] = expirations_count

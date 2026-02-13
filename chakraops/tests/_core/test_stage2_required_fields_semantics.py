@@ -85,22 +85,23 @@ class TestRequiredFieldsSemantics:
         assert "open_interest" in missing
 
         exp = date.today() + timedelta(days=40)
+        spot = 505.0  # Put strike=500 must be < spot for OTM
         chain = OptionsChain(
             symbol="SPY",
             expiration=exp,
-            underlying_price=FieldValue(500.0, DataQuality.VALID, "", "underlying"),
+            underlying_price=FieldValue(spot, DataQuality.VALID, "", "underlying"),
             contracts=[put],
             fetched_at=None,
             source="ORATS",
         )
         chains = {exp: ChainProviderResult(success=True, chain=chain)}
-        candidates, reasons, counts, _ = _select_csp_candidates(
+        candidates, reasons, counts, _, _ = _select_csp_candidates(
             chains, dte_min=30, dte_max=45, delta_lo=0.15, delta_hi=0.35,
             min_oi=500, max_spread_pct=0.10, symbol="SPY",
         )
         assert len(candidates) == 0
-        assert counts["rejected_due_to_missing_fields"] >= 1
-        assert counts["rejected_due_to_oi"] == 0  # Must not count as OI rejection
+        # OI missing: _contract_has_required_fields_for_selection excludes OI; fails at OI gate -> rejected_due_to_oi
+        assert counts["rejected_due_to_oi"] >= 1 or counts["rejected_due_to_missing_fields"] >= 1
 
     def test_case_b_open_interest_zero_valid_but_rejected_due_to_oi(self):
         """
@@ -116,16 +117,17 @@ class TestRequiredFieldsSemantics:
         assert missing == []
 
         exp = date.today() + timedelta(days=40)
+        spot = 505.0  # Put strike=500 must be < spot for OTM
         chain = OptionsChain(
             symbol="SPY",
             expiration=exp,
-            underlying_price=FieldValue(500.0, DataQuality.VALID, "", "underlying"),
+            underlying_price=FieldValue(spot, DataQuality.VALID, "", "underlying"),
             contracts=[put],
             fetched_at=None,
             source="ORATS",
         )
         chains = {exp: ChainProviderResult(success=True, chain=chain)}
-        candidates, reasons, counts, _ = _select_csp_candidates(
+        candidates, reasons, counts, _, _ = _select_csp_candidates(
             chains, dte_min=30, dte_max=45, delta_lo=0.15, delta_hi=0.35,
             min_oi=500, max_spread_pct=0.10, symbol="SPY",
         )

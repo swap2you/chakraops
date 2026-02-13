@@ -109,10 +109,11 @@ class TestCspSelectionDeltaRange:
 
     def _chains_with_put(self, put: OptionContract) -> dict:
         exp = put.expiration
+        spot = 505.0  # Put strike=500 must be < spot for OTM
         chain = OptionsChain(
             symbol="SPY",
             expiration=exp,
-            underlying_price=FieldValue(500.0, DataQuality.VALID, "", "underlying_price"),
+            underlying_price=FieldValue(spot, DataQuality.VALID, "", "underlying_price"),
             contracts=[put],
             fetched_at="2026-02-10T12:00:00Z",
             source="ORATS",
@@ -124,7 +125,7 @@ class TestCspSelectionDeltaRange:
         put = _make_put(0.25)
         put.compute_derived_fields()
         chains = self._chains_with_put(put)
-        candidates, reasons, counts, _ = _select_csp_candidates(
+        candidates, reasons, counts, _, _ = _select_csp_candidates(
             chains, dte_min=30, dte_max=45, delta_lo=0.15, delta_hi=0.35,
             min_oi=500, max_spread_pct=0.10, symbol="SPY",
         )
@@ -136,7 +137,7 @@ class TestCspSelectionDeltaRange:
         put = _make_put(-0.25)
         put.compute_derived_fields()
         chains = self._chains_with_put(put)
-        candidates, reasons, counts, _ = _select_csp_candidates(
+        candidates, reasons, counts, _, _ = _select_csp_candidates(
             chains, dte_min=30, dte_max=45, delta_lo=0.15, delta_hi=0.35,
             min_oi=500, max_spread_pct=0.10, symbol="SPY",
         )
@@ -147,7 +148,7 @@ class TestCspSelectionDeltaRange:
         call = _make_call(0.25)
         call.compute_derived_fields()
         chains = self._chains_with_put(call)
-        candidates, reasons, _, _ = _select_csp_candidates(
+        candidates, reasons, _, _, _ = _select_csp_candidates(
             chains, dte_min=30, dte_max=45, delta_lo=0.15, delta_hi=0.35,
             min_oi=500, max_spread_pct=0.10, symbol="SPY",
         )
@@ -157,7 +158,7 @@ class TestCspSelectionDeltaRange:
         put = _make_put(0.10)
         put.compute_derived_fields()
         chains = self._chains_with_put(put)
-        _, reasons, counts, _ = _select_csp_candidates(
+        _, reasons, counts, _, _ = _select_csp_candidates(
             chains, dte_min=30, dte_max=45, delta_lo=0.15, delta_hi=0.35,
             min_oi=500, max_spread_pct=0.10, symbol="SPY",
         )

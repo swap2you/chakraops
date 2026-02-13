@@ -207,15 +207,46 @@ def main() -> int:
     )
     parser.add_argument("--symbol", default=SYMBOL_DEFAULT, help=f"Ticker (default: {SYMBOL_DEFAULT})")
     parser.add_argument("--base", default=BASE_DEFAULT, help=f"API base URL (default: {BASE_DEFAULT})")
+    parser.add_argument("--mode", choices=("csp", "cc"), default="csp", help="Stage-2 strategy mode (default: csp)")
     args = parser.parse_args()
     base = args.base.rstrip("/")
     symbol = (args.symbol or SYMBOL_DEFAULT).strip().upper()
+    mode = (args.mode or "csp").strip().lower()
 
     repo_root = Path(__file__).resolve().parent.parent
     out_dir = repo_root / "artifacts" / "validate"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     errors: list[str] = []
+    build_id_mismatch: bool = False
+    build_id_warning_msg: str = ""
+
+    # 0) GET /health for build_id (port/server mismatch guard)
+    url_health = f"{base}/health"
+    health_data, health_code, _ = _get(url_health, timeout=5)
+    if health_code == 200 and health_data:
+        server_build_id = health_data.get("build_id") or ""
+        local_build_id = ""
+        try:
+            import subprocess
+            r = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=Path(__file__).resolve().parent.parent,
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            if r.returncode == 0 and r.stdout:
+                local_build_id = r.stdout.strip()[:12]
+        except Exception:
+            pass
+        if server_build_id and local_build_id and server_build_id != local_build_id:
+            build_id_mismatch = True
+            build_id_warning_msg = (
+                f"WARNING: Server build_id ({server_build_id}) does not match local working tree ({local_build_id}). "
+                "Validation may be running against a different code version (e.g. different port or stale server)."
+            )
+            print(f"\n*** {build_id_warning_msg} ***\n", file=sys.stderr)
 
     # 1) GET /api/ops/snapshot?symbol=...
     url_snapshot = f"{base}/api/ops/snapshot?symbol={symbol}"
@@ -230,8 +261,8 @@ def main() -> int:
     else:
         print(f"ops/snapshot failed: {err_snap}", file=sys.stderr)
 
-    # 2) GET /api/view/symbol-diagnostics?symbol=...
-    url_diag = f"{base}/api/view/symbol-diagnostics?symbol={symbol}"
+    # 2) GET /api/view/symbol-diagnostics?symbol=...&mode=...
+    url_diag = f"{base}/api/view/symbol-diagnostics?symbol={symbol}&mode={mode}"
     data_diag, code_diag, err_diag = _get(url_diag)
     if code_diag != 200:
         errors.append(f"symbol-diagnostics: {code_diag} {err_diag or 'non-200'}")
@@ -240,15 +271,31 @@ def main() -> int:
         with open(out_diag, "w", encoding="utf-8") as f:
             json.dump(data_diag, f, indent=2)
         print(f"Wrote {out_diag}")
-        # Stage-2 trace for harness comparison (Phase 3.0); always write file
+        # Stage-2 trace for harness comparison (Phase 3.2: never null when contract_data available)
         trace = data_diag.get("stage2_trace")
         out_trace = out_dir / f"{symbol}_stage2_trace.json"
         if isinstance(trace, dict):
-            with open(out_trace, "w", encoding="utf-8") as f:
-                json.dump(trace, f, indent=2, default=str)
+            to_write = trace
         else:
-            with open(out_trace, "w", encoding="utf-8") as f:
-                json.dump({"symbol": symbol, "stage2_trace": None, "message": "Trace not available (LIVE mode or pipeline did not return trace)."}, f, indent=2)
+            # Build minimal trace from diagnostics so file is never "Trace not available" placeholder
+            cd = data_diag.get("contract_data") or {}
+            stock = data_diag.get("stock") or {}
+            opts = data_diag.get("options") or {}
+            to_write = {
+                "spot_used": cd.get("spot_used") or stock.get("price"),
+                "expirations_in_window": opts.get("expirations_count") or [],
+                "requested_put_strikes": None,
+                "requested_tickers_count": None,
+                "sample_request_symbols": [],
+                "response_rows": None,
+                "otm_puts_in_dte": cd.get("otm_puts_in_dte", 0),
+                "otm_puts_in_delta_band": cd.get("otm_puts_in_delta_band", 0),
+                "delta_abs_stats_otm_puts": None,
+                "sample_otm_puts": [],
+                "message": "Minimal trace (validate_one_symbol fallback)",
+            }
+        with open(out_trace, "w", encoding="utf-8") as f:
+            json.dump(to_write, f, indent=2, default=str)
         print(f"Wrote {out_trace}")
     else:
         print(f"symbol-diagnostics failed: {err_diag}", file=sys.stderr)
@@ -288,6 +335,13 @@ def main() -> int:
     analysis_lines = [
         f"# Validation: {symbol}",
         "",
+    ]
+    if build_id_mismatch and build_id_warning_msg:
+        analysis_lines.append("## ⚠ Build / server mismatch")
+        analysis_lines.append("")
+        analysis_lines.append(build_id_warning_msg)
+        analysis_lines.append("")
+    analysis_lines.extend([
         "## Endpoints",
         f"- `GET {url_snapshot}` → {out_snap.name}",
         f"- `GET {url_diag}` → {out_diag.name}",
@@ -296,7 +350,7 @@ def main() -> int:
         "## Required fields (Stage-1)",
         f"Expected: {', '.join(REQUIRED_FIELDS)}.",
         "",
-    ]
+    ])
     for f in REQUIRED_FIELDS:
         key = f if f != "quote_date" else ("quote_date / quote_as_of")
         val = snap_obj.get(f) if f != "quote_date" else (snap_obj.get("quote_date") or snap_obj.get("quote_as_of"))
@@ -336,6 +390,101 @@ def main() -> int:
         analysis_lines.append("**PASS** — all required fields present and quote_date fresh.")
     analysis_lines.append("")
 
+    # Phase 3.5: Truth Summary + Top Candidates Table
+    trace = (data_diag or {}).get("stage2_trace") or {}
+    cd = (data_diag or {}).get("contract_data") or {}
+    opt = (data_diag or {}).get("options") or {}
+    tel = cd.get("strikes_options_telemetry") or opt.get("strikes_options_telemetry") or {}
+    req_counts = trace.get("request_counts") or {}
+    puts_req = req_counts.get("puts_requested") if "puts_requested" in req_counts else trace.get("puts_requested")
+    calls_req = req_counts.get("calls_requested") if "calls_requested" in req_counts else trace.get("calls_requested", 0)
+    exp_in_window = trace.get("expirations_in_window") or []
+    exp_count = len(exp_in_window) if isinstance(exp_in_window, list) else trace.get("expirations_count") or 0
+    delta_stats = trace.get("delta_abs_stats") or trace.get("delta_abs_stats_otm_puts") or opt.get("delta_distribution") or {}
+    d_min = delta_stats.get("min_abs_put_delta") or delta_stats.get("min")
+    d_med = delta_stats.get("median")
+    d_max = delta_stats.get("max_abs_put_delta") or delta_stats.get("max")
+    sample_syms = (trace.get("sample_request_symbols") or tel.get("sample_request_symbols") or [])[:5]
+    truth_lines = [
+        "## Stage-2 Truth Summary (Phase 3.5)",
+        "",
+        f"- **mode**: {mode.upper()}",
+        f"- **spot_used**: {trace.get('spot_used') or cd.get('spot_used')}",
+        f"- **expirations_in_window**: count={exp_count}, list={exp_in_window[:10] if isinstance(exp_in_window, list) else exp_in_window}",
+        f"- **request_counts**: puts_requested={puts_req}, calls_requested={calls_req}",
+        f"- **sample_request_symbols[0:5]**: {sample_syms}",
+        f"- **response_rows**: {trace.get('response_rows') or tel.get('response_rows')}",
+        f"- **puts_with_required_fields**: {trace.get('puts_with_required_fields') or opt.get('puts_with_required_fields') or cd.get('puts_with_required_fields')}",
+        f"- **calls_with_required_fields**: {trace.get('calls_with_required_fields') or opt.get('calls_with_required_fields') or cd.get('calls_with_required_fields')}",
+        f"- **otm_puts_in_dte / otm_calls_in_dte**: {trace.get('otm_puts_in_dte') or trace.get('otm_calls_in_dte') or cd.get('otm_puts_in_dte')}",
+        f"- **otm_in_delta_band**: {trace.get('otm_puts_in_delta_band') or trace.get('otm_calls_in_delta_band') or trace.get('otm_contracts_in_delta_band') or cd.get('otm_puts_in_delta_band')}",
+        f"- **delta_abs_stats**: min={d_min}, median={d_med}, max={d_max}",
+    ]
+    candidate_trades = (data_diag or {}).get("candidate_trades") or []
+    sel_contract = trace.get("selected_contract")
+    if candidate_trades:
+        truth_lines.append(f"- **selected_trade**: {candidate_trades[0]}")
+    elif sel_contract:
+        truth_lines.append(f"- **selected_trade**: {sel_contract}")
+    else:
+        top_rej = trace.get("top_rejection_reason") or (opt.get("top_rejection_reasons") or {}).get("top_rejection_reason")
+        sample_rej = trace.get("sample_rejections") or (opt.get("top_rejection_reasons") or {}).get("sample_rejected_candidates") or []
+        truth_lines.append(f"- **top_rejection**: {top_rej or 'N/A'}")
+        truth_lines.append(f"- **sample_rejections[0:5]**: {sample_rej[:5]}")
+    truth_lines.append("")
+    analysis_lines.extend(truth_lines)
+
+    # Acceptance Block (Phase 3.6/3.7)
+    otm_in_delta = trace.get("otm_puts_in_delta_band") or trace.get("otm_contracts_in_delta_band") or trace.get("otm_calls_in_delta_band") or cd.get("otm_puts_in_delta_band") or cd.get("otm_contracts_in_delta_band") or 0
+    sel_trade = trace.get("selected_trade") or trace.get("selected_contract") or (candidate_trades[0] if candidate_trades else None) or sel_contract
+    selected_yn = "Y" if sel_trade else "N"
+    top_rej = trace.get("top_rejection") or trace.get("top_rejection_reason") or (opt.get("top_rejection_reasons") or {}).get("top_rejection_reason")
+    sel_summary = ""
+    if sel_trade and isinstance(sel_trade, dict):
+        sel_summary = f"strike={sel_trade.get('strike')} exp={sel_trade.get('exp')} bid={sel_trade.get('bid')} abs_delta={sel_trade.get('abs_delta')} oi={sel_trade.get('oi')} spread_pct={sel_trade.get('spread_pct')}"
+    elif sel_trade:
+        sel_summary = str(sel_trade)[:80]
+    acceptance_block = (
+        f"## Acceptance Block\n\n"
+        f"mode={mode.upper()} | puts_requested={puts_req} | calls_requested={calls_req} | expirations_count={exp_count} | "
+        f"response_rows={trace.get('response_rows') or tel.get('response_rows')} | otm_in_delta_band={otm_in_delta} | "
+        f"selected? {selected_yn} | top_rejection={top_rej or 'N/A'}"
+    )
+    if selected_yn == "Y":
+        acceptance_block += f"\n  selected: {sel_summary}"
+    acceptance_block += "\n"
+    analysis_lines.append(acceptance_block)
+    print("\n--- Acceptance Block ---")
+    print(acceptance_block.strip())
+
+    # Top Candidates Table (10 rows)
+    top_candidates = trace.get("top_candidates_table") or trace.get("top_candidates") or []
+    if not top_candidates and (opt.get("top_rejection_reasons") or {}).get("sample_rejected_candidates"):
+        for r in (opt.get("top_rejection_reasons") or {}).get("sample_rejected_candidates", [])[:10]:
+            top_candidates.append({
+                "exp": r.get("exp"), "strike": r.get("strike"), "OTM?": r.get("OTM?"),
+                "abs_delta": r.get("abs_delta"), "bid": r.get("bid"), "ask": r.get("ask"),
+                "spread_pct": r.get("spread_pct"), "oi": r.get("oi"),
+                "passes_required_fields?": r.get("passes_required_fields?"), "passes_delta_band?": r.get("passes_delta_band?"),
+                "rejection_reason": r.get("rejection_reason", ""),
+            })
+    table_lines = ["## Top Candidates Table (10 rows)", ""]
+    cols = ["exp", "strike", "OTM?", "abs_delta", "bid", "ask", "spread_pct", "oi", "passes_required_fields?", "passes_delta_band?", "rejection_reason"]
+    table_lines.append("| " + " | ".join(cols) + " |")
+    table_lines.append("| " + " | ".join(["---"] * len(cols)) + " |")
+    for row in (top_candidates or [])[:10]:
+        table_lines.append("| " + " | ".join(str(row.get(c, "")) for c in cols) + " |")
+    if not top_candidates:
+        table_lines.append("(no candidates in trace)")
+    table_lines.append("")
+    analysis_lines.extend(table_lines)
+    print("\n--- Stage-2 Truth Summary ---")
+    for line in truth_lines:
+        print(line)
+    print("\n--- Top Candidates Table ---")
+    for line in table_lines:
+        print(line)
+
     out_md = out_dir / f"{symbol}_analysis.md"
     with open(out_md, "w", encoding="utf-8") as f:
         f.write("\n".join(analysis_lines))
@@ -371,6 +520,24 @@ def main() -> int:
     # Stage-1 BLOCKED (e.g. stale) => exit 3
     if is_stale:
         return 3
+    # Phase 3.2 acceptance checks (must be printed)
+    if data_diag is not None:
+        tel = (data_diag.get("options") or {}).get("strikes_options_telemetry") or {}
+        trace = data_diag.get("stage2_trace")
+        cd = data_diag.get("contract_data") or {}
+        opt_counts = (data_diag.get("options") or {}).get("option_type_counts") or {}
+        sample_syms = tel.get("sample_request_symbols") or (trace or {}).get("sample_request_symbols") or []
+        req_strikes = tel.get("requested_put_strikes") or (trace or {}).get("requested_put_strikes")
+        print("\n--- Phase 3.2 acceptance ---")
+        print(f"  sample_request_symbols[0:3]= {sample_syms[:3]}")
+        print(f"  calls_seen= {opt_counts.get('calls_seen', 'N/A')}")
+        print(f"  otm_puts_in_delta_band= {cd.get('otm_puts_in_delta_band', 'N/A')}")
+        print(f"  stage2_trace non-null= {trace is not None and isinstance(trace, dict)}")
+        is_fallback = (trace or {}).get("message") == "Minimal trace (validate_one_symbol fallback)"
+        print(f"  stage2_trace.json is real (not fallback)= {not is_fallback}")
+        if req_strikes:
+            print(f"  requested_put_strikes= {req_strikes}")
+
     # Phase 3.3.1: eligibility and contract checks (symbol_eligibility, contract_data, contract_eligibility)
     if data_diag is not None:
         exit_ec, msg_list = _eligibility_and_contract_assert(data_diag)

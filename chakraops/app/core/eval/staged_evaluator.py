@@ -328,6 +328,8 @@ class FullEvaluationResult:
     contract_eligibility: Optional[Dict[str, Any]] = None  # { status: PASS|FAIL|UNAVAILABLE, reasons: [] }
     # Phase 3.2.2: Explicit liquidity gate results (underlying + option) for artifact
     liquidity_gates: Optional[Dict[str, Any]] = None  # { underlying: {...}, option: {...} }
+    # Phase 4: Eligibility gate trace (mode_decision CSP | CC | NONE)
+    eligibility_trace: Optional[Dict[str, Any]] = None
 
     # Metadata
     fetched_at: Optional[str] = None
@@ -1532,18 +1534,20 @@ def evaluate_symbol_full(
     chain_provider: Optional[OratsChainProvider] = None,
     skip_stage2: bool = False,
     strategy_mode: str = "CSP",
+    holdings: Optional[Dict[str, int]] = None,
 ) -> FullEvaluationResult:
     """
     Run full 2-stage evaluation for a symbol.
-    
+    Phase 4: Eligibility runs first; mode_decision (CSP | CC | NONE) from eligibility_engine.
+    If NONE, Stage-2 is skipped. If CSP or CC, Stage-2 runs with that mode only.
     Args:
         symbol: Stock ticker
         chain_provider: Optional provider instance
         skip_stage2: If True, only run stage 1
-        strategy_mode: "CSP" or "CC" for Stage-2 flow (default CSP)
-    
+        strategy_mode: Ignored when Phase 4 eligibility runs; used only as fallback if eligibility unavailable
+        holdings: Symbol -> shares for CC (Phase 4). If None, treated as {} (CC ineligible).
     Returns:
-        FullEvaluationResult with complete evaluation data
+        FullEvaluationResult with complete evaluation data and eligibility_trace
     """
     result = FullEvaluationResult(symbol=symbol, source="ORATS")
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -1625,8 +1629,41 @@ def evaluate_symbol_full(
             result.symbol_eligibility = {"status": "FAIL", "reasons": [underlying_gates.get("reason") or "Underlying liquidity gates failed"]}
         return result
 
-    # Stage 2
-    mode = strategy_mode or get_stage2_strategy_mode()
+    # Phase 4: Eligibility gate (runs before Stage-2; decides mode CSP | CC | NONE)
+    mode_decision = "CSP"
+    try:
+        from app.core.eligibility.eligibility_engine import run as run_eligibility
+        mode_decision, eligibility_trace = run_eligibility(
+            symbol, holdings=holdings or {}, current_price=stage1.price, lookback=255
+        )
+        result.eligibility_trace = eligibility_trace
+    except Exception as e:
+        logger.warning("[ELIGIBILITY] %s: %s; defaulting to CSP", symbol, e)
+        result.eligibility_trace = {
+            "symbol": symbol,
+            "mode_decision": "CSP",
+            "regime": "UNKNOWN",
+            "rejection_reason_codes": ["ELIGIBILITY_ERROR"],
+            "error": str(e),
+        }
+
+    if mode_decision == "NONE":
+        result.options_available = False
+        rej = (result.eligibility_trace or {}).get("rejection_reason_codes") or []
+        result.options_reason = "; ".join(rej) if rej else "Eligibility: NONE"
+        result.final_verdict = FinalVerdict.HOLD
+        result.verdict = "HOLD"
+        result.primary_reason = result.options_reason
+        result.score = stage1.stage1_score
+        result.liquidity_gates = {"underlying": underlying_gates, "option": compute_option_liquidity_gates(None)}
+        se, cd, ce = build_eligibility_layers(stage1, None, now_iso, market_open)
+        result.symbol_eligibility, result.contract_data, result.contract_eligibility = se, cd, ce
+        if not underlying_gates["passed"] and result.symbol_eligibility:
+            result.symbol_eligibility = {"status": "FAIL", "reasons": [underlying_gates.get("reason") or "Underlying liquidity gates failed"]}
+        return result
+
+    # Stage 2: eligibility is single source of truth. Ignore CLI/API strategy_mode for stage2.
+    mode = mode_decision if mode_decision in ("CSP", "CC") else (strategy_mode or get_stage2_strategy_mode())
     stage2 = evaluate_stage2(symbol, stage1, chain_provider, strategy_mode=mode)
     
     # Log stage 2 result before enhancement

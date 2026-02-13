@@ -1,0 +1,22 @@
+# ChakraOps — Wheel strategy evaluation and execution.
+# Phase 4 variations:
+#   Phase 4     — Eligibility gate (candles, indicators, regime, CSP/CC/NONE); ORATS daily only; swing levels.
+#   Phase 4.1   — Trade construction (deterministic, no execution); TradeProposal.
+#   Phase 4.2   — Entry proximity (RSI/support/resistance/ATR); Iron Condor signals.
+#   Phase 4.3   — Multi-timeframe (daily + weekly alignment, FAIL_REGIME_CONFLICT); trade proposals; execution readiness.
+#   Phase 4.4   — Volatility kill switch (RISK_OFF blocks execution).
+#   Phase 4.5.1 — Earnings gate.
+#   Phase 4.5.2 — Macro event gate (FOMC/CPI/JOBS/NFP).
+#   Phase 4.5.3 — Session gate; market calendar.
+#   Phase 4.5.4 — Data completeness guard.
+#   Phase 4.5.5 — Risk posture (CONSERVATIVE | BALANCED | AGGRESSIVE).
+#   Phase 4A    — Signal scoring; Phase 4B — Explainability / decision snapshot.
+
+[project]
+name = "chakraops"
+version = "0.1.0"
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]

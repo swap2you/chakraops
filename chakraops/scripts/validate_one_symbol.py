@@ -18,15 +18,19 @@ Exit codes:
   5 - Contract unavailable but expected (symbol_eligibility PASS but contract_data not available).
   6 - Mode integrity FAIL (CSP run has calls / CC run has puts).
 """
-
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import argparse
 import json
-import sys
 import time
 from datetime import date
-from pathlib import Path
 
 try:
     import urllib.request
@@ -208,7 +212,7 @@ def main() -> int:
     )
     parser.add_argument("--symbol", default=SYMBOL_DEFAULT, help=f"Ticker (default: {SYMBOL_DEFAULT})")
     parser.add_argument("--base", default=BASE_DEFAULT, help=f"API base URL (default: {BASE_DEFAULT})")
-    parser.add_argument("--mode", choices=("csp", "cc"), default="csp", help="Stage-2 strategy mode (default: csp)")
+    parser.add_argument("--mode", choices=("csp", "cc"), default="csp", help="API query only (test); actual mode from eligibility (default: csp)")
     args = parser.parse_args()
     base = args.base.rstrip("/")
     symbol = (args.symbol or SYMBOL_DEFAULT).strip().upper()
@@ -298,6 +302,13 @@ def main() -> int:
         with open(out_trace, "w", encoding="utf-8") as f:
             json.dump(to_write, f, indent=2, default=str)
         print(f"Wrote {out_trace}")
+        # Phase 4: Persist eligibility_trace
+        el_trace = data_diag.get("eligibility_trace")
+        if isinstance(el_trace, dict):
+            out_el = out_dir / f"{symbol}_eligibility_trace.json"
+            with open(out_el, "w", encoding="utf-8") as f:
+                json.dump(el_trace, f, indent=2, default=str)
+            print(f"Wrote {out_el}")
     else:
         print(f"symbol-diagnostics failed: {err_diag}", file=sys.stderr)
 
@@ -315,6 +326,25 @@ def main() -> int:
         print(f"Wrote {out_univ} (universe returned non-200 or invalid JSON)")
     if code_univ != 200:
         errors.append(f"universe: {code_univ} {err_univ or 'non-200'}")
+
+    # --- Candle diagnostics (ORATS daily provider) ---
+    candles_list = []
+    candles_first_date = "N/A"
+    candles_last_date = "N/A"
+    try:
+        from app.core.eligibility.candles import get_candles
+        candles_list = get_candles(symbol, lookback=400)
+        if candles_list:
+            candles_first_date = str(candles_list[0].get("ts") or "N/A")[:10]
+            candles_last_date = str(candles_list[-1].get("ts") or "N/A")[:10]
+        out_candles = out_dir / f"{symbol}_candles.json"
+        with open(out_candles, "w", encoding="utf-8") as f:
+            json.dump(candles_list, f, indent=0, default=str)
+        print(f"Wrote {out_candles}")
+    except Exception as e:
+        print(f"Candle fetch failed: {e}", file=sys.stderr)
+    print("\n--- Candle Diagnostics ---")
+    print(f"rows={len(candles_list)} first_date={candles_first_date} last_date={candles_last_date}")
 
     # --- Snapshot for contract checks ---
     snap_obj = (data_snap or {}).get("snapshot")
@@ -347,6 +377,11 @@ def main() -> int:
         f"- `GET {url_snapshot}` → {out_snap.name}",
         f"- `GET {url_diag}` → {out_diag.name}",
         f"- `GET {url_universe}` → {out_univ.name}",
+        "",
+        "## Candle Diagnostics",
+        f"- **rows**: {len(candles_list)}",
+        f"- **first_date**: {candles_first_date}",
+        f"- **last_date**: {candles_last_date}",
         "",
         "## Required fields (Stage-1)",
         f"Expected: {', '.join(REQUIRED_FIELDS)}.",
@@ -390,6 +425,29 @@ def main() -> int:
     else:
         analysis_lines.append("**PASS** — all required fields present and quote_date fresh.")
     analysis_lines.append("")
+
+    # Phase 4: Eligibility Block (mode, regime, key indicators, top rejections)
+    el_trace = (data_diag or {}).get("eligibility_trace")
+    if isinstance(el_trace, dict):
+        mode_el = el_trace.get("mode_decision") or "NONE"
+        regime_el = el_trace.get("regime") or "—"
+        comp = el_trace.get("computed") or {}
+        rej = el_trace.get("rejection_reason_codes") or []
+        analysis_lines.append("## Eligibility Block (Phase 4)")
+        analysis_lines.append("")
+        analysis_lines.append(f"- **mode_decision**: {mode_el}")
+        analysis_lines.append(f"- **regime**: {regime_el}")
+        analysis_lines.append(f"- **RSI14**: {comp.get('RSI14')}")
+        analysis_lines.append(f"- **EMA20 / EMA50 / EMA200**: {comp.get('EMA20')} / {comp.get('EMA50')} / {comp.get('EMA200')}")
+        analysis_lines.append(f"- **ATR_pct**: {comp.get('ATR_pct')}")
+        analysis_lines.append(f"- **distance_to_support_pct**: {comp.get('distance_to_support_pct')}")
+        analysis_lines.append(f"- **distance_to_resistance_pct**: {comp.get('distance_to_resistance_pct')}")
+        analysis_lines.append(f"- **rejection_reason_codes**: {rej}")
+        analysis_lines.append("")
+        print("\n--- Eligibility Block ---")
+        print(f"mode_decision={mode_el} regime={regime_el}")
+        print(f"RSI14={comp.get('RSI14')} EMA20={comp.get('EMA20')} EMA50={comp.get('EMA50')} ATR_pct={comp.get('ATR_pct')}")
+        print(f"rejection_reason_codes={rej}")
 
     # Phase 3.5: Truth Summary + Top Candidates Table
     trace = (data_diag or {}).get("stage2_trace") or {}
@@ -458,12 +516,16 @@ def main() -> int:
     print("\n--- Acceptance Block ---")
     print(acceptance_block.strip())
 
-    # Phase 3.8: Mode Integrity — read contract_data.stage2_trace; CSP/CC rules; OCC type at index -9.
-    # Only fail (exit 6) when one of the conditions fails. No changes to selected_trade, request_counts, candidate_trades.
+    # Phase 3.8: Mode Integrity — eligibility is single source of truth. Use mode_decision from response, NOT CLI --mode.
+    # If eligibility returned NONE, stage2 did not run; skip integrity or pass. Otherwise validate trace matches mode_decision.
     cd_for_integrity = (data_diag or {}).get("contract_data") or {}
     trace_integrity = cd_for_integrity.get("stage2_trace") or trace
     if not isinstance(trace_integrity, dict):
         trace_integrity = {}
+    el_trace_integrity = (data_diag or {}).get("eligibility_trace") or {}
+    mode_decision_for_integrity = (el_trace_integrity.get("mode_decision") or "").strip().upper()
+    if mode_decision_for_integrity not in ("CSP", "CC"):
+        mode_decision_for_integrity = ""  # NONE or missing: no stage2 run to validate
     req_counts_integrity = trace_integrity.get("request_counts") or {}
     puts_req_i = req_counts_integrity.get("puts_requested")
     calls_req_i = req_counts_integrity.get("calls_requested")
@@ -475,8 +537,8 @@ def main() -> int:
     mode_integrity_pass = True
     mode_integrity_fail_reason = None
     has_trace = isinstance(trace_integrity, dict) and (req_counts_integrity or sample_symbols_integrity)
-    if has_trace:
-        m = (mode or "csp").strip().upper()
+    if has_trace and mode_decision_for_integrity:
+        m = mode_decision_for_integrity
         if m == "CSP":
             if calls_req_i != 0:
                 mode_integrity_pass = False
@@ -504,8 +566,9 @@ def main() -> int:
                         mode_integrity_fail_reason = f"MODE_INTEGRITY_FAIL: CC found put symbol {s}"
                         break
     first_3 = (trace.get("sample_request_symbols") or [])[:3]
+    mode_display = mode_decision_for_integrity or mode.upper()
     mode_integrity_line = (
-        f"Mode Integrity: mode={mode.upper()} puts_requested={puts_req} calls_requested={calls_req} "
+        f"Mode Integrity: mode={mode_display} (from eligibility) puts_requested={puts_req} calls_requested={calls_req} "
         f"sample_symbols[0:3]={first_3} -> {'PASS' if mode_integrity_pass else 'FAIL'}"
     )
     analysis_lines.append("\n## Mode Integrity\n\n" + mode_integrity_line + "\n")

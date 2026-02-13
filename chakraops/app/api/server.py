@@ -1731,10 +1731,12 @@ def api_view_symbol_diagnostics(
     except Exception as e:
         result["notes"].append(f"Diagnostics partial: {e}")
 
-    # LIVE EVALUATION: always evaluate fresh from snapshot + live chain (no persisted run)
+    # LIVE EVALUATION: Phase 4 eligibility then Stage-2 (mode from eligibility)
     try:
         from app.core.eval.staged_evaluator import evaluate_symbol_full
-        full_result = evaluate_symbol_full(sym, skip_stage2=False, strategy_mode=strategy_mode)
+        full_result = evaluate_symbol_full(
+            sym, skip_stage2=False, strategy_mode=strategy_mode, holdings=None
+        )
     except Exception as e:
         logger.exception("[DIAGNOSTICS] Live evaluation failed for %s: %s", sym, e)
         result["eligibility"]["verdict"] = "UNKNOWN"
@@ -1783,6 +1785,8 @@ def api_view_symbol_diagnostics(
         result["stage2_trace"] = getattr(full_result.stage2, "stage2_trace", None) or {"error": "TRACE_MISSING_BUG", "message": "Stage-2 ran but trace missing"}
     if getattr(full_result, "contract_eligibility", None):
         result["contract_eligibility"] = full_result.contract_eligibility
+    if getattr(full_result, "eligibility_trace", None):
+        result["eligibility_trace"] = full_result.eligibility_trace
     result["gates"] = list(full_result.gates) if full_result.gates else result["gates"]
     result["blockers"] = list(full_result.blockers) if full_result.blockers else result["blockers"]
     result["candidate_trades"] = list(full_result.candidate_trades) if full_result.candidate_trades else []

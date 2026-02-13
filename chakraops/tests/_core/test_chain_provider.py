@@ -528,8 +528,9 @@ class TestStagedEvaluator:
     
     @patch("app.core.eval.staged_evaluator.evaluate_stage1")
     @patch("app.core.eval.staged_evaluator.evaluate_stage2")
-    def test_full_evaluation_eligible(self, mock_stage2, mock_stage1):
-        """Test full evaluation produces ELIGIBLE verdict."""
+    @patch("app.core.eligibility.eligibility_engine.run")
+    def test_full_evaluation_eligible(self, mock_eligibility_run, mock_stage2, mock_stage1):
+        """Test full evaluation produces ELIGIBLE verdict. Phase 4: mock eligibility to return CSP."""
         from app.core.eval.staged_evaluator import (
             evaluate_symbol_full,
             Stage1Result,
@@ -539,7 +540,8 @@ class TestStagedEvaluator:
             EvaluationStage,
             FinalVerdict,
         )
-        
+        mock_eligibility_run.return_value = ("CSP", {"mode_decision": "CSP", "regime": "SIDEWAYS", "rejection_reason_codes": []})
+
         # Mock stage 1
         mock_stage1.return_value = Stage1Result(
             symbol="AAPL",
@@ -574,6 +576,50 @@ class TestStagedEvaluator:
         assert result.stage_reached == EvaluationStage.STAGE2_CHAIN
         assert result.final_verdict == FinalVerdict.ELIGIBLE
         assert result.verdict == "ELIGIBLE"
+
+    @patch("app.core.eval.staged_evaluator.evaluate_stage1")
+    @patch("app.core.eval.staged_evaluator.evaluate_stage2")
+    @patch("app.core.eligibility.eligibility_engine.run")
+    def test_stage2_respects_eligibility_mode_only(self, mock_eligibility_run, mock_stage2, mock_stage1):
+        """Stage2 must be called with strategy_mode from eligibility only; CLI/API mode is ignored."""
+        from app.core.eval.staged_evaluator import (
+            evaluate_symbol_full,
+            Stage1Result,
+            Stage2Result,
+            StockVerdict,
+            SelectedContract,
+            EvaluationStage,
+            FinalVerdict,
+        )
+        mock_eligibility_run.return_value = ("CC", {"mode_decision": "CC", "regime": "DOWN", "rejection_reason_codes": []})
+        mock_stage1.return_value = Stage1Result(
+            symbol="AAPL",
+            stock_verdict=StockVerdict.QUALIFIED,
+            stock_verdict_reason="OK",
+            stage1_score=80,
+            price=150.0,
+            data_completeness=1.0,
+        )
+        mock_selected = MagicMock(spec=SelectedContract)
+        mock_selected.selection_reason = "CC selected"
+        mock_selected.contract = MagicMock()
+        mock_selected.contract.get_liquidity_grade.return_value = ContractLiquidityGrade.B
+        mock_stage2.return_value = Stage2Result(
+            symbol="AAPL",
+            expirations_available=5,
+            expirations_evaluated=3,
+            contracts_evaluated=50,
+            selected_contract=mock_selected,
+            selected_expiration=date.today() + timedelta(days=30),
+            liquidity_grade="B",
+            liquidity_ok=True,
+            liquidity_reason="OK",
+            chain_completeness=1.0,
+        )
+        evaluate_symbol_full("AAPL", skip_stage2=False, strategy_mode="CSP")
+        mock_stage2.assert_called_once()
+        call_kwargs = mock_stage2.call_args[1]
+        assert call_kwargs.get("strategy_mode") == "CC", "Stage2 must use eligibility mode CC, not CLI CSP"
     
     @patch("app.core.eval.staged_evaluator.evaluate_stage1")
     def test_full_evaluation_stage1_block(self, mock_stage1):

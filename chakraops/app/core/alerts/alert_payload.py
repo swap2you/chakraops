@@ -31,6 +31,7 @@ def build_alert_payload(
     tier: Optional[str] = None,
     priority_rank: Optional[int] = None,
     severity_dict: Optional[Dict[str, Any]] = None,
+    sizing_dict: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Build alert payload dict from existing traces. Never include secrets.
@@ -111,5 +112,12 @@ def build_alert_payload(
     payload["severity_reason"] = sev.get("reason")
     payload["distance_metric_used"] = sev.get("distance_metric_used")
     payload["threshold_used"] = sev.get("threshold_used")
+
+    # Phase 6.4: position sizing (informational only)
+    sizing = sizing_dict or {}
+    payload["contracts_suggested"] = sizing.get("contracts_suggested")
+    payload["capital_required_estimate"] = sizing.get("capital_required_estimate")
+    payload["capital_pct_of_account"] = sizing.get("capital_pct_of_account")
+    payload["limiting_factor"] = sizing.get("limiting_factor")
 
     return payload

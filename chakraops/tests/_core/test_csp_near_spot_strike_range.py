@@ -21,6 +21,7 @@ def _make_strikes_rows(exp_str: str, spot: float, strikes: list[float], dte: int
             "strike": s,
             "dte": dte,
             "stockPrice": spot,
+            "optionType": "PUT",
         }
         for s in strikes
     ]

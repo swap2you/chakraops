@@ -388,11 +388,16 @@ def run_health_gate_for_symbol(
         from app.core.scoring.signal_score import compute_signal_score
         from app.core.scoring.tiering import assign_tier
         from app.core.scoring.severity import compute_alert_severity
+        from app.core.scoring.position_sizing import compute_position_sizing
+        from app.core.scoring.config import ACCOUNT_EQUITY_DEFAULT
         el_for_score = eligibility_trace or {}
         score_dict = compute_signal_score(el_for_score, stage2_trace, spot_used)
         tier = assign_tier(el_for_score.get("mode_decision") or "NONE", score_dict.get("composite_score", 0))
         severity_dict = compute_alert_severity(el_for_score, score_dict, tier, spot_used)
-        eligibility_trace = {**el_for_score, "score": score_dict, "tier": tier, "severity": severity_dict}
+        sizing_dict = compute_position_sizing(
+            el_for_score.get("mode_decision") or "NONE", float(spot_used or 0), stage2_trace, ACCOUNT_EQUITY_DEFAULT, holdings_shares=0
+        )
+        eligibility_trace = {**el_for_score, "score": score_dict, "tier": tier, "severity": severity_dict, "sizing": sizing_dict}
     except Exception:
         pass
     el_path = sym_dir / f"{symbol}_eligibility_trace.json"
@@ -512,7 +517,8 @@ def main() -> int:
             score_dict = (el_trace or {}).get("score") or {}
             tier = (el_trace or {}).get("tier")
             severity_dict = (el_trace or {}).get("severity") or {}
-            payload = build_alert_payload(symbol, run_id, el_trace, st2_trace, candles_meta, {"source": "health_gate_phase5"}, score_dict=score_dict, tier=tier, severity_dict=severity_dict)
+            sizing_dict = (el_trace or {}).get("sizing") or {}
+            payload = build_alert_payload(symbol, run_id, el_trace, st2_trace, candles_meta, {"source": "health_gate_phase5"}, score_dict=score_dict, tier=tier, severity_dict=severity_dict, sizing_dict=sizing_dict)
             path = save_alert_payload(payload, base_dir=str(repo_root / "artifacts" / "alerts"))
             print(f"ALERT_PAYLOAD saved: {path}")
     except Exception as e:

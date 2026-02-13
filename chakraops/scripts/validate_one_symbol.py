@@ -311,13 +311,19 @@ def main() -> int:
                 from app.core.scoring.signal_score import compute_signal_score
                 from app.core.scoring.tiering import assign_tier
                 from app.core.scoring.severity import compute_alert_severity
+                from app.core.scoring.position_sizing import compute_position_sizing
+                from app.core.scoring.config import ACCOUNT_EQUITY_DEFAULT
                 cd = data_diag.get("contract_data") or {}
                 stock = data_diag.get("stock") or {}
                 spot = cd.get("spot_used") or stock.get("price")
                 score_dict = compute_signal_score(el_trace, trace if isinstance(trace, dict) else None, spot)
                 tier = assign_tier(el_trace.get("mode_decision") or "NONE", score_dict.get("composite_score", 0))
                 severity_dict = compute_alert_severity(el_trace, score_dict, tier, spot)
-                el_trace = {**el_trace, "score": score_dict, "tier": tier, "severity": severity_dict}
+                sizing_dict = compute_position_sizing(
+                    el_trace.get("mode_decision") or "NONE", float(spot or 0), trace if isinstance(trace, dict) else None,
+                    ACCOUNT_EQUITY_DEFAULT, holdings_shares=0,
+                )
+                el_trace = {**el_trace, "score": score_dict, "tier": tier, "severity": severity_dict, "sizing": sizing_dict}
             except Exception:
                 pass
             out_el = out_dir / f"{symbol}_eligibility_trace.json"
@@ -368,15 +374,21 @@ def main() -> int:
         from app.core.scoring.signal_score import compute_signal_score
         from app.core.scoring.tiering import assign_tier
         from app.core.scoring.severity import compute_alert_severity
+        from app.core.scoring.position_sizing import compute_position_sizing
+        from app.core.scoring.config import ACCOUNT_EQUITY_DEFAULT
         el_trace = (data_diag or {}).get("eligibility_trace")
         st2_trace = (data_diag or {}).get("stage2_trace")
         spot = ((data_diag or {}).get("stock") or {}).get("price") or ((data_diag or {}).get("contract_data") or {}).get("spot_used")
         score_dict = compute_signal_score(el_trace, st2_trace, spot) if el_trace else {}
         tier = assign_tier((el_trace or {}).get("mode_decision") or "NONE", (score_dict or {}).get("composite_score", 0))
         severity_dict = compute_alert_severity(el_trace, score_dict, tier, spot)
+        sizing_dict = compute_position_sizing(
+            (el_trace or {}).get("mode_decision") or "NONE", float(spot or 0), st2_trace,
+            ACCOUNT_EQUITY_DEFAULT, holdings_shares=0,
+        )
         candles_meta = {"first_date": candles_first_date, "last_date": candles_last_date}
         config_meta = {"source": "validate_one_symbol"}
-        payload = build_alert_payload(symbol, run_id, el_trace, st2_trace, candles_meta, config_meta, score_dict=score_dict, tier=tier, priority_rank=1, severity_dict=severity_dict)
+        payload = build_alert_payload(symbol, run_id, el_trace, st2_trace, candles_meta, config_meta, score_dict=score_dict, tier=tier, priority_rank=1, severity_dict=severity_dict, sizing_dict=sizing_dict)
         path = save_alert_payload(payload, base_dir=str(repo_root / "artifacts" / "alerts"))
         print(f"ALERT_PAYLOAD saved: {path}")
         print("\n--- Severity ---")

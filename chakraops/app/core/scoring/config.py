@@ -8,6 +8,9 @@ from __future__ import annotations
 ACCOUNT_EQUITY_DEFAULT = 150_000
 MAX_CONTRACTS_PER_SYMBOL = 5
 MAX_NOTIONAL_PCT_PER_TRADE = 0.20  # e.g. 20% of account on one CSP
+MAX_TOTAL_NOTIONAL_PCT = 0.60  # total capital across all positions (informational)
+MIN_FREE_CASH_PCT = 0.10  # keep 10% cash buffer (informational)
+DEFAULT_RISK_MODE = "CONSERVATIVE"  # optional; no complexity added
 
 # Affordability score: 100 at notional_pct <= AFFORDABILITY_PCT_100, 0 at >= AFFORDABILITY_PCT_0
 AFFORDABILITY_PCT_100 = 0.05   # <= 5% of account -> score 100

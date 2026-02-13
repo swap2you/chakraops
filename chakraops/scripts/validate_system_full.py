@@ -157,6 +157,8 @@ def main() -> int:
     from app.core.scoring.tiering import assign_tier
     from app.core.scoring.ranking import rank_candidates
     from app.core.scoring.severity import compute_alert_severity
+    from app.core.scoring.position_sizing import compute_position_sizing
+    from app.core.scoring.config import ACCOUNT_EQUITY_DEFAULT
 
     candidates: List[Dict[str, Any]] = []
     for r in results:
@@ -168,9 +170,11 @@ def main() -> int:
                 spot = float(r["cands"][-1].get("close"))
             except (TypeError, ValueError):
                 pass
+        spot_f = float(spot) if spot is not None else 0.0
         score_dict = compute_signal_score(el, st2, spot)
         tier = assign_tier(r.get("mode_decision") or "NONE", score_dict.get("composite_score", 0))
         severity_dict = compute_alert_severity(el, score_dict, tier, spot)
+        sizing_dict = compute_position_sizing(r.get("mode_decision") or "NONE", spot_f, st2, ACCOUNT_EQUITY_DEFAULT, holdings_shares=0)
         sel = st2.get("selected_trade") if isinstance(st2, dict) else None
         dist_pct = severity_dict.get("distance_metric_used")
         payload = {
@@ -188,17 +192,25 @@ def main() -> int:
             "dte": sel.get("dte") if isinstance(sel, dict) else None,
             "spread_pct": sel.get("spread_pct") if isinstance(sel, dict) else None,
             "expiration": sel.get("exp") if isinstance(sel, dict) else None,
+            "contracts_suggested": sizing_dict.get("contracts_suggested"),
+            "capital_required_estimate": sizing_dict.get("capital_required_estimate"),
+            "capital_pct_of_account": sizing_dict.get("capital_pct_of_account"),
+            "limiting_factor": sizing_dict.get("limiting_factor"),
+            "sizing_dict": sizing_dict,
         }
         candidates.append(payload)
 
     ranked = rank_candidates(candidates)
 
-    # Top 10 table
+    # Top 10 table (with sizing)
     print()
     print("===== TOP 10 CANDIDATES (ranked) =====")
-    fmt = "%4s %6s %4s %4s %8s %12s %8s %8s %6s %10s"
-    print(fmt % ("rank", "symbol", "mode", "tier", "score", "notional_pct", "strike", "delta", "dte", "spread_pct"))
-    print("-" * 82)
+    fmt = "%4s %6s %4s %4s %8s %12s %8s %8s %6s %10s %4s %10s %10s %14s"
+    print(fmt % (
+        "rank", "symbol", "mode", "tier", "score", "notional_pct", "strike", "delta", "dte", "spread_pct",
+        "ctrs", "cap_req", "cap_pct", "limiting_factor",
+    ))
+    print("-" * 120)
     for p in ranked[:10]:
         npct = p.get("notional_pct_of_account")
         npct_s = f"{npct:.4f}" if npct is not None else "N/A"
@@ -207,6 +219,12 @@ def main() -> int:
         dte_s = str(p.get("dte")) if p.get("dte") is not None else "N/A"
         sp_s = f"{p.get('spread_pct'):.4f}" if p.get("spread_pct") is not None else "N/A"
         score_s = str(p.get("composite_score")) if p.get("composite_score") is not None else "N/A"
+        ctrs_s = str(p.get("contracts_suggested")) if p.get("contracts_suggested") is not None else "N/A"
+        cap_req = p.get("capital_required_estimate")
+        cap_req_s = f"{cap_req:,.0f}" if cap_req is not None else "N/A"
+        cap_pct = p.get("capital_pct_of_account")
+        cap_pct_s = f"{cap_pct:.4f}" if cap_pct is not None else "N/A"
+        lim_s = str(p.get("limiting_factor")) if p.get("limiting_factor") is not None else "N/A"
         print(fmt % (
             p.get("priority_rank", "?"),
             p.get("symbol", "?"),
@@ -218,6 +236,10 @@ def main() -> int:
             delta_s,
             dte_s,
             sp_s,
+            ctrs_s,
+            cap_req_s,
+            cap_pct_s,
+            lim_s,
         ))
 
     # Phase 6.3: ALERT READINESS (sorted by priority_rank)
@@ -269,10 +291,12 @@ def main() -> int:
             score_dict = compute_signal_score(el, st2, spot)
             tier = assign_tier(r.get("mode_decision") or "NONE", score_dict.get("composite_score", 0))
             severity_dict = compute_alert_severity(el, score_dict, tier, spot)
+            spot_f = float(spot) if spot is not None else 0.0
+            sizing_dict = compute_position_sizing(r.get("mode_decision") or "NONE", spot_f, st2, ACCOUNT_EQUITY_DEFAULT, holdings_shares=0)
             priority_rank = rank_by_symbol.get(symbol, 1)
             payload = build_alert_payload(
                 symbol, run_id, el, st2, candles_meta, {"source": "validate_system_full"},
-                score_dict=score_dict, tier=tier, priority_rank=priority_rank, severity_dict=severity_dict,
+                score_dict=score_dict, tier=tier, priority_rank=priority_rank, severity_dict=severity_dict, sizing_dict=sizing_dict,
             )
             path = save_alert_payload(payload, base_dir=str(repo_root / "artifacts" / "alerts"))
             print(f"ALERT_PAYLOAD saved: {path}")

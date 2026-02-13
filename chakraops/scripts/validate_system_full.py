@@ -12,6 +12,9 @@ from __future__ import annotations
 
 import argparse
 import sys
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
 
 
 def main() -> int:
@@ -19,6 +22,8 @@ def main() -> int:
     parser.add_argument("--symbol", default="SPY", help="Symbol to validate (default: SPY)")
     args = parser.parse_args()
     symbol = (args.symbol or "SPY").strip().upper()
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + uuid.uuid4().hex[:8]
+    repo_root = Path(__file__).resolve().parents[1]
 
     from app.core.eligibility.candles import get_candles
     from app.core.eligibility.indicators import atr, atr_pct, ema, rsi_wilder
@@ -98,6 +103,8 @@ def main() -> int:
         print(f"REGIME: FAIL ({e})")
 
     # 4) Validate eligibility (Phase 5.0: support_level, resistance_level, method, window, tolerance_used)
+    eligibility_trace = None
+    mode_decision = "NONE"
     try:
         mode_decision, eligibility_trace = run_eligibility(symbol, holdings={}, lookback=255)
         if not eligibility_trace:
@@ -121,10 +128,17 @@ def main() -> int:
                 actual = r.get("actual", r.get("value", "?"))
                 thresh = r.get("threshold", "?")
                 print(f"  failing: {name} actual={actual} vs threshold={thresh}")
+            # Phase 5.2: intraday diagnostics when enabled
+            intraday = eligibility_trace.get("intraday") or {}
+            if intraday.get("enabled"):
+                print(f"  intraday: timeframe={intraday.get('timeframe')} data_present={intraday.get('data_present')} "
+                      f"intraday_regime={intraday.get('intraday_regime')} alignment_pass={intraday.get('alignment_pass')} "
+                      f"reason_code={intraday.get('reason_code')}")
     except Exception as e:
         print(f"ELIGIBILITY: FAIL ({e})")
 
     # 5) Validate Stage-2 (only when mode_decision != NONE)
+    stage2_trace = None
     if eligibility_ok and mode_decision and mode_decision != "NONE":
         try:
             from app.core.eval.staged_evaluator import evaluate_symbol_full
@@ -132,6 +146,7 @@ def main() -> int:
             provider = get_chain_provider()
             result = evaluate_symbol_full(symbol, chain_provider=provider, skip_stage2=False)
             trace = getattr(result.stage2, "stage2_trace", None) or {}
+            stage2_trace = trace
             req_counts = trace.get("request_counts") or {}
             puts_requested = trace.get("puts_requested") or req_counts.get("puts_requested")
             calls_requested = trace.get("calls_requested") or req_counts.get("calls_requested")
@@ -163,6 +178,21 @@ def main() -> int:
         print("STAGE2: PASS (mode_decision is NONE; skip Stage-2 request check)")
 
     _print_summary(candles_ok, indicators_ok, regime_ok, eligibility_ok, stage2_ok)
+
+    # Phase 6.0: Alert payload (artifact only; no Slack)
+    try:
+        from app.core.alerts.alert_payload import build_alert_payload
+        from app.core.alerts.alert_store import save_alert_payload
+        candles_meta = {}
+        if cands:
+            candles_meta["first_date"] = str(cands[0].get("ts") or "N/A")[:10]
+            candles_meta["last_date"] = str(cands[-1].get("ts") or "N/A")[:10]
+        payload = build_alert_payload(symbol, run_id, eligibility_trace, stage2_trace, candles_meta, {"source": "validate_system_full"})
+        path = save_alert_payload(payload, base_dir=str(repo_root / "artifacts" / "alerts"))
+        print(f"ALERT_PAYLOAD saved: {path}")
+    except Exception as e:
+        print(f"ALERT_PAYLOAD save failed: {e}", file=sys.stderr)
+
     return 0 if all((candles_ok, indicators_ok, regime_ok, eligibility_ok, stage2_ok)) else 1
 
 

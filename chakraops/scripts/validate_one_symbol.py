@@ -30,7 +30,8 @@ if str(ROOT) not in sys.path:
 import argparse
 import json
 import time
-from datetime import date
+import uuid
+from datetime import date, datetime, timezone
 
 try:
     import urllib.request
@@ -221,6 +222,7 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parent.parent
     out_dir = repo_root / "artifacts" / "validate"
     out_dir.mkdir(parents=True, exist_ok=True)
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + uuid.uuid4().hex[:8]
 
     errors: list[str] = []
     build_id_mismatch: bool = False
@@ -346,6 +348,20 @@ def main() -> int:
     print("\n--- Candle Diagnostics ---")
     print(f"rows={len(candles_list)} first_date={candles_first_date} last_date={candles_last_date}")
 
+    # Phase 6.0: Alert payload (artifact only; no Slack)
+    try:
+        from app.core.alerts.alert_payload import build_alert_payload
+        from app.core.alerts.alert_store import save_alert_payload
+        el_trace = (data_diag or {}).get("eligibility_trace")
+        st2_trace = (data_diag or {}).get("stage2_trace")
+        candles_meta = {"first_date": candles_first_date, "last_date": candles_last_date}
+        config_meta = {"source": "validate_one_symbol"}
+        payload = build_alert_payload(symbol, run_id, el_trace, st2_trace, candles_meta, config_meta)
+        path = save_alert_payload(payload, base_dir=str(repo_root / "artifacts" / "alerts"))
+        print(f"ALERT_PAYLOAD saved: {path}")
+    except Exception as e:
+        print(f"ALERT_PAYLOAD save failed: {e}", file=sys.stderr)
+
     # --- Snapshot for contract checks ---
     snap_obj = (data_snap or {}).get("snapshot")
     if not isinstance(snap_obj, dict):
@@ -448,6 +464,12 @@ def main() -> int:
         print(f"mode_decision={mode_el} regime={regime_el}")
         print(f"RSI14={comp.get('RSI14')} EMA20={comp.get('EMA20')} EMA50={comp.get('EMA50')} ATR_pct={comp.get('ATR_pct')}")
         print(f"rejection_reason_codes={rej}")
+        # Phase 5.2: intraday when enabled
+        intraday = el_trace.get("intraday") or {}
+        if intraday.get("enabled"):
+            print(f"intraday: timeframe={intraday.get('timeframe')} data_present={intraday.get('data_present')} "
+                  f"intraday_regime={intraday.get('intraday_regime')} alignment_pass={intraday.get('alignment_pass')} "
+                  f"reason_code={intraday.get('reason_code')}")
 
     # Phase 3.5: Truth Summary + Top Candidates Table
     trace = (data_diag or {}).get("stage2_trace") or {}

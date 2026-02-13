@@ -33,3 +33,8 @@ S_R_ATR_MULT = 0.5
 S_R_PCT_TOL = 0.006
 # Phase 5.0.1: Hard-cap tolerance (max fraction of spot)
 MAX_S_R_TOL_PCT = 0.012
+
+# Phase 5.2: Optional intraday confirmation (4H)
+ENABLE_INTRADAY_CONFIRMATION = False
+INTRADAY_TIMEFRAME = "4H"
+INTRADAY_MIN_ROWS = 100

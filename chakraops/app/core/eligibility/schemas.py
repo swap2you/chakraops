@@ -18,8 +18,9 @@ def build_eligibility_trace(
     as_of: Optional[str] = None,
     primary_reason_code: Optional[str] = None,
     all_reason_codes: Optional[List[str]] = None,
+    intraday: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Build the canonical eligibility_trace dict for persistence and API. Phase 5.1: rule_checks with reason_code; primary_reason_code; all_reason_codes."""
+    """Build the canonical eligibility_trace dict. Phase 5.2: optional intraday block."""
     out = {
         "symbol": symbol,
         "mode_decision": mode_decision,
@@ -32,6 +33,8 @@ def build_eligibility_trace(
         "primary_reason_code": primary_reason_code,
         "all_reason_codes": all_reason_codes if all_reason_codes is not None else rejection_reason_codes,
     }
+    if intraday is not None:
+        out["intraday"] = intraday
     if computed:
         out["rsi14"] = computed.get("RSI14")
         out["ema20"] = computed.get("EMA20")

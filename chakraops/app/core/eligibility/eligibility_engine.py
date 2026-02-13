@@ -18,6 +18,9 @@ from app.core.eligibility.config import (
     EMA_FAST,
     EMA_MID,
     EMA_SLOW,
+    ENABLE_INTRADAY_CONFIRMATION,
+    INTRADAY_MIN_ROWS,
+    INTRADAY_TIMEFRAME,
     MAX_ATR_PCT,
     RSI_PERIOD,
     RESIST_NEAR_PCT,
@@ -62,6 +65,8 @@ FAIL_REGIME_CC = "FAIL_REGIME_CC"
 FAIL_REGIME_CONFLICT = "FAIL_REGIME_CONFLICT"
 FAIL_NO_SUPPORT = "FAIL_NO_SUPPORT"
 FAIL_NO_RESISTANCE = "FAIL_NO_RESISTANCE"
+FAIL_INTRADAY_DATA_MISSING = "FAIL_INTRADAY_DATA_MISSING"
+FAIL_INTRADAY_REGIME_CONFLICT = "FAIL_INTRADAY_REGIME_CONFLICT"
 WARN_EVENT_RISK = "WARN_EVENT_RISK"
 
 
@@ -284,6 +289,46 @@ def run(
                 primary_reason_code = rc["reason_code"]
                 break
 
+    # Phase 5.2: Optional intraday confirmation (4H)
+    intraday_block: Dict[str, Any] = {
+        "enabled": ENABLE_INTRADAY_CONFIRMATION,
+        "timeframe": INTRADAY_TIMEFRAME,
+        "data_present": False,
+        "intraday_regime": None,
+        "alignment_pass": None,
+        "reason_code": None,
+    }
+    if ENABLE_INTRADAY_CONFIRMATION and mode_decision in ("CSP", "CC"):
+        from app.core.eligibility.providers.intraday_provider import get_intraday_candles
+        intraday_candles = get_intraday_candles(sym, INTRADAY_TIMEFRAME, lookback=200)
+        if not intraday_candles or len(intraday_candles) < INTRADAY_MIN_ROWS:
+            mode_decision = "NONE"
+            primary_reason_code = FAIL_INTRADAY_DATA_MISSING
+            rejection_reason_codes = list(dict.fromkeys(rejection_reason_codes + [FAIL_INTRADAY_DATA_MISSING]))
+            intraday_block["data_present"] = False
+            intraday_block["alignment_pass"] = False
+            intraday_block["reason_code"] = FAIL_INTRADAY_DATA_MISSING
+        else:
+            closes_4h = [float(c["close"]) for c in intraday_candles if c.get("close") is not None]
+            ema20_4h = ema(closes_4h, EMA_FAST)
+            ema50_4h = ema(closes_4h, EMA_MID)
+            ema200_4h = ema(closes_4h, EMA_SLOW)
+            ema50_slope_4h = ema_slope(closes_4h, EMA_MID, 5)
+            intraday_regime = classify_regime(closes_4h, ema20_4h, ema50_4h, ema200_4h, ema50_slope_4h)
+            intraday_block["data_present"] = True
+            intraday_block["intraday_regime"] = intraday_regime
+            conflict = (mode_decision == "CSP" and intraday_regime == "DOWN") or (
+                mode_decision == "CC" and intraday_regime == "UP"
+            )
+            if conflict:
+                mode_decision = "NONE"
+                primary_reason_code = FAIL_INTRADAY_REGIME_CONFLICT
+                rejection_reason_codes = list(dict.fromkeys(rejection_reason_codes + [FAIL_INTRADAY_REGIME_CONFLICT]))
+                intraday_block["alignment_pass"] = False
+                intraday_block["reason_code"] = FAIL_INTRADAY_REGIME_CONFLICT
+            else:
+                intraday_block["alignment_pass"] = True
+
     trace = build_eligibility_trace(
         symbol=sym,
         mode_decision=mode_decision,
@@ -295,5 +340,6 @@ def run(
         as_of=as_of,
         primary_reason_code=primary_reason_code,
         all_reason_codes=rejection_reason_codes,
+        intraday=intraday_block,
     )
     return mode_decision, trace

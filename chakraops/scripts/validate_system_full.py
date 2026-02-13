@@ -272,11 +272,50 @@ def main() -> int:
         ))
 
     # Phase 7.2/7.3: Slack SIGNAL alerts (tier A/B, severity READY/NOW, contracts_suggested > 0); structured payload with exit plan
+    # Phase 8.2: Portfolio guardrails applied before Slack payload; advisory context and adjusted contracts
     try:
         from app.core.alerts.slack_dispatcher import route_alert
         from app.core.lifecycle.exit_planner import build_exit_plan
+        from app.core.portfolio.portfolio_snapshot import build_portfolio_snapshot, load_open_positions
+        from app.core.portfolio.portfolio_guardrails import apply_guardrails
         slack_state_path = repo_root / "artifacts" / "alerts" / "last_sent_state.json"
         results_by_sym = {r["symbol"]: r for r in results}
+        # Build portfolio snapshot for guardrails (after sizing, before Slack)
+        portfolio_snapshot: Dict[str, Any] = {}
+        open_positions: List[Dict[str, Any]] = []
+        portfolio_equity: Optional[float] = getattr(args, "account_equity", None) or ACCOUNT_EQUITY_DEFAULT
+        try:
+            open_positions = load_open_positions(repo_root / "artifacts" / "positions" / "open_positions.json")
+            portfolio_snapshot = build_portfolio_snapshot(open_positions, portfolio_equity)
+        except Exception:
+            pass  # guardrails degraded; snapshot empty
+        # Phase 8.3: Assignment stress simulation (read-only; print summary to console)
+        try:
+            from app.core.portfolio.assignment_stress_simulator import format_stress_summary, simulate_assignment_stress
+            stress_result = simulate_assignment_stress(portfolio_snapshot, open_positions)
+            summary = format_stress_summary(stress_result)
+            if summary and "No stress" not in summary:
+                print()
+                print("===== ASSIGNMENT STRESS (Phase 8.3) =====")
+                print(summary)
+        except Exception:
+            pass  # non-blocking; do not crash
+        # Phase 8.3b: Dynamic stress + NAV shrink (read-only; print summary to console)
+        try:
+            from app.core.portfolio.assignment_stress_simulator import (
+                format_stress_summary_dynamic,
+                simulate_assignment_stress_dynamic,
+            )
+            snap_with_equity = dict(portfolio_snapshot) if portfolio_snapshot else {}
+            snap_with_equity["portfolio_equity_usd"] = portfolio_equity if portfolio_equity else None
+            stress_dynamic = simulate_assignment_stress_dynamic(snap_with_equity, open_positions)
+            summary_dynamic = format_stress_summary_dynamic(stress_dynamic)
+            if summary_dynamic and "No stress" not in summary_dynamic:
+                print()
+                print("===== ASSIGNMENT STRESS DYNAMIC (Phase 8.3b) =====")
+                print(summary_dynamic)
+        except Exception:
+            pass  # non-blocking; do not crash
         for p in ranked:
             tier = (p.get("tier") or "").strip().upper()
             severity = (p.get("severity") or "").strip().upper()
@@ -285,8 +324,10 @@ def main() -> int:
                 sym = (p.get("symbol") or "?").strip().upper()
                 res = results_by_sym.get(sym)
                 exit_base, exit_ext, t1, t2 = None, None, None, None
+                regime_state: Dict[str, Any] = {}
                 if res:
                     el, st2, cands = res.get("eligibility_trace"), res.get("stage2_trace"), res.get("cands") or []
+                    regime_state = {"mode": (el or {}).get("regime")}
                     spot = (st2 or {}).get("spot_used") or (el or {}).get("computed", {}).get("close")
                     if not spot and cands:
                         try:
@@ -303,10 +344,22 @@ def main() -> int:
                         sp = ep.get("structure_plan") or {}
                         exit_base, exit_ext = pp.get("base_target_pct"), pp.get("extension_target_pct")
                         t1, t2 = sp.get("T1"), sp.get("T2")
+                # Phase 8.2: apply guardrails (guidance only; soft override of suggested contracts)
+                candidate = {
+                    "symbol": sym,
+                    "type": p.get("mode_decision"),
+                    "mode_decision": p.get("mode_decision"),
+                    "suggested_contracts": ctrs,
+                    "contracts_suggested": ctrs,
+                    "severity": severity,
+                }
+                guardrails_result = apply_guardrails(portfolio_snapshot, candidate, regime_state)
+                adjusted_ctrs = guardrails_result.get("adjusted_contracts", ctrs)
+                severity_override = guardrails_result.get("severity_override")
                 payload = {
                     "symbol": sym,
                     "tier": tier,
-                    "severity": severity,
+                    "severity": severity_override if severity_override else severity,
                     "composite_score": p.get("composite_score"),
                     "strike": p.get("strike"),
                     "dte": p.get("dte"),
@@ -317,7 +370,12 @@ def main() -> int:
                     "exit_T1": t1,
                     "exit_T2": t2,
                     "mode": p.get("mode_decision"),
+                    "contracts_suggested": adjusted_ctrs,
+                    "guardrail_adjusted_msg": None,
+                    "guardrails_advisories": guardrails_result.get("advisories", []),
                 }
+                if adjusted_ctrs != ctrs:
+                    payload["guardrail_adjusted_msg"] = "Guardrail Adjusted: %s → %s" % (ctrs, adjusted_ctrs)
                 route_alert("SIGNAL", payload, event_key=f"signal:{sym}", state_path=slack_state_path)
     except Exception as e:
         pass  # do not crash; Slack optional

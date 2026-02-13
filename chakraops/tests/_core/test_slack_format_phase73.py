@@ -142,6 +142,46 @@ def test_get_webhook_for_position_signals():
         assert _get_webhook_for_position("ADVISORY") == "https://signals"
 
 
+# --- Phase 8.2: Guardrail Adjusted in Slack SIGNAL ---
+
+
+def test_signal_format_includes_guardrail_adjusted_when_present():
+    """Phase 8.2: SIGNAL format includes 'Guardrail Adjusted: X → Y' when guardrail_adjusted_msg present."""
+    payload = {
+        "symbol": "SPY",
+        "mode": "CSP",
+        "tier": "A",
+        "severity": "READY",
+        "composite_score": 85,
+        "strike": 500,
+        "dte": 35,
+        "delta": 0.34,
+        "capital_required_estimate": 50000,
+        "guardrail_adjusted_msg": "Guardrail Adjusted: 2 → 1",
+    }
+    text = _format_message("SIGNAL", payload)
+    assert "Guardrail Adjusted: 2 → 1" in text
+    assert "SPY" in text
+    assert "TRADE SIGNAL" in text
+
+
+def test_signal_format_no_guardrail_line_when_absent():
+    """Phase 8.2: SIGNAL format omits guardrail line when guardrail_adjusted_msg absent."""
+    payload = {
+        "symbol": "SPY",
+        "mode": "CSP",
+        "tier": "A",
+        "severity": "READY",
+        "composite_score": 85,
+        "strike": 500,
+        "dte": 35,
+        "delta": 0.34,
+        "capital_required_estimate": 50000,
+    }
+    text = _format_message("SIGNAL", payload)
+    assert "Guardrail Adjusted" not in text
+
+
 # --- Daily summary formatting ---
 
 

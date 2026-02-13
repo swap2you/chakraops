@@ -150,7 +150,7 @@ def send_slack_message(webhook_url: str, text: str) -> bool:
 
 
 def _fmt_signal(p: Dict[str, Any]) -> str:
-    """Phase 7.3: Structured SIGNAL format."""
+    """Phase 7.3: Structured SIGNAL format. Phase 8.2: Guardrail Adjusted line when applicable."""
     lines = [
         "🟢 *TRADE SIGNAL*",
         "Symbol: %s" % (p.get("symbol") or "?"),
@@ -163,13 +163,20 @@ def _fmt_signal(p: Dict[str, Any]) -> str:
         "DTE: %s" % (_str_num(p.get("dte"))),
         "Delta: %s" % (_str_num(p.get("delta"))),
         "Capital Required: %s" % (_str_capital(p.get("capital_required_estimate"))),
+    ]
+    # Phase 8.2: Guardrail Adjusted X → Y when contracts were reduced
+    guardrail_msg = p.get("guardrail_adjusted_msg")
+    if guardrail_msg:
+        lines.append("")
+        lines.append("*%s*" % guardrail_msg)
+    lines.extend([
         "",
         "Exit Plan:",
         "  Base Target: %s" % (_str_pct(p.get("exit_base_target_pct"))),
         "  Extension: %s" % (_str_pct(p.get("exit_extension_target_pct"))),
         "  T1: %s" % (_str_num(p.get("exit_T1"))),
         "  T2: %s" % (_str_num(p.get("exit_T2"))),
-    ]
+    ])
     return "\n".join(lines)
 
 

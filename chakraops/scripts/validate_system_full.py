@@ -147,6 +147,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Full system validation (ORATS, indicators, regime, eligibility, Stage-2)")
     parser.add_argument("--symbol", default="SPY", help="Single symbol (default: SPY)")
     parser.add_argument("--symbols", default="", help="Comma-separated symbols for ranking (e.g. SPY,NVDA,AAPL,MSFT)")
+    parser.add_argument("--daily-summary", action="store_true", help="Send Slack DAILY summary alert")
     args = parser.parse_args()
     if (args.symbols or "").strip():
         symbols = [s.strip().upper() for s in args.symbols.strip().split(",") if s.strip()]
@@ -270,6 +271,25 @@ def main() -> int:
             dp_s,
         ))
 
+    # Phase 7.2: Slack SIGNAL alerts (tier A/B, severity READY/NOW, contracts_suggested > 0)
+    try:
+        from app.core.alerts.slack_dispatcher import route_alert
+        slack_state_path = repo_root / "artifacts" / "alerts" / "last_sent_state.json"
+        for p in ranked:
+            tier = (p.get("tier") or "").strip().upper()
+            severity = (p.get("severity") or "").strip().upper()
+            ctrs = p.get("contracts_suggested")
+            if tier in ("A", "B") and severity in ("READY", "NOW") and (ctrs is not None and ctrs > 0):
+                sym = (p.get("symbol") or "?").strip().upper()
+                route_alert(
+                    "SIGNAL",
+                    {"symbol": sym, "tier": tier, "severity": severity, "composite_score": p.get("composite_score"), "strike": p.get("strike")},
+                    event_key=f"signal:{sym}",
+                    state_path=slack_state_path,
+                )
+    except Exception as e:
+        pass  # do not crash; Slack optional
+
     # Phase 7.0: Exit plan summary (first ranked candidate)
     if ranked and results:
         sym0 = ranked[0].get("symbol")
@@ -363,6 +383,20 @@ def main() -> int:
                 pct_s = f"{ev['premium_capture_pct']:.2%}" if ev.get("premium_capture_pct") is not None else "N/A"
                 dte_s = str(ev["dte"]) if ev.get("dte") is not None else "N/A"
                 print(fmt_ps % (sym, pct_s, dte_s, ev.get("exit_signal", "?"), ev.get("exit_reason", "?")))
+                # Phase 7.2: Position alerts (EXIT_NOW -> CRITICAL, else SIGNAL)
+                exit_sig = ev.get("exit_signal")
+                if exit_sig in ("EXIT_NOW", "TAKE_PROFIT", "ROLL_SUGGESTED"):
+                    try:
+                        from app.core.alerts.slack_dispatcher import route_alert
+                        event_type = "CRITICAL" if exit_sig == "EXIT_NOW" else "SIGNAL"
+                        route_alert(
+                            event_type,
+                            {"symbol": sym, "position_id": pos.get("position_id", ""), "exit_signal": exit_sig, "exit_reason": ev.get("exit_reason")},
+                            event_key=f"position:{pos.get('position_id', '')}",
+                            state_path=repo_root / "artifacts" / "alerts" / "last_sent_state.json",
+                        )
+                    except Exception:
+                        pass
         # if no open positions, do nothing (script does not break)
     except Exception as e:
         print(f"POSITION STATUS skipped: {e}", file=sys.stderr)
@@ -414,6 +448,28 @@ def main() -> int:
             print(f"ALERT_PAYLOAD saved: {path}")
     except Exception as e:
         print(f"ALERT_PAYLOAD save failed: {e}", file=sys.stderr)
+
+    # Phase 7.2: Optional DAILY summary Slack alert
+    if getattr(args, "daily_summary", False):
+        try:
+            from app.core.positions.position_ledger import load_open_positions
+            from app.core.alerts.slack_dispatcher import route_alert
+            open_positions = load_open_positions(repo_root / "artifacts" / "positions" / "open_positions.json")
+            top5 = ranked[:5] if ranked else []
+            exposure_pct = None
+            if top5:
+                pcts = [p.get("capital_pct_of_account") or p.get("notional_pct_of_account") for p in top5]
+                pcts = [x for x in pcts if x is not None]
+                if pcts:
+                    exposure_pct = sum(pcts) * 100.0
+            route_alert(
+                "DAILY",
+                {"top_count": len(top5), "open_positions_count": len(open_positions), "exposure_pct": exposure_pct, "alerts_count": 0},
+                event_key="daily:summary",
+                state_path=repo_root / "artifacts" / "alerts" / "last_sent_state.json",
+            )
+        except Exception:
+            pass
 
     all_ok = all([
         results[0]["candles_ok"], results[0]["indicators_ok"], results[0]["regime_ok"],

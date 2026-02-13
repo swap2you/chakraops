@@ -501,6 +501,20 @@ def main() -> int:
     print(f"  Warn: {all_warn}")
     print(f"  Fail: {all_fail}")
 
+    # Phase 7.2: HEALTH Slack alert when OVERALL != PASS
+    if all_fail or all_warn:
+        try:
+            from app.core.alerts.slack_dispatcher import route_alert
+            failed_list = all_fail if all_fail else all_warn
+            route_alert(
+                "HEALTH",
+                {"failed_symbols": failed_list, "failed": ",".join(failed_list)},
+                event_key="health:system",
+                state_path=repo_root / "artifacts" / "alerts" / "last_sent_state.json",
+            )
+        except Exception:
+            pass
+
     # Alert payload per symbol (Phase 6.0)
     try:
         from app.core.alerts.alert_payload import build_alert_payload

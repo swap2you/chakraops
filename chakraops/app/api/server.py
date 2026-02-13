@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-# Load .env first so OPENAI_API_KEY, SLACK_WEBHOOK_URL, etc. are available (for uvicorn and run_api)
+# Load .env first so OPENAI_API_KEY, Slack webhooks (Phase 7.2), etc. are available (for uvicorn and run_api)
 def _load_env() -> None:
     try:
         from dotenv import load_dotenv
@@ -519,12 +519,20 @@ async def _lifespan(app: FastAPI):
     print("Base URL:", base_url)
     print("Probe status:", probe_status)
     print("===========================")
-    # Slack: log whether webhook is configured (do not log the URL)
-    _slack_configured = bool((os.getenv("SLACK_WEBHOOK_URL") or "").strip())
+    # Slack (Phase 7.2): any of CRITICAL/SIGNALS/HEALTH/DAILY webhooks = configured
+    try:
+        from app.core.alerts.slack_dispatcher import get_slack_config_status, is_slack_configured
+        _slack_configured = is_slack_configured()
+        _slack_status = get_slack_config_status()
+    except Exception:
+        _slack_configured = False
+        _slack_status = {}
     print("===== SLACK =====")
     print("Configured:", _slack_configured)
+    for name, configured in (_slack_status or {}).items():
+        print(f"{name}: {'configured' if configured else 'missing'}")
     if not _slack_configured:
-        print("Set SLACK_WEBHOOK_URL in .env and restart to enable Slack alerts.")
+        print("Set SLACK_WEBHOOK_CRITICAL / SLACK_WEBHOOK_SIGNALS / SLACK_WEBHOOK_HEALTH / SLACK_WEBHOOK_DAILY in .env (any one) to enable Slack alerts.")
     print("=================")
 
     # TTS (OpenAI): log whether text-to-speech is available (do not log the key)
@@ -3403,22 +3411,27 @@ def api_ops_notify_slack(request: Request):
     Returns HTTP 200 with body: sent=True when Slack confirms delivery; sent=False when
     not configured (reason + setup_hint) or when Slack API fails (reason + status_code).
     Use configured=False in response to show setup hint in UI instead of error.
-    If no text/meta provided, builds a default message from the latest evaluation run.
+    Phase 7.2: configured = any of SLACK_WEBHOOK_CRITICAL/SIGNALS/HEALTH/DAILY; test send uses SIGNALS or legacy SLACK_WEBHOOK_URL.
     """
     import asyncio
     import requests as req
     
-    webhook_url = os.getenv("SLACK_WEBHOOK_URL")
+    try:
+        from app.core.alerts.slack_dispatcher import get_test_webhook_url, is_slack_configured
+        _configured = is_slack_configured()
+        webhook_url = (os.getenv("SLACK_WEBHOOK_URL") or "").strip() or get_test_webhook_url()
+    except Exception:
+        _configured = False
+        webhook_url = (os.getenv("SLACK_WEBHOOK_URL") or "").strip()
     if not webhook_url:
         _persist_slack_delivery(False, None, "Slack not configured")
-        # Return 200 so clients can show setup hint instead of error; sent=False indicates no delivery
         return JSONResponse(
             status_code=200,
             content={
                 "sent": False,
-                "configured": False,
-                "reason": "Slack not configured - set SLACK_WEBHOOK_URL environment variable",
-                "setup_hint": "Add SLACK_WEBHOOK_URL to your .env (see docs) and restart the backend.",
+                "configured": _configured,
+                "reason": "Slack not configured - set SLACK_WEBHOOK_CRITICAL/SIGNALS/HEALTH/DAILY (or SLACK_WEBHOOK_URL) in .env",
+                "setup_hint": "Add at least one of SLACK_WEBHOOK_CRITICAL, SLACK_WEBHOOK_SIGNALS, SLACK_WEBHOOK_HEALTH, SLACK_WEBHOOK_DAILY to .env and restart.",
                 "slack_response_body": None,
             },
         )

@@ -15,9 +15,19 @@ from __future__ import annotations
 import argparse
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+
+def _float_eq(a: Any, b: Any, tol: float = 1e-6) -> bool:
+    """True if a and b are equal as floats within tolerance."""
+    if a is None and b is None:
+        return True
+    try:
+        return abs(float(a) - float(b)) <= tol
+    except (TypeError, ValueError):
+        return False
 
 
 def _run_one_symbol(symbol: str, lookback: int = 400) -> Dict[str, Any]:
@@ -292,6 +302,70 @@ def main() -> int:
                 print(f"  panic_flag=True reason={ep0['panic_plan'].get('panic_reason')}")
         else:
             print(f"  enabled=False mode={ep0.get('mode')}")
+
+    # Phase 7.1: Position status (open positions from ledger)
+    try:
+        from app.core.positions.position_ledger import load_open_positions
+        from app.core.positions.position_evaluator import evaluate_position, write_evaluation
+        ledger_path = repo_root / "artifacts" / "positions" / "open_positions.json"
+        open_positions = load_open_positions(ledger_path)
+        if open_positions:
+            eval_dir = repo_root / "artifacts" / "positions" / "evaluations"
+            print()
+            print("===== POSITION STATUS =====")
+            fmt_ps = "%6s %8s %4s %8s %12s"
+            print(fmt_ps % ("symbol", "premium%", "dte", "signal", "reason"))
+            print("-" * 48)
+            results_by_symbol = {r["symbol"]: r for r in results}
+            for pos in open_positions:
+                sym = (pos.get("symbol") or "").strip().upper()
+                res = results_by_symbol.get(sym)
+                spot = None
+                bid, ask = None, None
+                el, st2, candles_meta = None, None, {}
+                if res:
+                    st2 = res.get("stage2_trace")
+                    el = res.get("eligibility_trace")
+                    spot = (st2 or {}).get("spot_used") or (el or {}).get("computed", {}).get("close")
+                    if not spot and (res.get("cands")):
+                        try:
+                            spot = float(res["cands"][-1].get("close"))
+                        except (TypeError, ValueError):
+                            pass
+                    # Resolve bid/ask for exact position contract: selected_trade first, then chain table
+                    pos_exp = (pos.get("expiration") or "")[:10]
+                    pos_strike = pos.get("strike")
+                    option_type = (pos.get("option_type") or "").strip().upper()
+                    if not option_type:
+                        option_type = "CALL" if (pos.get("mode") or "").strip().upper() == "CC" else "PUT"
+                    sel = (st2 or {}).get("selected_trade")
+                    if isinstance(sel, dict):
+                        sel_exp = (sel.get("exp") or "")[:10] if sel.get("exp") else ""
+                        if pos_exp == sel_exp and _float_eq(pos_strike, sel.get("strike")):
+                            bid, ask = sel.get("bid"), sel.get("ask")
+                    if bid is None or ask is None:
+                        from app.core.positions.quote_resolver import find_contract_quote
+                        chain_rows = (st2 or {}).get("top_candidates_table") or []
+                        quote = find_contract_quote(chain_rows, pos_exp, pos_strike, option_type)
+                        if quote:
+                            bid, ask = quote.get("bid"), quote.get("ask")
+                    if res.get("cands"):
+                        candles_meta["first_date"] = str(res["cands"][0].get("ts") or "N/A")[:10]
+                        candles_meta["last_date"] = str(res["cands"][-1].get("ts") or "N/A")[:10]
+                if spot is None and pos.get("entry_spot") is not None:
+                    spot = float(pos["entry_spot"])
+                exit_plan = None
+                if el is not None and st2 is not None:
+                    from app.core.lifecycle.exit_planner import build_exit_plan
+                    exit_plan = build_exit_plan(sym, pos.get("mode") or "CSP", spot, el, st2, candles_meta, ACCOUNT_EQUITY_DEFAULT)
+                ev = evaluate_position(pos, spot, bid, ask, exit_plan, date.today())
+                write_evaluation(ev, eval_dir)
+                pct_s = f"{ev['premium_capture_pct']:.2%}" if ev.get("premium_capture_pct") is not None else "N/A"
+                dte_s = str(ev["dte"]) if ev.get("dte") is not None else "N/A"
+                print(fmt_ps % (sym, pct_s, dte_s, ev.get("exit_signal", "?"), ev.get("exit_reason", "?")))
+        # if no open positions, do nothing (script does not break)
+    except Exception as e:
+        print(f"POSITION STATUS skipped: {e}", file=sys.stderr)
 
     # Summary (single-symbol: first result)
     co = results[0]["candles_ok"]

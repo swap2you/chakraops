@@ -153,3 +153,28 @@ def test_compute_support_resistance_empty_candles():
     assert result["resistance_level"] is None
     assert result["distance_to_support_pct"] is None
     assert result["distance_to_resistance_pct"] is None
+
+
+def test_tolerance_capped_when_atr_huge():
+    """Phase 5.0.1: When ATR is huge, tolerance_used is capped by MAX_S_R_TOL_PCT * spot."""
+    from app.core.eligibility.config import MAX_S_R_TOL_PCT
+    candles = [{"high": 102, "low": 98, "close": 100, "volume": 1e6}] * 60
+    # atr_mult * atr14 = 0.5 * 200 = 100 (huge); cap = 100 * 0.012 = 1.2
+    result = compute_support_resistance(
+        candles, spot=100.0, atr14=200.0, window=60, k=2, atr_mult=0.5, pct_tol=0.006
+    )
+    expected_cap = 100.0 * MAX_S_R_TOL_PCT
+    assert result["tolerance_used"] is not None
+    assert result["tolerance_used"] <= expected_cap + 0.001
+    assert result["tolerance_used"] < 50.0  # would be 100 without cap
+
+
+def test_tolerance_respects_pct_floor_when_atr_small():
+    """Phase 5.0.1: When ATR is small, tolerance_used >= pct_tol * spot (floor)."""
+    candles = [{"high": 100.5, "low": 99.5, "close": 100, "volume": 1e6}] * 60
+    # atr_mult * atr14 = 0.5 * 0.1 = 0.05; tol_pct = 0.006 * 100 = 0.6; tol = max(0.05, 0.6) = 0.6
+    result = compute_support_resistance(
+        candles, spot=100.0, atr14=0.1, window=60, k=2, atr_mult=0.5, pct_tol=0.006
+    )
+    assert result["tolerance_used"] is not None
+    assert result["tolerance_used"] >= 0.5  # pct floor ~0.6

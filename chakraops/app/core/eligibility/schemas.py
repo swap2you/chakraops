@@ -16,8 +16,10 @@ def build_eligibility_trace(
     rule_checks: List[Dict[str, Any]],
     rejection_reason_codes: List[str],
     as_of: Optional[str] = None,
+    primary_reason_code: Optional[str] = None,
+    all_reason_codes: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
-    """Build the canonical eligibility_trace dict for persistence and API. Top-level includes regime, rsi14, ema20, ema50, atr_pct, distances."""
+    """Build the canonical eligibility_trace dict for persistence and API. Phase 5.1: rule_checks with reason_code; primary_reason_code; all_reason_codes."""
     out = {
         "symbol": symbol,
         "mode_decision": mode_decision,
@@ -27,6 +29,8 @@ def build_eligibility_trace(
         "computed": computed,
         "rule_checks": rule_checks,
         "rejection_reason_codes": rejection_reason_codes,
+        "primary_reason_code": primary_reason_code,
+        "all_reason_codes": all_reason_codes if all_reason_codes is not None else rejection_reason_codes,
     }
     if computed:
         out["rsi14"] = computed.get("RSI14")
@@ -80,12 +84,19 @@ def computed_values(
 
 
 def rule_check(
-    name: str, passed: bool, value: Any = None, threshold: Any = None
+    name: str,
+    passed: bool,
+    value: Any = None,
+    threshold: Any = None,
+    reason_code: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Single rule check entry."""
+    """Single rule check entry. Phase 5.1: actual (alias value), reason_code."""
     out: Dict[str, Any] = {"name": name, "passed": passed}
     if value is not None:
         out["value"] = value
+        out["actual"] = value
     if threshold is not None:
         out["threshold"] = threshold
+    if reason_code is not None:
+        out["reason_code"] = reason_code
     return out

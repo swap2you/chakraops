@@ -110,6 +110,8 @@ def run(
             rule_checks=[],
             rejection_reason_codes=[FAIL_NO_CANDLES],
             as_of=as_of,
+            primary_reason_code=FAIL_NO_CANDLES,
+            all_reason_codes=[FAIL_NO_CANDLES],
         )
         return "NONE", trace
 
@@ -126,6 +128,8 @@ def run(
             rule_checks=[],
             rejection_reason_codes=[FAIL_NO_CANDLES],
             as_of=as_of,
+            primary_reason_code=FAIL_NO_CANDLES,
+            all_reason_codes=[FAIL_NO_CANDLES],
         )
         return "NONE", trace
 
@@ -199,47 +203,63 @@ def run(
     rule_checks: List[Dict[str, Any]] = []
     rejections: List[str] = []
 
-    atr_ok = atr_pct_val is not None and atr_pct_val < MAX_ATR_PCT
-    rule_checks.append(rule_check("ATR_pct < MAX_ATR_PCT", atr_ok, atr_pct_val, MAX_ATR_PCT))
-    if not atr_ok:
-        rejections.append(FAIL_ATR)
-        rejections.append(FAIL_ATR_TOO_HIGH)
+    # Phase 5.1: Rule-by-rule in evaluation order with reason_code
+    rule_checks.append(rule_check("CANDLES_PRESENT", True, len(cands), None, reason_code=FAIL_NO_CANDLES))
+    rule_checks.append(rule_check("INDICATORS_PRESENT", True, (rsi14 is not None, ema20 is not None), None, reason_code=FAIL_NO_CANDLES))
+    multiframe_ok = not rejections_before_gating
+    rule_checks.append(rule_check("MULTIFRAME_ALIGNED", multiframe_ok, regime, None, reason_code=FAIL_REGIME_CONFLICT))
 
     regime_up = regime == "UP"
     regime_down = regime == "DOWN"
+    rule_checks.append(rule_check("REGIME_OK_CSP", regime_up, regime, "UP", reason_code=FAIL_REGIME_CSP))
+    rule_checks.append(rule_check("REGIME_OK_CC", regime_down, regime, "DOWN", reason_code=FAIL_REGIME_CC))
+
+    held_ok = shares > 0
+    rule_checks.append(rule_check("HOLDINGS_OK", held_ok, shares, 1, reason_code=FAIL_NO_HOLDINGS))
+
+    support_found = support_level is not None
+    resistance_found = resistance_level is not None
+    rule_checks.append(rule_check("SUPPORT_FOUND", support_found, support_level, None, reason_code=FAIL_NO_SUPPORT))
+    rule_checks.append(rule_check("RESISTANCE_FOUND", resistance_found, resistance_level, None, reason_code=FAIL_NO_RESISTANCE))
+
     near_support = dist_support is not None and dist_support <= SUPPORT_NEAR_PCT
-    rule_checks.append(rule_check("near_support", near_support, dist_support, SUPPORT_NEAR_PCT))
+    rule_checks.append(rule_check("NEAR_SUPPORT", near_support, dist_support, SUPPORT_NEAR_PCT, reason_code=FAIL_NOT_NEAR_SUPPORT))
     if not near_support:
         rejections.append(FAIL_NOT_NEAR_SUPPORT)
         if support_level is None:
             rejections.append(FAIL_NO_SUPPORT)
-    rsi_csp_ok = rsi14 is not None and CSP_RSI_MIN <= rsi14 <= CSP_RSI_MAX
-    rule_checks.append(rule_check("RSI in [CSP_RSI_MIN, CSP_RSI_MAX]", rsi_csp_ok, rsi14, (CSP_RSI_MIN, CSP_RSI_MAX)))
-    if not rsi_csp_ok and rsi14 is not None:
-        rejections.append(FAIL_RSI_RANGE)
-        rejections.append(FAIL_RSI_CSP)
 
-    csp_eligible = regime_up and near_support and rsi_csp_ok and atr_ok
-    if not regime_up and (near_support and rsi_csp_ok and atr_ok):
-        rejections.append(FAIL_REGIME_CSP)
-
-    held_ok = shares > 0
-    rule_checks.append(rule_check("holdings > 0 for CC", held_ok, shares, 1))
-    if not held_ok:
-        rejections.append(FAIL_NOT_HELD_FOR_CC)
-        rejections.append(FAIL_NO_HOLDINGS)
     near_resist = dist_resist is not None and dist_resist <= RESIST_NEAR_PCT
-    rule_checks.append(rule_check("near_resistance", near_resist, dist_resist, RESIST_NEAR_PCT))
+    rule_checks.append(rule_check("NEAR_RESISTANCE", near_resist, dist_resist, RESIST_NEAR_PCT, reason_code=FAIL_NOT_NEAR_RESISTANCE))
     if not near_resist:
         rejections.append(FAIL_NOT_NEAR_RESISTANCE)
         if resistance_level is None:
             rejections.append(FAIL_NO_RESISTANCE)
+
+    rsi_csp_ok = rsi14 is not None and CSP_RSI_MIN <= rsi14 <= CSP_RSI_MAX
+    rule_checks.append(rule_check("RSI_IN_RANGE_CSP", rsi_csp_ok, rsi14, (CSP_RSI_MIN, CSP_RSI_MAX), reason_code=FAIL_RSI_CSP))
+    if not rsi_csp_ok and rsi14 is not None:
+        rejections.append(FAIL_RSI_RANGE)
+        rejections.append(FAIL_RSI_CSP)
+
     rsi_cc_ok = rsi14 is not None and CC_RSI_MIN <= rsi14 <= CC_RSI_MAX
-    rule_checks.append(rule_check("RSI in [CC_RSI_MIN, CC_RSI_MAX]", rsi_cc_ok, rsi14, (CC_RSI_MIN, CC_RSI_MAX)))
+    rule_checks.append(rule_check("RSI_IN_RANGE_CC", rsi_cc_ok, rsi14, (CC_RSI_MIN, CC_RSI_MAX), reason_code=FAIL_RSI_CC))
     if not rsi_cc_ok and rsi14 is not None:
         rejections.append(FAIL_RSI_RANGE)
         rejections.append(FAIL_RSI_CC)
 
+    atr_ok = atr_pct_val is not None and atr_pct_val < MAX_ATR_PCT
+    rule_checks.append(rule_check("ATR_OK", atr_ok, atr_pct_val, MAX_ATR_PCT, reason_code=FAIL_ATR))
+    if not atr_ok:
+        rejections.append(FAIL_ATR)
+        rejections.append(FAIL_ATR_TOO_HIGH)
+
+    csp_eligible = regime_up and near_support and rsi_csp_ok and atr_ok
+    if not regime_up and (near_support and rsi_csp_ok and atr_ok):
+        rejections.append(FAIL_REGIME_CSP)
+    if not held_ok:
+        rejections.append(FAIL_NOT_HELD_FOR_CC)
+        rejections.append(FAIL_NO_HOLDINGS)
     cc_eligible = regime_down and held_ok and near_resist and rsi_cc_ok and atr_ok
     if held_ok and not regime_down and (near_resist and rsi_cc_ok and atr_ok):
         rejections.append(FAIL_REGIME_CC)
@@ -257,6 +277,13 @@ def run(
         mode_decision = "NONE"
         rejection_reason_codes = list(dict.fromkeys(rejections))
 
+    primary_reason_code: Optional[str] = None
+    if mode_decision == "NONE":
+        for rc in rule_checks:
+            if not rc.get("passed", True) and rc.get("reason_code"):
+                primary_reason_code = rc["reason_code"]
+                break
+
     trace = build_eligibility_trace(
         symbol=sym,
         mode_decision=mode_decision,
@@ -266,5 +293,7 @@ def run(
         rule_checks=rule_checks,
         rejection_reason_codes=rejection_reason_codes,
         as_of=as_of,
+        primary_reason_code=primary_reason_code,
+        all_reason_codes=rejection_reason_codes,
     )
     return mode_decision, trace

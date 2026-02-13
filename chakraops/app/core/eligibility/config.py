@@ -31,3 +31,5 @@ SWING_CLUSTER_WINDOW = 90
 SWING_FRACTAL_K = 3
 S_R_ATR_MULT = 0.5
 S_R_PCT_TOL = 0.006
+# Phase 5.0.1: Hard-cap tolerance (max fraction of spot)
+MAX_S_R_TOL_PCT = 0.012

@@ -113,6 +113,14 @@ def main() -> int:
             window = eligibility_trace.get("window", "?")
             tol = eligibility_trace.get("tolerance_used", "?")
             print(f"  support_level={sl} resistance_level={rl} method={method} window={window} tolerance_used={tol}")
+            primary = eligibility_trace.get("primary_reason_code")
+            print(f"  primary_reason_code={primary}")
+            failing = [r for r in eligibility_trace.get("rule_checks") or [] if not r.get("passed")]
+            for r in failing[:3]:
+                name = r.get("name", "?")
+                actual = r.get("actual", r.get("value", "?"))
+                thresh = r.get("threshold", "?")
+                print(f"  failing: {name} actual={actual} vs threshold={thresh}")
     except Exception as e:
         print(f"ELIGIBILITY: FAIL ({e})")
 

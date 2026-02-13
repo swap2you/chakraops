@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.core.eligibility.config import (
+    MAX_S_R_TOL_PCT,
     S_R_ATR_MULT,
     S_R_PCT_TOL,
     SWING_CLUSTER_WINDOW,
@@ -167,9 +168,11 @@ def compute_support_resistance(
 
     tol_atr = (atr_mult * atr14) if atr14 is not None and atr14 > 0 else 0.0
     tol_pct = pct_tol * spot
-    tolerance = max(tol_atr, tol_pct)
-    if tolerance <= 0:
-        tolerance = tol_pct if tol_pct > 0 else (spot * 0.006)
+    tol = max(tol_atr, tol_pct)
+    if tol <= 0:
+        tol = tol_pct if tol_pct > 0 else (spot * 0.006)
+    cap = spot * MAX_S_R_TOL_PCT
+    tolerance = min(tol, cap)
     out["tolerance_used"] = round(tolerance, 6)
 
     all_levels = swing_highs + swing_lows

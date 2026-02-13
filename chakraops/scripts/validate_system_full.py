@@ -260,6 +260,39 @@ def main() -> int:
             dp_s,
         ))
 
+    # Phase 7.0: Exit plan summary (first ranked candidate)
+    if ranked and results:
+        sym0 = ranked[0].get("symbol")
+        res0 = next((r for r in results if r.get("symbol") == sym0), results[0])
+        el0 = res0.get("eligibility_trace")
+        st2_0 = res0.get("stage2_trace")
+        cands0 = res0.get("cands") or []
+        spot0 = (st2_0 or {}).get("spot_used") or (el0 or {}).get("computed", {}).get("close")
+        if not spot0 and cands0:
+            try:
+                spot0 = float(cands0[-1].get("close"))
+            except (TypeError, ValueError):
+                spot0 = None
+        candles_meta0 = {}
+        if cands0:
+            candles_meta0["first_date"] = str(cands0[0].get("ts") or "N/A")[:10]
+            candles_meta0["last_date"] = str(cands0[-1].get("ts") or "N/A")[:10]
+        from app.core.lifecycle.exit_planner import build_exit_plan
+        ep0 = build_exit_plan(sym0, ranked[0].get("mode_decision") or "NONE", spot0, el0, st2_0, candles_meta0, ACCOUNT_EQUITY_DEFAULT)
+        print()
+        print("===== EXIT PLAN (Phase 7.0) =====")
+        if ep0.get("enabled"):
+            print(f"  style={ep0.get('summary', {}).get('style', 'N/A')} primary_focus={ep0.get('summary', {}).get('primary_focus', 'N/A')}")
+            sp = ep0.get("structure_plan") or {}
+            tp = ep0.get("time_plan") or {}
+            pp = ep0.get("premium_plan") or {}
+            print(f"  base_target_pct={pp.get('base_target_pct')} extension_target_pct={pp.get('extension_target_pct')}")
+            print(f"  T1={sp.get('T1')} T2={sp.get('T2')} stop_hint_price={sp.get('stop_hint_price')} dte={tp.get('dte')}")
+            if ep0.get("panic_plan", {}).get("panic_flag"):
+                print(f"  panic_flag=True reason={ep0['panic_plan'].get('panic_reason')}")
+        else:
+            print(f"  enabled=False mode={ep0.get('mode')}")
+
     # Summary (single-symbol: first result)
     co = results[0]["candles_ok"]
     io = results[0]["indicators_ok"]
@@ -293,10 +326,15 @@ def main() -> int:
             severity_dict = compute_alert_severity(el, score_dict, tier, spot)
             spot_f = float(spot) if spot is not None else 0.0
             sizing_dict = compute_position_sizing(r.get("mode_decision") or "NONE", spot_f, st2, ACCOUNT_EQUITY_DEFAULT, holdings_shares=0)
+            from app.core.lifecycle.exit_planner import build_exit_plan
+            exit_plan_dict = build_exit_plan(
+                symbol, r.get("mode_decision") or "NONE", spot, el, st2, candles_meta, ACCOUNT_EQUITY_DEFAULT
+            )
             priority_rank = rank_by_symbol.get(symbol, 1)
             payload = build_alert_payload(
                 symbol, run_id, el, st2, candles_meta, {"source": "validate_system_full"},
                 score_dict=score_dict, tier=tier, priority_rank=priority_rank, severity_dict=severity_dict, sizing_dict=sizing_dict,
+                exit_plan_dict=exit_plan_dict,
             )
             path = save_alert_payload(payload, base_dir=str(repo_root / "artifacts" / "alerts"))
             print(f"ALERT_PAYLOAD saved: {path}")

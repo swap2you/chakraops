@@ -32,6 +32,7 @@ def build_alert_payload(
     priority_rank: Optional[int] = None,
     severity_dict: Optional[Dict[str, Any]] = None,
     sizing_dict: Optional[Dict[str, Any]] = None,
+    exit_plan_dict: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Build alert payload dict from existing traces. Never include secrets.
@@ -119,5 +120,18 @@ def build_alert_payload(
     payload["capital_required_estimate"] = sizing.get("capital_required_estimate")
     payload["capital_pct_of_account"] = sizing.get("capital_pct_of_account")
     payload["limiting_factor"] = sizing.get("limiting_factor")
+
+    # Phase 7.0: exit plan summary (informational only)
+    ep = exit_plan_dict or {}
+    if ep.get("enabled"):
+        pp = ep.get("premium_plan") or {}
+        sp = ep.get("structure_plan") or {}
+        tp = ep.get("time_plan") or {}
+        payload["exit_base_target_pct"] = pp.get("base_target_pct")
+        payload["exit_extension_target_pct"] = pp.get("extension_target_pct")
+        payload["exit_T1"] = sp.get("T1")
+        payload["exit_T2"] = sp.get("T2")
+        payload["exit_stop_hint_price"] = sp.get("stop_hint_price")
+        payload["exit_dte"] = tp.get("dte")
 
     return payload

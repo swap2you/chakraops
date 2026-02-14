@@ -39,6 +39,51 @@ def check_scheduler_health(
     }
 
 
+def check_eval_wall_time(
+    wall_time_sec: float,
+    cycle_minutes: int,
+) -> Optional[Dict[str, Any]]:
+    """
+    Phase 8.8: If wall time > 25% of cycle length -> WARN (HEALTH advisory).
+    """
+    if cycle_minutes <= 0:
+        return None
+    cycle_sec = cycle_minutes * 60
+    threshold = 0.25 * cycle_sec
+    if wall_time_sec <= threshold:
+        return None
+    return {
+        "reason": "EVAL_WALL_TIME_HIGH",
+        "failed_symbols": ["EVAL_BUDGET"],
+        "failed": "EVAL_WALL_TIME_HIGH",
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        "wall_time_sec": wall_time_sec,
+        "cycle_minutes": cycle_minutes,
+        "threshold_pct": 25,
+    }
+
+
+def check_cache_hit_rate(cache_hit_rate_pct: Optional[float]) -> Optional[Dict[str, Any]]:
+    """
+    Phase 8.8: If cache hit rate < 20% after warmup -> WARN (HEALTH advisory).
+    Informational only; no blocking.
+    """
+    if cache_hit_rate_pct is None:
+        return None
+    try:
+        if float(cache_hit_rate_pct) >= 20.0:
+            return None
+    except (TypeError, ValueError):
+        return None
+    return {
+        "reason": "CACHE_HIT_RATE_LOW",
+        "failed_symbols": ["CACHE"],
+        "failed": "CACHE_HIT_RATE_LOW",
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        "cache_hit_rate_pct": cache_hit_rate_pct,
+    }
+
+
 def check_orats_latency(rolling_avg_ms: Optional[float]) -> Optional[Dict[str, Any]]:
     """
     If ORATS latency rolling average > 6000 ms, return HEALTH alert payload for ORATS_LATENCY_HIGH.
@@ -85,6 +130,8 @@ def run_watchdog_checks(
     interval_minutes: int,
     orats_rolling_avg_ms: Optional[float] = None,
     has_signals_in_24h: bool = True,
+    wall_time_sec: Optional[float] = None,
+    cache_hit_rate_pct: Optional[float] = None,
 ) -> None:
     """
     Run all watchdog checks and send Slack alerts if needed. Non-blocking; catches all exceptions.
@@ -118,6 +165,31 @@ def run_watchdog_checks(
             )
         except Exception as e:
             logger.warning("[Watchdog] ORATS_LATENCY alert failed: %s", e)
+    # Phase 8.8: EVAL_WALL_TIME_HIGH -> HEALTH
+    if wall_time_sec is not None and interval_minutes > 0:
+        payload = check_eval_wall_time(wall_time_sec, interval_minutes)
+        if payload:
+            try:
+                route_alert(
+                    "HEALTH",
+                    payload,
+                    event_key="health:eval_wall_time",
+                    state_path="artifacts/alerts/last_sent_state.json",
+                )
+            except Exception as e:
+                logger.warning("[Watchdog] EVAL_WALL_TIME alert failed: %s", e)
+    # Phase 8.8: CACHE_HIT_RATE_LOW -> HEALTH
+    payload = check_cache_hit_rate(cache_hit_rate_pct)
+    if payload:
+        try:
+            route_alert(
+                "HEALTH",
+                payload,
+                event_key="health:cache_hit_rate",
+                state_path="artifacts/alerts/last_sent_state.json",
+            )
+        except Exception as e:
+            logger.warning("[Watchdog] CACHE_HIT_RATE alert failed: %s", e)
     # NO_SIGNALS_24H -> DAILY advisory
     payload = check_signals_24h(has_signals_in_24h)
     if payload:

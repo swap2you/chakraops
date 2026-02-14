@@ -4,12 +4,13 @@
 ORATS Core Data v2 client — single source of truth for per-ticker snapshot.
 
 Phase 8A: GET /datav2/cores returns all required per-ticker equity + options context.
-All per-ticker snapshot data must flow through this module (or the central facade).
+Phase 8.8: Optional cache layer via fetch_with_cache (TTL 1 day for cores).
 """
 
 from __future__ import annotations
 
 import logging
+from datetime import date
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -75,6 +76,58 @@ def fetch_core_snapshot(
     }
     if fields:
         params["fields"] = ",".join(str(f).strip() for f in fields if str(f).strip())
+
+    params_for_cache: Dict[str, Any] = {"as_of": date.today().isoformat()}
+
+    def _do_fetch() -> Dict[str, Any]:
+        try:
+            resp = requests.get(url, params=params, timeout=timeout_sec)
+        except requests.RequestException as e:
+            raise OratsCoreError(
+                f"Request failed: {e}",
+                ticker=ticker_upper,
+                response_snippet=str(e)[:200],
+            ) from e
+        if resp.status_code != 200:
+            snippet = resp.text[:300] if resp.text else ""
+            raise OratsCoreError(
+                f"ORATS cores returned HTTP {resp.status_code}",
+                ticker=ticker_upper,
+                http_status=resp.status_code,
+                response_snippet=snippet,
+            )
+        try:
+            raw: Any = resp.json()
+        except Exception as e:
+            raise OratsCoreError(
+                f"Invalid JSON response: {e}",
+                ticker=ticker_upper,
+                response_snippet=resp.text[:200] if resp.text else "",
+            ) from e
+        rows: List[Dict[str, Any]] = []
+        if isinstance(raw, list):
+            rows = raw
+        elif isinstance(raw, dict) and "data" in raw:
+            d = raw.get("data")
+            if isinstance(d, list):
+                rows = d
+        if not rows:
+            raise OratsCoreError(
+                "ORATS cores returned empty data[]",
+                ticker=ticker_upper,
+                http_status=200,
+                response_snippet=str(raw)[:200] if raw else "",
+            )
+        return dict(rows[0])
+
+    try:
+        from app.core.data.cache_store import TTL_IV_RANK, fetch_with_cache
+        snapshot = fetch_with_cache("cores", ticker_upper, params_for_cache, TTL_IV_RANK, _do_fetch)
+        return snapshot
+    except ImportError:
+        pass
+    except OratsCoreError:
+        raise
 
     try:
         resp = requests.get(url, params=params, timeout=timeout_sec)

@@ -68,7 +68,7 @@ class NightlySummary:
     regime: Optional[str] = None
     risk_posture: Optional[str] = None
     duration_seconds: float = 0.0
-    
+
     # Counts
     universe_total: int = 0
     evaluated: int = 0
@@ -78,7 +78,10 @@ class NightlySummary:
     holds: int = 0
     blocks: int = 0
     errors_count: int = 0
-    
+
+    # Phase 8.8: Eval throughput (optional)
+    cache_hit_rate_pct: Optional[float] = None
+
     # Top candidates and holds
     top_eligible: List[Dict[str, Any]] = field(default_factory=list)
     top_holds: List[Dict[str, Any]] = field(default_factory=list)
@@ -115,8 +118,14 @@ def build_slack_message(summary: NightlySummary) -> Dict[str, Any]:
     ]
     if summary.errors_count > 0:
         counts_lines.append(f"*Errors:* {summary.errors_count} :warning:")
+    # Phase 8.8: Eval throughput line
+    if summary.cache_hit_rate_pct is not None:
+        counts_lines.append(
+            f"*Eval throughput:* processed {summary.evaluated} symbols, "
+            f"cache hit rate {summary.cache_hit_rate_pct:.0f}%, wall time {summary.duration_seconds:.0f}s"
+        )
     counts_text = "\n".join(counts_lines)
-    
+
     # Top eligible section
     eligible_section = ""
     if summary.top_eligible:
@@ -321,8 +330,15 @@ def run_nightly_evaluation(
         return result
     
     start_time = time.time()
-    
+
     try:
+        # Phase 8.8: Reset cache stats at run start
+        try:
+            from app.core.data.cache_store import reset_cache_stats
+            reset_cache_stats()
+        except Exception:
+            pass
+
         # Phase 8.7: Load symbols from tiered universe manifest
         from pathlib import Path
         from app.core.universe.universe_manager import get_symbols_for_cycle, load_universe_manifest
@@ -346,18 +362,43 @@ def run_nightly_evaluation(
         if not symbols:
             result["error"] = "No symbols in universe"
             return result
-        
-        # Run staged evaluation (single source of truth: persisted run only)
-        from app.core.eval.staged_evaluator import evaluate_universe_staged, StagedEvaluationResult
-        
-        staged_out = evaluate_universe_staged(
-            symbols,
-            top_k=config.stage2_top_k,
-        )
-        if not isinstance(staged_out, StagedEvaluationResult):
-            raise TypeError("evaluate_universe_staged must return StagedEvaluationResult")
-        staged_results = staged_out.results
-        exposure_summary = staged_out.exposure_summary
+
+        # Phase 8.8: Budget + batch planner
+        from app.core.eval.evaluation_budget import EvaluationBudget
+        from app.core.eval.batch_planner import plan_batches
+        from app.core.config.eval_config import EVAL_BATCH_SIZE, EVAL_MAX_SYMBOLS_PER_CYCLE
+
+        budget = EvaluationBudget.from_config(started_at=datetime.now(timezone.utc))
+        symbols = budget.trim_symbols(symbols)
+        batches = plan_batches(symbols, EVAL_BATCH_SIZE)
+        staged_results: list = []
+        exposure_summary = None
+        budget_stopped = False
+
+        for batch in batches:
+            if budget.should_stop_for_time():
+                logger.warning("[NIGHTLY] Budget stop: time cap reached; processed %d/%d", budget.symbols_processed, len(symbols))
+                budget_stopped = True
+                break
+            from app.core.eval.staged_evaluator import evaluate_universe_staged, StagedEvaluationResult
+            staged_out = evaluate_universe_staged(batch, top_k=config.stage2_top_k)
+            if not isinstance(staged_out, StagedEvaluationResult):
+                raise TypeError("evaluate_universe_staged must return StagedEvaluationResult")
+            staged_results.extend(staged_out.results)
+            exposure_summary = staged_out.exposure_summary
+            budget.record_batch(len(batch), requests_estimate=len(batch) * 3)
+
+        if budget_stopped:
+            result["budget_stopped"] = True
+            result["budget_warning"] = "Budget stop: time cap reached; processed %d/%d" % (budget.symbols_processed, len(symbols))
+
+        # Phase 8.8: Log budget + cache stats
+        try:
+            from app.core.data.cache_store import cache_stats
+            cs = cache_stats()
+            logger.info("[NIGHTLY] Budget: %s | Cache: hit_rate=%.1f%%", budget.budget_status(), cs.get("cache_hit_rate_pct", 0))
+        except Exception:
+            pass
         
         # Build summary
         duration = time.time() - start_time
@@ -427,7 +468,13 @@ def run_nightly_evaluation(
         save_run(run)
         update_latest_pointer(run_id, completed_at)
         
-        # Build Slack summary
+        # Build Slack summary (Phase 8.8: include cache hit rate)
+        cache_hit_rate = None
+        try:
+            from app.core.data.cache_store import cache_stats
+            cache_hit_rate = cache_stats().get("cache_hit_rate_pct")
+        except Exception:
+            pass
         summary = NightlySummary(
             run_id=run_id,
             timestamp=completed_at,
@@ -441,6 +488,7 @@ def run_nightly_evaluation(
             eligible=len(eligible_list),
             holds=len(hold_list),
             blocks=len(block_list),
+            cache_hit_rate_pct=cache_hit_rate,
             top_eligible=top_candidates,
             top_holds=top_holds,
         )
@@ -482,6 +530,19 @@ def run_nightly_evaluation(
             len(symbols), len(eligible_list), len(hold_list), duration, slack_sent
         )
         print(f"[NIGHTLY] Completed: {len(eligible_list)} eligible, {len(hold_list)} holds, Slack: {slack_msg}")
+
+        # Phase 8.8: Run health checks (wall time, cache hit rate)
+        try:
+            from app.core.system.watchdog import run_watchdog_checks
+            cycle_min = manifest.get("cycle_minutes") or 30
+            run_watchdog_checks(
+                last_run_timestamp=None,
+                interval_minutes=int(cycle_min),
+                wall_time_sec=duration,
+                cache_hit_rate_pct=cache_hit_rate,
+            )
+        except Exception:
+            pass
         
     except Exception as e:
         logger.exception("[NIGHTLY] Evaluation failed: %s", e)

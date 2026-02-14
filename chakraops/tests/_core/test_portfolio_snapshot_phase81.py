@@ -47,6 +47,10 @@ def test_snapshot_empty_ledger_returns_zeros_and_none():
     assert snap["symbol_concentration"]["max_symbol_pct"] is None
     assert snap["sector_breakdown"]["status"] == "UNKNOWN"
     assert snap["cluster_risk_level"] == "UNKNOWN"
+    assert "cluster_breakdown" in snap
+    assert snap["cluster_breakdown"]["status"] == "UNKNOWN"
+    assert snap["cluster_breakdown"]["by_cluster"] == []
+    assert snap["max_cluster_pct"] is None
     assert snap["regime_adjusted_exposure"] is None
     assert isinstance(snap["warnings"], list)
 
@@ -65,8 +69,9 @@ def test_snapshot_csp_only_committed_and_exposure():
     # SPY: 500*100*2 = 100000, QQQ: 400*100*1 = 40000 → 140000
     assert snap["total_capital_committed"] == 140_000.0
     assert snap["exposure_pct"] == pytest.approx(70.0)
-    assert snap["cluster_risk_level"] == "UNKNOWN"
-    assert snap["sector_breakdown"]["status"] == "UNKNOWN"
+    # Phase 8.6: SPY+QQQ map to INDEX_ETF → 2 in cluster → MEDIUM
+    assert snap["cluster_risk_level"] == "MEDIUM"
+    assert snap["sector_breakdown"]["status"] == "OK"  # mapped to ETF
 
 
 def test_snapshot_mixed_csp_cc_no_fake_holdings():
@@ -193,8 +198,8 @@ def test_snapshot_assignment_risk_near_itm_threshold():
 
 
 def test_snapshot_cluster_risk_unknown_when_missing_cluster_field():
-    """cluster_risk_level UNKNOWN when positions have no cluster field."""
-    positions = [_pos(symbol="SPY", strike=500.0, contracts=1)]
+    """cluster_risk_level UNKNOWN when symbol not in cluster map (unmapped)."""
+    positions = [_pos(symbol="XYZ", strike=500.0, contracts=1)]  # XYZ not in DEFAULT_CLUSTER_MAP
     snap = build_portfolio_snapshot(positions, 100_000.0)
     assert snap["cluster_risk_level"] == "UNKNOWN"
 
@@ -271,3 +276,51 @@ def test_load_open_positions_empty_file(tmp_path: Path):
     ledger = tmp_path / "open_positions.json"
     positions = load_open_positions(ledger)
     assert positions == []
+
+
+def test_snapshot_cluster_breakdown_populated_from_mapping():
+    """Phase 8.6: cluster_breakdown populated from symbol mapping when positions lack cluster."""
+    positions = [
+        _pos(symbol="AAPL", strike=150.0, contracts=1, mode="CC", shares=100, entry_spot=148.0),
+        _pos(symbol="MSFT", strike=400.0, contracts=1),
+    ]
+    snap = build_portfolio_snapshot(positions, 200_000.0)
+    assert "cluster_breakdown" in snap
+    assert snap["cluster_breakdown"]["status"] in ("OK", "PARTIAL")
+    by_cluster = snap["cluster_breakdown"]["by_cluster"]
+    assert len(by_cluster) >= 1
+    # Both AAPL and MSFT map to MEGA_CAP_TECH
+    mega = next((c for c in by_cluster if c["cluster"] == "MEGA_CAP_TECH"), None)
+    assert mega is not None
+    assert mega["count"] == 2
+    assert snap["max_cluster_pct"] is not None
+    assert snap["max_cluster_pct"] == pytest.approx(100.0, rel=0.01)
+    assert snap["cluster_risk_level"] == "MEDIUM"  # 2 in same cluster
+
+
+def test_snapshot_sector_breakdown_ok_partial_unknown_thresholds():
+    """Phase 8.6: sector_breakdown OK when >= 80% tagged, PARTIAL otherwise, UNKNOWN when none."""
+    # All mapped (AAPL, MSFT, NVDA) -> OK
+    positions_ok = [
+        _pos(symbol="AAPL", strike=150.0, contracts=1),
+        _pos(symbol="MSFT", strike=400.0, contracts=1),
+        _pos(symbol="NVDA", strike=500.0, contracts=1),
+    ]
+    snap_ok = build_portfolio_snapshot(positions_ok, 500_000.0)
+    assert snap_ok["sector_breakdown"]["status"] == "OK"
+
+    # None mapped (all XYZ) -> UNKNOWN
+    positions_unk = [
+        _pos(symbol="XYZ", strike=100.0, contracts=1),
+    ]
+    snap_unk = build_portfolio_snapshot(positions_unk, 100_000.0)
+    assert snap_unk["sector_breakdown"]["status"] == "UNKNOWN"
+
+    # Mixed: 1 mapped, 2 unmapped -> 1/3 < 80% -> PARTIAL
+    positions_partial = [
+        _pos(symbol="AAPL", strike=150.0, contracts=1),
+        _pos(symbol="XYZ", strike=100.0, contracts=1),
+        _pos(symbol="ABC", strike=100.0, contracts=1),
+    ]
+    snap_partial = build_portfolio_snapshot(positions_partial, 200_000.0)
+    assert snap_partial["sector_breakdown"]["status"] == "PARTIAL"

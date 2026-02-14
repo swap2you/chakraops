@@ -20,8 +20,14 @@ from typing import Any, Dict, List, Optional, Union
 # Use same default path as Phase 7.1 position ledger
 from app.core.positions.position_ledger import load_open_positions as _load_open_positions
 
+# Phase 8.6: Static sector/cluster mapping
+from app.core.portfolio.cluster_mapper import get_symbol_tags, load_cluster_map
+
 # Threshold for "near ITM" assignment risk: spot <= strike * 1.02 (within 2%)
 ASSIGNMENT_RISK_NEAR_ITM_THRESHOLD = 1.02
+
+# Phase 8.6: sector_breakdown OK threshold (>= 80% of positions tagged)
+SECTOR_TAGGED_THRESHOLD = 0.80
 
 
 def _parse_date(value: Any) -> Optional[date]:
@@ -94,6 +100,8 @@ class PortfolioSnapshot:
     symbol_concentration: Dict[str, Any]
     sector_breakdown: Dict[str, Any]
     cluster_risk_level: str
+    cluster_breakdown: Dict[str, Any]  # Phase 8.6
+    max_cluster_pct: Optional[float]  # Phase 8.6
     regime_adjusted_exposure: Optional[float]
     warnings: List[str] = field(default_factory=list)
 
@@ -111,6 +119,8 @@ class PortfolioSnapshot:
             "symbol_concentration": self.symbol_concentration,
             "sector_breakdown": self.sector_breakdown,
             "cluster_risk_level": self.cluster_risk_level,
+            "cluster_breakdown": self.cluster_breakdown,
+            "max_cluster_pct": self.max_cluster_pct,
             "regime_adjusted_exposure": self.regime_adjusted_exposure,
             "warnings": list(self.warnings),
         }
@@ -247,22 +257,36 @@ def build_portfolio_snapshot(
     max_symbol_pct: Optional[float] = max((p["pct_of_committed"] for p in top_list), default=None) if top_list else None
     symbol_concentration = {"top_symbols": top_list, "max_symbol_pct": max_symbol_pct}
 
-    # sector_breakdown: if positions have sector
+    # Phase 8.6: Load cluster map override (if exists)
+    _repo_root = Path(__file__).resolve().parent.parent.parent
+    _cluster_map_path = _repo_root / "artifacts" / "config" / "cluster_map.json"
+    cluster_map_override = load_cluster_map(_cluster_map_path) if _cluster_map_path else {}
+
+    # sector_breakdown: use position sector or mapped sector from get_symbol_tags
     sectors: Dict[str, float] = {}
-    has_sector = False
+    tagged_sector_count = 0
     for i, p in enumerate(positions):
-        sec = p.get("sector")
-        if sec is not None and isinstance(sec, str):
-            has_sector = True
-            sec = sec.strip() or "UNKNOWN"
-            c = committed_list[i] if i < len(committed_list) else 0
-            sectors[sec] = sectors.get(sec, 0) + c
-    if not has_sector:
+        sec_raw = p.get("sector")
+        if sec_raw is not None and isinstance(sec_raw, str) and sec_raw.strip():
+            sec = sec_raw.strip()
+        else:
+            tags = get_symbol_tags(p.get("symbol") or "?", cluster_map_override or None)
+            sec = tags.get("sector") or "UNKNOWN"
+        if sec and sec != "UNKNOWN":
+            tagged_sector_count += 1
+        sec = sec or "UNKNOWN"
+        c = committed_list[i] if i < len(committed_list) else 0
+        sectors[sec] = sectors.get(sec, 0) + c
+    pct_tagged = tagged_sector_count / total if total > 0 else 0.0
+    if tagged_sector_count == 0:
         sector_status = "UNKNOWN"
         by_sector: List[Dict[str, Any]] = []
-    elif not sectors or total_committed <= 0:
+    elif pct_tagged < SECTOR_TAGGED_THRESHOLD:
         sector_status = "PARTIAL"
-        by_sector = []
+        by_sector = [
+            {"sector": s, "committed": c, "pct_of_committed": 100.0 * c / total_committed}
+            for s, c in sorted(sectors.items(), key=lambda x: -x[1])
+        ]
     else:
         sector_status = "OK"
         by_sector = [
@@ -302,15 +326,25 @@ def build_portfolio_snapshot(
         "positions_near_itm": positions_near_itm,
     }
 
-    # cluster_risk_level: from cluster field
+    # Phase 8.6: cluster from position or mapped; cluster_breakdown + cluster_risk_level
     cluster_counts: Dict[str, int] = {}
+    cluster_committed: Dict[str, float] = {}
     has_cluster = False
-    for p in positions:
+    tagged_cluster_count = 0
+    for i, p in enumerate(positions):
         cl = p.get("cluster")
-        if cl is not None and isinstance(cl, str):
-            has_cluster = True
+        if cl is None or not isinstance(cl, str) or not (cl and cl.strip()):
+            tags = get_symbol_tags(p.get("symbol") or "?", cluster_map_override or None)
+            cl = tags.get("cluster") or "UNKNOWN"
+        else:
             cl = cl.strip() or "?"
-            cluster_counts[cl] = cluster_counts.get(cl, 0) + 1
+        if cl and cl != "UNKNOWN":
+            has_cluster = True
+            tagged_cluster_count += 1
+        cl = cl or "UNKNOWN"
+        cluster_counts[cl] = cluster_counts.get(cl, 0) + 1
+        c = committed_list[i] if i < len(committed_list) else 0
+        cluster_committed[cl] = cluster_committed.get(cl, 0) + c
     cluster_risk_level = "UNKNOWN"
     if has_cluster and cluster_counts:
         max_count = max(cluster_counts.values())
@@ -320,6 +354,26 @@ def build_portfolio_snapshot(
             cluster_risk_level = "MEDIUM"
         else:
             cluster_risk_level = "LOW"
+    pct_cluster_tagged = tagged_cluster_count / total if total > 0 else 0.0
+    if tagged_cluster_count == 0:
+        cluster_breakdown_status = "UNKNOWN"
+    elif pct_cluster_tagged < SECTOR_TAGGED_THRESHOLD:
+        cluster_breakdown_status = "PARTIAL"
+    else:
+        cluster_breakdown_status = "OK"
+    by_cluster = [
+        {
+            "cluster": k,
+            "count": cluster_counts[k],
+            "committed": v,
+            "pct_of_committed": 100.0 * v / total_committed if total_committed > 0 else 0,
+        }
+        for k, v in sorted(cluster_committed.items(), key=lambda x: -x[1])
+    ]
+    cluster_breakdown = {"status": cluster_breakdown_status, "by_cluster": by_cluster}
+    max_cluster_pct_val: Optional[float] = max(
+        (b["pct_of_committed"] for b in by_cluster), default=None
+    ) if by_cluster else None
 
     # regime_adjusted_exposure
     regime_adjusted_exposure: Optional[float] = None
@@ -344,6 +398,8 @@ def build_portfolio_snapshot(
         symbol_concentration=symbol_concentration,
         sector_breakdown=sector_breakdown,
         cluster_risk_level=cluster_risk_level,
+        cluster_breakdown=cluster_breakdown,
+        max_cluster_pct=max_cluster_pct_val,
         regime_adjusted_exposure=regime_adjusted_exposure,
         warnings=warnings,
     )

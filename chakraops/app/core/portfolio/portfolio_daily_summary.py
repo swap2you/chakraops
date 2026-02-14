@@ -70,6 +70,17 @@ def build_portfolio_daily_summary(
     sym_s = "%.0f%%" % max_sym if max_sym is not None else "N/A"
     lines.append("Max Symbol Concentration: %s | Cluster Risk: %s" % (sym_s, cluster))
 
+    # Phase 8.6: Max cluster concentration line (if available)
+    cluster_breakdown = snapshot.get("cluster_breakdown") or {}
+    max_cluster_pct_val = snapshot.get("max_cluster_pct")
+    by_cluster = cluster_breakdown.get("by_cluster") or []
+    top_cluster = by_cluster[0] if by_cluster else None
+    top_cluster_name = top_cluster.get("cluster") if top_cluster else None
+    if max_cluster_pct_val is not None and top_cluster_name and top_cluster_name != "UNKNOWN":
+        lines.append("Cluster: %s | Max Cluster: %.0f%% (%s)" % (
+            cluster, max_cluster_pct_val, top_cluster_name,
+        ))
+
     # Stress: prefer -10% scenario
     scenarios = stress_dynamic.get("scenarios") or []
     stress_10 = next((s for s in scenarios if s.get("shock_pct") == -0.10), None)

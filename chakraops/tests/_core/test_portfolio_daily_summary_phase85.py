@@ -173,3 +173,29 @@ def test_daily_payload_without_portfolio_section():
     text = _fmt_daily(payload)
     assert "DAILY SUMMARY" in text
     assert "Portfolio Risk Summary" not in text
+
+
+def test_daily_summary_includes_max_cluster_line_when_available():
+    """Phase 8.6: DAILY summary includes max cluster concentration when available."""
+    snapshot = {
+        "portfolio_equity_usd": 150_000,
+        "exposure_pct": 22.4,
+        "open_csp_count": 3,
+        "open_cc_count": 1,
+        "symbol_concentration": {"max_symbol_pct": 18},
+        "cluster_risk_level": "HIGH",
+        "cluster_breakdown": {
+            "status": "OK",
+            "by_cluster": [
+                {"cluster": "MEGA_CAP_TECH", "count": 3, "committed": 63_000, "pct_of_committed": 42},
+            ],
+        },
+        "max_cluster_pct": 42.0,
+        "warnings": [],
+    }
+    stress = {"scenarios": [], "worst_case": {"shock_pct": -0.15, "estimated_unrealized_drawdown": 0, "survival_status": "OK"}, "warnings": []}
+    out = build_portfolio_daily_summary(snapshot, stress)
+    lines = [ln for ln in out["lines"] if "Max Cluster:" in ln]
+    assert len(lines) == 1
+    assert "42%" in lines[0]
+    assert "MEGA_CAP_TECH" in lines[0]

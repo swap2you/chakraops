@@ -44,6 +44,8 @@ def test_portfolio_dashboard_api_returns_snapshot_and_stress():
     snap = data["snapshot"]
     stress = data["stress"]
     assert "total_open_positions" in snap or "total_capital_committed" in snap
+    assert "cluster_breakdown" in snap
+    assert "max_cluster_pct" in snap
     assert "scenarios" in stress
     assert "worst_case" in stress
     assert "warnings" in stress

@@ -3036,6 +3036,46 @@ async def api_portfolio_risk_profile_put(request: Request) -> Dict[str, Any]:
 
 
 # ============================================================================
+# PHASE 8.4 – PORTFOLIO DASHBOARD (READ-ONLY COMMAND CENTER)
+# ============================================================================
+# Read-only command center. No trading logic mutation.
+# Uses build_portfolio_snapshot() and simulate_assignment_stress_dynamic().
+
+
+@app.get("/api/portfolio/dashboard")
+def api_portfolio_dashboard() -> Dict[str, Any]:
+    """Phase 8.4: Portfolio dashboard — snapshot + stress simulation. Read-only."""
+    try:
+        from app.core.portfolio.portfolio_snapshot import (
+            build_portfolio_snapshot,
+            load_open_positions,
+            get_portfolio_equity_usd,
+        )
+        from app.core.portfolio.assignment_stress_simulator import simulate_assignment_stress_dynamic
+        from app.core.scoring.config import ACCOUNT_EQUITY_DEFAULT
+
+        repo = Path(__file__).resolve().parent.parent.parent
+        ledger_path = repo / "artifacts" / "positions" / "open_positions.json"
+        open_positions = load_open_positions(ledger_path)
+        portfolio_equity = get_portfolio_equity_usd() or ACCOUNT_EQUITY_DEFAULT
+        snapshot = build_portfolio_snapshot(open_positions, portfolio_equity)
+        snap_with_equity = dict(snapshot)
+        snap_with_equity["portfolio_equity_usd"] = portfolio_equity
+        stress = simulate_assignment_stress_dynamic(snap_with_equity, open_positions)
+        # Include equity in snapshot for frontend (Phase 8.4)
+        snapshot_out = dict(snapshot)
+        snapshot_out["portfolio_equity_usd"] = portfolio_equity
+        return {"snapshot": snapshot_out, "stress": stress}
+    except Exception as e:
+        logger.exception("Error fetching portfolio dashboard: %s", e)
+        return {
+            "snapshot": {},
+            "stress": {"scenarios": [], "worst_case": {}, "warnings": [str(e)]},
+            "error": str(e),
+        }
+
+
+# ============================================================================
 # PHASE 2A: DASHBOARD OPPORTUNITIES — RANKED DECISION INTELLIGENCE
 # ============================================================================
 

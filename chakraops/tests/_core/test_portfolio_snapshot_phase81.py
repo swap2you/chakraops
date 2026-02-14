@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -109,16 +109,31 @@ def test_snapshot_cc_with_shares_and_cost():
 
 
 def test_snapshot_weighted_dte_weighting_by_committed():
-    """weighted_dte is DTE weighted by committed capital."""
-    exp_short = (date.today() + timedelta(days=10)).isoformat()
-    exp_long = (date.today() + timedelta(days=40)).isoformat()
+    """weighted_dte is DTE weighted by committed capital. Use explicit dte for determinism."""
     positions = [
-        _pos(symbol="SPY", strike=500.0, contracts=2, expiration=exp_short),  # DTE 10, committed 100k
-        _pos(symbol="QQQ", strike=400.0, contracts=1, expiration=exp_long),   # DTE 40, committed 40k
+        _pos(symbol="SPY", strike=500.0, contracts=2, dte=10),  # DTE 10, committed 100k
+        _pos(symbol="QQQ", strike=400.0, contracts=1, dte=40),  # DTE 40, committed 40k
     ]
     snap = build_portfolio_snapshot(positions, 200_000.0)
     assert snap["weighted_dte"] is not None
     # 10 * 100000 + 40 * 40000 = 1000000 + 1600000 = 2600000 / 140000 ≈ 18.57
+    expected_wdte = (10 * 100_000 + 40 * 40_000) / 140_000
+    assert snap["weighted_dte"] == pytest.approx(expected_wdte)
+
+
+def test_snapshot_weighted_dte_expiry_based_stable_with_fixed_as_of():
+    """Expiry-based DTE is stable with fixed as_of UTC."""
+    # Fixed as_of near midnight UTC
+    as_of = datetime(2026, 2, 13, 23, 59, 0, tzinfo=timezone.utc)
+    exp_short = "2026-02-23"  # 10 days from as_of date
+    exp_long = "2026-03-25"   # 40 days from as_of date
+    positions = [
+        _pos(symbol="SPY", strike=500.0, contracts=2, expiration=exp_short),
+        _pos(symbol="QQQ", strike=400.0, contracts=1, expiration=exp_long),
+    ]
+    snap = build_portfolio_snapshot(positions, 200_000.0, as_of=as_of)
+    assert snap["weighted_dte"] is not None
+    # (2026-02-23 - 2026-02-13).days = 10, (2026-03-25 - 2026-02-13).days = 40
     expected_wdte = (10 * 100_000 + 40 * 40_000) / 140_000
     assert snap["weighted_dte"] == pytest.approx(expected_wdte)
 

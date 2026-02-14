@@ -202,17 +202,32 @@ def build_portfolio_snapshot(
     ]
     avg_premium_capture: Optional[float] = sum(captures) / len(captures) if captures else None
 
-    # weighted_dte: DTE weighted by committed (or contracts if committed=0)
+    # weighted_dte: DTE weighted by committed (or contracts if committed=0).
+    # Prefer numeric dte when present (timezone-safe). Else compute from expiry using UTC date-only.
+    as_of_date = today  # already date in UTC when as_of was datetime.utc
     dte_weights: List[tuple] = []
     for i, p in enumerate(positions):
-        exp = _parse_date(p.get("expiration"))
-        if exp is None:
-            continue
-        dte = (exp - today).days
+        dte_val: Optional[int] = None
+        # 1. Prefer explicit numeric dte
+        raw_dte = p.get("dte")
+        if raw_dte is not None:
+            try:
+                d = int(float(raw_dte))
+                if d >= 0:
+                    dte_val = d
+            except (TypeError, ValueError):
+                pass
+        # 2. Else compute from expiry (date-only arithmetic, UTC)
+        if dte_val is None:
+            exp = _parse_date(p.get("expiration") or p.get("expiry"))
+            if exp is None:
+                warnings.append("Position %s missing dte and expiration; skipped for weighted_dte" % (p.get("symbol") or p.get("position_id", "?")))
+                continue
+            dte_val = max(0, (exp - as_of_date).days)
         w = committed_list[i] if i < len(committed_list) else 0
         if w <= 0:
             w = float(p.get("contracts") or 1)
-        dte_weights.append((dte, w))
+        dte_weights.append((dte_val, w))
     weighted_dte_val: Optional[float] = None
     if dte_weights and sum(w for _, w in dte_weights) > 0:
         total_w = sum(w for _, w in dte_weights)

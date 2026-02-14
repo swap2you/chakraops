@@ -107,6 +107,8 @@ export const ENDPOINTS = {
   portfolioRiskProfile: `${BASE}/api/portfolio/risk-profile`,
   /** Risk profile PUT */
   portfolioRiskProfilePut: `${BASE}/api/portfolio/risk-profile`,
+  /** Phase 8.4: Portfolio dashboard — snapshot + stress simulation (read-only) */
+  portfolioDashboard: `${BASE}/api/portfolio/dashboard`,
 
   // ============================================================================
   // PHASE 2A: DASHBOARD OPPORTUNITIES (RANKED)

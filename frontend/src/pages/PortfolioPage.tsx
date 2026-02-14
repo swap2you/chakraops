@@ -1,5 +1,6 @@
 /**
  * Phase 3: Portfolio dashboard — summary cards, exposure tables, risk profile editor.
+ * Phase 8.4: Command Center tab — read-only portfolio dashboard.
  */
 import { useEffect, useState, useCallback } from "react";
 import { useDataMode } from "@/context/DataModeContext";
@@ -11,6 +12,7 @@ import { PortfolioSummaryCards } from "@/components/PortfolioSummaryCards";
 import { ExposureTable } from "@/components/ExposureTable";
 import { RiskProfileForm } from "@/components/RiskProfileForm";
 import { DecisionQualitySummary } from "@/components/DecisionQualitySummary";
+import { PortfolioCommandCenter } from "@/components/PortfolioCommandCenter";
 import { pushSystemNotification } from "@/lib/notifications";
 import type {
   PortfolioSummary,
@@ -36,7 +38,7 @@ export function PortfolioPage() {
   const [positions, setPositions] = useState<TrackedPosition[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"exposure" | "positions" | "risk" | "decision-quality">("exposure");
+  const [activeTab, setActiveTab] = useState<"exposure" | "positions" | "risk" | "decision-quality" | "command-center">("exposure");
 
   const fetchAll = useCallback(async () => {
     if (mode !== "LIVE") return;
@@ -128,7 +130,7 @@ export function PortfolioPage() {
 
       <section>
         <div className="mb-4 flex gap-2">
-          {(["exposure", "positions", "risk", "decision-quality"] as const).map((tab) => (
+          {(["exposure", "positions", "risk", "decision-quality", "command-center"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -145,7 +147,9 @@ export function PortfolioPage() {
                   ? "Positions"
                   : tab === "risk"
                     ? "Risk Profile"
-                    : "Decision Quality"}
+                    : tab === "decision-quality"
+                      ? "Decision Quality"
+                      : "Command Center"}
             </button>
           ))}
         </div>
@@ -229,6 +233,12 @@ export function PortfolioPage() {
         {activeTab === "decision-quality" && (
           <div className="rounded-lg border border-border p-6">
             <DecisionQualitySummary />
+          </div>
+        )}
+
+        {activeTab === "command-center" && (
+          <div className="rounded-lg border border-border p-6">
+            <PortfolioCommandCenter />
           </div>
         )}
       </section>

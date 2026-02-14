@@ -84,6 +84,11 @@ class NightlySummary:
     requests_estimated: Optional[int] = None
     top_endpoint_hit_rate: Optional[str] = None
 
+    # Phase 9.0: Universe gates
+    gate_skips_count: int = 0
+    gate_skips_total: int = 0
+    gate_skip_reasons_summary: Optional[str] = None
+
     # Top candidates and holds
     top_eligible: List[Dict[str, Any]] = field(default_factory=list)
     top_holds: List[Dict[str, Any]] = field(default_factory=list)
@@ -133,6 +138,12 @@ def build_slack_message(summary: NightlySummary) -> Dict[str, Any]:
         if summary.top_endpoint_hit_rate:
             parts.append(summary.top_endpoint_hit_rate)
         counts_lines.append(f"*Eval throughput:* {', '.join(parts)}")
+    # Phase 9.0: Universe gates summary
+    if summary.gate_skips_count > 0 and summary.gate_skips_total > 0:
+        gate_line = f"*Universe Gates:* skipped {summary.gate_skips_count}/{summary.gate_skips_total}"
+        if summary.gate_skip_reasons_summary:
+            gate_line += f" ({summary.gate_skip_reasons_summary})"
+        counts_lines.append(gate_line)
     counts_text = "\n".join(counts_lines)
 
     # Top eligible section
@@ -389,7 +400,84 @@ def run_nightly_evaluation(
 
         budget = EvaluationBudget.from_config(started_at=datetime.now(timezone.utc))
         symbols = budget.trim_symbols(symbols)
-        batches = plan_batches(symbols, EVAL_BATCH_SIZE)
+
+        # Phase 9.0: Universe quality gates (cheap-first, before chain pipeline)
+        gate_skips: List[Dict[str, Any]] = []
+        symbols_to_evaluate = symbols
+        try:
+            from app.core.universe.universe_quality_gates import evaluate_universe_quality, GateDecision
+            from app.core.config.universe_gates_config import get_gate_config, resolve_gate_config_for_symbol, get_symbol_gate_override
+            from app.core.data.symbol_snapshot_service import get_snapshots_batch
+            from app.core.symbols.data_dependencies import compute_dependency_lists
+            from app.core.environment.market_calendar import trading_days_since
+
+            gate_cfg = get_gate_config()
+            if gate_cfg.get("enabled", True):
+                snapshots = get_snapshots_batch(symbols, derive_avg_stock_volume_20d=True, use_cache=True)
+                symbols_to_evaluate = []
+                for sym in symbols:
+                    snap = snapshots.get(sym)
+                    snap_dict = snap.to_dict() if snap else {}
+                    sym_dict = {
+                        "symbol": sym,
+                        "price": snap_dict.get("price"),
+                        "bid": snap_dict.get("bid"),
+                        "ask": snap_dict.get("ask"),
+                        "volume": snap_dict.get("volume"),
+                        "iv_rank": snap_dict.get("iv_rank"),
+                        "quote_date": snap_dict.get("quote_date"),
+                        "avg_stock_volume_20d": snap_dict.get("avg_stock_volume_20d"),
+                        "avg_option_volume_20d": snap_dict.get("avg_option_volume_20d"),
+                        "fetched_at": snap_dict.get("quote_as_of") or snap_dict.get("core_as_of"),
+                    }
+                    req_miss, opt_miss, req_stale, data_as_of = compute_dependency_lists(
+                        sym_dict, max_stale_trading_days=gate_cfg.get("data_stale_days_block", 2)
+                    )
+                    quote_date = sym_dict.get("quote_date")
+                    stale_days = None
+                    if quote_date:
+                        try:
+                            from datetime import date
+                            s = str(quote_date).strip()[:10]
+                            if len(s) >= 10:
+                                d = date(int(s[:4]), int(s[5:7]), int(s[8:10]))
+                                stale_days = trading_days_since(d)
+                        except (ValueError, IndexError, TypeError):
+                            pass
+                    data_sufficiency = {
+                        "required_data_missing": req_miss,
+                        "required_data_stale": req_stale,
+                        "stale_days": stale_days,
+                    }
+                    core_snapshot = {
+                        "price": snap_dict.get("price"),
+                        "bid": snap_dict.get("bid"),
+                        "ask": snap_dict.get("ask"),
+                        "volume": snap_dict.get("volume"),
+                        "avg_stock_volume_20d": snap_dict.get("avg_stock_volume_20d"),
+                        "quote_date": snap_dict.get("quote_date"),
+                    }
+                    gate_cfg_sym = resolve_gate_config_for_symbol(manifest, sym)
+                    sym_override = get_symbol_gate_override(manifest, sym)
+                    decision = evaluate_universe_quality(
+                        sym, core_snapshot, None, data_sufficiency, gate_cfg_sym, sym_override
+                    )
+                    if decision.status == "SKIP":
+                        gate_skips.append({
+                            "symbol": sym,
+                            "reasons": decision.reasons,
+                            "metrics": decision.metrics,
+                        })
+                        logger.info("[NIGHTLY] Gate SKIP %s: %s", sym, decision.reasons)
+                    else:
+                        symbols_to_evaluate.append(sym)
+                if gate_skips:
+                    logger.info("[NIGHTLY] Universe gates: skipped %d/%d symbols", len(gate_skips), len(symbols))
+        except Exception as e:
+            logger.warning("[NIGHTLY] Universe gates failed (non-fatal, evaluating all): %s", e)
+            symbols_to_evaluate = symbols
+
+        batches = plan_batches(symbols_to_evaluate, EVAL_BATCH_SIZE)
         staged_results: list = []
         exposure_summary = None
         budget_stopped = False
@@ -502,6 +590,18 @@ def run_nightly_evaluation(
                 top_endpoint_hit_rate = f"top_ep={ep_name} {rate:.0f}%"
         except Exception:
             pass
+        # Phase 9.0: Gate skips summary
+        gate_skips_total = len(symbols)
+        gate_skips_count = len(gate_skips)
+        gate_reasons_summary = None
+        if gate_skips:
+            reason_counts: Dict[str, int] = {}
+            for s in gate_skips:
+                for r in s.get("reasons", []):
+                    reason_counts[r] = reason_counts.get(r, 0) + 1
+            gate_reasons_summary = ", ".join(
+                f"{r}={c}" for r, c in sorted(reason_counts.items(), key=lambda x: -x[1])[:5]
+            )
         summary = NightlySummary(
             run_id=run_id,
             timestamp=completed_at,
@@ -517,6 +617,9 @@ def run_nightly_evaluation(
             blocks=len(block_list),
             cache_hit_rate_pct=cache_hit_rate,
             requests_estimated=budget.requests_estimated,
+            gate_skips_count=gate_skips_count,
+            gate_skips_total=gate_skips_total,
+            gate_skip_reasons_summary=gate_reasons_summary,
             top_endpoint_hit_rate=top_endpoint_hit_rate,
             top_eligible=top_candidates,
             top_holds=top_holds,

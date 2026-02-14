@@ -20,8 +20,9 @@ def test_fetch_returns_cached_when_fresh(tmp_path: Path):
         patch("app.core.data.cache_store.CACHE_ENABLED", True),
     ):
         from datetime import datetime, timezone
+        # Phase 8.9: key includes normalized params (as_of=...)
         cache_set(
-            "cores:AAPL:2026-02-13",
+            "cores:AAPL:as_of=2026-02-13:2026-02-13",
             {"value": {"cached": True}, "cached_at": datetime.now(timezone.utc).isoformat()},
         )
         fetcher = MagicMock(side_effect=AssertionError("fetcher should not be called"))
@@ -53,5 +54,5 @@ def test_orats_error_not_cached(tmp_path: Path):
         fetcher = MagicMock(side_effect=ValueError("ORATS error"))
         with pytest.raises(ValueError, match="ORATS error"):
             fetch_with_cache("cores", "ERR", {"as_of": "2026-02-13"}, 60, fetcher)
-        out = cache_get("cores:ERR:2026-02-13")
+        out = cache_get("cores:ERR:as_of=2026-02-13:2026-02-13")
         assert out is None or out.get("value") != {"error": "ORATS error"}

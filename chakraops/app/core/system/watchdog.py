@@ -63,6 +63,63 @@ def check_eval_wall_time(
     }
 
 
+def check_requests_vs_budget(
+    requests_estimated: Optional[int],
+    max_requests_estimate: Optional[int],
+) -> Optional[Dict[str, Any]]:
+    """
+    Phase 8.9: If requests_estimated > 80% of max_requests_estimate -> WARN (HEALTH advisory).
+    """
+    if requests_estimated is None or max_requests_estimate is None or max_requests_estimate <= 0:
+        return None
+    try:
+        req = int(requests_estimated)
+        max_r = int(max_requests_estimate)
+    except (TypeError, ValueError):
+        return None
+    if req <= int(0.8 * max_r):
+        return None
+    return {
+        "reason": "REQUESTS_ESTIMATE_HIGH",
+        "failed_symbols": ["EVAL_BUDGET"],
+        "failed": "REQUESTS_ESTIMATE_HIGH",
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        "requests_estimated": req,
+        "max_requests_estimate": max_r,
+    }
+
+
+def check_cache_hit_rate_hot_endpoint(
+    cache_stats_by_endpoint: Optional[Dict[str, Dict[str, Any]]],
+) -> Optional[Dict[str, Any]]:
+    """
+    Phase 8.9: If cores or strikes endpoint has low hit rate (<20%) and traffic -> WARN.
+    """
+    if not cache_stats_by_endpoint:
+        return None
+    hot_endpoints = ("cores", "strikes")
+    for ep in hot_endpoints:
+        stats = cache_stats_by_endpoint.get(ep)
+        if not stats:
+            continue
+        hits = stats.get("hits", 0) or 0
+        misses = stats.get("misses", 0) or 0
+        total = hits + misses
+        if total < 5:
+            continue
+        hit_rate = 100.0 * hits / total
+        if hit_rate < 20.0:
+            return {
+                "reason": "CACHE_HIT_RATE_LOW_HOT_ENDPOINT",
+                "failed_symbols": ["CACHE"],
+                "failed": "CACHE_HIT_RATE_LOW_HOT_ENDPOINT",
+                "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                "endpoint": ep,
+                "cache_hit_rate_pct": round(hit_rate, 1),
+            }
+    return None
+
+
 def check_cache_hit_rate(cache_hit_rate_pct: Optional[float]) -> Optional[Dict[str, Any]]:
     """
     Phase 8.8: If cache hit rate < 20% after warmup -> WARN (HEALTH advisory).
@@ -132,6 +189,9 @@ def run_watchdog_checks(
     has_signals_in_24h: bool = True,
     wall_time_sec: Optional[float] = None,
     cache_hit_rate_pct: Optional[float] = None,
+    requests_estimated: Optional[int] = None,
+    max_requests_estimate: Optional[int] = None,
+    cache_stats_by_endpoint: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> None:
     """
     Run all watchdog checks and send Slack alerts if needed. Non-blocking; catches all exceptions.
@@ -190,6 +250,30 @@ def run_watchdog_checks(
             )
         except Exception as e:
             logger.warning("[Watchdog] CACHE_HIT_RATE alert failed: %s", e)
+    # Phase 8.9: REQUESTS_ESTIMATE_HIGH -> HEALTH
+    payload = check_requests_vs_budget(requests_estimated, max_requests_estimate)
+    if payload:
+        try:
+            route_alert(
+                "HEALTH",
+                payload,
+                event_key="health:requests_estimate",
+                state_path="artifacts/alerts/last_sent_state.json",
+            )
+        except Exception as e:
+            logger.warning("[Watchdog] REQUESTS_ESTIMATE alert failed: %s", e)
+    # Phase 8.9: CACHE_HIT_RATE_LOW_HOT_ENDPOINT -> HEALTH
+    payload = check_cache_hit_rate_hot_endpoint(cache_stats_by_endpoint)
+    if payload:
+        try:
+            route_alert(
+                "HEALTH",
+                payload,
+                event_key="health:cache_hit_rate_hot_endpoint",
+                state_path="artifacts/alerts/last_sent_state.json",
+            )
+        except Exception as e:
+            logger.warning("[Watchdog] CACHE_HIT_RATE_HOT_ENDPOINT alert failed: %s", e)
     # NO_SIGNALS_24H -> DAILY advisory
     payload = check_signals_24h(has_signals_in_24h)
     if payload:

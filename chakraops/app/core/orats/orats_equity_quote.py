@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -342,7 +342,18 @@ def fetch_equity_quotes_batch(
             continue
         
         try:
-            batch_results = _fetch_equity_quotes_single_batch(batch)
+            params_for_cache = {"as_of": datetime.now(timezone.utc).date().isoformat()}
+            try:
+                from app.core.data.cache_policy import get_ttl
+                from app.core.data.cache_store import fetch_batch_with_cache
+                batch_results = fetch_batch_with_cache(
+                    "quotes", batch, params_for_cache, get_ttl("quotes"),
+                    lambda b=batch: _fetch_equity_quotes_single_batch(b),
+                    serialize=lambda d: {k: asdict(v) for k, v in d.items()},
+                    deserialize=lambda d: {k: EquityQuote(**v) for k, v in d.items()},
+                )
+            except ImportError:
+                batch_results = _fetch_equity_quotes_single_batch(batch)
             for symbol, quote in batch_results.items():
                 quote.fetched_at = now_iso
                 results[symbol] = quote
@@ -667,7 +678,18 @@ def fetch_iv_ranks_batch(
     
     for batch in batches:
         try:
-            batch_results = _fetch_iv_ranks_single_batch(batch)
+            params_for_cache = {"as_of": datetime.now(timezone.utc).date().isoformat()}
+            try:
+                from app.core.data.cache_policy import get_ttl
+                from app.core.data.cache_store import fetch_batch_with_cache
+                batch_results = fetch_batch_with_cache(
+                    "iv_rank", batch, params_for_cache, get_ttl("iv_rank"),
+                    lambda b=batch: _fetch_iv_ranks_single_batch(b),
+                    serialize=lambda d: {k: asdict(v) for k, v in d.items()},
+                    deserialize=lambda d: {k: IVRankData(**v) for k, v in d.items()},
+                )
+            except ImportError:
+                batch_results = _fetch_iv_ranks_single_batch(batch)
             for symbol, iv_data in batch_results.items():
                 iv_data.fetched_at = now_iso
                 results[symbol] = iv_data

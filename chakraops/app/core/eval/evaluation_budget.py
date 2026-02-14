@@ -65,10 +65,26 @@ class EvaluationBudget:
             return []
         return symbols[: self.max_symbols]
 
-    def record_batch(self, symbols_count: int, requests_estimate: int = 0) -> None:
-        """Record a processed batch."""
+    def record_batch(
+        self,
+        symbols_count: int,
+        requests_estimate: int | None = None,
+        endpoints_used: List[str] | None = None,
+    ) -> None:
+        """
+        Record a processed batch.
+        If endpoints_used provided, compute requests_estimate via request_cost_model.
+        Otherwise use requests_estimate if given.
+        """
         self.symbols_processed += symbols_count
-        self.requests_estimated += requests_estimate
+        if endpoints_used is not None:
+            from app.core.eval.request_cost_model import estimate_requests_for_symbols
+            self.requests_estimated += estimate_requests_for_symbols(
+                [""] * symbols_count,
+                endpoints_used=endpoints_used,
+            )
+        elif requests_estimate is not None:
+            self.requests_estimated += requests_estimate
         self.batches_processed += 1
 
     def budget_status(self) -> Dict[str, Any]:

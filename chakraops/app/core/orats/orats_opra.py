@@ -318,8 +318,51 @@ class OratsDelayedClient:
         Returns:
             List of strike rows with callBidPrice, callAskPrice, putBidPrice, etc.
         """
+        ticker_upper = ticker.upper()
+        params_for_cache: Dict[str, Any] = {"as_of": date.today().isoformat()}
+        if dte_min is not None:
+            params_for_cache["dte_min"] = dte_min
+        if dte_max is not None:
+            params_for_cache["dte_max"] = dte_max
+        if delta_min is not None:
+            params_for_cache["delta_min"] = delta_min
+        if delta_max is not None:
+            params_for_cache["delta_max"] = delta_max
+        if fields:
+            params_for_cache["fields"] = ",".join(fields)
+
+        def _do_fetch() -> List[Dict[str, Any]]:
+            return self._get_strikes_http(
+                ticker_upper, dte_min, dte_max, delta_min, delta_max, fields
+            )
+
+        try:
+            from app.core.data.cache_policy import get_ttl
+            from app.core.data.cache_store import fetch_with_cache
+            return fetch_with_cache(
+                "strikes", ticker_upper, params_for_cache, get_ttl("strikes"), _do_fetch
+            )
+        except ImportError:
+            pass
+        except OratsDelayedError:
+            raise
+
+        return self._get_strikes_http(
+            ticker_upper, dte_min, dte_max, delta_min, delta_max, fields
+        )
+
+    def _get_strikes_http(
+        self,
+        ticker: str,
+        dte_min: Optional[int],
+        dte_max: Optional[int],
+        delta_min: Optional[float],
+        delta_max: Optional[float],
+        fields: Optional[List[str]],
+    ) -> List[Dict[str, Any]]:
+        """HTTP implementation of get_strikes (used by cache layer)."""
         _RATE_LIMITER.acquire()
-        
+
         url = f"{self.base_url}{ORATS_STRIKES_PATH}"
         params: Dict[str, str] = {
             "token": _get_orats_token(),

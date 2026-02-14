@@ -18,15 +18,17 @@ import json
 import logging
 import os
 import tempfile
-from datetime import datetime, timezone
+from collections import defaultdict
+from dataclasses import asdict
+from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional, TypeVar
 
 from app.core.config.eval_config import CACHE_DIR, CACHE_ENABLED
 
 logger = logging.getLogger(__name__)
 
-# TTL defaults (seconds)
+# TTL defaults (seconds) — prefer cache_policy.get_ttl() for Phase 8.9
 TTL_PRICE = 60
 TTL_BID_ASK_VOLUME_OI = 60
 TTL_IV_RANK = 86400  # 1 day
@@ -35,6 +37,10 @@ TTL_CALENDAR_EVENTS = 86400  # 1 day
 # Stats
 _cache_hits = 0
 _cache_misses = 0
+_cache_hits_by_endpoint: Dict[str, int] = defaultdict(int)
+_cache_misses_by_endpoint: Dict[str, int] = defaultdict(int)
+
+T = TypeVar("T")
 
 
 def _safe_key(key: str) -> str:
@@ -124,21 +130,51 @@ def cache_stats() -> Dict[str, Any]:
     }
 
 
-def _record_hit() -> None:
+def cache_stats_by_endpoint() -> Dict[str, Dict[str, Any]]:
+    """Phase 8.9: Per-endpoint hit/miss and hit rate."""
+    out: Dict[str, Dict[str, Any]] = {}
+    all_endpoints = set(_cache_hits_by_endpoint) | set(_cache_misses_by_endpoint)
+    for ep in sorted(all_endpoints):
+        hits = _cache_hits_by_endpoint.get(ep, 0)
+        misses = _cache_misses_by_endpoint.get(ep, 0)
+        total = hits + misses
+        hit_rate = 100.0 * hits / total if total > 0 else 0.0
+        out[ep] = {
+            "hits": hits,
+            "misses": misses,
+            "hit_rate_pct": round(hit_rate, 1),
+        }
+    return out
+
+
+def _record_hit(endpoint_name: str = "") -> None:
     global _cache_hits
     _cache_hits += 1
+    if endpoint_name:
+        _cache_hits_by_endpoint[endpoint_name] = _cache_hits_by_endpoint.get(endpoint_name, 0) + 1
 
 
-def _record_miss() -> None:
+def _record_miss(endpoint_name: str = "") -> None:
     global _cache_misses
     _cache_misses += 1
+    if endpoint_name:
+        _cache_misses_by_endpoint[endpoint_name] = _cache_misses_by_endpoint.get(endpoint_name, 0) + 1
 
 
 def reset_cache_stats() -> None:
     """Reset hit/miss counters (for tests)."""
-    global _cache_hits, _cache_misses
+    global _cache_hits, _cache_misses, _cache_hits_by_endpoint, _cache_misses_by_endpoint
     _cache_hits = 0
     _cache_misses = 0
+    _cache_hits_by_endpoint = defaultdict(int)
+    _cache_misses_by_endpoint = defaultdict(int)
+
+
+def _normalized_params(params: Dict[str, Any]) -> str:
+    """Phase 8.9: Sorted key=value for cache key (exclude token)."""
+    skip = {"token"}
+    parts = sorted(f"{k}={v}" for k, v in params.items() if k not in skip and v is not None)
+    return ":".join(parts) if parts else ""
 
 
 def fetch_with_cache(
@@ -160,18 +196,60 @@ def fetch_with_cache(
         return fetcher()
 
     as_of = params.get("as_of") or date.today().isoformat()
-    key = f"{endpoint_name}:{symbol.upper()}:{as_of}"
+    param_str = _normalized_params(params)
+    key = f"{endpoint_name}:{symbol.upper()}:{param_str}:{as_of}"
 
     cached = cache_get(key)
     if cached is not None and is_fresh(cached, ttl_seconds):
-        _record_hit()
+        _record_hit(endpoint_name)
         return cached.get("value")
 
-    _record_miss()
+    _record_miss(endpoint_name)
     try:
         result = fetcher()
         cache_set(key, {"value": result, "cached_at": datetime.now(timezone.utc).isoformat()})
         return result
     except Exception:
         # Do NOT cache errors
+        raise
+
+
+def fetch_batch_with_cache(
+    endpoint_name: str,
+    symbols: List[str],
+    params: Dict[str, Any],
+    ttl_seconds: int,
+    fetcher: Callable[[], Dict[str, Any]],
+    *,
+    serialize: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
+    deserialize: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    Phase 8.9: Cache-aware batch fetch. Key = endpoint:sorted_symbols:params:as_of.
+    If cache enabled and fresh -> return cached (deserialized if deserialize provided).
+    Else call fetcher(), store, return. Errors are not cached.
+    """
+    from datetime import date
+
+    if not CACHE_ENABLED:
+        return fetcher()
+
+    sorted_syms = ",".join(sorted(s.upper() for s in symbols))
+    as_of = params.get("as_of") or date.today().isoformat()
+    param_str = _normalized_params(params)
+    key = f"{endpoint_name}:{sorted_syms}:{param_str}:{as_of}"
+
+    cached = cache_get(key)
+    if cached is not None and is_fresh(cached, ttl_seconds):
+        _record_hit(endpoint_name)
+        raw = cached.get("value")
+        return deserialize(raw) if deserialize and raw else raw
+
+    _record_miss(endpoint_name)
+    try:
+        result = fetcher()
+        to_store = serialize(result) if serialize else result
+        cache_set(key, {"value": to_store, "cached_at": datetime.now(timezone.utc).isoformat()})
+        return result
+    except Exception:
         raise

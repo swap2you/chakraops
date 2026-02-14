@@ -48,7 +48,7 @@ def test_budget_status_counters():
         max_requests_estimate=1000,
         started_at=now,
     )
-    budget.record_batch(10, requests_estimate=30)
+    budget.record_batch(10, requests_estimate=30)  # explicit requests_estimate
     budget.record_batch(5, requests_estimate=15)
     status = budget.budget_status()
     assert status["symbols_processed"] == 15

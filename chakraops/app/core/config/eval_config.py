@@ -53,6 +53,8 @@ def _cache_dir() -> Path:
 
 CACHE_DIR: Path = _cache_dir()
 CACHE_ENABLED: bool = _bool_env("CACHE_ENABLED", True)
+CACHE_MAX_AGE_DAYS: int = _int_env("CACHE_MAX_AGE_DAYS", 7)
+CACHE_MAX_FILES: int = _int_env("CACHE_MAX_FILES", 20000)
 
 __all__ = [
     "EVALUATION_QUOTE_WINDOW_MINUTES",
@@ -63,4 +65,6 @@ __all__ = [
     "EVAL_MAX_REQUESTS_ESTIMATE",
     "CACHE_DIR",
     "CACHE_ENABLED",
+    "CACHE_MAX_AGE_DAYS",
+    "CACHE_MAX_FILES",
 ]

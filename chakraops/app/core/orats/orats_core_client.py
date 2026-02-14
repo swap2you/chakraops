@@ -121,8 +121,9 @@ def fetch_core_snapshot(
         return dict(rows[0])
 
     try:
-        from app.core.data.cache_store import TTL_IV_RANK, fetch_with_cache
-        snapshot = fetch_with_cache("cores", ticker_upper, params_for_cache, TTL_IV_RANK, _do_fetch)
+        from app.core.data.cache_policy import get_ttl
+        from app.core.data.cache_store import fetch_with_cache
+        snapshot = fetch_with_cache("cores", ticker_upper, params_for_cache, get_ttl("cores"), _do_fetch)
         return snapshot
     except ImportError:
         pass

@@ -79,8 +79,10 @@ class NightlySummary:
     blocks: int = 0
     errors_count: int = 0
 
-    # Phase 8.8: Eval throughput (optional)
+    # Phase 8.8/8.9: Eval throughput (optional)
     cache_hit_rate_pct: Optional[float] = None
+    requests_estimated: Optional[int] = None
+    top_endpoint_hit_rate: Optional[str] = None
 
     # Top candidates and holds
     top_eligible: List[Dict[str, Any]] = field(default_factory=list)
@@ -118,12 +120,19 @@ def build_slack_message(summary: NightlySummary) -> Dict[str, Any]:
     ]
     if summary.errors_count > 0:
         counts_lines.append(f"*Errors:* {summary.errors_count} :warning:")
-    # Phase 8.8: Eval throughput line
-    if summary.cache_hit_rate_pct is not None:
-        counts_lines.append(
-            f"*Eval throughput:* processed {summary.evaluated} symbols, "
-            f"cache hit rate {summary.cache_hit_rate_pct:.0f}%, wall time {summary.duration_seconds:.0f}s"
-        )
+    # Phase 8.8/8.9: Eval throughput line
+    if summary.cache_hit_rate_pct is not None or summary.requests_estimated is not None:
+        parts = [
+            f"processed {summary.evaluated} symbols",
+            f"wall time {summary.duration_seconds:.0f}s",
+        ]
+        if summary.cache_hit_rate_pct is not None:
+            parts.append(f"cache hit rate {summary.cache_hit_rate_pct:.0f}%")
+        if summary.requests_estimated is not None:
+            parts.append(f"requests_est {summary.requests_estimated}")
+        if summary.top_endpoint_hit_rate:
+            parts.append(summary.top_endpoint_hit_rate)
+        counts_lines.append(f"*Eval throughput:* {', '.join(parts)}")
     counts_text = "\n".join(counts_lines)
 
     # Top eligible section
@@ -339,6 +348,16 @@ def run_nightly_evaluation(
         except Exception:
             pass
 
+        # Phase 8.9: Prune cache at start (do not fail run)
+        try:
+            from app.core.data.cache_pruner import prune_cache
+            from app.core.config.eval_config import CACHE_DIR, CACHE_MAX_AGE_DAYS, CACHE_MAX_FILES
+            pruned = prune_cache(CACHE_DIR, max_age_days=CACHE_MAX_AGE_DAYS, max_files=CACHE_MAX_FILES)
+            if pruned.get("deleted", 0) > 0:
+                logger.info("[NIGHTLY] Cache pruned: deleted=%s remaining=%s", pruned.get("deleted"), pruned.get("remaining"))
+        except Exception as e:
+            logger.warning("[NIGHTLY] Cache prune failed (non-fatal): %s", e)
+
         # Phase 8.7: Load symbols from tiered universe manifest
         from pathlib import Path
         from app.core.universe.universe_manager import get_symbols_for_cycle, load_universe_manifest
@@ -386,7 +405,7 @@ def run_nightly_evaluation(
                 raise TypeError("evaluate_universe_staged must return StagedEvaluationResult")
             staged_results.extend(staged_out.results)
             exposure_summary = staged_out.exposure_summary
-            budget.record_batch(len(batch), requests_estimate=len(batch) * 3)
+            budget.record_batch(len(batch), endpoints_used=["cores", "strikes", "iv_rank"])
 
         if budget_stopped:
             result["budget_stopped"] = True
@@ -468,11 +487,19 @@ def run_nightly_evaluation(
         save_run(run)
         update_latest_pointer(run_id, completed_at)
         
-        # Build Slack summary (Phase 8.8: include cache hit rate)
+        # Build Slack summary (Phase 8.8/8.9: cache hit rate, requests_estimated, top endpoint)
         cache_hit_rate = None
+        top_endpoint_hit_rate = None
         try:
-            from app.core.data.cache_store import cache_stats
-            cache_hit_rate = cache_stats().get("cache_hit_rate_pct")
+            from app.core.data.cache_store import cache_stats, cache_stats_by_endpoint
+            cs = cache_stats()
+            cache_hit_rate = cs.get("cache_hit_rate_pct")
+            by_ep = cache_stats_by_endpoint()
+            if by_ep:
+                best = max(by_ep.items(), key=lambda x: x[1].get("hits", 0) + x[1].get("misses", 0))
+                ep_name, ep_stats = best
+                rate = ep_stats.get("hit_rate_pct", 0)
+                top_endpoint_hit_rate = f"top_ep={ep_name} {rate:.0f}%"
         except Exception:
             pass
         summary = NightlySummary(
@@ -489,6 +516,8 @@ def run_nightly_evaluation(
             holds=len(hold_list),
             blocks=len(block_list),
             cache_hit_rate_pct=cache_hit_rate,
+            requests_estimated=budget.requests_estimated,
+            top_endpoint_hit_rate=top_endpoint_hit_rate,
             top_eligible=top_candidates,
             top_holds=top_holds,
         )
@@ -535,11 +564,20 @@ def run_nightly_evaluation(
         try:
             from app.core.system.watchdog import run_watchdog_checks
             cycle_min = manifest.get("cycle_minutes") or 30
+            ep_stats = None
+            try:
+                from app.core.data.cache_store import cache_stats_by_endpoint
+                ep_stats = cache_stats_by_endpoint()
+            except Exception:
+                pass
             run_watchdog_checks(
                 last_run_timestamp=None,
                 interval_minutes=int(cycle_min),
                 wall_time_sec=duration,
                 cache_hit_rate_pct=cache_hit_rate,
+                requests_estimated=budget.requests_estimated,
+                max_requests_estimate=budget.max_requests_estimate,
+                cache_stats_by_endpoint=ep_stats,
             )
         except Exception:
             pass

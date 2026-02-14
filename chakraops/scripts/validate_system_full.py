@@ -552,6 +552,9 @@ def main() -> int:
         try:
             from app.core.positions.position_ledger import load_open_positions
             from app.core.alerts.slack_dispatcher import route_alert
+            from app.core.portfolio.portfolio_snapshot import build_portfolio_snapshot
+            from app.core.portfolio.assignment_stress_simulator import simulate_assignment_stress_dynamic
+            from app.core.portfolio.portfolio_daily_summary import build_portfolio_daily_summary
             open_positions = load_open_positions(repo_root / "artifacts" / "positions" / "open_positions.json")
             top5 = ranked[:5] if ranked else []
             top_signals = [{"symbol": p.get("symbol"), "tier": p.get("tier"), "severity": p.get("severity")} for p in top5]
@@ -585,18 +588,30 @@ def main() -> int:
                         pass
                 if captures:
                     average_premium_capture = sum(captures) / len(captures)
+            # Phase 8.5: Portfolio Risk Summary for DAILY
+            portfolio_risk_summary = None
+            try:
+                snapshot = build_portfolio_snapshot(open_positions, account_equity)
+                snapshot["portfolio_equity_usd"] = account_equity
+                stress_dynamic = simulate_assignment_stress_dynamic(snapshot, open_positions)
+                portfolio_risk_summary = build_portfolio_daily_summary(snapshot, stress_dynamic)
+            except Exception:
+                pass
+            daily_payload = {
+                "top_signals": top_signals,
+                "top_count": len(top5),
+                "open_positions_count": len(open_positions),
+                "total_capital_used": total_capital_used,
+                "exposure_pct": exposure_pct,
+                "average_premium_capture": average_premium_capture,
+                "exit_alerts_today": exit_alerts_today,
+                "alerts_count": exit_alerts_today,
+            }
+            if portfolio_risk_summary is not None:
+                daily_payload["portfolio_risk_summary"] = portfolio_risk_summary
             route_alert(
                 "DAILY",
-                {
-                    "top_signals": top_signals,
-                    "top_count": len(top5),
-                    "open_positions_count": len(open_positions),
-                    "total_capital_used": total_capital_used,
-                    "exposure_pct": exposure_pct,
-                    "average_premium_capture": average_premium_capture,
-                    "exit_alerts_today": exit_alerts_today,
-                    "alerts_count": exit_alerts_today,
-                },
+                daily_payload,
                 event_key="daily:summary",
                 state_path=repo_root / "artifacts" / "alerts" / "last_sent_state.json",
             )

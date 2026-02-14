@@ -236,6 +236,13 @@ def _fmt_daily(p: Dict[str, Any]) -> str:
     avg_cap = p.get("average_premium_capture")
     lines.append("Average Premium Capture: %s" % ("%.0f%%" % (avg_cap * 100) if avg_cap is not None else "N/A"))
     lines.append("Exit Alerts Today: %s" % (p.get("exit_alerts_today") or p.get("alerts_count") or 0))
+    # Phase 8.5: Portfolio Risk Summary section
+    prs = p.get("portfolio_risk_summary")
+    if prs and isinstance(prs, dict):
+        lines.append("")
+        lines.append("*%s*" % (prs.get("title") or "Portfolio Risk Summary"))
+        for ln in prs.get("lines") or []:
+            lines.append(ln)
     return "\n".join(lines)
 
 

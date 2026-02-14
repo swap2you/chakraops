@@ -323,10 +323,22 @@ def run_nightly_evaluation(
     start_time = time.time()
     
     try:
-        # Load universe symbols
-        from app.api.data_health import UNIVERSE_SYMBOLS
-        symbols = list(UNIVERSE_SYMBOLS)
-        
+        # Phase 8.7: Load symbols from tiered universe manifest
+        from pathlib import Path
+        from app.core.universe.universe_manager import get_symbols_for_cycle, load_universe_manifest
+        from app.core.universe.universe_state_store import UniverseStateStore
+
+        repo = Path(__file__).resolve().parents[3]
+        manifest_path = repo / "artifacts" / "config" / "universe.json"
+        manifest = load_universe_manifest(manifest_path)
+        state_store = UniverseStateStore(repo / "artifacts" / "state" / "universe_state.json")
+        now_utc = datetime.now(timezone.utc)
+        symbols = get_symbols_for_cycle(manifest, now_utc, state_store)
+        if not symbols:
+            from app.api.data_health import UNIVERSE_SYMBOLS
+            symbols = list(UNIVERSE_SYMBOLS)
+            logger.info("[NIGHTLY] No universe tiers due; falling back to UNIVERSE_SYMBOLS (%d symbols)", len(symbols))
+
         if config.max_symbols and config.max_symbols < len(symbols):
             symbols = symbols[:config.max_symbols]
             logger.info("[NIGHTLY] Limited to %d symbols", config.max_symbols)

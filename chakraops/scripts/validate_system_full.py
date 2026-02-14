@@ -147,15 +147,28 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Full system validation (ORATS, indicators, regime, eligibility, Stage-2)")
     parser.add_argument("--symbol", default="SPY", help="Single symbol (default: SPY)")
     parser.add_argument("--symbols", default="", help="Comma-separated symbols for ranking (e.g. SPY,NVDA,AAPL,MSFT)")
+    parser.add_argument("--use-universe", action="store_true", help="Phase 8.7: Use tiered universe manifest (ignored if --symbols set)")
     parser.add_argument("--daily-summary", action="store_true", help="Send Slack DAILY summary alert")
     args = parser.parse_args()
+    repo_root = Path(__file__).resolve().parents[1]
     if (args.symbols or "").strip():
         symbols = [s.strip().upper() for s in args.symbols.strip().split(",") if s.strip()]
+    elif getattr(args, "use_universe", False):
+        try:
+            from app.core.universe.universe_manager import get_symbols_for_cycle, load_universe_manifest
+            from app.core.universe.universe_state_store import UniverseStateStore
+            manifest = load_universe_manifest(repo_root / "artifacts" / "config" / "universe.json")
+            state_store = UniverseStateStore(repo_root / "artifacts" / "state" / "universe_state.json")
+            now_utc = datetime.now(timezone.utc)
+            symbols = get_symbols_for_cycle(manifest, now_utc, state_store)
+            if not symbols:
+                symbols = [(args.symbol or "SPY").strip().upper()]
+        except Exception:
+            symbols = [(args.symbol or "SPY").strip().upper()]
     else:
         symbols = [(args.symbol or "SPY").strip().upper()]
 
     run_id = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + uuid.uuid4().hex[:8]
-    repo_root = Path(__file__).resolve().parents[1]
     lookback = 400
 
     results: List[Dict[str, Any]] = []

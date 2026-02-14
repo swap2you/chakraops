@@ -82,6 +82,12 @@ def main() -> int:
     )
     
     parser.add_argument(
+        "--use-universe",
+        action="store_true",
+        help="Phase 8.7: Use tiered universe manifest for symbol list (manual mode)",
+    )
+    
+    parser.add_argument(
         "-v", "--verbose",
         action="store_true",
         help="Enable verbose logging",
@@ -171,10 +177,28 @@ def run_nightly_mode(args: argparse.Namespace) -> int:
 
 def run_manual_mode(args: argparse.Namespace) -> int:
     """Run manual evaluation (same as API trigger)."""
-    from app.api.data_health import UNIVERSE_SYMBOLS
+    from pathlib import Path
+
     from app.core.eval.universe_evaluator import run_universe_evaluation_staged
-    
-    symbols = list(UNIVERSE_SYMBOLS)
+
+    if getattr(args, "use_universe", False):
+        try:
+            from app.core.universe.universe_manager import get_symbols_for_cycle, load_universe_manifest
+            from app.core.universe.universe_state_store import UniverseStateStore
+            repo = Path(__file__).resolve().parent
+            manifest = load_universe_manifest(repo / "artifacts" / "config" / "universe.json")
+            state_store = UniverseStateStore(repo / "artifacts" / "state" / "universe_state.json")
+            now_utc = datetime.now(timezone.utc)
+            symbols = get_symbols_for_cycle(manifest, now_utc, state_store)
+            if not symbols:
+                from app.api.data_health import UNIVERSE_SYMBOLS
+                symbols = list(UNIVERSE_SYMBOLS)
+        except Exception:
+            from app.api.data_health import UNIVERSE_SYMBOLS
+            symbols = list(UNIVERSE_SYMBOLS)
+    else:
+        from app.api.data_health import UNIVERSE_SYMBOLS
+        symbols = list(UNIVERSE_SYMBOLS)
     if args.max_symbols:
         symbols = symbols[:args.max_symbols]
     

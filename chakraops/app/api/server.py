@@ -2611,6 +2611,69 @@ def api_view_evaluation_run(run_id: str) -> Dict[str, Any]:
         return {"found": False, "run_id": run_id, "reason": f"Error: {e}"}
 
 
+# ============================================================================
+# PHASE UI-1: EVAL / RUN RESULTS / SYSTEM HEALTH
+# ============================================================================
+
+@app.get("/api/eval/latest-run")
+def api_eval_latest_run() -> Dict[str, Any]:
+    """Phase UI-1: Latest run state, top ranked, warnings, throughput."""
+    try:
+        from app.api.eval_routes import build_latest_run_response
+        return build_latest_run_response()
+    except ImportError as e:
+        return {
+            "run_id": None,
+            "as_of": None,
+            "status": "ERROR",
+            "reason": str(e),
+            "top_ranked": [],
+            "warnings": [],
+            "throughput": {},
+        }
+    except Exception as e:
+        logger.exception("api_eval_latest_run: %s", e)
+        return {
+            "run_id": None,
+            "as_of": None,
+            "status": "ERROR",
+            "reason": str(e),
+            "top_ranked": [],
+            "warnings": [],
+            "throughput": {},
+        }
+
+
+@app.get("/api/eval/symbol/{symbol}")
+def api_eval_symbol(symbol: str) -> Dict[str, Any]:
+    """Phase UI-1: Full evaluation payload for a symbol (drilldown)."""
+    try:
+        from app.api.eval_routes import build_symbol_response
+        return build_symbol_response(symbol)
+    except ImportError as e:
+        return {"symbol": symbol, "error": str(e)}
+    except Exception as e:
+        logger.exception("api_eval_symbol %s: %s", symbol, e)
+        return {"symbol": symbol, "error": str(e)}
+
+
+@app.get("/api/system/health")
+def api_system_health() -> Dict[str, Any]:
+    """Phase UI-1: Watchdog, cache, budget state from last run."""
+    try:
+        from app.api.eval_routes import build_system_health_response
+        return build_system_health_response()
+    except ImportError as e:
+        return {"run_id": None, "watchdog": {"warnings": []}, "cache": {}, "budget": {}, "error": str(e)}
+    except Exception as e:
+        logger.exception("api_system_health: %s", e)
+        return {"run_id": None, "watchdog": {"warnings": []}, "cache": {}, "budget": {}, "error": str(e)}
+
+
+# ============================================================================
+# EVALUATION RUN PERSISTENCE ENDPOINTS
+# ============================================================================
+
 @app.get("/api/view/evaluation/status/current")
 def api_view_evaluation_status_current() -> Dict[str, Any]:
     """

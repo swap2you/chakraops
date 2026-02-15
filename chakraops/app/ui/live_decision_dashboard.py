@@ -1062,6 +1062,18 @@ def main() -> None:
         _render_footer()
         return
 
+    # Phase UI-1: Run Results page (does not need decision artifact)
+    if current_page == "run_results":
+        st.subheader("Universe Run Results")
+        from app.ui.run_results_ui import render_run_results_tab, render_diagnostics_tab
+        rr_tab, diag_tab = st.tabs(["Ranked Candidates", "System Diagnostics"])
+        with rr_tab:
+            render_run_results_tab()
+        with diag_tab:
+            render_diagnostics_tab()
+        _render_footer()
+        return
+
     file_labels = [f.path.name for f in decision_files]
     default_idx = 0
     selected_label = st.sidebar.selectbox("Snapshot", file_labels, index=default_idx, key="snapshot_select")

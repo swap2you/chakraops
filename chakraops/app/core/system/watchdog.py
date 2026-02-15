@@ -286,3 +286,37 @@ def run_watchdog_checks(
             )
         except Exception as e:
             logger.warning("[Watchdog] NO_SIGNALS_24H alert failed: %s", e)
+
+
+def collect_watchdog_warnings(
+    last_run_timestamp: Optional[str] = None,
+    interval_minutes: int = 30,
+    orats_rolling_avg_ms: Optional[float] = None,
+    has_signals_in_24h: bool = True,
+    wall_time_sec: Optional[float] = None,
+    cache_hit_rate_pct: Optional[float] = None,
+    requests_estimated: Optional[int] = None,
+    max_requests_estimate: Optional[int] = None,
+    cache_stats_by_endpoint: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Run all watchdog checks and return any warning payloads (without sending alerts).
+    Used by UI-1 diagnostics persistence.
+    """
+    warnings: List[Dict[str, Any]] = []
+    for fn, args in [
+        (check_scheduler_health, (last_run_timestamp, interval_minutes)),
+        (check_orats_latency, (orats_rolling_avg_ms,)),
+        (check_eval_wall_time, (wall_time_sec or 0, interval_minutes)),
+        (check_cache_hit_rate, (cache_hit_rate_pct,)),
+        (check_requests_vs_budget, (requests_estimated, max_requests_estimate)),
+        (check_cache_hit_rate_hot_endpoint, (cache_stats_by_endpoint,)),
+        (check_signals_24h, (has_signals_in_24h,)),
+    ]:
+        try:
+            p = fn(*args)
+            if p:
+                warnings.append(p)
+        except Exception:
+            pass
+    return warnings

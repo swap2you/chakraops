@@ -664,15 +664,15 @@ def run_nightly_evaluation(
         print(f"[NIGHTLY] Completed: {len(eligible_list)} eligible, {len(hold_list)} holds, Slack: {slack_msg}")
 
         # Phase 8.8: Run health checks (wall time, cache hit rate)
+        ep_stats = None
+        try:
+            from app.core.data.cache_store import cache_stats_by_endpoint
+            ep_stats = cache_stats_by_endpoint()
+        except Exception:
+            pass
+        cycle_min = manifest.get("cycle_minutes") or 30
         try:
             from app.core.system.watchdog import run_watchdog_checks
-            cycle_min = manifest.get("cycle_minutes") or 30
-            ep_stats = None
-            try:
-                from app.core.data.cache_store import cache_stats_by_endpoint
-                ep_stats = cache_stats_by_endpoint()
-            except Exception:
-                pass
             run_watchdog_checks(
                 last_run_timestamp=None,
                 interval_minutes=int(cycle_min),
@@ -684,6 +684,34 @@ def run_nightly_evaluation(
             )
         except Exception:
             pass
+
+        # Phase UI-1: Persist run diagnostics for /api/eval and /api/system/health
+        try:
+            from app.core.eval.run_diagnostics_store import save_run_diagnostics
+            from app.core.system.watchdog import collect_watchdog_warnings
+            wd_warnings = collect_watchdog_warnings(
+                interval_minutes=int(cycle_min),
+                wall_time_sec=duration,
+                cache_hit_rate_pct=cache_hit_rate,
+                requests_estimated=budget.requests_estimated,
+                max_requests_estimate=budget.max_requests_estimate,
+                cache_stats_by_endpoint=ep_stats,
+            )
+            save_run_diagnostics(
+                run_id=run_id,
+                wall_time_sec=duration,
+                requests_estimated=budget.requests_estimated,
+                max_requests_estimate=budget.max_requests_estimate,
+                cache_hit_rate_pct=cache_hit_rate,
+                cache_hit_rate_by_endpoint=ep_stats,
+                gate_skips_count=gate_skips_count,
+                gate_skip_reasons_summary=gate_reasons_summary,
+                budget_stopped=result.get("budget_stopped", False),
+                budget_warning=result.get("budget_warning"),
+                watchdog_warnings=wd_warnings,
+            )
+        except Exception as e:
+            logger.debug("[NIGHTLY] Run diagnostics save failed (non-fatal): %s", e)
         
     except Exception as e:
         logger.exception("[NIGHTLY] Evaluation failed: %s", e)

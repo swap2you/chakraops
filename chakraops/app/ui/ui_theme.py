@@ -380,6 +380,7 @@ def humanize_label(key: str) -> str:
 # Sidebar nav: (label, page_id, icon_name) for vertical nav
 NAV_ITEMS = [
     ("Dashboard", "dashboard", "circle-live"),
+    ("Run Results", "run_results", "database"),  # Phase UI-1: eval run + diagnostics
     ("Diagnostics", "diagnostics", "pulse"),
     ("Strategy", "strategy", "shield"),
     ("Configuration", "configuration", "database"),

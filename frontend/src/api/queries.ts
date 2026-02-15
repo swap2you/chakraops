@@ -7,11 +7,11 @@ import { useQuery } from "@tanstack/react-query";
 import { apiGet } from "./client";
 import type {
   ArtifactListResponse,
-  DataHealthResponse,
   DecisionResponse,
   UniverseResponse,
   SymbolDiagnosticsResponseExtended,
-  SystemHealthResponse,
+  UiSystemHealthResponse,
+  UiTrackedPositionsResponse,
 } from "./types";
 import type { DecisionMode } from "./types";
 
@@ -39,12 +39,12 @@ function symbolDiagnosticsPath(symbol: string): string {
   return `/api/ui/symbol-diagnostics?symbol=${encodeURIComponent(symbol)}`;
 }
 
-function systemHealthPath(): string {
-  return `/api/healthz`;
+function uiSystemHealthPath(): string {
+  return `/api/ui/system-health`;
 }
 
-function dataHealthPath(): string {
-  return `/api/ops/data-health`;
+function uiTrackedPositionsPath(): string {
+  return `/api/ui/positions/tracked`;
 }
 
 // =============================================================================
@@ -60,8 +60,8 @@ export const queryKeys = {
   universe: () => ["ui", "universe"] as const,
   symbolDiagnostics: (symbol: string) =>
     ["ui", "symbolDiagnostics", symbol] as const,
-  systemHealth: () => ["ui", "systemHealth"] as const,
-  dataHealth: () => ["ui", "dataHealth"] as const,
+  uiSystemHealth: () => ["ui", "systemHealth"] as const,
+  uiTrackedPositions: () => ["ui", "positions", "tracked"] as const,
 };
 
 // =============================================================================
@@ -93,25 +93,28 @@ export function useUniverse() {
   });
 }
 
-export function useSymbolDiagnostics(symbol: string) {
+export function useSymbolDiagnostics(
+  symbol: string,
+  enabled = true
+) {
   return useQuery({
     queryKey: queryKeys.symbolDiagnostics(symbol),
     queryFn: () =>
       apiGet<SymbolDiagnosticsResponseExtended>(symbolDiagnosticsPath(symbol)),
-    enabled: symbol.trim().length > 0,
+    enabled: enabled && symbol.trim().length > 0,
   });
 }
 
-export function useSystemHealth() {
+export function useUiSystemHealth() {
   return useQuery({
-    queryKey: queryKeys.systemHealth(),
-    queryFn: () => apiGet<SystemHealthResponse>(systemHealthPath()),
+    queryKey: queryKeys.uiSystemHealth(),
+    queryFn: () => apiGet<UiSystemHealthResponse>(uiSystemHealthPath()),
   });
 }
 
-export function useDataHealth() {
+export function useUiTrackedPositions() {
   return useQuery({
-    queryKey: queryKeys.dataHealth(),
-    queryFn: () => apiGet<DataHealthResponse>(dataHealthPath()),
+    queryKey: queryKeys.uiTrackedPositions(),
+    queryFn: () => apiGet<UiTrackedPositionsResponse>(uiTrackedPositionsPath()),
   });
 }

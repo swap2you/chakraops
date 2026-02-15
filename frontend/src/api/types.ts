@@ -166,32 +166,60 @@ export interface SymbolDiagnosticsResponse {
 }
 
 // =============================================================================
-// SystemHealthResponse — GET /api/healthz (public, not under /api/ui)
+// UiSystemHealthResponse — GET /api/ui/system-health
 // =============================================================================
 
-export interface SystemHealthResponse {
-  ok: boolean;
-  status?: string;
+export interface UiSystemHealthApi {
+  status: "OK" | "DOWN";
+  latency_ms?: number;
 }
 
-// =============================================================================
-// DataHealthResponse — GET /api/ops/data-health
-// =============================================================================
-
-export interface DataHealthResponse {
-  provider: string;
-  status: string;
+export interface UiSystemHealthOrats {
+  status: "OK" | "WARN" | "DOWN";
   last_success_at: string | null;
-  last_attempt_at: string | null;
-  last_error_at: string | null;
-  last_error_reason: string | null;
   avg_latency_seconds: number | null;
-  entitlement: string;
-  effective_last_success_at: string | null;
+  last_error_reason?: string | null;
+}
+
+export interface UiSystemHealthMarket {
+  phase: string;
+  is_open: boolean;
+  timestamp: string | null;
+}
+
+export interface UiSystemHealthScheduler {
+  interval_minutes?: number | null;
+  nightly_next_at?: string | null;
+  eod_next_at?: string | null;
+}
+
+export interface UiSystemHealthResponse {
+  api: UiSystemHealthApi;
+  orats: UiSystemHealthOrats;
+  market: UiSystemHealthMarket;
+  scheduler: UiSystemHealthScheduler;
 }
 
 // =============================================================================
-// Symbol diagnostics extended (stage breakdown, liquidity)
+// UiTrackedPosition — GET /api/ui/positions/tracked
+// =============================================================================
+
+export interface UiTrackedPosition {
+  symbol: string;
+  qty?: number | null;
+  contracts?: number | null;
+  avg_price?: number | null;
+  notional?: number | null;
+  updated_at?: string | null;
+  status?: string | null;
+}
+
+export interface UiTrackedPositionsResponse {
+  positions: UiTrackedPosition[];
+}
+
+// =============================================================================
+// Symbol diagnostics extended (stage breakdown, liquidity, execution confidence)
 // =============================================================================
 
 export interface SymbolEligibilityDetail {
@@ -207,7 +235,73 @@ export interface SymbolLiquidityDetail {
   reason: string | null;
 }
 
+/** Eligibility trace computed fields (RSI, ATR, S/R). */
+export interface SymbolDiagnosticsComputed {
+  rsi?: number | null;
+  atr?: number | null;
+  atr_pct?: number | null;
+  support_level?: number | null;
+  resistance_level?: number | null;
+}
+
+/** Exit plan structure (T1, T2, T3, stop hint). */
+export interface SymbolDiagnosticsExitPlan {
+  t1?: number | null;
+  t2?: number | null;
+  t3?: number | null;
+  stop?: number | null;
+}
+
+/** Candidate trade (strike, expiry, delta, credit_estimate, max_loss). */
+export interface SymbolDiagnosticsCandidate {
+  strategy?: string;
+  strike?: number | null;
+  expiry?: string | null;
+  delta?: number | null;
+  credit_estimate?: number | null;
+  max_loss?: number | null;
+  why_this_trade?: string | null;
+}
+
+/** Score breakdown (composite_score, component scores). */
+export interface SymbolDiagnosticsScoreBreakdown {
+  data_quality_score?: number;
+  regime_score?: number;
+  options_liquidity_score?: number;
+  strategy_fit_score?: number;
+  capital_efficiency_score?: number;
+  composite_score?: number;
+  csp_notional?: number | null;
+  notional_pct?: number | null;
+}
+
+/** Rank reasons (reasons[], penalty). */
+export interface SymbolDiagnosticsRankReasons {
+  reasons?: string[];
+  penalty?: string | null;
+}
+
 export interface SymbolDiagnosticsResponseExtended extends SymbolDiagnosticsResponse {
   symbol_eligibility?: SymbolEligibilityDetail;
   liquidity?: SymbolLiquidityDetail;
+  /** Eligibility trace computed: RSI, ATR, support/resistance levels. */
+  computed?: SymbolDiagnosticsComputed;
+  /** Composite score (0-100). */
+  composite_score?: number | null;
+  /** Confidence band (A | B | C). */
+  confidence_band?: string | null;
+  /** Suggested capital % per position. */
+  suggested_capital_pct?: number | null;
+  /** Reason for band assignment. */
+  band_reason?: string | null;
+  /** Full candidate contract list. */
+  candidates?: SymbolDiagnosticsCandidate[];
+  /** Exit plan (t1, t2, t3, stop). */
+  exit_plan?: SymbolDiagnosticsExitPlan;
+  /** Score breakdown. */
+  score_breakdown?: SymbolDiagnosticsScoreBreakdown | null;
+  /** Rank reasons. */
+  rank_reasons?: SymbolDiagnosticsRankReasons | null;
+  /** Regime (UP | DOWN | SIDEWAYS from eligibility). */
+  regime?: string | null;
 }

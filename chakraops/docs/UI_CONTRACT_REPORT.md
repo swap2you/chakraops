@@ -98,13 +98,24 @@
         "stock": "object | null",
         "gates": "array",
         "blockers": "array",
-        "notes": "array"
+        "notes": "array",
+        "symbol_eligibility": "object",
+        "liquidity": "object",
+        "computed": "object (rsi, atr, atr_pct, support_level, resistance_level)",
+        "composite_score": "number | null",
+        "confidence_band": "string | null (A|B|C)",
+        "suggested_capital_pct": "number | null",
+        "band_reason": "string | null",
+        "candidates": "array (candidate trades: strike, expiry, delta, credit_estimate, max_loss)",
+        "exit_plan": "object (t1, t2, t3, stop)",
+        "score_breakdown": "object | null",
+        "rank_reasons": "object | null"
       },
       "source": "app.api.symbol_diagnostics.get_symbol_diagnostics -> api_view_symbol_diagnostics",
       "reads_artifacts": true,
       "reads_filesystem": false,
       "live_mock_sensitive": false,
-      "notes": "UI-friendly subset of full diagnostics. Uses canonical SymbolSnapshot + staged evaluator. Not LIVE/MOCK artifact-based."
+      "notes": "UI-friendly subset of full diagnostics with execution confidence data. Uses canonical SymbolSnapshot + staged evaluator. Not LIVE/MOCK artifact-based."
     }
   ]
 }
@@ -209,6 +220,43 @@ blockers[].message
 blockers[].severity
 blockers[].impact
 notes[]
+symbol_eligibility.status
+symbol_eligibility.required_data_missing
+symbol_eligibility.required_data_stale
+symbol_eligibility.reasons
+liquidity.stock_liquidity_ok
+liquidity.option_liquidity_ok
+liquidity.reason
+computed.rsi
+computed.atr
+computed.atr_pct
+computed.support_level
+computed.resistance_level
+composite_score
+confidence_band
+suggested_capital_pct
+band_reason
+candidates[].strategy
+candidates[].strike
+candidates[].expiry
+candidates[].delta
+candidates[].credit_estimate
+candidates[].max_loss
+candidates[].why_this_trade
+exit_plan.t1
+exit_plan.t2
+exit_plan.t3
+exit_plan.stop
+score_breakdown.data_quality_score
+score_breakdown.regime_score
+score_breakdown.options_liquidity_score
+score_breakdown.strategy_fit_score
+score_breakdown.capital_efficiency_score
+score_breakdown.composite_score
+score_breakdown.csp_notional
+score_breakdown.notional_pct
+rank_reasons.reasons
+rank_reasons.penalty
 ```
 
 ---

@@ -1338,18 +1338,20 @@ def api_view_universe() -> Dict[str, Any]:
                     "symbols": [], "excluded": result.get("excluded", []),
                     "updated_at": datetime.now(timezone.utc).isoformat(), "error": None, "source": "LIVE_COMPUTE",
                 }
-            return {
+            from app.api.response_normalizers import normalize_universe_snapshot
+            return normalize_universe_snapshot({
                 "symbols": result["symbols"],
                 "excluded": result.get("excluded", []),
                 "updated_at": result["updated_at"],
                 "error": None,
                 "source": "LIVE_COMPUTE",
-            }
+            })
         # Market not OPEN: prefer latest artifact to avoid ORATS calls for all symbols
         from app.core.eval.run_artifacts import build_universe_from_latest_artifact
         artifact = build_universe_from_latest_artifact()
         if artifact:
-            return {
+            from app.api.response_normalizers import normalize_universe_snapshot
+            return normalize_universe_snapshot({
                 "symbols": artifact["symbols"],
                 "excluded": artifact.get("excluded", []),
                 "updated_at": artifact["updated_at"],
@@ -1357,7 +1359,7 @@ def api_view_universe() -> Dict[str, Any]:
                 "source": "ARTIFACT_LATEST",
                 "as_of": artifact.get("as_of"),
                 "run_id": artifact.get("run_id"),
-            }
+            })
         from app.api.data_health import fetch_universe_from_canonical_snapshot
         result = fetch_universe_from_canonical_snapshot()
         if result["all_failed"]:
@@ -1366,13 +1368,14 @@ def api_view_universe() -> Dict[str, Any]:
                 "symbols": [], "excluded": result.get("excluded", []),
                 "updated_at": datetime.now(timezone.utc).isoformat(), "error": None, "source": "LIVE_COMPUTE_NO_ARTIFACT",
             }
-        return {
+        from app.api.response_normalizers import normalize_universe_snapshot
+        return normalize_universe_snapshot({
             "symbols": result["symbols"],
             "excluded": result.get("excluded", []),
             "updated_at": result["updated_at"],
             "error": None,
             "source": "LIVE_COMPUTE_NO_ARTIFACT",
-        }
+        })
     except Exception as e:
         logger.warning("[UNIVERSE] Universe load failed: %s; returning empty.", e, exc_info=False)
         return {
@@ -2642,6 +2645,59 @@ def api_eval_latest_run() -> Dict[str, Any]:
             "warnings": [],
             "throughput": {},
         }
+
+
+@app.get("/api/eval/runs")
+def api_eval_runs(limit: int = Query(default=10, ge=1, le=100)) -> list:
+    """Phase UI-2: Run history for Recent Runs table."""
+    try:
+        from app.api.eval_routes import build_runs_response
+        return build_runs_response(limit=limit)
+    except ImportError as e:
+        return []
+    except Exception as e:
+        logger.exception("api_eval_runs: %s", e)
+        return []
+
+
+@app.get("/api/eval/export/latest-run")
+def api_eval_export_latest_run() -> Response:
+    """Phase UI-2: Download latest run JSON."""
+    try:
+        from app.core.eval.run_artifacts import get_latest_run_dir
+        run_dir = get_latest_run_dir()
+        if run_dir:
+            path = run_dir / "evaluation.json"
+            if path.exists():
+                return Response(content=path.read_text(encoding="utf-8"), media_type="application/json")
+        from app.core.eval.evaluation_store import load_latest_pointer, load_run
+        pointer = load_latest_pointer()
+        if pointer:
+            run = load_run(pointer.run_id)
+            if run:
+                import json
+                from dataclasses import asdict
+                return Response(
+                    content=json.dumps(asdict(run), indent=2, default=str),
+                    media_type="application/json",
+                )
+    except Exception as e:
+        logger.warning("api_eval_export_latest_run: %s", e)
+    raise HTTPException(status_code=404, detail="No run available")
+
+
+@app.get("/api/eval/export/diagnostics")
+def api_eval_export_diagnostics() -> Response:
+    """Phase UI-2: Download latest diagnostics JSON."""
+    try:
+        import json
+        from app.core.eval.run_diagnostics_store import load_run_diagnostics
+        diag = load_run_diagnostics()
+        if diag:
+            return Response(content=json.dumps(diag, indent=2, default=str), media_type="application/json")
+    except Exception as e:
+        logger.warning("api_eval_export_diagnostics: %s", e)
+    raise HTTPException(status_code=404, detail="No diagnostics available")
 
 
 @app.get("/api/eval/symbol/{symbol}")

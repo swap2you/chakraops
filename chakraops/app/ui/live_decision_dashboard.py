@@ -34,6 +34,7 @@ from app.ui.live_dashboard_utils import (
     extract_exclusions,
     extract_snapshot_gate_plan_dryrun,
     list_decision_files,
+    list_mock_files,
     load_decision_artifact,
     status_color,
 )
@@ -107,6 +108,10 @@ def _repo_root() -> Path:
 
 def _default_out_dir() -> Path:
     return _repo_root() / "out"
+
+
+LIVE_ARTIFACT_DIR = _repo_root() / "out"
+MOCK_ARTIFACT_DIR = _repo_root() / "out" / "mock"
 
 
 def _fmt_money(v: Any) -> str:
@@ -1052,13 +1057,35 @@ def main() -> None:
     _render_sidebar_nav(current_page)
     st.sidebar.markdown("---")
     st.sidebar.markdown("**Controls**")
-    out_dir = Path(st.session_state.out_dir)
+    artifact_mode = st.sidebar.radio("Mode", ["LIVE", "MOCK"], index=0, key="artifact_mode", horizontal=True)
+    use_mock_artifact = artifact_mode == "MOCK"
+
+    if use_mock_artifact:
+        out_dir = MOCK_ARTIFACT_DIR
+        out_dir.mkdir(parents=True, exist_ok=True)
+        decision_files = list_mock_files(out_dir)
+    else:
+        out_dir = LIVE_ARTIFACT_DIR
+        decision_files = list_decision_files(out_dir, exclude_mock=True)
+
     out_dir_resolved = out_dir.resolve() if out_dir.exists() else out_dir
-    decision_files = list_decision_files(out_dir)
+
+    st.markdown(
+        f"<div style='background:#1e3a5f;color:#fff;padding:10px 14px;border-radius:8px;margin-bottom:12px;"
+        f"font-weight:600;font-size:14px;'>"
+        f"{'MOCK' if use_mock_artifact else 'LIVE'} mode — {out_dir_resolved}</div>",
+        unsafe_allow_html=True,
+    )
 
     if not decision_files and current_page in ("dashboard", "diagnostics"):
-        st.error(f"No decision files found in: {out_dir}")
-        st.info("Expected files like: out/decision_<timestamp>.json (produced by scripts/run_and_save.py)")
+        st.error(f"No {'scenario' if use_mock_artifact else 'decision'} files found in: {out_dir}")
+        if use_mock_artifact:
+            st.info("Place scenario JSON files (e.g. scenario_*.json) in out/mock/ for MOCK mode.")
+        else:
+            st.info(
+                "Generate a decision artifact, then rerun Streamlit:\n\n"
+                "`python scripts/run_and_save.py --symbols SPY,AAPL --output-dir out`"
+            )
         _render_footer()
         return
 
@@ -1078,8 +1105,6 @@ def main() -> None:
     default_idx = 0
     selected_label = st.sidebar.selectbox("Snapshot", file_labels, index=default_idx, key="snapshot_select")
     selected_path = next((f.path for f in decision_files if f.path.name == selected_label), decision_files[0].path) if decision_files else None
-    if use_mock_artifact and selected_path and selected_path.name == "decision_MOCK.json":
-        selected_path = None  # will load mock artifact below
 
     st.sidebar.markdown("**Refresh**")
     if st.sidebar.button("Refresh now", key="refresh_btn"):
@@ -1188,27 +1213,29 @@ def main() -> None:
         return
 
     # --- Dashboard / Diagnostics: need artifact ---
-    if not selected_path and not use_mock_artifact:
+    if not selected_path:
         st.warning("No snapshot selected.")
         _render_footer()
         return
 
-    # Load artifact (or use mock when UI_MODE=MOCK)
-    if use_mock_artifact and (not selected_path or (hasattr(selected_path, "name") and getattr(selected_path, "name", "") == "decision_MOCK.json")):
-        try:
-            from app.ui.mock_data import get_mock_artifact
-            artifact = get_mock_artifact()
-            selected_path = Path(out_dir) / "decision_MOCK.json"  # for modified_str fallback
-        except Exception as e:
-            st.error(f"Mock data failed: {e}")
+    try:
+        artifact = load_decision_artifact(selected_path)
+    except Exception as e:
+        st.error(f"Failed to load JSON: {selected_path}")
+        st.code(str(e))
+        _render_footer()
+        return
+
+    if not use_mock_artifact:
+        meta = artifact.get("metadata") or {}
+        snap = artifact.get("decision_snapshot") or {}
+        ds = str(meta.get("data_source") or snap.get("data_source") or "").lower()
+        if ds in ("mock", "scenario"):
+            st.error(
+                "LIVE mode must never load mock data. This file has data_source indicating mock. "
+                "Switch to MOCK mode or load a live artifact from out/."
+            )
             _render_footer()
-            return
-    else:
-        try:
-            artifact = load_decision_artifact(selected_path)
-        except Exception as e:
-            st.error(f"Failed to load JSON: {selected_path}")
-            st.code(str(e))
             return
 
     snapshot, gate, plan, dry_run = extract_snapshot_gate_plan_dryrun(artifact)
@@ -1260,10 +1287,10 @@ def main() -> None:
     with_options_count = len(symbols_with_options)
     without_options_count = len(symbols_without_options)
     as_of = snapshot.get("as_of", "N/A")
-    if use_mock_artifact or not (selected_path and selected_path.exists()):
-        modified_ts = datetime.now()
-    else:
+    if selected_path and selected_path.exists():
         modified_ts = datetime.fromtimestamp(selected_path.stat().st_mtime)
+    else:
+        modified_ts = datetime.now()
     modified_str = modified_ts.strftime("%Y-%m-%d %H:%M")
 
     # Check data source from snapshot (pipeline annotation)

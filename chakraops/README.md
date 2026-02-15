@@ -48,29 +48,21 @@ For daily operation, validation, and troubleshooting without reading code:
 
 **Generate Decision Snapshot (One-time):**
 ```bash
-python scripts/run_and_save.py
+python scripts/run_and_save.py --symbols SPY,AAPL --output-dir out
 ```
 Output: `out/decision_<timestamp>.json` and `out/decision_latest.json`
 
-**Realtime Mode (Continuous updates during market hours):**
+**Realtime Mode (Continuous updates):**
 ```bash
-python scripts/run_and_save.py --realtime
+python scripts/run_and_save.py --realtime --interval 30
 ```
-- Refreshes every 30-60 seconds (configurable via `config.yaml` → `realtime.refresh_interval`)
-- Automatically stops at market close (16:00 by default, configurable via `realtime.end_time`)
+- Refreshes every `--interval` seconds (default 30)
 - Overwrites `decision_latest.json` on each refresh
-- Creates single `decision_YYYY-MM-DD_end.json` at close
-- Keeps only end-of-day snapshots (last 7 days by default)
-
-**Test Mode (Diagnostics):**
-```bash
-python scripts/run_and_save.py --test
-```
-Shows detailed scoring, chain info, and rejection summaries.
+- Press Ctrl+C to stop
 
 **Launch Live Dashboard:**
 ```bash
-python scripts/live_dashboard.py
+streamlit run app/ui/live_decision_dashboard.py --server.port 8501
 ```
 Open: http://localhost:8501
 

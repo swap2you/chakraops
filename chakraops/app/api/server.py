@@ -1324,8 +1324,7 @@ def api_view_trade_plan() -> Dict[str, Any]:
 
 @app.get("/api/view/universe")
 def api_view_universe() -> Dict[str, Any]:
-    """Universe: canonical SymbolSnapshot only (delayed quote + core + optional derived). Never 503. Banner from GET /api/ops/data-health.
-    When market is OPEN: live compute (source=LIVE_COMPUTE). When closed: serve from latest artifact if present (source=ARTIFACT_LATEST), else live compute (source=LIVE_COMPUTE_NO_ARTIFACT)."""
+    """Universe: LIVE_COMPUTE when market OPEN; ARTIFACT_LATEST when closed and artifact exists; LIVE_COMPUTE_NO_ARTIFACT when closed and no artifact."""
     from datetime import datetime, timezone
     try:
         phase = get_market_phase()
@@ -1340,39 +1339,26 @@ def api_view_universe() -> Dict[str, Any]:
                 }
             from app.api.response_normalizers import normalize_universe_snapshot
             return normalize_universe_snapshot({
-                "symbols": result["symbols"],
-                "excluded": result.get("excluded", []),
-                "updated_at": result["updated_at"],
+                **result,
                 "error": None,
                 "source": "LIVE_COMPUTE",
             })
-        # Market not OPEN: prefer latest artifact to avoid ORATS calls for all symbols
         from app.core.eval.run_artifacts import build_universe_from_latest_artifact
         artifact = build_universe_from_latest_artifact()
-        if artifact:
+        if artifact is not None:
             from app.api.response_normalizers import normalize_universe_snapshot
-            return normalize_universe_snapshot({
-                "symbols": artifact["symbols"],
-                "excluded": artifact.get("excluded", []),
-                "updated_at": artifact["updated_at"],
-                "error": None,
-                "source": "ARTIFACT_LATEST",
-                "as_of": artifact.get("as_of"),
-                "run_id": artifact.get("run_id"),
-            })
+            out = normalize_universe_snapshot({**artifact, "error": None, "source": "ARTIFACT_LATEST"})
+            return out
         from app.api.data_health import fetch_universe_from_canonical_snapshot
         result = fetch_universe_from_canonical_snapshot()
         if result["all_failed"]:
-            logger.warning("[UNIVERSE] No artifact; canonical snapshot returned no symbols; excluded=%s", result.get("excluded"))
             return {
                 "symbols": [], "excluded": result.get("excluded", []),
                 "updated_at": datetime.now(timezone.utc).isoformat(), "error": None, "source": "LIVE_COMPUTE_NO_ARTIFACT",
             }
         from app.api.response_normalizers import normalize_universe_snapshot
         return normalize_universe_snapshot({
-            "symbols": result["symbols"],
-            "excluded": result.get("excluded", []),
-            "updated_at": result["updated_at"],
+            **result,
             "error": None,
             "source": "LIVE_COMPUTE_NO_ARTIFACT",
         })
@@ -1512,8 +1498,10 @@ def _minimal_stage2_trace_from_contract_data(contract_data: Dict[str, Any], stag
 def _diagnostics_primary_reason(result: Dict[str, Any], full_result: Any) -> str:
     """
     Phase 3.3.2: Set primary_reason from eligibility layers only.
-    - Symbol FAIL: Stage-1 reasons only (no Stage-2 "missing bid/ask").
-    - Chain truly unavailable: CHAIN_UNAVAILABLE (Stage-2 did not run or returned no contracts).
+    Precedence:
+    - Symbol FAIL: Stage-1 reasons only.
+    - contract_data.available is False: CONTRACT_UNAVAILABLE (never "missing bid/ask" when stock bid/ask exist).
+    - Stage-2 did not run / no chain: CHAIN_UNAVAILABLE.
     - Chain available but selection FAIL: CONTRACT_SELECTION_FAILED with reasons.
     """
     se = result.get("symbol_eligibility") or {}
@@ -1526,6 +1514,15 @@ def _diagnostics_primary_reason(result: Dict[str, Any], full_result: Any) -> str
     if se_status == "FAIL":
         reasons = se.get("reasons") or []
         return "; ".join(reasons) if reasons else "Stage 1 did not qualify"
+
+    # When contract data unavailable, use CONTRACT_UNAVAILABLE and never include stock bid/ask wording
+    if not cd_available:
+        raw = (full_result.primary_reason or "")
+        # Sanitize: avoid "missing bid"/"missing ask" (reserved for stock); use generic reason
+        if "missing bid" in raw.lower() or "missing ask" in raw.lower():
+            return "CONTRACT_UNAVAILABLE: chain or option fields incomplete (stock bid/ask present)"
+        return f"CONTRACT_UNAVAILABLE: {raw}" if raw else "CONTRACT_UNAVAILABLE: chain or option data unavailable"
+
     if ce_status == "UNAVAILABLE":
         return "CHAIN_UNAVAILABLE: Stage-2 did not execute or returned no contracts"
     if ce_status == "FAIL":
@@ -1534,8 +1531,6 @@ def _diagnostics_primary_reason(result: Dict[str, Any], full_result: Any) -> str
         return f"CONTRACT_SELECTION_FAILED: {first}"
     if ce_status == "PASS":
         return full_result.primary_reason or ""
-    if not cd_available:
-        return "CHAIN_UNAVAILABLE: Stage-2 did not execute or returned no contracts"
     return full_result.primary_reason or ""
 
 
@@ -1755,10 +1750,11 @@ def api_view_symbol_diagnostics(
         result["notes"].append(f"Diagnostics partial: {e}")
 
     # LIVE EVALUATION: Phase 4 eligibility then Stage-2 (mode from eligibility)
+    # Pass canonical snapshot so evaluate_symbol_full reuses it (get_snapshot called exactly once above)
     try:
         from app.core.eval.staged_evaluator import evaluate_symbol_full
         full_result = evaluate_symbol_full(
-            sym, skip_stage2=False, strategy_mode=strategy_mode, holdings=None
+            sym, skip_stage2=False, strategy_mode=strategy_mode, holdings=None, canonical_snapshot=snap
         )
     except Exception as e:
         logger.exception("[DIAGNOSTICS] Live evaluation failed for %s: %s", sym, e)

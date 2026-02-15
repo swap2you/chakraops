@@ -398,14 +398,16 @@ class FullEvaluationResult:
 # Stage 1: Stock Quality Evaluation
 # ============================================================================
 
-def evaluate_stage1(symbol: str) -> Stage1Result:
+def evaluate_stage1(symbol: str, canonical_snapshot: Optional[Any] = None) -> Stage1Result:
     """
     Stage 1: Evaluate stock quality and regime.
 
     Uses ONLY canonical snapshot (symbol_snapshot_service). Delayed data only; no live.
     Stage-1 HARD GATE: any required field missing or stale → BLOCK.
+    Args:
+        symbol: Stock ticker
+        canonical_snapshot: Optional pre-fetched SymbolSnapshot; when provided, skips get_snapshot.
     """
-    from app.core.data.symbol_snapshot_service import get_snapshot
     from app.core.data.contract_validator import validate_equity_snapshot
     from app.core.data.data_requirements import (
         REQUIRED_STAGE1_FIELDS,
@@ -419,8 +421,9 @@ def evaluate_stage1(symbol: str) -> Stage1Result:
     result.fetched_at = now_iso
 
     try:
-        # Canonical snapshot only (delayed strikes/options + cores + optional derived)
-        canonical = get_snapshot(symbol, derive_avg_stock_volume_20d=True, use_cache=True)
+        from app.core.data.symbol_snapshot_service import get_snapshot
+        # Use pre-fetched snapshot when provided (e.g. from symbol-diagnostics to avoid double call)
+        canonical = canonical_snapshot if canonical_snapshot is not None else get_snapshot(symbol, derive_avg_stock_volume_20d=True, use_cache=True)
 
         # Adapter: validator expects FullEquitySnapshot
         snapshot = FullEquitySnapshot(
@@ -1535,6 +1538,7 @@ def evaluate_symbol_full(
     skip_stage2: bool = False,
     strategy_mode: str = "CSP",
     holdings: Optional[Dict[str, int]] = None,
+    canonical_snapshot: Optional[Any] = None,
 ) -> FullEvaluationResult:
     """
     Run full 2-stage evaluation for a symbol.
@@ -1559,7 +1563,7 @@ def evaluate_symbol_full(
         market_open = True
 
     # Stage 1
-    stage1 = evaluate_stage1(symbol)
+    stage1 = evaluate_stage1(symbol, canonical_snapshot=canonical_snapshot)
     result.stage1 = stage1
     result.stage_reached = EvaluationStage.STAGE1_ONLY
     

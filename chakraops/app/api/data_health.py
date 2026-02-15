@@ -297,21 +297,27 @@ def _extract_last_price(row: Dict[str, Any]) -> Optional[float]:
     return None
 
 
+def get_universe_symbols() -> List[str]:
+    """Return universe symbols at request time (supports patching in tests; preserves list order)."""
+    return list(UNIVERSE_SYMBOLS)
+
+
 def fetch_universe_from_canonical_snapshot() -> Dict[str, Any]:
     """
-    Fetch universe from canonical SymbolSnapshot service (delayed quote + core + optional derived).
-    Does NOT use /datav2/live/* for equity. Returns same shape as fetch_universe_from_orats for API compatibility.
+    Fetch universe from canonical SymbolSnapshot service via get_snapshots_batch (delayed quote + core + optional derived).
+    Does NOT use /datav2/live/* for equity. Reads symbols at request time from get_universe_symbols().
     """
     from app.core.data.symbol_snapshot_service import get_snapshots_batch
 
+    symbols = get_universe_symbols()
     updated_at = datetime.now(timezone.utc).isoformat()
     symbols_out: List[Dict[str, Any]] = []
     excluded: List[Dict[str, Any]] = []
     try:
-        snapshots = get_snapshots_batch(list(UNIVERSE_SYMBOLS), derive_avg_stock_volume_20d=True, use_cache=True)
+        snapshots = get_snapshots_batch(symbols, derive_avg_stock_volume_20d=True, use_cache=True)
     except Exception as e:
         logger.warning("[UNIVERSE] Canonical snapshot batch failed: %s", e)
-        for ticker in UNIVERSE_SYMBOLS:
+        for ticker in symbols:
             excluded.append({"symbol": ticker, "exclusion_reason": str(e)[:200]})
         return {
             "symbols": [],
@@ -319,7 +325,7 @@ def fetch_universe_from_canonical_snapshot() -> Dict[str, Any]:
             "all_failed": True,
             "updated_at": updated_at,
         }
-    for ticker in UNIVERSE_SYMBOLS:
+    for ticker in symbols:
         sym = ticker.upper()
         snap = snapshots.get(sym)
         if not snap:

@@ -24,6 +24,12 @@ import argparse
 import logging
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
+
+# Bootstrap sys.path so "from app..." imports resolve regardless of cwd
+_chakraops_dir = Path(__file__).resolve().parent
+if str(_chakraops_dir) not in sys.path:
+    sys.path.insert(0, str(_chakraops_dir))
 
 # Configure logging
 logging.basicConfig(

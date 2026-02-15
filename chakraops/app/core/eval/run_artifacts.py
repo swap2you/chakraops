@@ -409,55 +409,57 @@ def build_latest_response_from_artifacts() -> Optional[Dict[str, Any]]:
     }
 
 
+def _universe_artifact_dir() -> Path:
+    """Repository out dir: chakraops/out (for universe_latest.json, universe_*.json only)."""
+    return Path(__file__).resolve().parents[3] / "out"
+
+
 def build_universe_from_latest_artifact() -> Optional[Dict[str, Any]]:
     """
-    Build universe response for /api/view/universe from latest run artifact.
-    Same shape as fetch_universe_from_canonical_snapshot (symbols + excluded + updated_at)
-    plus as_of and run_id. Returns None if no valid artifact.
+    Build universe response for /api/view/universe from dedicated universe artifact ONLY.
+    Looks ONLY for: out/universe_latest.json or out/universe_*.json (newest by mtime).
+    Does NOT consider decision_*.json, evaluation.json, or any other files.
+    Returns None if no dedicated universe artifact exists.
     """
-    run_dir = get_latest_run_dir()
-    if not run_dir:
+    out_dir = _universe_artifact_dir()
+    if not out_dir.exists() or not out_dir.is_dir():
         return None
-    eval_path = run_dir / "evaluation.json"
-    if not eval_path.exists():
-        return None
+
+    # Prefer universe_latest.json, else newest universe_*.json
+    latest_path = out_dir / "universe_latest.json"
+    if latest_path.exists() and latest_path.is_file():
+        path_to_read = latest_path
+    else:
+        universe_files = sorted(
+            [p for p in out_dir.iterdir() if p.is_file() and p.name.startswith("universe_") and p.suffix.lower() == ".json"],
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if not universe_files:
+            return None
+        path_to_read = universe_files[0]
+
     try:
-        with open(eval_path, "r", encoding="utf-8") as f:
+        with open(path_to_read, "r", encoding="utf-8") as f:
             data = json.load(f)
     except Exception as e:
-        logger.warning("[RUN_ARTIFACTS] Failed to read evaluation.json for universe: %s", e)
+        logger.warning("[RUN_ARTIFACTS] Failed to read universe artifact %s: %s", path_to_read, e)
         return None
-    if data.get("status") != "COMPLETED":
+
+    if not isinstance(data, dict):
         return None
-    run_id = data.get("run_id", "")
-    completed_at = data.get("completed_at") or datetime.now(timezone.utc).isoformat()
-    symbols_raw = data.get("symbols", [])
-    symbols_out: List[Dict[str, Any]] = []
-    excluded: List[Dict[str, Any]] = []
-    for s in symbols_raw:
-        sym = (s.get("symbol") or "UNKNOWN").strip().upper()
-        if not sym or sym == "UNKNOWN":
-            continue
-        symbols_out.append({
-            "symbol": sym,
-            "source": s.get("source") or "artifact_run",
-            "last_price": s.get("price"),
-            "fetched_at": s.get("fetched_at") or completed_at,
-            "exclusion_reason": s.get("exclusion_reason"),
-            "stock_volume_today": s.get("stock_volume_today"),
-            "avg_option_volume_20d": s.get("avg_option_volume_20d"),
-            "avg_stock_volume_20d": s.get("avg_stock_volume_20d"),
-            "quote_as_of": s.get("quote_date") or s.get("fetched_at") or completed_at,
-            "field_sources": s.get("field_sources") if isinstance(s.get("field_sources"), dict) else {},
-            "missing_reasons": s.get("missing_reasons") if isinstance(s.get("missing_reasons"), dict) else {},
-        })
+
+    symbols = data.get("symbols")
+    if not isinstance(symbols, list):
+        return None
+
     return {
-        "symbols": symbols_out,
-        "excluded": excluded,
-        "all_failed": len(symbols_out) == 0,
-        "updated_at": completed_at,
-        "as_of": completed_at,
-        "run_id": run_id,
+        "symbols": symbols,
+        "excluded": data.get("excluded") if isinstance(data.get("excluded"), list) else [],
+        "all_failed": len(symbols) == 0,
+        "updated_at": data.get("updated_at") or datetime.now(timezone.utc).isoformat(),
+        "as_of": data.get("as_of") or data.get("updated_at") or datetime.now(timezone.utc).isoformat(),
+        "run_id": data.get("run_id", ""),
     }
 
 

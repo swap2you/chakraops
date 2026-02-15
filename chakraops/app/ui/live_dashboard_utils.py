@@ -12,8 +12,8 @@ class DecisionFileInfo:
     modified_epoch_s: float
 
 
-def list_decision_files(output_dir: Path) -> List[DecisionFileInfo]:
-    """Return decision_*.json files sorted newest-first by mtime."""
+def list_decision_files(output_dir: Path, exclude_mock: bool = False) -> List[DecisionFileInfo]:
+    """Return decision_*.json files sorted newest-first by mtime. If exclude_mock, skip decision_MOCK.json."""
     if not output_dir.exists() or not output_dir.is_dir():
         return []
 
@@ -25,10 +25,31 @@ def list_decision_files(output_dir: Path) -> List[DecisionFileInfo]:
             continue
         if not p.name.startswith("decision_"):
             continue
+        if exclude_mock and p.name == "decision_MOCK.json":
+            continue
         try:
             files.append(DecisionFileInfo(path=p, modified_epoch_s=p.stat().st_mtime))
         except OSError:
-            # If stat fails, skip deterministically (don't throw from UI).
+            continue
+
+    files.sort(key=lambda f: (f.modified_epoch_s, f.path.name), reverse=True)
+    return files
+
+
+def list_mock_files(mock_dir: Path) -> List[DecisionFileInfo]:
+    """Return *.json files from MOCK dir (e.g. scenario_*.json) sorted newest-first."""
+    if not mock_dir.exists() or not mock_dir.is_dir():
+        return []
+
+    files: List[DecisionFileInfo] = []
+    for p in mock_dir.iterdir():
+        if not p.is_file():
+            continue
+        if p.suffix.lower() != ".json":
+            continue
+        try:
+            files.append(DecisionFileInfo(path=p, modified_epoch_s=p.stat().st_mtime))
+        except OSError:
             continue
 
     files.sort(key=lambda f: (f.modified_epoch_s, f.path.name), reverse=True)

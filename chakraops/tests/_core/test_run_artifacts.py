@@ -122,19 +122,29 @@ def test_runner_writes_expected_files_and_latest_manifest(artifacts_tmp):
     assert latest["completed_at"]
 
 
-def test_build_universe_from_latest_artifact_returns_shape(artifacts_tmp):
-    """build_universe_from_latest_artifact returns symbols + updated_at + as_of + run_id when latest run exists."""
-    run = _make_completed_run()
-    run.symbols[0]["quote_date"] = "2026-02-10T20:00:00Z"
-    run.symbols[0]["field_sources"] = {"price": "delayed"}
-    run_dir = write_run_artifacts(run)
-    assert run_dir is not None
-    update_latest_and_recent(run, run_dir)
-    out = build_universe_from_latest_artifact()
+def test_build_universe_from_latest_artifact_returns_shape(artifacts_tmp, tmp_path):
+    """build_universe_from_latest_artifact returns symbols + updated_at + as_of + run_id when universe_*.json exists."""
+    out_dir = tmp_path / "out"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    universe_data = {
+        "symbols": [
+            {"symbol": "AAPL", "last_price": 150.0, "quote_as_of": "2026-02-10T20:00:00Z", "field_sources": {"price": "delayed"}},
+            {"symbol": "SPY", "last_price": 450.0},
+        ],
+        "excluded": [],
+        "updated_at": "2026-02-10T14:30:00+00:00",
+        "as_of": "2026-02-10T14:30:00+00:00",
+        "run_id": "eval_20260210_143000_abc12345",
+    }
+    (out_dir / "universe_latest.json").write_text(json.dumps(universe_data), encoding="utf-8")
+
+    with patch("app.core.eval.run_artifacts._universe_artifact_dir", return_value=out_dir):
+        out = build_universe_from_latest_artifact()
+
     assert out is not None
-    assert out["run_id"] == run.run_id
-    assert out["updated_at"] == run.completed_at
-    assert out["as_of"] == run.completed_at
+    assert out["run_id"] == "eval_20260210_143000_abc12345"
+    assert out["updated_at"] == "2026-02-10T14:30:00+00:00"
+    assert out["as_of"] == "2026-02-10T14:30:00+00:00"
     assert "symbols" in out
     assert len(out["symbols"]) == 2
     aapl = next(s for s in out["symbols"] if s["symbol"] == "AAPL")
@@ -145,17 +155,18 @@ def test_build_universe_from_latest_artifact_returns_shape(artifacts_tmp):
     assert out["all_failed"] is False
 
 
-def test_build_universe_from_latest_artifact_returns_none_when_no_artifact(artifacts_tmp):
-    """build_universe_from_latest_artifact returns None when latest.json or run dir missing."""
-    # No latest.json
-    assert build_universe_from_latest_artifact() is None
-    # latest.json points to non-existent path
-    artifacts_tmp.mkdir(parents=True, exist_ok=True)
-    (artifacts_tmp / "latest.json").write_text(
-        json.dumps({"run_id": "eval_20260210_200000_xxx", "path": str(artifacts_tmp / "2026-02-10" / "run_20260210_200000Z"), "completed_at": "2026-02-10T20:00:00+00:00"}),
-        encoding="utf-8",
-    )
-    assert build_universe_from_latest_artifact() is None
+def test_build_universe_from_latest_artifact_returns_none_when_no_artifact(tmp_path):
+    """build_universe_from_latest_artifact returns None when no universe_*.json exists."""
+    out_dir = tmp_path / "out"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # out/ exists but has no universe_*.json
+    with patch("app.core.eval.run_artifacts._universe_artifact_dir", return_value=out_dir):
+        assert build_universe_from_latest_artifact() is None
+
+    # out/ has decision_*.json but NOT universe_* - must still return None
+    (out_dir / "decision_latest.json").write_text(json.dumps({"decision_snapshot": {}}), encoding="utf-8")
+    with patch("app.core.eval.run_artifacts._universe_artifact_dir", return_value=out_dir):
+        assert build_universe_from_latest_artifact() is None
 
 
 def test_runner_skips_non_completed(artifacts_tmp):

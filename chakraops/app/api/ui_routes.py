@@ -404,8 +404,25 @@ def ui_symbol_diagnostics(
     score_breakdown = eligibility.get("score_breakdown")
     rank_reasons = eligibility.get("rank_reasons")
 
+    # --- Provider status for empty/missing data (reduce UI confusion) ---
+    options = result.get("options") or {}
+    expirations_count = options.get("expirations_count", 0) if isinstance(options, dict) else 0
+    provider_status = "OK"
+    provider_message = ""
+    if result.get("error"):
+        provider_status = "ERROR"
+        provider_message = str(result.get("error", ""))[:200]
+    elif expirations_count == 0:
+        provider_status = "NO_CHAIN"
+        provider_message = "No option chain expirations available for this symbol."
+    elif result.get("not_found") or result.get("provider_404"):
+        provider_status = "NOT_FOUND"
+        provider_message = result.get("provider_message") or "Symbol or quote data not found."
+
     out: Dict[str, Any] = {
         "symbol": result.get("symbol"),
+        "provider_status": provider_status,
+        "provider_message": provider_message,
         "primary_reason": eligibility.get("primary_reason"),
         "verdict": eligibility.get("verdict"),
         "in_universe": result.get("in_universe"),

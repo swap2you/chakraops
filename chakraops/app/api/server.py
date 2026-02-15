@@ -1857,7 +1857,7 @@ def api_view_symbol_diagnostics(
         sym, expirations_count, chain_len, full_result.verdict,
     )
     if expirations_count == 0:
-        logger.warning("[DIAGNOSTICS] %s: expirations_count == 0", sym)
+        logger.debug("[DIAGNOSTICS] %s: expirations_count == 0", sym)
     if contracts_count is None and full_result.stage2 is not None:
         logger.error("[DIAGNOSTICS] %s: contracts_count is null after stage-2", sym)
 

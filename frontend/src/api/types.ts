@@ -304,4 +304,8 @@ export interface SymbolDiagnosticsResponseExtended extends SymbolDiagnosticsResp
   rank_reasons?: SymbolDiagnosticsRankReasons | null;
   /** Regime (UP | DOWN | SIDEWAYS from eligibility). */
   regime?: string | null;
+  /** Provider status: OK | NOT_FOUND | NO_CHAIN | ERROR. */
+  provider_status?: string | null;
+  /** Human-readable message when provider_status is not OK. */
+  provider_message?: string | null;
 }

@@ -10,17 +10,20 @@ const nav = [
 
 export function Sidebar() {
   return (
-    <aside className="w-48 border-r border-zinc-800 bg-zinc-950 p-2">
-      <nav className="space-y-0.5">
+    <aside className="flex w-52 shrink-0 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="flex h-12 items-center border-b border-zinc-200 px-3 dark:border-zinc-800">
+        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">ChakraOps</span>
+      </div>
+      <nav className="flex-1 space-y-0.5 p-2">
         {nav.map(({ path, label, icon: Icon }) => (
           <NavLink
             key={path}
             to={path}
             className={({ isActive }) =>
-              `flex items-center gap-2 rounded px-2 py-1.5 text-sm ${
+              `flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors ${
                 isActive
-                  ? "bg-zinc-800 text-white"
-                  : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
+                  ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-white"
+                  : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800/50 dark:hover:text-zinc-200"
               }`
             }
           >

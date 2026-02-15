@@ -48,7 +48,7 @@ def _swing_high_impl(candles: List[Dict[str, Any]], lookback: int, skip_sanity: 
         last_close = candles[-1].get("close")
         if last_close is not None and float(last_close) > 0:
             if val > float(last_close) * SWING_HIGH_MAX_RATIO:
-                logger.warning(
+                logger.debug(
                     "[levels] swing_high %.2f > close*%.1f (%.2f); recomputing with last %d candles",
                     val, SWING_HIGH_MAX_RATIO, float(last_close), SWING_SANITY_LOOKBACK,
                 )
@@ -73,7 +73,7 @@ def _swing_low_impl(candles: List[Dict[str, Any]], lookback: int, skip_sanity: b
         last_close = candles[-1].get("close")
         if last_close is not None and float(last_close) > 0:
             if val < float(last_close) * SWING_LOW_MIN_RATIO:
-                logger.warning(
+                logger.debug(
                     "[levels] swing_low %.2f < close*%.1f (%.2f); recomputing with last %d candles",
                     val, SWING_LOW_MIN_RATIO, float(last_close), SWING_SANITY_LOOKBACK,
                 )

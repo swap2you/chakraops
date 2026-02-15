@@ -6,10 +6,10 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, subtext, actions }: PageHeaderProps) {
   return (
-    <header className="mb-4 flex items-center justify-between border-b border-zinc-800 pb-2">
+    <header className="mb-4 flex items-center justify-between border-b border-zinc-200 pb-3 dark:border-zinc-800">
       <div>
-        <h1 className="text-lg font-semibold text-zinc-100">{title}</h1>
-        {subtext && <p className="text-sm text-zinc-500">{subtext}</p>}
+        <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">{title}</h1>
+        {subtext && <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-500">{subtext}</p>}
       </div>
       {actions}
     </header>

@@ -6,6 +6,7 @@ import { ScenarioProvider } from "@/context/ScenarioContext";
 import { PollingProvider } from "@/context/PollingContext";
 import { CommandBar } from "@/components/CommandBar";
 import { CommandPalette } from "@/components/CommandPalette";
+import { DecisionPage } from "@/pages/DecisionPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { PositionsPage } from "@/pages/PositionsPage";
 import { JournalPage } from "@/pages/JournalPage";
@@ -14,6 +15,8 @@ import { AnalyticsPage } from "@/pages/AnalyticsPage";
 import { HistoryPage } from "@/pages/HistoryPage";
 import { AnalysisPage } from "@/pages/AnalysisPage";
 import { DiagnosticsPage } from "@/pages/DiagnosticsPage";
+import { UniversePage } from "@/pages/UniversePage";
+import { SymbolDiagnosticsPage } from "@/pages/SymbolDiagnosticsPage";
 import { StrategyPage } from "@/pages/StrategyPage";
 import { PipelinePage } from "@/pages/PipelinePage";
 import { AccountsPage } from "@/pages/AccountsPage";
@@ -22,7 +25,10 @@ import { PortfolioPage } from "@/pages/PortfolioPage";
 import { AccessGate } from "@/components/AccessGate";
 
 const SHORTCUT_PATHS: Record<string, string> = {
-  d: "/dashboard",
+  d: "/decision",
+  u: "/universe",
+  y: "/symbol-diagnostics",
+  b: "/dashboard",
   p: "/positions",
   j: "/journal",
   n: "/notifications",
@@ -75,6 +81,9 @@ function AppShell() {
       <CommandBar />
       <main className="flex-1">
         <Routes>
+          <Route path="/decision" element={<DecisionPage />} />
+          <Route path="/universe" element={<UniversePage />} />
+          <Route path="/symbol-diagnostics" element={<SymbolDiagnosticsPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/positions" element={<PositionsPage />} />
           <Route path="/journal" element={<JournalPage />} />
@@ -88,8 +97,8 @@ function AppShell() {
           <Route path="/accounts" element={<AccountsPage />} />
           <Route path="/tracked-positions" element={<TrackedPositionsPage />} />
           <Route path="/portfolio" element={<PortfolioPage />} />
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/" element={<Navigate to="/decision" replace />} />
+          <Route path="*" element={<Navigate to="/decision" replace />} />
         </Routes>
       </main>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />

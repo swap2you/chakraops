@@ -49,6 +49,7 @@ export interface RiskProfile {
 /** Phase 8.4: Portfolio dashboard — snapshot + stress simulation. */
 export interface PortfolioDashboardSnapshot {
   as_of?: string;
+  portfolio_equity_usd?: number | null;
   total_open_positions?: number;
   open_csp_count?: number;
   open_cc_count?: number;

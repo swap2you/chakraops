@@ -613,7 +613,7 @@ _PUBLIC_PATHS = frozenset({"/health", "/api/healthz"})
 async def api_key_middleware(request: Request, call_next):
     """Require X-API-Key for all non-health routes when CHAKRAOPS_API_KEY is set."""
     path = request.url.path.rstrip("/") or request.url.path
-    if path in _PUBLIC_PATHS:
+    if path in _PUBLIC_PATHS or path.startswith("/api/ui"):
         return await call_next(request)
     if not CHAKRAOPS_API_KEY:
         return await call_next(request)
@@ -627,9 +627,15 @@ async def api_key_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+_UI_CORS_ORIGINS = (os.getenv("UI_CORS_ORIGINS") or "http://localhost:5173").strip().split(",")
+_CORS_ORIGINS = [o.strip() for o in _UI_CORS_ORIGINS if o.strip()] or ["http://localhost:5173"]
+
+from app.api.ui_routes import router as ui_router
+app.include_router(ui_router)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

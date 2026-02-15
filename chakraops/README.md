@@ -62,7 +62,7 @@ python scripts/run_and_save.py --realtime --interval 30
 
 **Launch Live Dashboard:**
 ```bash
-streamlit run app/ui/live_decision_dashboard.py --server.port 8501
+cd frontend && npm run dev
 ```
 Open: http://localhost:8501
 

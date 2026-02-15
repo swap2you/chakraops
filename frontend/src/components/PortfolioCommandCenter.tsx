@@ -8,6 +8,7 @@ import { ENDPOINTS } from "@/data/endpoints";
 import type {
   PortfolioDashboardResponse,
   PortfolioDashboardSnapshot,
+  PortfolioDashboardStress,
   PortfolioDashboardStressScenario,
 } from "@/types/portfolio";
 import { Loader2, AlertTriangle } from "lucide-react";
@@ -81,8 +82,8 @@ export function PortfolioCommandCenter() {
     );
   }
 
-  const snapshot: PortfolioDashboardSnapshot = data?.snapshot ?? {};
-  const stress = data?.stress ?? {};
+  const snapshot: PortfolioDashboardSnapshot = (data?.snapshot ?? {}) as PortfolioDashboardSnapshot;
+  const stress = (data?.stress ?? {}) as PortfolioDashboardStress;
   const scenarios: PortfolioDashboardStressScenario[] = stress.scenarios ?? [];
   const worstShock = stress.worst_case?.shock_pct;
 

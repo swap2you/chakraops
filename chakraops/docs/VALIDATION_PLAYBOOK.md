@@ -34,7 +34,7 @@ $env:PYTHONPATH = (Get-Location).Path
 
 ### 4. Compile checks
 ```powershell
-python -m py_compile run_evaluation.py scripts/run_and_save.py app/ui/live_decision_dashboard.py
+python -m py_compile run_evaluation.py scripts/run_and_save.py app/api/server.py app/api/ui_routes.py
 ```
 *Run from chakraops/ so paths resolve.*
 
@@ -56,19 +56,24 @@ Get-ChildItem out/decision_*.json
 
 ### 8. Start backend (Terminal 1)
 ```powershell
+.\.venv\Scripts\Activate.ps1
+$env:PYTHONPATH = (Get-Location).Path
 python -m uvicorn app.api.server:app --reload --port 8000
 ```
 
-### 9. Start UI (Terminal 2)
+### 9. Start React UI (Terminal 2)
 ```powershell
-python -m streamlit run app/ui/live_decision_dashboard.py --server.port 8501
+cd ..\frontend
+npm install
+npm run dev
 ```
 
 ### 10. Quick API smoke (separate terminal)
 ```powershell
 Invoke-WebRequest -Uri "http://localhost:8000/api/healthz" -UseBasicParsing | Select-Object StatusCode
-Invoke-WebRequest -Uri "http://localhost:8000/api/view/universe" -UseBasicParsing | Select-Object StatusCode
-Invoke-WebRequest -Uri "http://localhost:8000/api/view/symbol-diagnostics?symbol=SPY" -UseBasicParsing | Select-Object StatusCode
+Invoke-WebRequest -Uri "http://localhost:8000/api/ui/decision/latest?mode=LIVE" -UseBasicParsing | Select-Object StatusCode
+Invoke-WebRequest -Uri "http://localhost:8000/api/ui/universe" -UseBasicParsing | Select-Object StatusCode
+Invoke-WebRequest -Uri "http://localhost:8000/api/ui/symbol-diagnostics?symbol=SPY" -UseBasicParsing | Select-Object StatusCode
 ```
 Expected: StatusCode 200 for each.
 
@@ -182,35 +187,38 @@ curl -o diagnostics.json http://localhost:8000/api/eval/export/diagnostics
 # Terminal 1: API
 uvicorn app.api.server:app --reload --port 8000
 
-# Terminal 2: Streamlit
-streamlit run app/ui/live_decision_dashboard.py --server.port 8501
+# Terminal 2: React frontend
+cd frontend && npm install && npm run dev
 ```
 
 **Windows PowerShell:**
 ```powershell
 cd chakraops
+.\.venv\Scripts\Activate.ps1
 $env:PYTHONPATH=(Get-Location).Path
 
 # Terminal 1: API
 python -m uvicorn app.api.server:app --reload --port 8000
 
-# Terminal 2: Streamlit
-python -m streamlit run app/ui/live_decision_dashboard.py --server.port 8501
+# Terminal 2: React frontend
+cd ..\frontend
+npm install
+npm run dev
 ```
 
-Open http://localhost:8501. Generate decision artifacts first (see Fresh Start below) so the dashboard has data.
+Open http://localhost:5173. Generate decision artifacts first (see Fresh Start below) so the UI has data.
 
 ---
 
 ## 8. Kill Running Processes (Windows)
 
-If uvicorn or Streamlit is stuck, stop them:
+If uvicorn or the React dev server is stuck, stop them:
 
 - **In terminal**: Press `Ctrl+C` to stop the running process.
 - **Kill by port**:
   ```powershell
   netstat -ano | findstr :8000
-  netstat -ano | findstr :8501
+  netstat -ano | findstr :5173
   taskkill /PID <PID> /F
   ```
   Replace `<PID>` with the Process ID from the second column.
@@ -240,12 +248,14 @@ The Live Decision Monitor reads `out/decision_*.json` in LIVE mode. **One script
    python -m uvicorn app.api.server:app --reload --port 8000
    ```
 
-4. **Start Streamlit** (Terminal 2):
+4. **Start React frontend** (Terminal 2):
    ```powershell
-   python -m streamlit run app/ui/live_decision_dashboard.py --server.port 8501
+   cd ..\frontend
+   npm install
+   npm run dev
    ```
 
-5. Open http://localhost:8501. Ensure mode is **LIVE** and select the latest decision file.
+5. Open http://localhost:5173. Use **LIVE** mode to load the latest decision file.
 
 ### MOCK mode (scenario testing)
 

@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 4%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 6%;
+    --card-foreground: 0 0% 98%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 64%;
+    --border: 0 0% 15%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 4%;
+    --destructive: 0 84% 60%;
+    --input: 0 0% 15%;
+    --ring: 217 91% 60%;
+    --radius: 0.25rem;
+  }
+}
+
+body {
+  font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.4;
+}

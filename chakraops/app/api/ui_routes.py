@@ -207,13 +207,27 @@ def ui_symbol_diagnostics(
     from app.api.symbol_diagnostics import get_symbol_diagnostics
 
     result = get_symbol_diagnostics(symbol=symbol)
+    eligibility = result.get("eligibility") or {}
+    symbol_eligibility = result.get("symbol_eligibility") or {}
+    liquidity = result.get("liquidity") or {}
     return {
         "symbol": result.get("symbol"),
-        "primary_reason": result.get("eligibility", {}).get("primary_reason"),
-        "verdict": result.get("eligibility", {}).get("verdict"),
+        "primary_reason": eligibility.get("primary_reason"),
+        "verdict": eligibility.get("verdict"),
         "in_universe": result.get("in_universe"),
         "stock": result.get("stock"),
         "gates": result.get("gates", []),
         "blockers": result.get("blockers", []),
         "notes": result.get("notes", []),
+        "symbol_eligibility": {
+            "status": symbol_eligibility.get("status"),
+            "required_data_missing": symbol_eligibility.get("required_data_missing") or [],
+            "required_data_stale": symbol_eligibility.get("required_data_stale") or [],
+            "reasons": symbol_eligibility.get("reasons") or [],
+        },
+        "liquidity": {
+            "stock_liquidity_ok": liquidity.get("stock_liquidity_ok"),
+            "option_liquidity_ok": liquidity.get("option_liquidity_ok"),
+            "reason": liquidity.get("reason"),
+        },
     }

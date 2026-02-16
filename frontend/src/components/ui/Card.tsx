@@ -17,8 +17,8 @@ export function Card({ children, className }: CardProps) {
   return (
     <section
       className={clsx(
-        "rounded-lg border border-zinc-200 bg-white p-5 shadow-sm transition-all duration-200 ease-out dark:border-zinc-800 dark:bg-zinc-900/60 dark:shadow-none",
-        "hover:border-zinc-300 hover:shadow-md dark:hover:border-zinc-700 dark:hover:shadow-lg dark:hover:shadow-black/20",
+        "rounded-lg border border-zinc-200 bg-white p-6 shadow-sm transition-colors duration-150 dark:border-zinc-800 dark:bg-zinc-900/60 dark:shadow-none",
+        "hover:border-zinc-300 dark:hover:border-zinc-700",
         className
       )}
     >
@@ -34,7 +34,7 @@ export function CardHeader({ title, description, actions, children, className }:
         <div className="flex items-start justify-between gap-2">
           <div>
             {title && (
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
+              <h3 className="text-xl font-semibold text-zinc-700 dark:text-zinc-300">
                 {title}
               </h3>
             )}

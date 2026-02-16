@@ -10,7 +10,7 @@ export function Table({ children, className }: { children: React.ReactNode; clas
 
 export function TableHeader({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <thead>
+    <thead className="sticky top-0 z-[1] bg-zinc-50 dark:bg-zinc-950">
       <tr
         className={clsx(
           "border-b border-zinc-200 text-left text-zinc-600 dark:border-zinc-700 dark:text-zinc-500",
@@ -39,8 +39,8 @@ export function TableRow({
   return (
     <tr
       className={clsx(
-        "border-b border-zinc-100 last:border-0 transition-all duration-200 ease-out dark:border-zinc-800/50",
-        "hover:-translate-y-px hover:bg-zinc-50 hover:shadow-sm dark:hover:bg-zinc-800/40",
+        "border-b border-zinc-100 last:border-0 transition-colors duration-150 dark:border-zinc-800/50",
+        "hover:bg-zinc-100 dark:hover:bg-zinc-800/40",
         onClick && "cursor-pointer",
         className
       )}
@@ -54,7 +54,7 @@ export function TableRow({
 
 export function TableHead({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <th className={clsx("py-2 pr-2 font-medium text-zinc-600 dark:text-zinc-500", className)}>
+    <th className={clsx("py-3 pr-2 font-medium text-zinc-600 dark:text-zinc-500", className)}>
       {children}
     </th>
   );
@@ -73,7 +73,7 @@ export function TableCell({
 }) {
   return (
     <td
-      className={clsx("py-2 pr-2", numeric && "font-mono text-right tabular-nums", className)}
+      className={clsx("py-3 pr-2", numeric && "font-mono text-right tabular-nums", className)}
       title={title}
     >
       {children}

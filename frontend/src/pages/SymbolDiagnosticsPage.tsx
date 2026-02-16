@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Calendar, Database, Droplets } from "lucide-react";
-import { useSymbolDiagnostics } from "@/api/queries";
+import { Calendar, ChevronDown, ChevronRight, Database, Droplets, X } from "lucide-react";
+import { useSymbolDiagnostics, useDefaultAccount } from "@/api/queries";
 import type { SymbolDiagnosticsResponseExtended } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { TradeTicketDrawer } from "@/components/TradeTicketDrawer";
-import { Card, CardHeader, Badge, StatusBadge, Tooltip, Button } from "@/components/ui";
+import { Card, CardHeader, Badge, StatusBadge, Button } from "@/components/ui";
 import type { SymbolDiagnosticsCandidate } from "@/api/types";
 
 function verdictColor(v: string | null | undefined): string {
@@ -65,6 +65,23 @@ function computeExpectedReturnPct(
   return (credit / notional) * 100;
 }
 
+function getDefaultCapital(account: unknown): number | null {
+  if (account == null || typeof account !== "object" || !("total_capital" in account)) return null;
+  const tc = (account as { total_capital?: unknown }).total_capital;
+  return typeof tc === "number" ? tc : null;
+}
+
+function deltaCondition(delta: number | null | undefined, strategy: string): string {
+  if (delta == null) return "—";
+  const d = Math.abs(delta);
+  if ((strategy ?? "").toUpperCase() === "CSP") {
+    if (d >= 0.20 && d <= 0.35) return "in band";
+    if (d < 0.20) return "low";
+    return "high";
+  }
+  return d.toFixed(3);
+}
+
 export function SymbolDiagnosticsPage() {
   const [searchParams] = useSearchParams();
   const symbolFromUrl = searchParams.get("symbol")?.trim().toUpperCase() ?? "";
@@ -75,6 +92,7 @@ export function SymbolDiagnosticsPage() {
 
   const shouldFetch = activeSymbol != null && isValidSymbol(activeSymbol);
   const { data, isLoading, isError } = useSymbolDiagnostics(activeSymbol ?? "", shouldFetch);
+  const { data: accountData } = useDefaultAccount();
 
   const handleLookup = useCallback(() => {
     const s = symbol.trim().toUpperCase();
@@ -133,6 +151,7 @@ export function SymbolDiagnosticsPage() {
         <ExecutionConsole
           data={data}
           onOpenTradeTicket={(c) => setTradeTicketCandidate(c)}
+          defaultCapital={getDefaultCapital(accountData?.account)}
         />
       )}
 
@@ -151,20 +170,35 @@ export function SymbolDiagnosticsPage() {
   );
 }
 
+const INFO_DRAWER_CONTENT: Record<string, string> = {
+  RSI: "Relative Strength Index (14). Overbought >70, oversold <30. Used for regime context.",
+  ATR: "Average True Range (14). Volatility measure. ATR% = ATR/price.",
+  Provider: "Data provider status. NO_CHAIN: No option chain expirations for this symbol. NOT_FOUND: Symbol or quote not found.",
+  support: "Technical support level from eligibility trace.",
+  resistance: "Technical resistance level from eligibility trace.",
+  regime: "Market regime: UP, DOWN, or SIDEWAYS/NEUTRAL from evaluation.",
+};
+
 function ExecutionConsole({
   data,
   onOpenTradeTicket,
+  defaultCapital,
 }: {
   data: SymbolDiagnosticsResponseExtended;
   onOpenTradeTicket: (c: SymbolDiagnosticsCandidate) => void;
+  defaultCapital?: number | null;
 }) {
+  const [explainOpen, setExplainOpen] = useState(false);
+  const [infoDrawerKey, setInfoDrawerKey] = useState<string | null>(null);
   const comp = data.computed;
   const ep = data.exit_plan;
   const candidates = data.candidates ?? [];
   const liq = data.liquidity;
   const sel = data.symbol_eligibility;
+  const expl = data.explanation;
   const price = data.stock && typeof data.stock === "object" && "price" in data.stock ? (data.stock as { price?: number }).price : null;
   const providerStatus = data.provider_status ?? "OK";
+  const totalCapital = defaultCapital ?? null;
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -183,9 +217,14 @@ function ExecutionConsole({
             Regime {data.regime ?? "—"}
           </Badge>
           {providerStatus !== "OK" && (
-            <span className="text-xs text-amber-600 dark:text-amber-400" title={data.provider_message ?? ""}>
+            <button
+              type="button"
+              onClick={() => setInfoDrawerKey("Provider")}
+              className="text-xs text-amber-600 dark:text-amber-400 hover:underline"
+              title={data.provider_message ?? ""}
+            >
               Provider: {providerStatus}
-            </span>
+            </button>
           )}
         </div>
       </Card>
@@ -237,20 +276,22 @@ function ExecutionConsole({
         <Card>
           <CardHeader title="Technical" />
           <div className="grid grid-cols-3 gap-x-6 gap-y-2 text-sm">
-            <Tooltip content="Relative Strength Index (14). Overbought >70, oversold <30.">
-              <Kv label="RSI" value={fmt(comp?.rsi)} />
-            </Tooltip>
-            <Tooltip content="Average True Range (14). Volatility measure.">
-              <Kv label="ATR" value={fmt(comp?.atr)} />
-            </Tooltip>
+            <LabelKv label="RSI" value={fmt(comp?.rsi)} onLabelClick={() => setInfoDrawerKey("RSI")} />
+            <LabelKv label="ATR" value={fmt(comp?.atr)} onLabelClick={() => setInfoDrawerKey("ATR")} />
             <Kv label="ATR%" value={comp?.atr_pct != null ? fmtPct(comp.atr_pct) : "—"} />
-            <Kv label="support" value={fmt(comp?.support_level)} />
-            <Kv label="resistance" value={fmt(comp?.resistance_level)} />
+            <LabelKv label="support" value={fmt(comp?.support_level)} onLabelClick={() => setInfoDrawerKey("support")} />
+            <LabelKv label="resistance" value={fmt(comp?.resistance_level)} onLabelClick={() => setInfoDrawerKey("resistance")} />
             <div>
-              <span className="block text-zinc-500 dark:text-zinc-500">regime</span>
-              <span className={`inline-flex rounded border px-2 py-0.5 text-sm font-medium ${regimeColor(data.regime)}`}>
-                {data.regime ?? "—"}
-              </span>
+              <button
+                type="button"
+                onClick={() => setInfoDrawerKey("regime")}
+                className="text-left hover:opacity-80"
+              >
+                <span className="block text-zinc-500 dark:text-zinc-500">regime</span>
+                <span className={`inline-flex rounded border px-2 py-0.5 text-sm font-medium ${regimeColor(data.regime)}`}>
+                  {data.regime ?? "—"}
+                </span>
+              </button>
             </div>
           </div>
         </Card>
@@ -282,13 +323,18 @@ function ExecutionConsole({
                   <th className="py-2 pr-2">credit</th>
                   <th className="py-2 pr-2">max_loss</th>
                   <th className="py-2 pr-2">ret%</th>
-                  <th className="py-2">why</th>
+                  <th className="py-2 pr-2">cap util %</th>
+                  <th className="py-2 pr-2 max-w-[100px]">regime</th>
+                  <th className="py-2 pr-2 max-w-[100px]">support</th>
+                  <th className="py-2 pr-2 max-w-[100px]">liquidity</th>
+                  <th className="py-2 pr-2 max-w-[100px]">iv</th>
+                  <th className="py-2 pr-2">delta cond</th>
                 </tr>
               </thead>
               <tbody>
                 {candidates.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-3 text-zinc-500">
+                    <td colSpan={14} className="py-3 text-zinc-500">
                       No candidates.
                     </td>
                   </tr>
@@ -297,6 +343,10 @@ function ExecutionConsole({
                     const dte = computeDte(c.expiry);
                     const retPct = computeExpectedReturnPct(c.strike ?? undefined, c.credit_estimate ?? undefined);
                     const inBand = deltaInBand(c.delta ?? undefined, c.strategy ?? "");
+                    const maxLoss = c.max_loss ?? 0;
+                    const capUtilPct = totalCapital != null && totalCapital > 0 && maxLoss > 0
+                      ? (maxLoss / totalCapital) * 100
+                      : null;
                     return (
                       <tr
                         key={i}
@@ -320,12 +370,22 @@ function ExecutionConsole({
                         <td className="py-2 pr-2">{fmt(c.credit_estimate)}</td>
                         <td className="py-2 pr-2">{fmt(c.max_loss)}</td>
                         <td className="py-2 pr-2">{retPct != null ? retPct.toFixed(2) + "%" : "—"}</td>
-                        <td
-                          className="py-2 truncate max-w-[120px] text-zinc-400"
-                          title={c.why_this_trade ?? ""}
-                        >
-                          {c.why_this_trade ?? "—"}
+                        <td className="py-2 pr-2 font-mono">
+                          {capUtilPct != null ? capUtilPct.toFixed(2) + "%" : "—"}
                         </td>
+                        <td className="py-2 pr-2 max-w-[100px] truncate text-zinc-600 dark:text-zinc-400" title={expl?.stock_regime_reason ?? ""}>
+                          {expl?.stock_regime_reason ?? "—"}
+                        </td>
+                        <td className="py-2 pr-2 max-w-[100px] truncate text-zinc-600 dark:text-zinc-400" title={expl?.support_condition ?? ""}>
+                          {expl?.support_condition ?? "—"}
+                        </td>
+                        <td className="py-2 pr-2 max-w-[100px] truncate text-zinc-600 dark:text-zinc-400" title={expl?.liquidity_condition ?? ""}>
+                          {expl?.liquidity_condition ?? "—"}
+                        </td>
+                        <td className="py-2 pr-2 max-w-[100px] truncate text-zinc-600 dark:text-zinc-400" title={expl?.iv_condition ?? ""}>
+                          {expl?.iv_condition ?? "—"}
+                        </td>
+                        <td className="py-2 pr-2">{deltaCondition(c.delta ?? undefined, c.strategy ?? "")}</td>
                       </tr>
                     );
                   })
@@ -333,6 +393,47 @@ function ExecutionConsole({
               </tbody>
             </table>
           </div>
+        </Card>
+
+        <Card>
+          <button
+            type="button"
+            onClick={() => setExplainOpen((o) => !o)}
+            className="flex w-full items-center justify-between text-left"
+          >
+            <CardHeader title="Explain This Decision" />
+            {explainOpen ? <ChevronDown className="h-4 w-4 text-zinc-500" /> : <ChevronRight className="h-4 w-4 text-zinc-500" />}
+          </button>
+          {explainOpen && (
+            <div className="mt-2 border-t border-zinc-200 pt-3 dark:border-zinc-700">
+              <div className="space-y-1 text-xs">
+                {data.gates?.length ? (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-zinc-200 text-left text-zinc-600 dark:border-zinc-700 dark:text-zinc-500">
+                        <th className="py-2 pr-2">Gate</th>
+                        <th className="py-2 pr-2">Status</th>
+                        <th className="py-2">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.gates.map((g, i) => (
+                        <tr key={i} className="border-b border-zinc-100 dark:border-zinc-800/50">
+                          <td className="py-2 pr-2 font-medium text-zinc-700 dark:text-zinc-300">{g.name}</td>
+                          <td className="py-2 pr-2">
+                            <StatusBadge status={g.status} />
+                          </td>
+                          <td className="py-2 text-zinc-500 dark:text-zinc-400">{g.reason}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <span className="text-zinc-500 dark:text-zinc-500">No gates evaluated.</span>
+                )}
+              </div>
+            </div>
+          )}
         </Card>
       </div>
 
@@ -366,61 +467,37 @@ function ExecutionConsole({
             <RiskFlag
               icon={<Calendar className="h-4 w-4" />}
               label="earnings days"
-              value="—"
+              value={earningsDaysReason(undefined)}
               status="neutral"
             />
             <RiskFlag
               icon={<Calendar className="h-4 w-4" />}
               label="earnings block"
-              value="—"
+              value={earningsBlockReason(undefined)}
               status="neutral"
             />
             <RiskFlag
               icon={<Droplets className="h-4 w-4" />}
               label="stock liq"
-              value={
-                liq?.stock_liquidity_ok == null
-                  ? "—"
-                  : liq.stock_liquidity_ok
-                    ? "OK"
-                    : "FAIL"
-              }
+              value={liqReason(liq?.stock_liquidity_ok, liq?.reason, "stock")}
               status={
-                liq?.stock_liquidity_ok == null
-                  ? "neutral"
-                  : liq.stock_liquidity_ok
-                    ? "ok"
-                    : "fail"
+                liq?.stock_liquidity_ok == null ? "neutral" : liq.stock_liquidity_ok ? "ok" : "fail"
               }
             />
             <RiskFlag
               icon={<Droplets className="h-4 w-4" />}
               label="option liq"
-              value={
-                liq?.option_liquidity_ok == null
-                  ? "—"
-                  : liq.option_liquidity_ok
-                    ? "OK"
-                    : "FAIL"
-              }
+              value={liqReason(liq?.option_liquidity_ok, liq?.reason, "option")}
               status={
-                liq?.option_liquidity_ok == null
-                  ? "neutral"
-                  : liq.option_liquidity_ok
-                    ? "ok"
-                    : "fail"
+                liq?.option_liquidity_ok == null ? "neutral" : liq.option_liquidity_ok ? "ok" : "fail"
               }
             />
             <RiskFlag
               icon={<Database className="h-4 w-4" />}
               label="data status"
-              value={sel?.status ?? "—"}
+              value={sel?.status ?? "Not evaluated"}
               status={
-                sel?.status === "PASS"
-                  ? "ok"
-                  : sel?.status === "FAIL"
-                    ? "fail"
-                    : "neutral"
+                sel?.status === "PASS" ? "ok" : sel?.status === "FAIL" ? "fail" : "neutral"
               }
             />
             <div className="col-span-2 flex items-start gap-2">
@@ -428,32 +505,52 @@ function ExecutionConsole({
               <div>
                 <span className="block text-xs text-zinc-500 dark:text-zinc-500">missing</span>
                 <span className="font-mono text-zinc-700 dark:text-zinc-300">
-                  {sel?.required_data_missing?.join(", ") ?? "—"}
+                  {sel?.required_data_missing?.length ? sel.required_data_missing.join(", ") : "None"}
                 </span>
               </div>
             </div>
           </div>
         </Card>
 
-        <Card>
-          <CardHeader title="Gates" />
-          <div className="space-y-1 text-xs">
-            {data.gates?.length ? (
-              data.gates.map((g, i) => (
-                <div key={i} className="flex items-center justify-between gap-2">
-                  <span className="truncate text-zinc-700 dark:text-zinc-300">{g.name}</span>
-                  <StatusBadge status={g.status} />
-                  <span className="truncate text-zinc-500 dark:text-zinc-500">{g.reason}</span>
-                </div>
-              ))
-            ) : (
-              <span className="text-zinc-500 dark:text-zinc-500">No gates.</span>
-            )}
-          </div>
-        </Card>
+        {infoDrawerKey && (
+          <Card className="border-zinc-300 dark:border-zinc-600">
+            <div className="flex items-center justify-between border-b border-zinc-200 pb-2 dark:border-zinc-700">
+              <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{infoDrawerKey}</span>
+              <button
+                type="button"
+                onClick={() => setInfoDrawerKey(null)}
+                className="rounded p-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              {INFO_DRAWER_CONTENT[infoDrawerKey] ?? "No explanation available."}
+            </p>
+          </Card>
+        )}
       </div>
     </div>
   );
+}
+
+function earningsDaysReason(_value: unknown): string {
+  return "Not evaluated";
+}
+
+function earningsBlockReason(_value: unknown): string {
+  return "Not evaluated";
+}
+
+function liqReason(
+  ok: boolean | null | undefined,
+  reason: string | null | undefined,
+  kind: string
+): string {
+  if (ok == null) return "Data not available";
+  if (ok) return "OK";
+  return reason && reason.trim() ? reason.trim() : `${kind} liquidity failed`;
 }
 
 function RiskFlag({
@@ -508,6 +605,31 @@ function Kv({
   return (
     <div className={className}>
       <span className="text-zinc-500 dark:text-zinc-500">{label}</span>
+      <div className="font-mono text-zinc-700 dark:text-zinc-200">{value}</div>
+    </div>
+  );
+}
+
+function LabelKv({
+  label,
+  value,
+  onLabelClick,
+  className = "",
+}: {
+  label: string;
+  value: React.ReactNode;
+  onLabelClick?: () => void;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      {onLabelClick ? (
+        <button type="button" onClick={onLabelClick} className="text-left hover:opacity-80">
+          <span className="text-zinc-500 dark:text-zinc-500 hover:underline">{label}</span>
+        </button>
+      ) : (
+        <span className="text-zinc-500 dark:text-zinc-500">{label}</span>
+      )}
       <div className="font-mono text-zinc-700 dark:text-zinc-200">{value}</div>
     </div>
   );

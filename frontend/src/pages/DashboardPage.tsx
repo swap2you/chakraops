@@ -21,12 +21,26 @@ import {
 } from "@/components/ui";
 
 function fmtTs(s: string | null | undefined): string {
-  if (!s) return "—";
+  if (!s) return "n/a";
   try {
     const d = new Date(s);
     return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   } catch {
-    return s;
+    return String(s ?? "n/a");
+  }
+}
+
+function evalFreshnessColor(ts: string | null | undefined): string {
+  if (!ts) return "text-zinc-500 dark:text-zinc-400";
+  try {
+    const d = new Date(ts);
+    const now = Date.now();
+    const ageHours = (now - d.getTime()) / (1000 * 60 * 60);
+    if (ageHours < 2) return "text-emerald-600 dark:text-emerald-400";
+    if (ageHours < 6) return "text-amber-600 dark:text-amber-400";
+    return "text-red-600 dark:text-red-400";
+  } catch {
+    return "text-zinc-500 dark:text-zinc-400";
   }
 }
 
@@ -88,7 +102,7 @@ export function DashboardPage() {
   );
   const eligibleFromDecision = selectedSignals.length > 0 && aTier.length === 0 && bTier.length === 0;
   const selectedBySymbol = new Map(
-    selectedSignals.map((s) => [s.symbol.toUpperCase(), s.candidate?.strategy ?? "—"])
+    selectedSignals.map((s) => [s.symbol.toUpperCase(), s.candidate?.strategy ?? "n/a"])
   );
   const positions = positionsRes?.positions ?? [];
   const openPositions = positions.filter((p) => (p.status ?? "").toUpperCase() === "OPEN" || (p.status ?? "").toUpperCase() === "PARTIAL_EXIT");
@@ -96,12 +110,12 @@ export function DashboardPage() {
 
   const isReady = !!decision;
   const metadata = decision?.metadata;
-  const marketPhase = health?.market?.phase ?? "—";
-  const oratsStatus = health?.orats?.status ?? "—";
+  const marketPhase = health?.market?.phase ?? "n/a";
+  const oratsStatus = health?.orats?.status ?? "n/a";
   const lastEvalTs = metadata?.pipeline_timestamp ?? health?.market?.timestamp;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
       <PageHeader title="Command Center" subtext={isReady ? "Mode, market, and evaluation status" : "AI trading command center"} />
       {!isReady ? (
         <Card>
@@ -146,8 +160,8 @@ export function DashboardPage() {
             <span className="font-mono text-zinc-700 dark:text-zinc-300">{marketPhase}</span>
           </div>
           <div>
-            <span className="block text-xs text-zinc-500 dark:text-zinc-500">Last eval</span>
-            <span className="font-mono text-zinc-700 dark:text-zinc-300">{fmtTs(lastEvalTs)}</span>
+            <span className="block text-xs text-zinc-500 dark:text-zinc-500">Last evaluation</span>
+            <span className={`font-mono text-base font-medium ${evalFreshnessColor(lastEvalTs)}`}>{fmtTs(lastEvalTs)}</span>
           </div>
           <div>
             <span className="block text-xs text-zinc-500 dark:text-zinc-500">ORATS</span>
@@ -162,15 +176,27 @@ export function DashboardPage() {
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          <CandidatePanel title="A-tier candidates" rows={aTier} selectedBySymbol={selectedBySymbol} />
-          <CandidatePanel title="B-tier candidates" rows={bTier} selectedBySymbol={selectedBySymbol} />
-          {eligibleFromDecision && (
-            <CandidatePanel title="Eligible candidates" rows={selectedSignals.map((s) => ({ symbol: s.symbol, verdict: s.verdict, final_verdict: s.verdict } as UniverseSymbol))} selectedBySymbol={selectedBySymbol} />
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+        <div className="space-y-8 lg:col-span-2">
+          {aTier.length === 0 && bTier.length === 0 && selectedSignals.length === 0 ? (
+            <Card>
+              <EmptyState title="No eligible opportunities" message="No eligible opportunities in current run." />
+            </Card>
+          ) : (
+            <>
+              <CandidatePanel title="A-tier candidates" rows={aTier} selectedBySymbol={selectedBySymbol} />
+              <CandidatePanel title="B-tier candidates" rows={bTier} selectedBySymbol={selectedBySymbol} />
+              {eligibleFromDecision && (
+                <CandidatePanel
+                  title="Eligible candidates"
+                  rows={selectedSignals.map((s) => ({ symbol: s.symbol, verdict: s.verdict, final_verdict: s.verdict } as UniverseSymbol))}
+                  selectedBySymbol={selectedBySymbol}
+                />
+              )}
+            </>
           )}
         </div>
-        <div className="space-y-4">
+        <div className="space-y-6">
           <StatCard
             label="Open positions"
             value={openPositions.length}
@@ -179,9 +205,9 @@ export function DashboardPage() {
           <StatCard label="Capital deployed" value={`$${capitalDeployed.toLocaleString()}`} />
           <Card>
             <CardHeader title="Data freshness" />
-            <p className="font-mono text-sm text-zinc-700 dark:text-zinc-300">{health?.orats?.status ?? "—"}</p>
+            <p className="font-mono text-sm text-zinc-700 dark:text-zinc-300">{health?.orats?.status ?? "n/a"}</p>
             <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">
-              {health?.orats?.last_success_at ? fmtTs(health.orats.last_success_at) : "—"}
+              {health?.orats?.last_success_at ? fmtTs(health.orats.last_success_at) : "n/a"}
             </p>
           </Card>
           <Card>
@@ -219,7 +245,7 @@ export function DashboardPage() {
           <div className="flex items-center gap-2">
             <Activity className={health?.api?.status === "OK" ? "h-4 w-4 text-emerald-500 dark:text-emerald-400" : "h-4 w-4 text-red-500 dark:text-red-400"} />
             <span className="text-zinc-500 dark:text-zinc-500">API</span>
-            <StatusBadge status={health?.api?.status ?? "—"} />
+            <StatusBadge status={health?.api?.status ?? "n/a"} />
             {health?.api?.latency_ms != null && (
               <span className="text-zinc-500 dark:text-zinc-500">{health.api.latency_ms}ms</span>
             )}
@@ -235,12 +261,12 @@ export function DashboardPage() {
               }
             />
             <span className="text-zinc-500 dark:text-zinc-500">ORATS</span>
-            <StatusBadge status={health?.orats?.status ?? "—"} />
+            <StatusBadge status={health?.orats?.status ?? "n/a"} />
           </div>
           <div className="flex items-center gap-2">
             <Zap className={health?.market?.is_open ? "h-4 w-4 text-emerald-500 dark:text-emerald-400" : "h-4 w-4 text-zinc-500 dark:text-zinc-500"} />
             <span className="text-zinc-500 dark:text-zinc-500">Market</span>
-            <span className="text-zinc-700 dark:text-zinc-400">{health?.market?.phase ?? "—"}</span>
+            <span className="text-zinc-700 dark:text-zinc-400">{health?.market?.phase ?? "n/a"}</span>
           </div>
         </div>
       </Card>
@@ -281,16 +307,16 @@ function CandidatePanel({
                   <span className="font-mono font-medium text-zinc-900 dark:text-zinc-200">{row.symbol}</span>
                 </TableCell>
                 <TableCell>
-                  <StatusBadge status={row.final_verdict ?? row.verdict ?? "—"} />
+                  <StatusBadge status={row.final_verdict ?? row.verdict ?? "n/a"} />
                 </TableCell>
-                <TableCell numeric>{row.score ?? "—"}</TableCell>
+                <TableCell numeric>{row.score ?? "n/a"}</TableCell>
                 <TableCell>
                   <Badge variant={row.band === "A" ? "success" : row.band === "B" ? "warning" : "neutral"}>
-                    {row.band ?? "—"}
+                    {row.band ?? "n/a"}
                   </Badge>
                 </TableCell>
                 <TableCell className="font-mono text-zinc-700 dark:text-zinc-300">
-                  {selectedBySymbol.get(row.symbol.toUpperCase()) ?? "—"}
+                  {selectedBySymbol.get(row.symbol.toUpperCase()) ?? "n/a"}
                 </TableCell>
                 <TableCell>
                   <Link to={`/symbol-diagnostics?symbol=${encodeURIComponent(row.symbol)}`}>

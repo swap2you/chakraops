@@ -64,6 +64,11 @@ class Position:
     # Phase 5: Manual override for data_sufficiency; logged distinctly from auto-derived
     data_sufficiency_override: Optional[str] = None  # PASS | WARN | FAIL
     data_sufficiency_override_source: Optional[str] = None  # "MANUAL" when user overrides
+    # Phase 7.2: Trade lifecycle — exit levels and stop
+    stop_price: Optional[float] = None
+    t1: Optional[float] = None
+    t2: Optional[float] = None
+    t3: Optional[float] = None
 
     def __post_init__(self) -> None:
         if not self.opened_at:
@@ -92,6 +97,14 @@ class Position:
             v = getattr(self, key, None)
             if v is not None:
                 d[key] = v
+        # Phase 7.2: Lifecycle
+        for key in ("stop_price", "t1", "t2", "t3"):
+            v = getattr(self, key, None)
+            if v is not None:
+                d[key] = v
+        d["entry_credit"] = self.credit_expected
+        d["entry_date"] = self.opened_at
+        d["expiry"] = self.expiration
         return d
 
     @classmethod
@@ -104,7 +117,7 @@ class Position:
             contracts=int(d.get("contracts", 0)),
             strike=d.get("strike"),
             expiration=d.get("expiration"),
-            credit_expected=d.get("credit_expected"),
+            credit_expected=d.get("credit_expected") or d.get("entry_credit"),
             quantity=d.get("quantity"),
             status=d.get("status", "OPEN"),
             opened_at=d.get("opened_at", ""),
@@ -119,6 +132,10 @@ class Position:
             risk_amount_at_entry=d.get("risk_amount_at_entry"),
             data_sufficiency_override=d.get("data_sufficiency_override"),
             data_sufficiency_override_source=d.get("data_sufficiency_override_source"),
+            stop_price=d.get("stop_price"),
+            t1=d.get("t1"),
+            t2=d.get("t2"),
+            t3=d.get("t3"),
         )
 
 

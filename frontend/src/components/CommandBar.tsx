@@ -66,7 +66,6 @@ function isStale(ts: string | null | undefined): boolean {
 }
 
 export function CommandBar() {
-  console.log("[CommandBar] render start");
   const location = useLocation();
   const { mode, toggleMode } = useDataMode();
   const { effective: theme, setMode } = useTheme();
@@ -81,7 +80,6 @@ export function CommandBar() {
   const isMock = mode === "MOCK";
   const showDataWarning = mode === "LIVE" && dataHealth.status !== "OK";
   // LIVE = attempted; OK = data confirmed (do not assume data exists just because mode is LIVE)
-  console.log("[DATA_HEALTH]", dataHealth);
 
   return (
     <>
@@ -351,7 +349,6 @@ export function CommandBar() {
       </div>
     </header>
 
-      {showDataWarning && console.log("[CommandBar] showDataWarning = true")}
       {showDataWarning && (
         <div
           className="flex items-center justify-center gap-2 border-b border-amber-500/50 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-700 dark:text-amber-300"

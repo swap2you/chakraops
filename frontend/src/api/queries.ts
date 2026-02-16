@@ -12,6 +12,8 @@ import type {
   SymbolDiagnosticsResponseExtended,
   UiSystemHealthResponse,
   UiTrackedPositionsResponse,
+  PortfolioResponse,
+  UiAlertsResponse,
 } from "./types";
 import type { DecisionMode } from "./types";
 
@@ -55,6 +57,14 @@ function uiPositionsManualExecutePath(): string {
   return `/api/ui/positions/manual-execute`;
 }
 
+function uiPortfolioPath(): string {
+  return `/api/ui/portfolio`;
+}
+
+function uiAlertsPath(): string {
+  return `/api/ui/alerts`;
+}
+
 // =============================================================================
 // Query keys
 // =============================================================================
@@ -71,6 +81,8 @@ export const queryKeys = {
   uiSystemHealth: () => ["ui", "systemHealth"] as const,
   uiTrackedPositions: () => ["ui", "positions", "tracked"] as const,
   uiAccountsDefault: () => ["ui", "accounts", "default"] as const,
+  uiPortfolio: () => ["ui", "portfolio"] as const,
+  uiAlerts: () => ["ui", "alerts"] as const,
 };
 
 // =============================================================================
@@ -148,6 +160,7 @@ export interface ManualExecutePayload {
   strike?: number;
   expiration?: string;
   credit_expected?: number;
+  entry_credit?: number;
 }
 
 export function useManualExecute() {
@@ -157,6 +170,22 @@ export function useManualExecute() {
       apiPost(uiPositionsManualExecutePath(), payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.uiTrackedPositions() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiPortfolio() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiAlerts() });
     },
+  });
+}
+
+export function usePortfolio() {
+  return useQuery({
+    queryKey: queryKeys.uiPortfolio(),
+    queryFn: () => apiGet<PortfolioResponse>(uiPortfolioPath()),
+  });
+}
+
+export function useAlerts() {
+  return useQuery({
+    queryKey: queryKeys.uiAlerts(),
+    queryFn: () => apiGet<UiAlertsResponse>(uiAlertsPath()),
   });
 }

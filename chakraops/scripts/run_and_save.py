@@ -91,6 +91,12 @@ def _build_decision_artifact_from_evaluation(eval_result: Any) -> Dict[str, Any]
 
 def _resolve_symbols(args: argparse.Namespace) -> List[str]:
     """Resolve symbol list from CLI or defaults. No DB dependency."""
+    if getattr(args, "all", False):
+        try:
+            from app.api.data_health import get_universe_symbols
+            return list(get_universe_symbols())
+        except Exception as e:
+            raise RuntimeError(f"Failed to load universe: {e}") from e
     if args.symbols:
         symbols = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
     else:
@@ -110,7 +116,10 @@ def run_one(args: argparse.Namespace, out_dir: Path) -> Tuple[int, Optional[Path
         print("No symbols to evaluate")
         return 1, None
 
-    print(f"Evaluating {len(symbols)} symbols: {symbols}")
+    if getattr(args, "all", False):
+        print(f"[RUN] Evaluating full universe ({len(symbols)} symbols)")
+    else:
+        print(f"Evaluating {len(symbols)} symbols: {symbols}")
 
     try:
         from app.core.eval.universe_evaluator import run_universe_evaluation_staged
@@ -158,11 +167,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run staged evaluation and save decision snapshots")
     parser.add_argument("--symbols", type=str, default=None, help="Comma-separated symbols (default: SPY,AAPL)")
     parser.add_argument("--limit", type=int, default=5, help="Max symbols when using universe (default: 5)")
+    parser.add_argument("--all", action="store_true", help="Evaluate entire universe")
     parser.add_argument("--output-dir", type=str, default="out", help="Output directory (default: out)")
     parser.add_argument("--realtime", action="store_true", help="Loop: update decision_latest.json every interval")
     parser.add_argument("--interval", type=int, default=30, help="Refresh interval in seconds (default: 30)")
     parser.add_argument("--skip-cleanup", action="store_true", help="Skip retention cleanup")
     args = parser.parse_args()
+
+    if args.all and args.symbols:
+        raise ValueError("Cannot use --all and --symbols together")
 
     out_dir = Path(args.output_dir)
     if not out_dir.is_absolute():

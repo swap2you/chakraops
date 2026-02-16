@@ -16,8 +16,12 @@ function fmt(n: number | null | undefined): string {
   return n.toFixed(2);
 }
 
+const defaultCredit = (c: SymbolDiagnosticsCandidate, q: number) =>
+  (c.credit_estimate ?? 0) * q;
+
 export function TradeTicketDrawer({ symbol, candidate, onClose }: TradeTicketDrawerProps) {
   const [qty, setQty] = useState(1);
+  const [entryCredit, setEntryCredit] = useState(defaultCredit(candidate, 1));
   const [copied, setCopied] = useState(false);
   const { data: accountData } = useDefaultAccount();
   const manualExecute = useManualExecute();
@@ -25,7 +29,7 @@ export function TradeTicketDrawer({ symbol, candidate, onClose }: TradeTicketDra
 
   const strike = candidate.strike ?? 0;
   const notional = strike * 100 * qty;
-  const credit = (candidate.credit_estimate ?? 0) * qty;
+  const credit = entryCredit;
 
   const orderText = [
     `Symbol: ${symbol}`,
@@ -48,6 +52,7 @@ export function TradeTicketDrawer({ symbol, candidate, onClose }: TradeTicketDra
   const handleMarkAsTracked = () => {
     if (!defaultAccount?.account_id) return;
     const strategy = (candidate.strategy ?? "CSP").toUpperCase();
+    const fillCredit = Number.isFinite(credit) ? credit : defaultCredit(candidate, qty);
     manualExecute.mutate(
       {
         account_id: defaultAccount.account_id,
@@ -56,7 +61,8 @@ export function TradeTicketDrawer({ symbol, candidate, onClose }: TradeTicketDra
         contracts: qty,
         strike: candidate.strike ?? undefined,
         expiration: candidate.expiry ?? undefined,
-        credit_expected: credit,
+        credit_expected: fillCredit,
+        entry_credit: fillCredit,
       },
       {
         onSuccess: () => onClose(),
@@ -129,8 +135,23 @@ export function TradeTicketDrawer({ symbol, candidate, onClose }: TradeTicketDra
                 min={1}
                 max={100}
                 value={qty}
-                onChange={(e) => setQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                onChange={(e) => {
+                  const nextQty = Math.max(1, parseInt(e.target.value, 10) || 1);
+                  setQty(nextQty);
+                  setEntryCredit(defaultCredit(candidate, nextQty));
+                }}
                 className="mt-1 w-24 rounded border border-zinc-300 bg-white px-2 py-1.5 font-mono text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-500">Entry credit (actual fill)</label>
+              <input
+                type="number"
+                step={0.01}
+                min={0}
+                value={entryCredit}
+                onChange={(e) => setEntryCredit(parseFloat(e.target.value) || 0)}
+                className="mt-1 w-28 rounded border border-zinc-300 bg-white px-2 py-1.5 font-mono text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
               />
             </div>
             <div>

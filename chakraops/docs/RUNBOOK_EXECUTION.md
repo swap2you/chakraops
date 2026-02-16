@@ -21,6 +21,9 @@ cd C:\Development\Workspace\ChakraOps\chakraops
 $env:PYTHONPATH = (Get-Location).Path
 python scripts/run_and_save.py --symbols SPY,AAPL --output-dir out
 
+#Run full universe evaluation:
+python scripts/run_and_save.py --all --output-dir out
+
 # Terminal 2: Start backend
 cd C:\Development\Workspace\ChakraOps\chakraops
 .\.venv\Scripts\Activate.ps1

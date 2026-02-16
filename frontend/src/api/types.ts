@@ -114,6 +114,26 @@ export interface UniverseSymbol {
   [key: string]: unknown;
 }
 
+/** Phase 7.1: Merged universe row with explicit evaluation state. No blanks. */
+export interface UniverseMergedRow {
+  symbol: string;
+  verdict: string;
+  final_verdict: string;
+  score: number | null;
+  band: string | null;
+  primary_reason: string | null;
+  price: number | null;
+  expiration: string | null;
+  stage_status: string;
+  provider_status: string | null;
+  stage1_status: string;
+  stage2_status: string;
+  data_freshness: string | null;
+  has_candidates: boolean;
+  evaluated_at: string | null;
+  strategy: string | null;
+}
+
 export interface UniverseResponse {
   source: string;
   updated_at: string;
@@ -219,6 +239,51 @@ export interface UiTrackedPositionsResponse {
 }
 
 // =============================================================================
+// Portfolio — GET /api/ui/portfolio (lifecycle-enriched positions)
+// =============================================================================
+
+export interface PortfolioPosition {
+  position_id: string;
+  symbol: string;
+  strategy: string;
+  entry_credit?: number | null;
+  quantity?: number | null;
+  contracts?: number | null;
+  strike?: number | null;
+  expiry?: string | null;
+  entry_date?: string | null;
+  status?: string | null;
+  stop_price?: number | null;
+  t1?: number | null;
+  t2?: number | null;
+  t3?: number | null;
+  mark?: number | null;
+  premium_captured_pct?: number | null;
+  dte?: number | null;
+  alert_flags?: string[];
+  unrealized_pnl?: number | null;
+}
+
+export interface PortfolioResponse {
+  positions: PortfolioPosition[];
+}
+
+// =============================================================================
+// Alerts — GET /api/ui/alerts
+// =============================================================================
+
+export interface UiAlert {
+  position_id: string;
+  symbol: string;
+  type: string;
+  message: string;
+}
+
+export interface UiAlertsResponse {
+  alerts: UiAlert[];
+}
+
+// =============================================================================
 // Symbol diagnostics extended (stage breakdown, liquidity, execution confidence)
 // =============================================================================
 
@@ -281,9 +346,19 @@ export interface SymbolDiagnosticsRankReasons {
   penalty?: string | null;
 }
 
+/** Phase 7.3: Structured explanation (symbol-level). */
+export interface SymbolDiagnosticsExplanation {
+  stock_regime_reason?: string | null;
+  support_condition?: string | null;
+  liquidity_condition?: string | null;
+  iv_condition?: string | null;
+}
+
 export interface SymbolDiagnosticsResponseExtended extends SymbolDiagnosticsResponse {
   symbol_eligibility?: SymbolEligibilityDetail;
   liquidity?: SymbolLiquidityDetail;
+  /** Phase 7.3: Structured explanation. */
+  explanation?: SymbolDiagnosticsExplanation | null;
   /** Eligibility trace computed: RSI, ATR, support/resistance levels. */
   computed?: SymbolDiagnosticsComputed;
   /** Composite score (0-100). */

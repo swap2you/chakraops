@@ -101,7 +101,7 @@ def manual_execute(data: Dict[str, Any]) -> Tuple[Optional[Position], List[str]]
         contracts=int(data.get("contracts", 0)),
         strike=data.get("strike"),
         expiration=data.get("expiration"),
-        credit_expected=data.get("credit_expected"),
+        credit_expected=data.get("credit_expected") or data.get("entry_credit"),
         quantity=data.get("quantity"),
         status="OPEN",
         opened_at=now,

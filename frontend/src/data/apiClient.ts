@@ -62,9 +62,6 @@ export class ApiError extends Error {
  */
 export async function apiGet<T>(path: string, opts?: { timeoutMs?: number; signal?: AbortSignal }): Promise<T> {
   const url = resolvePath(path);
-  if (typeof console !== "undefined" && console.log) {
-    console.log("[API] GET", url);
-  }
   const timeoutMs = opts?.timeoutMs ?? 15_000;
   
   // If external signal provided, use it; otherwise create internal timeout controller
@@ -133,9 +130,6 @@ export async function apiPost<T>(
   opts?: { timeoutMs?: number; headers?: Record<string, string> }
 ): Promise<T> {
   const url = resolvePath(path);
-  if (typeof console !== "undefined" && console.log) {
-    console.log("[API] POST", url);
-  }
   const timeoutMs = opts?.timeoutMs ?? 15_000;
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -152,9 +146,6 @@ export async function apiPost<T>(
       signal: controller.signal,
     });
     clearTimeout(id);
-    if (typeof console !== "undefined" && console.log) {
-      console.log("[API] POST", url, "status=" + res.status);
-    }
     const text = await res.text();
     if (!res.ok) {
       let parsed: unknown;

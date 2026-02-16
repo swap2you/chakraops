@@ -131,6 +131,7 @@ def update_position(position_id: str, updates: dict) -> Optional[Position]:
         "band", "risk_flags_at_entry", "portfolio_utilization_pct", "sector_exposure_pct",
         "thesis_strength", "data_sufficiency", "risk_amount_at_entry",
         "data_sufficiency_override", "data_sufficiency_override_source",
+        "stop_price", "t1", "t2", "t3", "credit_expected",
     })
     for key, value in updates.items():
         if key in allowed_keys and hasattr(target, key):

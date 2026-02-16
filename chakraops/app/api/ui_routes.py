@@ -328,6 +328,60 @@ async def ui_positions_manual_execute(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/portfolio")
+def ui_portfolio(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    Portfolio view: tracked positions with lifecycle (DTE, premium_captured %, alert flags).
+    """
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.positions.service import list_positions
+        from app.core.positions.lifecycle import enrich_position_for_portfolio
+        positions = list_positions(status=None, symbol=None)
+        mark_by_id: Dict[str, float] = {}
+        underlying_by_symbol: Dict[str, float] = {}
+        out: List[Dict[str, Any]] = [
+            enrich_position_for_portfolio(p, mark_by_id, underlying_by_symbol)
+            for p in positions
+        ]
+        return {"positions": out}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error loading portfolio: %s", e)
+        return {"positions": []}
+
+
+@router.get("/alerts")
+def ui_alerts(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Alerts from portfolio positions (T1, T2, T3, DTE_RISK, STOP)."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.positions.service import list_positions
+        from app.core.positions.lifecycle import enrich_position_for_portfolio
+        positions = list_positions(status=None, symbol=None)
+        alerts: List[Dict[str, Any]] = []
+        for p in positions:
+            if (p.status or "").upper() not in ("OPEN", "PARTIAL_EXIT"):
+                continue
+            enriched = enrich_position_for_portfolio(p, None, None)
+            for flag in enriched.get("alert_flags") or []:
+                alerts.append({
+                    "position_id": p.position_id,
+                    "symbol": p.symbol,
+                    "type": flag,
+                    "message": f"{p.symbol} {flag}",
+                })
+        return {"alerts": alerts}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error loading alerts: %s", e)
+        return {"alerts": []}
+
+
 @router.get("/positions/tracked")
 def ui_positions_tracked(
     status: str | None = Query(default=None),
@@ -459,6 +513,22 @@ def ui_symbol_diagnostics(
         provider_status = "NOT_FOUND"
         provider_message = result.get("provider_message") or "Symbol or quote data not found."
 
+    # Phase 7.3: Structured explanation for symbol-diagnostics UI
+    spot = None
+    if result.get("stock") and isinstance(result["stock"], dict):
+        spot = result["stock"].get("price")
+    el_trace = result.get("eligibility_trace") or {}
+    support = computed_out.get("support_level") or el_trace.get("support_level")
+    support_condition = None
+    if support is not None and isinstance(support, (int, float)):
+        support_condition = f"Support ${float(support):.2f}" + (f" vs spot ${float(spot):.2f}" if spot is not None else "")
+    liq_ok = liquidity.get("stock_liquidity_ok") and liquidity.get("option_liquidity_ok")
+    explanation: Dict[str, Any] = {
+        "stock_regime_reason": (el_trace.get("regime") or result.get("regime") or "").strip() or None,
+        "support_condition": support_condition,
+        "liquidity_condition": liquidity.get("reason") if not liq_ok else "OK",
+        "iv_condition": eligibility.get("primary_reason") or None,
+    }
     out: Dict[str, Any] = {
         "symbol": result.get("symbol"),
         "provider_status": provider_status,
@@ -467,6 +537,7 @@ def ui_symbol_diagnostics(
         "verdict": eligibility.get("verdict"),
         "in_universe": result.get("in_universe"),
         "stock": result.get("stock"),
+        "explanation": explanation,
         "gates": result.get("gates", []),
         "blockers": result.get("blockers", []),
         "notes": result.get("notes", []),

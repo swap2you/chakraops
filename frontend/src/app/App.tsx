@@ -6,6 +6,7 @@ import { DashboardPage } from "@/pages/DashboardPage";
 import { UniversePage } from "@/pages/UniversePage";
 import { SymbolDiagnosticsPage } from "@/pages/SymbolDiagnosticsPage";
 import { SystemDiagnosticsPage } from "@/pages/SystemDiagnosticsPage";
+import { PortfolioPage } from "@/pages/PortfolioPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,6 +28,7 @@ export function App() {
               <Route path="/universe" element={<UniversePage />} />
               <Route path="/symbol-diagnostics" element={<SymbolDiagnosticsPage />} />
               <Route path="/system" element={<SystemDiagnosticsPage />} />
+              <Route path="/portfolio" element={<PortfolioPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

@@ -38,8 +38,8 @@ export function Badge({ children, variant = "default", className }: BadgeProps) 
 export function StatusBadge({ status }: { status: string }) {
   const s = (status || "").toUpperCase();
   let v: BadgeVariant = "neutral";
-  if (s === "OK" || s === "PASS") v = "success";
-  else if (s === "WARN" || s === "FAIL") v = "warning";
+  if (s === "OK" || s === "PASS" || s === "ELIGIBLE") v = "success";
+  else if (s === "WARN" || s === "FAIL" || s === "HOLD") v = "warning";
   else if (s === "DOWN" || s === "BLOCKED") v = "danger";
   return <Badge variant={v}>{status || "—"}</Badge>;
 }

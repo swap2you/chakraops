@@ -3,8 +3,8 @@
  * Requires @tanstack/react-query.
  */
 
-import { useQuery } from "@tanstack/react-query";
-import { apiGet } from "./client";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiGet, apiPost } from "./client";
 import type {
   ArtifactListResponse,
   DecisionResponse,
@@ -47,6 +47,14 @@ function uiTrackedPositionsPath(): string {
   return `/api/ui/positions/tracked`;
 }
 
+function uiAccountsDefaultPath(): string {
+  return `/api/ui/accounts/default`;
+}
+
+function uiPositionsManualExecutePath(): string {
+  return `/api/ui/positions/manual-execute`;
+}
+
 // =============================================================================
 // Query keys
 // =============================================================================
@@ -62,6 +70,7 @@ export const queryKeys = {
     ["ui", "symbolDiagnostics", symbol] as const,
   uiSystemHealth: () => ["ui", "systemHealth"] as const,
   uiTrackedPositions: () => ["ui", "positions", "tracked"] as const,
+  uiAccountsDefault: () => ["ui", "accounts", "default"] as const,
 };
 
 // =============================================================================
@@ -116,5 +125,38 @@ export function useUiTrackedPositions() {
   return useQuery({
     queryKey: queryKeys.uiTrackedPositions(),
     queryFn: () => apiGet<UiTrackedPositionsResponse>(uiTrackedPositionsPath()),
+  });
+}
+
+export interface UiAccountsDefaultResponse {
+  account: { account_id: string; [k: string]: unknown } | null;
+  message?: string;
+}
+
+export function useDefaultAccount() {
+  return useQuery({
+    queryKey: queryKeys.uiAccountsDefault(),
+    queryFn: () => apiGet<UiAccountsDefaultResponse>(uiAccountsDefaultPath()),
+  });
+}
+
+export interface ManualExecutePayload {
+  account_id: string;
+  symbol: string;
+  strategy: string;
+  contracts?: number;
+  strike?: number;
+  expiration?: string;
+  credit_expected?: number;
+}
+
+export function useManualExecute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: ManualExecutePayload) =>
+      apiPost(uiPositionsManualExecutePath(), payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiTrackedPositions() });
+    },
   });
 }

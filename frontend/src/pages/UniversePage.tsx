@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useUniverse } from "@/api/queries";
+import { useUniverse, useDecision } from "@/api/queries";
 import type { UniverseSymbol } from "@/api/types";
+import { mergeUniverseWithDecision, buildSymbolsFromDecision } from "@/lib/mergeUniverseDecision";
 import { PageHeader } from "@/components/PageHeader";
 import {
   Card,
@@ -31,13 +32,20 @@ type VerdictFilter = "all" | "ELIGIBLE" | "HOLD" | "BLOCKED";
 
 export function UniversePage() {
   const navigate = useNavigate();
-  const { data, isLoading, isError } = useUniverse();
+  const { data: universeData, isLoading: universeLoading, isError } = useUniverse();
+  const { data: decision } = useDecision("LIVE");
   const [search, setSearch] = useState("");
   const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>("all");
 
-  const symbols = data?.symbols ?? [];
-  const source = data?.source ?? "—";
-  const updated = data?.updated_at ?? "—";
+  const baseSymbols = universeData?.symbols ?? [];
+  const symbols = useMemo(() => {
+    if (baseSymbols.length > 0) {
+      return mergeUniverseWithDecision(baseSymbols, decision);
+    }
+    return buildSymbolsFromDecision(decision);
+  }, [baseSymbols, decision]);
+  const source = universeData?.source ?? "—";
+  const updated = universeData?.updated_at ?? decision?.metadata?.pipeline_timestamp ?? "—";
 
   const filtered = useMemo(() => {
     let list = symbols;
@@ -52,6 +60,7 @@ export function UniversePage() {
     return list;
   }, [symbols, verdictFilter, search]);
 
+  const isLoading = universeLoading;
   if (isLoading) {
     return (
       <div>
@@ -73,7 +82,7 @@ export function UniversePage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <PageHeader title="Universe" subtext={`Source: ${source} · Updated ${fmtTs(updated)}`} />
       <Card>
         <CardHeader title="Filters" />

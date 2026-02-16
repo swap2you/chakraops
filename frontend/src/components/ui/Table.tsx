@@ -39,7 +39,8 @@ export function TableRow({
   return (
     <tr
       className={clsx(
-        "border-b border-zinc-100 last:border-0 hover:bg-zinc-50 dark:border-zinc-800/50 dark:hover:bg-zinc-800/30",
+        "border-b border-zinc-100 last:border-0 transition-all duration-200 ease-out dark:border-zinc-800/50",
+        "hover:-translate-y-px hover:bg-zinc-50 hover:shadow-sm dark:hover:bg-zinc-800/40",
         onClick && "cursor-pointer",
         className
       )}
@@ -63,14 +64,17 @@ export function TableCell({
   children,
   className,
   numeric,
+  title,
 }: {
   children: React.ReactNode;
   className?: string;
   numeric?: boolean;
+  title?: string;
 }) {
   return (
     <td
       className={clsx("py-2 pr-2", numeric && "font-mono text-right tabular-nums", className)}
+      title={title}
     >
       {children}
     </td>

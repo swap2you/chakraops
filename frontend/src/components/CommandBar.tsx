@@ -69,7 +69,7 @@ export function CommandBar() {
   console.log("[CommandBar] render start");
   const location = useLocation();
   const { mode, toggleMode } = useDataMode();
-  const { theme, setTheme } = useTheme();
+  const { effective: theme, setMode } = useTheme();
   const scenario = useScenario();
   useApiHealth(); // keep polling for API health
   const dataHealth = useApiDataHealth();
@@ -311,7 +311,7 @@ export function CommandBar() {
         {/* Theme toggle */}
         <button
           type="button"
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          onClick={() => setMode(theme === "dark" ? "light" : "dark")}
           className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
           aria-label="Toggle theme"
         >

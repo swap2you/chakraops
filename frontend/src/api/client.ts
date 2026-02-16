@@ -34,11 +34,37 @@ export class ApiError extends Error {
   }
 }
 
+function jsonHeaders(): Record<string, string> {
+  const h = getHeaders();
+  h["Content-Type"] = "application/json";
+  return h;
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
   const url = resolveUrl(path);
   const res = await fetch(url, {
     method: "GET",
     headers: getHeaders(),
+  });
+  const text = await res.text();
+  let body: unknown;
+  try {
+    body = text ? JSON.parse(text) : undefined;
+  } catch {
+    body = undefined;
+  }
+  if (!res.ok) {
+    throw new ApiError(`API ${res.status}: ${res.statusText}`, res.status, body);
+  }
+  return (body ?? {}) as T;
+}
+
+export async function apiPost<T>(path: string, payload: unknown): Promise<T> {
+  const url = resolveUrl(path);
+  const res = await fetch(url, {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify(payload),
   });
   const text = await res.text();
   let body: unknown;

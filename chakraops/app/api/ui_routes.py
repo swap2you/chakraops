@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Literal
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 
 from app.ui.live_dashboard_utils import list_decision_files, list_mock_files, load_decision_artifact
 
@@ -286,6 +286,46 @@ def ui_system_health(
             "eod_next_at": scheduler_eod_next,
         },
     }
+
+
+@router.get("/accounts/default")
+def ui_accounts_default(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Get the default account for manual execution. UI-safe wrapper for /api/accounts/default."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.accounts.service import get_default_account
+        account = get_default_account()
+        if account is None:
+            return {"account": None, "message": "No default account set"}
+        return {"account": account.to_dict()}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error getting default account: %s", e)
+        return {"account": None, "message": str(e)}
+
+
+@router.post("/positions/manual-execute")
+async def ui_positions_manual_execute(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Record a manual execution (creates a tracked position). UI-safe wrapper."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.positions.service import manual_execute
+        body = await request.json()
+        position, errors = manual_execute(body)
+        if errors:
+            raise HTTPException(status_code=400, detail={"errors": errors})
+        return position.to_dict()
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error recording manual execution: %s", e)
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/positions/tracked")

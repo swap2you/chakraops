@@ -4,7 +4,9 @@ import { Calendar, Database, Droplets } from "lucide-react";
 import { useSymbolDiagnostics } from "@/api/queries";
 import type { SymbolDiagnosticsResponseExtended } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
-import { Card, CardHeader, Badge, StatusBadge, Tooltip } from "@/components/ui";
+import { TradeTicketDrawer } from "@/components/TradeTicketDrawer";
+import { Card, CardHeader, Badge, StatusBadge, Tooltip, Button } from "@/components/ui";
+import type { SymbolDiagnosticsCandidate } from "@/api/types";
 
 function verdictColor(v: string | null | undefined): string {
   const s = (v ?? "").toUpperCase();
@@ -69,6 +71,7 @@ export function SymbolDiagnosticsPage() {
   const [symbol, setSymbol] = useState("");
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
+  const [tradeTicketCandidate, setTradeTicketCandidate] = useState<SymbolDiagnosticsCandidate | null>(null);
 
   const shouldFetch = activeSymbol != null && isValidSymbol(activeSymbol);
   const { data, isLoading, isError } = useSymbolDiagnostics(activeSymbol ?? "", shouldFetch);
@@ -127,7 +130,18 @@ export function SymbolDiagnosticsPage() {
       {isError && <p className="text-xs text-red-400">Failed to load.</p>}
 
       {data && !isLoading && (
-        <ExecutionConsole data={data} />
+        <ExecutionConsole
+          data={data}
+          onOpenTradeTicket={(c) => setTradeTicketCandidate(c)}
+        />
+      )}
+
+      {tradeTicketCandidate && activeSymbol && (
+        <TradeTicketDrawer
+          symbol={activeSymbol}
+          candidate={tradeTicketCandidate}
+          onClose={() => setTradeTicketCandidate(null)}
+        />
       )}
 
       {!data && !isLoading && !isError && !showInvalidError && (
@@ -137,17 +151,13 @@ export function SymbolDiagnosticsPage() {
   );
 }
 
-function fmtTs(s: string | null | undefined): string {
-  if (!s) return "—";
-  try {
-    const d = new Date(s);
-    return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-  } catch {
-    return String(s);
-  }
-}
-
-function ExecutionConsole({ data }: { data: SymbolDiagnosticsResponseExtended }) {
+function ExecutionConsole({
+  data,
+  onOpenTradeTicket,
+}: {
+  data: SymbolDiagnosticsResponseExtended;
+  onOpenTradeTicket: (c: SymbolDiagnosticsCandidate) => void;
+}) {
   const comp = data.computed;
   const ep = data.exit_plan;
   const candidates = data.candidates ?? [];
@@ -246,7 +256,20 @@ function ExecutionConsole({ data }: { data: SymbolDiagnosticsResponseExtended })
         </Card>
 
         <Card>
-          <CardHeader title="Candidates" />
+          <CardHeader
+            title="Candidates"
+            actions={
+              candidates.length > 0 ? (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => onOpenTradeTicket(candidates[0])}
+                >
+                  Open Trade Ticket
+                </Button>
+              ) : null
+            }
+          />
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>

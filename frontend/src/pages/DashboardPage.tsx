@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { ExternalLink, Activity, Droplets, Zap } from "lucide-react";
 import { useArtifactList, useDecision, useUniverse, useUiSystemHealth, useUiTrackedPositions } from "@/api/queries";
@@ -40,31 +40,53 @@ export function DashboardPage() {
   const { data: health } = useUiSystemHealth();
   const { data: positionsRes } = useUiTrackedPositions();
 
-  const isLoading = !decision;
-  if (isLoading || !decision) {
-    return (
-      <div className="space-y-4">
-        <PageHeader title="Command Center" subtext="AI trading command center" />
-        <Card>
-          <div className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
-            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-zinc-400" />
-            Loading decision and health…
-          </div>
-        </Card>
-      </div>
-    );
-  }
+  const mergedBySymbol = useMemo(() => {
+    const snapshot = decision?.decision_snapshot;
+    const candidates = snapshot?.candidates ?? [];
+    const selectedSignals = snapshot?.selected_signals ?? [];
+    const map = new Map<string, UniverseSymbol>();
+    for (const s of universe?.symbols ?? []) {
+      map.set((s.symbol || "").toUpperCase(), { ...s });
+    }
+    for (const c of candidates) {
+      const sym = (c.symbol || "").toUpperCase();
+      const existing = map.get(sym) ?? ({ symbol: c.symbol } as UniverseSymbol);
+      map.set(sym, {
+        ...existing,
+        symbol: c.symbol || existing.symbol,
+        verdict: c.verdict ?? existing.verdict,
+        final_verdict: c.verdict ?? existing.final_verdict,
+        score: (c as { score?: number }).score ?? existing.score,
+        band: (c as { band?: string }).band ?? existing.band,
+        primary_reason: (c as { primary_reason?: string }).primary_reason ?? existing.primary_reason,
+        expiration: c.candidate?.expiry ? String(c.candidate.expiry).slice(0, 10) : existing.expiration,
+        price: (c.candidate as { price?: number })?.price ?? existing.price,
+      });
+    }
+    for (const ss of selectedSignals) {
+      const sym = (ss.symbol || "").toUpperCase();
+      if (!map.has(sym)) {
+        map.set(sym, {
+          symbol: ss.symbol,
+          verdict: ss.verdict,
+          final_verdict: ss.verdict,
+          expiration: ss.candidate?.expiry ? String(ss.candidate.expiry).slice(0, 10) : undefined,
+        } as UniverseSymbol);
+      }
+    }
+    return map;
+  }, [universe?.symbols, decision?.decision_snapshot]);
 
-  const snapshot = decision.decision_snapshot;
-  const metadata = decision.metadata;
-  const universeSymbols = universe?.symbols ?? [];
+  const universeSymbols = Array.from(mergedBySymbol.values());
+  const snapshot = decision?.decision_snapshot;
+  const selectedSignals = snapshot?.selected_signals ?? [];
   const aTier = universeSymbols.filter(
     (s) => (s.band ?? "").toUpperCase() === "A" && ((s.final_verdict ?? s.verdict ?? "").toUpperCase() === "ELIGIBLE")
   );
   const bTier = universeSymbols.filter(
     (s) => (s.band ?? "").toUpperCase() === "B" && ((s.final_verdict ?? s.verdict ?? "").toUpperCase() === "ELIGIBLE")
   );
-  const selectedSignals = snapshot?.selected_signals ?? [];
+  const eligibleFromDecision = selectedSignals.length > 0 && aTier.length === 0 && bTier.length === 0;
   const selectedBySymbol = new Map(
     selectedSignals.map((s) => [s.symbol.toUpperCase(), s.candidate?.strategy ?? "—"])
   );
@@ -72,13 +94,24 @@ export function DashboardPage() {
   const openPositions = positions.filter((p) => (p.status ?? "").toUpperCase() === "OPEN" || (p.status ?? "").toUpperCase() === "PARTIAL_EXIT");
   const capitalDeployed = openPositions.reduce((sum, p) => sum + (p.notional ?? 0), 0);
 
+  const isReady = !!decision;
+  const metadata = decision?.metadata;
   const marketPhase = health?.market?.phase ?? "—";
   const oratsStatus = health?.orats?.status ?? "—";
   const lastEvalTs = metadata?.pipeline_timestamp ?? health?.market?.timestamp;
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Command Center" subtext="Mode, market, and evaluation status" />
+      <PageHeader title="Command Center" subtext={isReady ? "Mode, market, and evaluation status" : "AI trading command center"} />
+      {!isReady ? (
+        <Card>
+          <div className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-zinc-400" />
+            Loading decision and health…
+          </div>
+        </Card>
+      ) : (
+        <>
       <div className="flex flex-wrap items-center gap-3">
         <select
           value={mode}
@@ -129,10 +162,13 @@ export function DashboardPage() {
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
           <CandidatePanel title="A-tier candidates" rows={aTier} selectedBySymbol={selectedBySymbol} />
           <CandidatePanel title="B-tier candidates" rows={bTier} selectedBySymbol={selectedBySymbol} />
+          {eligibleFromDecision && (
+            <CandidatePanel title="Eligible candidates" rows={selectedSignals.map((s) => ({ symbol: s.symbol, verdict: s.verdict, final_verdict: s.verdict } as UniverseSymbol))} selectedBySymbol={selectedBySymbol} />
+          )}
         </div>
         <div className="space-y-4">
           <StatCard
@@ -208,6 +244,8 @@ export function DashboardPage() {
           </div>
         </div>
       </Card>
+        </>
+      )}
     </div>
   );
 }
@@ -234,7 +272,7 @@ function CandidatePanel({
             <TableHead>score</TableHead>
             <TableHead>band</TableHead>
             <TableHead>strategy</TableHead>
-            <TableHead className="w-16"></TableHead>
+            <TableHead className="w-16">{" "}</TableHead>
           </TableHeader>
           <TableBody>
             {rows.map((row) => (

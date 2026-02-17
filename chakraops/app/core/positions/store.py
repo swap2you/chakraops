@@ -79,8 +79,12 @@ def _save_all(positions: List[Position]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def list_positions(status: Optional[str] = None, symbol: Optional[str] = None) -> List[Position]:
-    """List all positions, optionally filtered by status and/or symbol."""
+def list_positions(
+    status: Optional[str] = None,
+    symbol: Optional[str] = None,
+    exclude_test: bool = False,
+) -> List[Position]:
+    """List all positions, optionally filtered by status, symbol, and exclude_test."""
     positions = _load_all()
     if status:
         positions = [p for p in positions if p.status == status]
@@ -88,8 +92,10 @@ def list_positions(status: Optional[str] = None, symbol: Optional[str] = None) -
         sym_upper = (symbol or "").strip().upper()
         if sym_upper:
             positions = [p for p in positions if (p.symbol or "").strip().upper() == sym_upper]
+    if exclude_test:
+        positions = [p for p in positions if not getattr(p, "is_test", False)]
     # Sort by opened_at descending (newest first)
-    positions.sort(key=lambda p: p.opened_at, reverse=True)
+    positions.sort(key=lambda p: p.opened_at or "", reverse=True)
     return positions
 
 
@@ -125,13 +131,15 @@ def update_position(position_id: str, updates: dict) -> Optional[Position]:
     if target is None:
         return None
 
-    # Phase 1 keys + Phase 4/5 entry snapshot keys
+    # Phase 1 keys + Phase 4/5 entry snapshot keys + Phase 10.0 close keys
     allowed_keys = frozenset({
         "status", "closed_at", "notes",
         "band", "risk_flags_at_entry", "portfolio_utilization_pct", "sector_exposure_pct",
         "thesis_strength", "data_sufficiency", "risk_amount_at_entry",
         "data_sufficiency_override", "data_sufficiency_override_source",
         "stop_price", "t1", "t2", "t3", "credit_expected",
+        "close_debit", "close_price", "close_fees", "close_time_utc", "realized_pnl",
+        "updated_at_utc",
     })
     for key, value in updates.items():
         if key in allowed_keys and hasattr(target, key):
@@ -152,3 +160,15 @@ def update_position(position_id: str, updates: dict) -> Optional[Position]:
     _save_all(positions)
     logger.info("[POSITIONS] Updated position %s", position_id)
     return target
+
+
+def delete_position(position_id: str) -> bool:
+    """Delete a position. Returns True if deleted. Caller must enforce guardrails (is_test or CLOSED)."""
+    positions = _load_all()
+    before = len(positions)
+    positions = [p for p in positions if p.position_id != position_id]
+    if len(positions) == before:
+        return False
+    _save_all(positions)
+    logger.info("[POSITIONS] Deleted position %s", position_id)
+    return True

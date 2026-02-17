@@ -774,6 +774,44 @@ def ui_accounts_default(
         return {"account": None, "message": str(e)}
 
 
+@router.get("/accounts")
+def ui_accounts_list(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """List all accounts. Phase 10.0."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.accounts.service import list_accounts
+        accounts = list_accounts()
+        return {"accounts": [a.to_dict() for a in accounts]}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error listing accounts: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/accounts")
+async def ui_accounts_create(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Create a new account. Phase 10.0. Body: provider, account_type, total_capital, max_capital_per_trade_pct, max_total_exposure_pct, allowed_strategies."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.accounts.service import create_account
+        body = await request.json()
+        account, errors = create_account(body)
+        if errors:
+            raise HTTPException(status_code=400, detail={"errors": errors})
+        return account.to_dict()
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error creating account: %s", e)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.post("/positions/manual-execute")
 async def ui_positions_manual_execute(
     request: Request,
@@ -798,29 +836,43 @@ async def ui_positions_manual_execute(
 
 @router.get("/portfolio")
 def ui_portfolio(
+    exclude_test: bool = Query(default=True),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
     """
     Portfolio view: tracked positions with lifecycle (DTE, premium_captured %, alert flags).
+    Phase 10.0: Excludes is_test by default; adds capital_deployed and open_positions_count.
     """
     _require_ui_key(x_ui_key)
     try:
         from app.core.positions.service import list_positions
         from app.core.positions.lifecycle import enrich_position_for_portfolio
-        positions = list_positions(status=None, symbol=None)
-        # Phase 8.6: Exclude DIAG_TEST (diagnostics sanity check) from portfolio display
-        positions = [p for p in positions if not (p.symbol or "").strip().upper().startswith("DIAG_TEST")]
+        positions = list_positions(status=None, symbol=None, exclude_test=exclude_test)
         mark_by_id: Dict[str, float] = {}
         underlying_by_symbol: Dict[str, float] = {}
-        out: List[Dict[str, Any]] = [
-            enrich_position_for_portfolio(p, mark_by_id, underlying_by_symbol)
-            for p in positions
-        ]
-        return {"positions": out}
+        capital_deployed = 0.0
+        open_count = 0
+        out: List[Dict[str, Any]] = []
+        for p in positions:
+            enriched = enrich_position_for_portfolio(p, mark_by_id, underlying_by_symbol)
+            collateral = getattr(p, "collateral", None)
+            s = (p.status or "").upper()
+            if s in ("OPEN", "PARTIAL_EXIT"):
+                open_count += 1
+                if collateral is not None:
+                    capital_deployed += float(collateral)
+                elif p.strike and p.contracts:
+                    capital_deployed += float(p.strike) * 100 * int(p.contracts)
+            out.append(enriched)
+        return {
+            "positions": out,
+            "capital_deployed": round(capital_deployed, 2),
+            "open_positions_count": open_count,
+        }
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Error loading portfolio: %s", e)
-        return {"positions": []}
+        return {"positions": [], "capital_deployed": 0, "open_positions_count": 0}
 
 
 @router.get("/alerts")
@@ -832,7 +884,7 @@ def ui_alerts(
     try:
         from app.core.positions.service import list_positions
         from app.core.positions.lifecycle import enrich_position_for_portfolio
-        positions = list_positions(status=None, symbol=None)
+        positions = list_positions(status=None, symbol=None, exclude_test=True)
         alerts: List[Dict[str, Any]] = []
         for p in positions:
             if (p.status or "").upper() not in ("OPEN", "PARTIAL_EXIT"):
@@ -856,32 +908,37 @@ def ui_alerts(
 def ui_positions_list(
     status: str | None = Query(default=None),
     symbol: str | None = Query(default=None),
+    exclude_test: bool = Query(default=True),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
     """
-    Get current positions (same data as /positions/tracked).
-    Returns { positions: [{ symbol, qty, contracts?, notional?, updated_at?, status? }] }.
+    Get current positions. Phase 10.0: includes id, collateral, is_test; excludes test by default.
     """
     _require_ui_key(x_ui_key)
     try:
         from app.core.positions.service import list_positions
-        positions = list_positions(status=status, symbol=symbol)
+        positions = list_positions(status=status, symbol=symbol, exclude_test=exclude_test)
         out: List[Dict[str, Any]] = []
         for p in positions:
             d = p.to_dict()
-            qty = d.get("quantity") if (d.get("strategy") or "").upper() == "STOCK" else d.get("contracts")
             strike = d.get("strike")
             contracts = d.get("contracts") or 0
-            notional = (float(strike) * 100 * int(contracts)) if strike is not None and contracts else None
+            collateral = d.get("collateral")
+            notional = collateral
+            if notional is None and strike is not None and contracts:
+                notional = float(strike) * 100 * int(contracts)
             out.append({
                 "position_id": d.get("position_id"),
+                "id": d.get("id") or d.get("position_id"),
                 "symbol": d.get("symbol", ""),
-                "qty": qty,
+                "qty": d.get("quantity") if (d.get("strategy") or "").upper() == "STOCK" else d.get("contracts"),
                 "contracts": d.get("contracts"),
-                "avg_price": d.get("credit_expected"),
+                "avg_price": d.get("credit_expected") or d.get("open_credit"),
+                "collateral": collateral,
                 "notional": notional,
-                "updated_at": d.get("opened_at"),
+                "updated_at": d.get("updated_at_utc") or d.get("opened_at"),
                 "status": d.get("status"),
+                "is_test": d.get("is_test", False),
             })
         return {"positions": out}
     except Exception as e:
@@ -915,21 +972,85 @@ async def ui_positions_create(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post("/positions/{position_id}/close")
+async def ui_positions_close(
+    position_id: str,
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Close an OPEN position. Phase 10.0. Body: close_price (required), close_time_utc? (optional), close_fees? (optional)."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.positions.service import close_position
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        body = body or {}
+        close_price = body.get("close_price")
+        if close_price is None:
+            raise HTTPException(status_code=400, detail="close_price is required")
+        try:
+            close_price = float(close_price)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="close_price must be a number")
+        close_time_utc = body.get("close_time_utc")
+        close_fees = body.get("close_fees")
+        position, errors = close_position(position_id, close_price, close_time_utc, close_fees)
+        if errors:
+            raise HTTPException(status_code=400, detail={"errors": errors})
+        if position is None:
+            raise HTTPException(status_code=404, detail="Position not found")
+        return position.to_dict()
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error closing position: %s", e)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/positions/{position_id}")
+def ui_positions_delete(
+    position_id: str,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Delete a position. Phase 10.0. Allowed only when is_test=true OR status=CLOSED/ABORTED. Returns 409 otherwise."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.positions.service import delete_position
+        ok, err = delete_position(position_id)
+        if not ok:
+            status = 409 if err and "Delete allowed only" in err else 404
+            raise HTTPException(status_code=status, detail=err or "Not found")
+        return {"deleted": position_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error deleting position: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/positions/tracked")
 def ui_positions_tracked(
     status: str | None = Query(default=None),
     symbol: str | None = Query(default=None),
+    exclude_test: bool = Query(default=True),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
     """
-    UI-safe wrapper for /api/positions/tracked.
-    Returns { positions: [{ symbol, qty, contracts?, avg_price?, notional?, updated_at? }] }.
+    UI-safe wrapper for /api/positions/tracked. Phase 10.0.
+    Returns { positions, capital_deployed, open_positions_count }.
+    Uses collateral for options (not notional). Excludes is_test by default.
     """
     _require_ui_key(x_ui_key)
     try:
         from app.core.positions.service import list_positions
-        positions = list_positions(status=status, symbol=symbol)
+        positions = list_positions(status=status, symbol=symbol, exclude_test=exclude_test)
         out: List[Dict[str, Any]] = []
+        capital_deployed = 0.0
+        open_count = 0
         for p in positions:
             d = p.to_dict()
             qty: int | None = None
@@ -937,26 +1058,41 @@ def ui_positions_tracked(
                 qty = d.get("quantity")
             else:
                 qty = d.get("contracts")
-            avg_price = d.get("credit_expected")
+            avg_price = d.get("credit_expected") or d.get("open_credit")
             strike = d.get("strike")
             contracts = d.get("contracts") or 0
-            notional = None
-            if strike is not None and contracts:
+            collateral = d.get("collateral")
+            notional = collateral
+            if notional is None and strike is not None and contracts:
                 notional = float(strike) * 100 * int(contracts)
+            s = (d.get("status") or "").upper()
+            if s in ("OPEN", "PARTIAL_EXIT"):
+                open_count += 1
+                if collateral is not None:
+                    capital_deployed += float(collateral)
+                elif notional is not None:
+                    capital_deployed += float(notional)
             out.append({
+                "id": d.get("id") or d.get("position_id"),
                 "symbol": d.get("symbol", ""),
                 "qty": qty,
                 "contracts": d.get("contracts"),
                 "avg_price": avg_price,
+                "collateral": collateral,
                 "notional": notional,
-                "updated_at": d.get("opened_at"),
+                "updated_at": d.get("updated_at_utc") or d.get("opened_at"),
                 "status": d.get("status"),
+                "is_test": d.get("is_test", False),
             })
-        return {"positions": out}
+        return {
+            "positions": out,
+            "capital_deployed": round(capital_deployed, 2),
+            "open_positions_count": open_count,
+        }
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Error listing tracked positions: %s", e)
-        return {"positions": []}
+        return {"positions": [], "capital_deployed": 0, "open_positions_count": 0}
 
 
 def _liquidity_evaluated(summary: Any) -> bool:

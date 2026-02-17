@@ -67,14 +67,79 @@ def validate_manual_execute(data: Dict[str, Any]) -> List[str]:
 # ---------------------------------------------------------------------------
 
 
-def list_positions(status: Optional[str] = None, symbol: Optional[str] = None) -> List[Position]:
-    """List all tracked positions, optionally filtered by symbol."""
-    return store.list_positions(status=status, symbol=symbol)
+def list_positions(
+    status: Optional[str] = None,
+    symbol: Optional[str] = None,
+    exclude_test: bool = False,
+) -> List[Position]:
+    """List all tracked positions, optionally filtered by symbol and exclude_test."""
+    return store.list_positions(status=status, symbol=symbol, exclude_test=exclude_test)
 
 
 def get_position(position_id: str) -> Optional[Position]:
     """Get a single position."""
     return store.get_position(position_id)
+
+
+def close_position(
+    position_id: str,
+    close_price: float,
+    close_time_utc: Optional[str] = None,
+    close_fees: Optional[float] = None,
+) -> Tuple[Optional[Position], List[str]]:
+    """
+    Close an OPEN position. Sets status=CLOSED, computes realized_pnl.
+    close_price: Debit per share to buy back (for options). For CSP: realized = open_credit - (close_price*100*contracts).
+    Returns (updated position, errors).
+    """
+    position = store.get_position(position_id)
+    if position is None:
+        return None, [f"Position {position_id} not found"]
+    if (position.status or "").upper() not in ("OPEN", "PARTIAL_EXIT"):
+        return None, [f"Position is already {position.status}; cannot close"]
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    close_ts = close_time_utc or now
+    # Compute close_debit and realized_pnl for options
+    strategy = (position.strategy or "").upper()
+    close_debit: Optional[float] = None
+    realized_pnl: Optional[float] = None
+    if strategy in ("CSP", "CC") and position.contracts:
+        close_debit = float(close_price) * 100 * int(position.contracts)
+        open_credit = position.open_credit or position.credit_expected
+        if open_credit is not None:
+            # credit_expected is typically total premium; if < 10 assume per-share
+            cred = float(open_credit)
+            open_total = cred * 100 * int(position.contracts) if cred < 10 else cred
+            realized_pnl = open_total - close_debit - (close_fees or 0)
+        else:
+            realized_pnl = -close_debit - (close_fees or 0)
+    updates = {
+        "status": "CLOSED",
+        "closed_at": close_ts,
+        "close_price": close_price,
+        "close_debit": close_debit,
+        "close_fees": close_fees,
+        "close_time_utc": close_ts,
+        "realized_pnl": realized_pnl,
+        "updated_at_utc": now,
+    }
+    updated = store.update_position(position_id, updates)
+    return updated, []
+
+
+def delete_position(position_id: str) -> Tuple[bool, Optional[str]]:
+    """
+    Delete a position. Allowed only when is_test=True OR status=CLOSED.
+    Returns (success, error_message).
+    """
+    position = store.get_position(position_id)
+    if position is None:
+        return False, f"Position {position_id} not found"
+    if not position.is_test and (position.status or "").upper() not in ("CLOSED", "ABORTED"):
+        return False, "Delete allowed only for CLOSED/ABORTED positions or test (is_test=true) positions"
+    ok = store.delete_position(position_id)
+    return ok, None
 
 
 def manual_execute(data: Dict[str, Any]) -> Tuple[Optional[Position], List[str]]:

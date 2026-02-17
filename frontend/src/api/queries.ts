@@ -58,6 +58,10 @@ function uiAccountsDefaultPath(): string {
   return `/api/ui/accounts/default`;
 }
 
+function uiPositionsPath(): string {
+  return `/api/ui/positions`;
+}
+
 function uiPositionsManualExecutePath(): string {
   return `/api/ui/positions/manual-execute`;
 }
@@ -74,6 +78,21 @@ function uiEvalRunPath(): string {
   return `/api/ui/eval/run`;
 }
 
+function uiDiagnosticsRunPath(checks?: string): string {
+  const base = `/api/ui/diagnostics/run`;
+  return checks ? `${base}?checks=${encodeURIComponent(checks)}` : base;
+}
+
+function uiDiagnosticsHistoryPath(limit?: number): string {
+  const base = `/api/ui/diagnostics/history`;
+  return limit != null ? `${base}?limit=${limit}` : base;
+}
+
+function uiNotificationsPath(limit?: number): string {
+  const base = `/api/ui/notifications`;
+  return limit != null ? `${base}?limit=${limit}` : base;
+}
+
 // =============================================================================
 // Query keys
 // =============================================================================
@@ -88,10 +107,13 @@ export const queryKeys = {
   symbolDiagnostics: (symbol: string) =>
     ["ui", "symbolDiagnostics", symbol] as const,
   uiSystemHealth: () => ["ui", "systemHealth"] as const,
+  uiPositions: () => ["ui", "positions"] as const,
   uiTrackedPositions: () => ["ui", "positions", "tracked"] as const,
   uiAccountsDefault: () => ["ui", "accounts", "default"] as const,
   uiPortfolio: () => ["ui", "portfolio"] as const,
   uiAlerts: () => ["ui", "alerts"] as const,
+  uiDiagnosticsHistory: (limit?: number) => ["ui", "diagnostics", "history", limit ?? 10] as const,
+  uiNotifications: (limit?: number) => ["ui", "notifications", limit ?? 100] as const,
 };
 
 // =============================================================================
@@ -205,6 +227,34 @@ export function useManualExecute() {
       apiPost(uiPositionsManualExecutePath(), payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.uiTrackedPositions() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiPositions() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiPortfolio() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiAlerts() });
+    },
+  });
+}
+
+export interface SavePaperPositionPayload {
+  symbol: string;
+  strategy: string;
+  contracts?: number;
+  strike?: number;
+  expiration?: string;
+  credit_expected?: number;
+  credit?: number;
+  max_loss?: number;
+  decision_snapshot_id?: string;
+  created_at?: string;
+}
+
+export function useSavePaperPosition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: SavePaperPositionPayload) =>
+      apiPost<{ position_id: string; symbol: string; [k: string]: unknown }>(uiPositionsPath(), payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiTrackedPositions() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiPositions() });
       qc.invalidateQueries({ queryKey: queryKeys.uiPortfolio() });
       qc.invalidateQueries({ queryKey: queryKeys.uiAlerts() });
     },
@@ -247,5 +297,55 @@ export function useRunEval() {
       qc.invalidateQueries({ queryKey: queryKeys.universe() });
       qc.invalidateQueries({ queryKey: queryKeys.uiAlerts() });
     },
+  });
+}
+
+// Diagnostics (Phase 8.2)
+export interface DiagnosticsRunResponse {
+  timestamp_utc: string;
+  checks: Array<{ check: string; status: string; details: Record<string, unknown> }>;
+  overall_status: string;
+}
+
+export interface DiagnosticsHistoryResponse {
+  runs: DiagnosticsRunResponse[];
+}
+
+export function useDiagnosticsHistory(limit = 10) {
+  return useQuery({
+    queryKey: queryKeys.uiDiagnosticsHistory(limit),
+    queryFn: () => apiGet<DiagnosticsHistoryResponse>(uiDiagnosticsHistoryPath(limit)),
+  });
+}
+
+export function useRunDiagnostics() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (checks?: string) =>
+      apiPost<DiagnosticsRunResponse>(uiDiagnosticsRunPath(checks), {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiDiagnosticsHistory() });
+    },
+  });
+}
+
+// Notifications (Phase 8.3)
+export interface UiNotification {
+  timestamp_utc: string;
+  severity: string;
+  type: string;
+  symbol?: string | null;
+  message: string;
+  details?: Record<string, unknown>;
+}
+
+export interface UiNotificationsResponse {
+  notifications: UiNotification[];
+}
+
+export function useNotifications(limit = 100) {
+  return useQuery({
+    queryKey: queryKeys.uiNotifications(limit),
+    queryFn: () => apiGet<UiNotificationsResponse>(uiNotificationsPath(limit)),
   });
 }

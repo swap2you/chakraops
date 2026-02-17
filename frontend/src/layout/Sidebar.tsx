@@ -1,11 +1,12 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, Globe, Search, Activity, PieChart } from "lucide-react";
+import { LayoutDashboard, Globe, Search, Activity, PieChart, Bell } from "lucide-react";
 
 const nav = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/universe", label: "Universe", icon: Globe },
   { path: "/symbol-diagnostics", label: "Symbol", icon: Search },
   { path: "/portfolio", label: "Portfolio", icon: PieChart },
+  { path: "/notifications", label: "Notifications", icon: Bell },
   { path: "/system", label: "System", icon: Activity },
 ];
 

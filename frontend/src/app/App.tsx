@@ -6,6 +6,7 @@ import { DashboardPage } from "@/pages/DashboardPage";
 import { UniversePage } from "@/pages/UniversePage";
 import { SymbolDiagnosticsPage } from "@/pages/SymbolDiagnosticsPage";
 import { SystemDiagnosticsPage } from "@/pages/SystemDiagnosticsPage";
+import { NotificationsPage } from "@/pages/NotificationsPage";
 import { PortfolioPage } from "@/pages/PortfolioPage";
 
 const queryClient = new QueryClient({
@@ -28,6 +29,7 @@ export function App() {
               <Route path="/universe" element={<UniversePage />} />
               <Route path="/symbol-diagnostics" element={<SymbolDiagnosticsPage />} />
               <Route path="/system" element={<SystemDiagnosticsPage />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/portfolio" element={<PortfolioPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

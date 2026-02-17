@@ -205,6 +205,16 @@ def run_watchdog_checks(
     payload = check_scheduler_health(last_run_timestamp, interval_minutes)
     if payload:
         try:
+            from app.api.notifications_store import append_notification
+            append_notification(
+                "WARN",
+                "SCHEDULER_MISSED",
+                "Scheduler missed window; last run too old",
+                details=payload,
+            )
+        except Exception as e:
+            logger.debug("[Watchdog] Failed to append SCHEDULER_MISSED notification: %s", e)
+        try:
             route_alert(
                 "HEALTH",
                 payload,

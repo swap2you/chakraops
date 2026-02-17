@@ -1,65 +1,51 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@/test/test-utils";
 import { NotificationsPage } from "./NotificationsPage";
-import { DataModeProvider } from "@/context/DataModeContext";
-import { ScenarioProvider } from "@/context/ScenarioContext";
-import { ThemeProvider } from "@/context/ThemeContext";
-import { BrowserRouter } from "react-router-dom";
-import { loadPendingSystemNotifications } from "@/lib/notifications";
 
-// LIVE test needs API to reject; other tests use MOCK (scenario.bundle), so no fetch.
-vi.mock("@/data/source", () => ({
-  getAlerts: () => Promise.reject(new Error("network")),
-  getDailyOverview: () => Promise.reject(new Error("network")),
-  getPositions: () => Promise.resolve([]),
-  getTradePlan: () => Promise.resolve(null),
-  getDecisionHistory: () => Promise.resolve([]),
+const mockNotifications = {
+  notifications: [
+    {
+      timestamp_utc: "2026-01-01T12:00:00Z",
+      severity: "WARN",
+      type: "ORATS_WARN",
+      symbol: null,
+      message: "ORATS status WARN; data may be stale",
+      details: {},
+    },
+  ],
+};
+
+vi.mock("@/api/queries", () => ({
+  useNotifications: () => ({
+    data: mockNotifications,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
 }));
 
 describe("NotificationsPage", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("renders without throwing", () => {
     expect(() => render(<NotificationsPage />)).not.toThrow();
   });
 
-  it("shows Notifications heading or empty state", () => {
+  it("shows Notifications page content", () => {
     render(<NotificationsPage />);
-    const heading = screen.queryByRole("heading", { name: /notifications/i });
-    const empty = screen.queryByText(/no notifications/i);
-    expect(heading != null || empty != null).toBe(true);
+    expect(screen.getAllByText(/Notifications/i).length).toBeGreaterThan(0);
   });
 
-  it("shows filter buttons", () => {
+  it("shows filter input", () => {
     render(<NotificationsPage />);
-    expect(screen.getByRole("button", { name: /^ALL$/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^NIGHTLY$/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^ELIGIBLE$/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^WARN$/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^DATA$/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^ERRORS$/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^INFO$/i })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Filter by type/i)).toBeInTheDocument();
   });
 
-  it("shows search input", () => {
+  it("shows notification row", () => {
     render(<NotificationsPage />);
-    const search = screen.getByRole("searchbox", { name: /search notifications/i });
-    expect(search).toBeInTheDocument();
-  });
-
-  it("LIVE + API error shows LIVE data unavailable and creates system notification", async () => {
-    const LiveWrapper = ({ children }: { children: React.ReactNode }) => (
-      <ThemeProvider>
-        <DataModeProvider initialMode="LIVE">
-          <ScenarioProvider>
-            <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>{children}</BrowserRouter>
-          </ScenarioProvider>
-        </DataModeProvider>
-      </ThemeProvider>
-    );
-    render(<NotificationsPage />, { wrapper: LiveWrapper });
-    const msg = await screen.findByText(/LIVE data unavailable/i);
-    expect(msg).toBeInTheDocument();
-    const pending = loadPendingSystemNotifications();
-    const fetchFailed = pending.find((n) => n.title === "LIVE fetch failed");
-    expect(fetchFailed).toBeDefined();
+    expect(screen.getByText(/ORATS_WARN/i)).toBeInTheDocument();
+    expect(screen.getByText(/ORATS status WARN/i)).toBeInTheDocument();
   });
 });

@@ -179,11 +179,15 @@ def ui_universe(
                 sym_key = (s.symbol or "").strip().upper()
                 diag = diag_by_sym.get(sym_key)
                 sel_el = (diag.symbol_eligibility or {}) if diag else {}
+                score_caps = getattr(s, "score_caps", None)
+                raw_score = getattr(s, "raw_score", None)
                 row: Dict[str, Any] = {
                     "symbol": s.symbol,
                     "verdict": s.verdict,
                     "final_verdict": s.final_verdict,
                     "score": s.score,
+                    "raw_score": raw_score,
+                    "score_caps": score_caps,
                     "band": s.band,
                     "primary_reason": s.primary_reason or "",
                     "stage_status": s.stage_status,
@@ -313,16 +317,21 @@ def ui_system_health(
 
     api_latency_ms = round((time.monotonic() - t0) * 1000, 1)
 
-    # Scheduler: placeholders if not available
+    # Scheduler: interval, heartbeat (last_run_at, next_run_at, last_result)
     scheduler_interval: int | None = None
     scheduler_nightly_next: str | None = None
     scheduler_eod_next: str | None = None
+    scheduler_last_run_at: str | None = None
+    scheduler_next_run_at: str | None = None
+    scheduler_last_result: str | None = None
     try:
         from app.api.server import get_scheduler_status, get_nightly_scheduler_status
         sched = get_scheduler_status()
         scheduler_interval = sched.get("interval_minutes")
-        scheduler_nightly_next = None
-        scheduler_eod_next = sched.get("next_expected_at")
+        scheduler_last_run_at = sched.get("last_run_at")
+        scheduler_next_run_at = sched.get("next_run_at")
+        scheduler_last_result = sched.get("last_result")
+        scheduler_eod_next = sched.get("next_run_at")
         nightly = get_nightly_scheduler_status()
         scheduler_nightly_next = nightly.get("next_scheduled_at")
     except Exception:
@@ -396,8 +405,91 @@ def ui_system_health(
             "interval_minutes": scheduler_interval,
             "nightly_next_at": scheduler_nightly_next,
             "eod_next_at": scheduler_eod_next,
+            "last_run_at": scheduler_last_run_at,
+            "next_run_at": scheduler_next_run_at,
+            "last_result": scheduler_last_result,
         },
     }
+
+
+@router.post("/diagnostics/run")
+def ui_diagnostics_run(
+    checks: str | None = Query(default=None, description="Comma-separated: orats,decision_store,universe,positions,scheduler"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    Run sanity checks. Optional ?checks=a,b,c to run subset.
+    Persists to out/diagnostics_history.jsonl.
+    """
+    _require_ui_key(x_ui_key)
+    try:
+        from app.api.diagnostics import run_diagnostics, ALL_CHECKS
+        check_set = None
+        if checks and checks.strip():
+            parts = [p.strip().lower() for p in checks.split(",") if p.strip()]
+            check_set = {p for p in parts if p in ALL_CHECKS} or None
+        return run_diagnostics(checks=check_set)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error running diagnostics: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/diagnostics/history")
+def ui_diagnostics_history(
+    limit: int = Query(default=10, ge=1, le=100),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Return last N diagnostic runs (newest first)."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.api.diagnostics import get_diagnostics_history
+        runs = get_diagnostics_history(limit=limit)
+        return {"runs": runs}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error loading diagnostics history: %s", e)
+        return {"runs": []}
+
+
+@router.get("/notifications")
+def ui_notifications(
+    limit: int = Query(default=100, ge=1, le=500),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Return last N notifications (newest first)."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.api.notifications_store import load_notifications
+        items = load_notifications(limit=limit)
+        return {"notifications": items}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error loading notifications: %s", e)
+        return {"notifications": []}
+
+
+@router.post("/notifications")
+async def ui_notifications_append(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Append a notification (for testing or external wiring)."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.api.notifications_store import append_notification
+        body = await request.json()
+        severity = body.get("severity", "INFO")
+        ntype = body.get("type", "USER")
+        message = body.get("message", "")
+        symbol = body.get("symbol")
+        details = body.get("details") or {}
+        append_notification(severity=severity, ntype=ntype, message=message, symbol=symbol, details=details)
+        return {"status": "OK"}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error appending notification: %s", e)
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/accounts/default")
@@ -494,6 +586,69 @@ def ui_alerts(
         return {"alerts": []}
 
 
+@router.get("/positions")
+def ui_positions_list(
+    status: str | None = Query(default=None),
+    symbol: str | None = Query(default=None),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    Get current positions (same data as /positions/tracked).
+    Returns { positions: [{ symbol, qty, contracts?, notional?, updated_at?, status? }] }.
+    """
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.positions.service import list_positions
+        positions = list_positions(status=status, symbol=symbol)
+        out: List[Dict[str, Any]] = []
+        for p in positions:
+            d = p.to_dict()
+            qty = d.get("quantity") if (d.get("strategy") or "").upper() == "STOCK" else d.get("contracts")
+            strike = d.get("strike")
+            contracts = d.get("contracts") or 0
+            notional = (float(strike) * 100 * int(contracts)) if strike is not None and contracts else None
+            out.append({
+                "position_id": d.get("position_id"),
+                "symbol": d.get("symbol", ""),
+                "qty": qty,
+                "contracts": d.get("contracts"),
+                "avg_price": d.get("credit_expected"),
+                "notional": notional,
+                "updated_at": d.get("opened_at"),
+                "status": d.get("status"),
+            })
+        return {"positions": out}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error listing positions: %s", e)
+        return {"positions": []}
+
+
+@router.post("/positions")
+async def ui_positions_create(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    Create a paper position from a candidate (symbol, strategy, contract details, credit, max_loss).
+    Body: symbol, strategy, contracts?, strike?, expiration?, credit_expected?, decision_snapshot_id? (optional).
+    """
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.positions.service import add_paper_position
+        body = await request.json()
+        position, errors = add_paper_position(body)
+        if errors:
+            raise HTTPException(status_code=400, detail={"errors": errors})
+        return position.to_dict()
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error creating paper position: %s", e)
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.get("/positions/tracked")
 def ui_positions_tracked(
     status: str | None = Query(default=None),
@@ -536,6 +691,12 @@ def ui_positions_tracked(
         import logging
         logging.getLogger(__name__).exception("Error listing tracked positions: %s", e)
         return {"positions": []}
+
+
+def _liquidity_evaluated(summary: Any) -> bool:
+    """True if Stage2 ran and liquidity checks were evaluated; False if Stage2 did not run (NOT_EVALUATED)."""
+    stage2_status = getattr(summary, "stage2_status", None) or ""
+    return stage2_status != "NOT_RUN"
 
 
 def _build_symbol_diagnostics_from_v2_store(
@@ -583,6 +744,7 @@ def _build_symbol_diagnostics_from_v2_store(
             "status": symbol_eligibility.get("status"),
             "required_data_missing": symbol_eligibility.get("required_data_missing") or [],
             "required_data_stale": symbol_eligibility.get("required_data_stale") or [],
+            "optional_missing": symbol_eligibility.get("optional_missing") or [],
             "reasons": symbol_eligibility.get("reasons") or [],
         },
         "liquidity": {
@@ -591,6 +753,7 @@ def _build_symbol_diagnostics_from_v2_store(
             "reason": liquidity.get("reason"),
             "missing_fields": liquidity.get("missing_fields") or [],
             "chain_missing_fields": liquidity.get("chain_missing_fields") or [],
+            "liquidity_evaluated": _liquidity_evaluated(summary),
         },
         "computed": {
             "rsi": technicals.get("rsi"),
@@ -601,6 +764,8 @@ def _build_symbol_diagnostics_from_v2_store(
         },
         "regime": diag.get("regime") or getattr(summary, "regime", None),
         "composite_score": getattr(summary, "score", None),
+        "raw_score": getattr(summary, "raw_score", None),
+        "score_caps": getattr(summary, "score_caps", None),
         "confidence_band": getattr(summary, "band", "D"),
         "suggested_capital_pct": diag.get("suggested_capital_pct"),
         "band_reason": getattr(summary, "band_reason", None),
@@ -658,6 +823,11 @@ def ui_symbol_recompute(
         from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
         merged = evaluate_single_symbol_and_merge(symbol=sym_upper)
     except Exception as e:
+        try:
+            from app.api.notifications_store import append_notification
+            append_notification("WARN", "RECOMPUTE_FAILURE", str(e), symbol=sym_upper, details={"error": str(e)[:500]})
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail=f"Recompute failed: {e}")
     store = get_evaluation_store_v2()
     store.reload_from_disk()

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { X, Copy, Check, Bookmark } from "lucide-react";
 import { Button } from "@/components/ui";
-import { useDefaultAccount, useManualExecute } from "@/api/queries";
+import { useDefaultAccount, useManualExecute, useSavePaperPosition } from "@/api/queries";
 import type { SymbolDiagnosticsCandidate } from "@/api/types";
 
 interface TradeTicketDrawerProps {
@@ -25,6 +25,7 @@ export function TradeTicketDrawer({ symbol, candidate, onClose }: TradeTicketDra
   const [copied, setCopied] = useState(false);
   const { data: accountData } = useDefaultAccount();
   const manualExecute = useManualExecute();
+  const savePaperPosition = useSavePaperPosition();
   const defaultAccount = accountData?.account ?? null;
 
   const strike = candidate.strike ?? 0;
@@ -63,6 +64,26 @@ export function TradeTicketDrawer({ symbol, candidate, onClose }: TradeTicketDra
         expiration: candidate.expiry ?? undefined,
         credit_expected: fillCredit,
         entry_credit: fillCredit,
+      },
+      {
+        onSuccess: () => onClose(),
+        onError: () => {},
+      }
+    );
+  };
+
+  const handleSavePosition = () => {
+    const strategy = (candidate.strategy ?? "CSP").toUpperCase();
+    const fillCredit = Number.isFinite(credit) ? credit : defaultCredit(candidate, qty);
+    savePaperPosition.mutate(
+      {
+        symbol: symbol.toUpperCase(),
+        strategy,
+        contracts: qty,
+        strike: candidate.strike ?? undefined,
+        expiration: candidate.expiry ?? undefined,
+        credit_expected: fillCredit,
+        max_loss: candidate.max_loss != null ? candidate.max_loss * qty : undefined,
       },
       {
         onSuccess: () => onClose(),
@@ -181,6 +202,15 @@ export function TradeTicketDrawer({ symbol, candidate, onClose }: TradeTicketDra
             )}
           </Button>
           <Button
+            variant="primary"
+            className="w-full"
+            onClick={handleSavePosition}
+            disabled={savePaperPosition.isPending}
+          >
+            <Bookmark className="mr-2 h-4 w-4" />
+            {savePaperPosition.isPending ? "Saving…" : "Save Position"}
+          </Button>
+          <Button
             variant="secondary"
             className="w-full"
             onClick={handleMarkAsTracked}
@@ -191,7 +221,7 @@ export function TradeTicketDrawer({ symbol, candidate, onClose }: TradeTicketDra
           </Button>
           {!defaultAccount?.account_id && (
             <p className="text-center text-xs text-zinc-500 dark:text-zinc-400">
-              Set a default account to track positions.
+              Set a default account to track positions (Mark as tracked).
             </p>
           )}
         </div>

@@ -46,6 +46,8 @@ export interface SymbolEvalSummary {
   candidate_count: number;
   band_reason: string | null;
   score_breakdown?: unknown;
+  raw_score?: number | null;
+  score_caps?: { regime_cap?: number | null; applied_caps?: Array<{ type: string; cap_value: number; before: number; after: number; reason: string }> } | null;
   rank_score?: number | null;
   capital_required?: number | null;
   premium_yield_pct?: number | null;
@@ -246,6 +248,9 @@ export interface UiSystemHealthScheduler {
   interval_minutes?: number | null;
   nightly_next_at?: string | null;
   eod_next_at?: string | null;
+  last_run_at?: string | null;
+  next_run_at?: string | null;
+  last_result?: string | null;
 }
 
 export interface UiSystemHealthDecisionStore {
@@ -333,6 +338,7 @@ export interface SymbolEligibilityDetail {
   status: string;
   required_data_missing: string[];
   required_data_stale: string[];
+  optional_missing?: string[];
   reasons: string[];
 }
 
@@ -340,6 +346,8 @@ export interface SymbolLiquidityDetail {
   stock_liquidity_ok: boolean | null;
   option_liquidity_ok: boolean | null;
   reason: string | null;
+  /** True if Stage2 ran and liquidity was evaluated; false when Stage2 did not run (show NOT_EVALUATED). */
+  liquidity_evaluated?: boolean;
 }
 
 /** Eligibility trace computed fields (RSI, ATR, S/R). */
@@ -370,7 +378,7 @@ export interface SymbolDiagnosticsCandidate {
   why_this_trade?: string | null;
 }
 
-/** Score breakdown (composite_score, component scores). */
+/** Score breakdown (raw_score, final_score, composite_score, caps). */
 export interface SymbolDiagnosticsScoreBreakdown {
   data_quality_score?: number;
   regime_score?: number;
@@ -378,6 +386,9 @@ export interface SymbolDiagnosticsScoreBreakdown {
   strategy_fit_score?: number;
   capital_efficiency_score?: number;
   composite_score?: number;
+  raw_score?: number | null;
+  final_score?: number | null;
+  score_caps?: { regime_cap?: number | null; applied_caps?: Array<{ type: string; cap_value: number; before: number; after: number; reason: string }> } | null;
   csp_notional?: number | null;
   notional_pct?: number | null;
 }
@@ -419,6 +430,10 @@ export interface SymbolDiagnosticsResponseExtended extends SymbolDiagnosticsResp
   score_breakdown?: SymbolDiagnosticsScoreBreakdown | null;
   /** Rank reasons. */
   rank_reasons?: SymbolDiagnosticsRankReasons | null;
+  /** Raw score (uncapped composite 0–100). */
+  raw_score?: number | null;
+  /** Score caps (regime_cap, applied_caps). */
+  score_caps?: { regime_cap?: number | null; applied_caps?: Array<{ type: string; cap_value: number; before: number; after: number; reason: string }> } | null;
   /** Regime (UP | DOWN | SIDEWAYS from eligibility). */
   regime?: string | null;
   /** Provider status: OK | NOT_FOUND | NO_CHAIN | ERROR. */

@@ -351,6 +351,18 @@ def _append_alert_record(record: Dict[str, Any]) -> None:
     path = _alerts_log_path()
     with open(path, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    # Phase 8.3: Append DATA_HEALTH alerts to notifications (UI parity with Slack)
+    if record.get("alert_type") == "DATA_HEALTH":
+        try:
+            from app.api.notifications_store import append_notification
+            append_notification(
+                record.get("severity", "WARN"),
+                "DATA_HEALTH",
+                record.get("summary", "Data health alert"),
+                details={"action_hint": record.get("action_hint")},
+            )
+        except Exception as e:
+            logger.debug("[ALERTS] Failed to append DATA_HEALTH to notifications: %s", e)
 
 
 def _append_lifecycle_log_if_lifecycle(alert: Alert, sent: bool) -> None:

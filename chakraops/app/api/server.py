@@ -65,6 +65,7 @@ UNIVERSE_EVAL_MINUTES = max(1, min(120, _UNIVERSE_EVAL_MINUTES_RAW))
 _scheduler_stop_event: Optional[threading.Event] = None
 _scheduler_thread: Optional[threading.Thread] = None
 _last_scheduled_eval_at: Optional[str] = None
+_last_scheduled_eval_result: Optional[str] = None  # OK | SKIPPED | FAILED
 
 # ============================================================================
 # NIGHTLY SCHEDULER
@@ -377,8 +378,10 @@ def _run_scheduled_evaluation() -> bool:
     Attempt to run a scheduled evaluation.
     Returns True if evaluation was triggered, False otherwise.
     """
-    global _last_scheduled_eval_at
-    
+    global _last_scheduled_eval_at, _last_scheduled_eval_result
+
+    _last_scheduled_eval_result = "SKIPPED"
+
     # Check if market is open
     phase = get_market_phase()
     if phase != "OPEN":
@@ -403,6 +406,7 @@ def _run_scheduled_evaluation() -> bool:
         result = trigger_evaluation(list(UNIVERSE_SYMBOLS))
         if result.get("started"):
             _last_scheduled_eval_at = datetime.now(timezone.utc).isoformat()
+            _last_scheduled_eval_result = "OK"
             logger.info("[SCHEDULER] Triggered scheduled evaluation at %s", _last_scheduled_eval_at)
             print(f"[SCHEDULER] Triggered scheduled evaluation at {_last_scheduled_eval_at}")
             # EOD freeze: if we're in the freeze window (e.g. 15:55 ET), run freeze_snapshot after eval
@@ -445,9 +449,11 @@ def _run_scheduled_evaluation() -> bool:
             return False
     except ImportError as e:
         logger.warning("[SCHEDULER] Cannot import evaluation modules: %s", e)
+        _last_scheduled_eval_result = "FAILED"
         return False
     except Exception as e:
         logger.exception("[SCHEDULER] Error triggering evaluation: %s", e)
+        _last_scheduled_eval_result = "FAILED"
         return False
 
 
@@ -527,11 +533,22 @@ def stop_evaluation_scheduler() -> None:
 
 
 def get_scheduler_status() -> Dict[str, Any]:
-    """Get current scheduler status."""
+    """Get current scheduler status. last_run_at/next_run_at in UTC ISO."""
+    next_run_at = None
+    if _last_scheduled_eval_at and UNIVERSE_EVAL_MINUTES:
+        try:
+            last_dt = datetime.fromisoformat(_last_scheduled_eval_at.replace("Z", "+00:00"))
+            from datetime import timedelta
+            next_run_at = (last_dt + timedelta(minutes=UNIVERSE_EVAL_MINUTES)).isoformat()
+        except (ValueError, TypeError):
+            pass
     return {
         "running": _scheduler_thread is not None and _scheduler_thread.is_alive(),
         "interval_minutes": UNIVERSE_EVAL_MINUTES,
         "last_scheduled_eval_at": _last_scheduled_eval_at,
+        "last_run_at": _last_scheduled_eval_at,
+        "next_run_at": next_run_at,
+        "last_result": _last_scheduled_eval_result,
         "market_open": is_market_open(),
     }
 

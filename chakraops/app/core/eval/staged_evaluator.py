@@ -315,7 +315,9 @@ class FullEvaluationResult:
     capital_hint: Optional[CapitalHint] = None
     
     # Phase 3: Explainable scoring and capital-aware ranking
-    score_breakdown: Optional[Dict[str, Any]] = None  # data_quality_score, regime_score, ...
+    score_breakdown: Optional[Dict[str, Any]] = None  # data_quality_score, regime_score, raw_score, final_score, score_caps
+    raw_score: Optional[int] = None  # uncapped composite 0-100
+    score_caps: Optional[Dict[str, Any]] = None  # { regime_cap, applied_caps: [{type, cap_value, before, after, reason}] }
     rank_reasons: Optional[Dict[str, Any]] = None  # { "reasons": [...], "penalty": "..." }
     csp_notional: Optional[float] = None  # selected_put_strike * 100
     notional_pct: Optional[float] = None  # csp_notional / account_equity
@@ -2124,22 +2126,78 @@ def evaluate_universe_staged(
                 price=result.price,
                 selected_put_strike=put_strike,
             )
+            raw_score_val: int
+            final_score_val: int
+            applied_caps: List[Dict[str, Any]] = []
+
             if result.stage_reached == EvaluationStage.STAGE1_ONLY:
                 # Preserve stage1_score to maintain ranking; apply regime cap
                 raw = result.stage1.stage1_score if result.stage1 else result.score
+                raw_score_val = int(raw) if raw is not None else 0
                 if market_regime_value == "RISK_OFF":
-                    result.score = min(raw, 50)
+                    cap_val = 50
+                    final_score_val = min(raw_score_val, cap_val)
+                    if raw_score_val > cap_val:
+                        applied_caps.append({
+                            "type": "regime_cap",
+                            "cap_value": cap_val,
+                            "before": raw_score_val,
+                            "after": final_score_val,
+                            "reason": "Regime RISK_OFF caps score to 50",
+                        })
                 elif market_regime_value == "NEUTRAL":
-                    result.score = min(raw, 65)
+                    cap_val = 65
+                    final_score_val = min(raw_score_val, cap_val)
+                    if raw_score_val > cap_val:
+                        applied_caps.append({
+                            "type": "regime_cap",
+                            "cap_value": cap_val,
+                            "before": raw_score_val,
+                            "after": final_score_val,
+                            "reason": "Regime NEUTRAL caps score to 65",
+                        })
                 else:
-                    result.score = raw
+                    final_score_val = raw_score_val
+                result.score = final_score_val
+                result.raw_score = raw_score_val
             else:
+                raw_score_val = max(0, min(100, composite))
                 if market_regime_value == "RISK_OFF":
-                    composite = min(composite, 50)
+                    cap_val = 50
+                    final_score_val = min(raw_score_val, cap_val)
+                    if raw_score_val > cap_val:
+                        applied_caps.append({
+                            "type": "regime_cap",
+                            "cap_value": cap_val,
+                            "before": raw_score_val,
+                            "after": final_score_val,
+                            "reason": "Regime RISK_OFF caps score to 50",
+                        })
                 elif market_regime_value == "NEUTRAL":
-                    composite = min(composite, 65)
-                result.score = max(0, min(100, composite))
-            result.score_breakdown = breakdown.to_dict()
+                    cap_val = 65
+                    final_score_val = min(raw_score_val, cap_val)
+                    if raw_score_val > cap_val:
+                        applied_caps.append({
+                            "type": "regime_cap",
+                            "cap_value": cap_val,
+                            "before": raw_score_val,
+                            "after": final_score_val,
+                            "reason": "Regime NEUTRAL caps score to 65",
+                        })
+                else:
+                    final_score_val = raw_score_val
+                result.score = max(0, min(100, final_score_val))
+                result.raw_score = raw_score_val
+            regime_cap_val = 50 if market_regime_value == "RISK_OFF" else (65 if market_regime_value == "NEUTRAL" else None)
+            result.score_caps = {
+                "regime_cap": regime_cap_val,
+                "applied_caps": applied_caps,
+            }
+            bd_dict = breakdown.to_dict()
+            bd_dict["raw_score"] = raw_score_val
+            bd_dict["final_score"] = result.score
+            bd_dict["score_caps"] = result.score_caps
+            result.score_breakdown = bd_dict
             result.rank_reasons = build_rank_reasons(
                 breakdown, result.regime, result.data_completeness,
                 result.liquidity_ok, result.verdict,

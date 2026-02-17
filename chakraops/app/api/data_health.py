@@ -196,6 +196,15 @@ def get_data_health() -> Dict[str, Any]:
     """Sticky data health: load persisted state, return status (UNKNOWN/OK/WARN/DOWN). Probe only when UNKNOWN or when caller needs refresh."""
     _load_persisted_state()
     status = _compute_sticky_status()
+    if status in ("WARN", "DEGRADED"):
+        try:
+            from app.api.notifications_store import append_orats_warn
+            append_orats_warn(
+                f"ORATS status {status}; data may be stale",
+                {"status": status, "last_success_at": _LAST_SUCCESS_AT, "last_error_reason": _LAST_ERROR_REASON},
+            )
+        except Exception as e:
+            logger.debug("[DATA_HEALTH] Failed to append ORATS WARN notification: %s", e)
     if status == "UNKNOWN":
         _attempt_live_summary()
     return _data_health_state()

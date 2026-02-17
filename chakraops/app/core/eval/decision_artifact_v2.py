@@ -95,7 +95,9 @@ class SymbolEvalSummary:
     has_candidates: bool
     candidate_count: int
     # Phase 7.7: Trust + sorting
-    score_breakdown: Optional[Dict[str, Any]] = None  # stage1_score, stage2_score, components, caps_applied
+    score_breakdown: Optional[Dict[str, Any]] = None  # stage1_score, stage2_score, raw_score, final_score, score_caps
+    raw_score: Optional[int | float] = None  # uncapped composite 0-100
+    score_caps: Optional[Dict[str, Any]] = None  # { regime_cap, applied_caps: [{type, cap_value, before, after, reason}] }
     band_reason: Optional[str] = None  # "Band A because score >= TIER_A_MIN"
     max_loss: Optional[float] = None  # capital required for selected candidate
     underlying_price: Optional[float] = None  # spot at evaluation

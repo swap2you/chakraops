@@ -138,3 +138,51 @@ def manual_execute(data: Dict[str, Any]) -> Tuple[Optional[Position], List[str]]
         return created, []
     except ValueError as e:
         return None, [str(e)]
+
+
+# Paper positions: same store, account_id="paper", no account validation
+PAPER_ACCOUNT_ID = "paper"
+
+
+def add_paper_position(data: Dict[str, Any]) -> Tuple[Optional[Position], List[str]]:
+    """Create a paper position from a candidate (symbol, strategy, contract details, credit, max_loss).
+    Does not require an existing account. Uses account_id=PAPER_ACCOUNT_ID.
+    Returns (position, errors).
+    """
+    errors: List[str] = []
+    if not data.get("symbol"):
+        errors.append("symbol is required")
+    strategy = (data.get("strategy") or "CSP").upper().strip()
+    if strategy not in VALID_STRATEGIES:
+        errors.append(f"strategy must be one of {sorted(VALID_STRATEGIES)}")
+    if strategy in ("CSP", "CC"):
+        contracts = data.get("contracts", 1)
+        if not isinstance(contracts, int) or contracts <= 0:
+            errors.append("contracts must be a positive integer for options strategies")
+    if errors:
+        return None, errors
+
+    now = datetime.now(timezone.utc).isoformat()
+    position_id = data.get("position_id") or generate_position_id()
+    contracts = int(data.get("contracts", 1))
+    position = Position(
+        position_id=position_id,
+        account_id=PAPER_ACCOUNT_ID,
+        symbol=data["symbol"].upper().strip(),
+        strategy=strategy,
+        contracts=contracts,
+        strike=data.get("strike"),
+        expiration=data.get("expiration"),
+        credit_expected=data.get("credit_expected") or data.get("credit"),
+        quantity=data.get("quantity"),
+        status="OPEN",
+        opened_at=data.get("created_at") or now,
+        closed_at=None,
+        notes=data.get("notes", ""),
+    )
+    try:
+        created = store.create_position(position)
+        logger.info("[POSITIONS] Paper position created: %s %s %s", position.symbol, position.strategy, position_id)
+        return created, []
+    except ValueError as e:
+        return None, [str(e)]

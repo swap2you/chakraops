@@ -19,17 +19,33 @@ import {
   Tooltip,
 } from "@/components/ui";
 
+/** Phase 8.5: Display timestamps in ET. */
 function fmtTs(s: string | null | undefined): string {
   if (!s) return "n/a";
   try {
     const d = new Date(s);
-    return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleString(undefined, {
+      timeZone: "America/New_York",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }) + " ET";
   } catch {
     return String(s);
   }
 }
 
 /** Format score_breakdown for tooltip. Phase 7.7 trust feature. */
+function formatScoreCapTooltip(row: { score?: number | null; raw_score?: number | null; score_caps?: { regime_cap?: number | null; applied_caps?: Array<{ type: string; cap_value: number; before: number; after: number; reason: string }> } | null }): string | null {
+  const caps = row.score_caps?.applied_caps;
+  if (!caps || caps.length === 0) return null;
+  const cap = caps[0];
+  const raw = row.raw_score ?? cap.before;
+  const final = row.score ?? cap.after;
+  return `Raw: ${raw} → Final: ${final} (capped by ${cap.reason})`;
+}
+
 function formatScoreBreakdown(bd: unknown): string {
   if (bd == null || typeof bd !== "object") return "";
   const o = bd as Record<string, unknown>;
@@ -243,10 +259,12 @@ export function UniversePage() {
                     <span className="inline-flex items-center gap-1">
                       {row.score != null ? String(row.score) : "n/a"}
                       {(() => {
+                        const capTxt = formatScoreCapTooltip(row);
                         const rb = row as { score_breakdown?: unknown };
-                        const txt = formatScoreBreakdown(rb.score_breakdown);
+                        const bdTxt = formatScoreBreakdown(rb.score_breakdown);
+                        const txt = capTxt ? (bdTxt ? `${capTxt} · ${bdTxt}` : capTxt) : bdTxt;
                         return txt ? (
-                          <Tooltip content={`Why this score: ${txt}`} className="max-w-md">
+                          <Tooltip content={txt} className="max-w-md">
                             <Info className="h-3.5 w-3.5 shrink-0 cursor-help text-zinc-500" />
                           </Tooltip>
                         ) : null;

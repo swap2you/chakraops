@@ -218,6 +218,17 @@ def evaluate_universe(
         if capital_req and capital_req > 0 and expected_cr is not None:
             prem_yield = (expected_cr / capital_req) * 100
         rk = compute_rank_score(band, float(score) if score is not None else None, prem_yield, capital_req, mcap)
+        raw_s = getattr(sr, "raw_score", None)
+        caps_s = getattr(sr, "score_caps", None)
+        if score_bd and hasattr(score_bd, "to_dict"):
+            score_bd = score_bd.to_dict()
+        if score_bd and isinstance(score_bd, dict):
+            score_bd = dict(score_bd)
+            if raw_s is not None:
+                score_bd["raw_score"] = raw_s
+            score_bd["final_score"] = score
+            if caps_s:
+                score_bd["score_caps"] = caps_s
         symbols_out.append(SymbolEvalSummary(
             symbol=sym_upper,
             verdict=verdict,
@@ -237,6 +248,8 @@ def evaluate_universe(
             has_candidates=len(cds) > 0,
             candidate_count=len(cds),
             score_breakdown=score_bd,
+            raw_score=raw_s,
+            score_caps=caps_s,
             band_reason=band_rsn,
             max_loss=max_loss_val,
             underlying_price=price_val,

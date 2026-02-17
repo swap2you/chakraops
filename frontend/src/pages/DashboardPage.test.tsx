@@ -22,6 +22,14 @@ vi.mock("@/api/queries", () => ({
   useUniverse: () => ({ data: mockUniverse }),
   useUiSystemHealth: () => ({ data: mockHealth }),
   useUiTrackedPositions: () => ({ data: mockPositions }),
+  useRunEval: () => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn(),
+    isPending: false,
+    isSuccess: false,
+    isError: false,
+    error: null,
+  }),
 }));
 
 describe("DashboardPage", () => {

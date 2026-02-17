@@ -231,9 +231,25 @@ function ExecutionConsole({
         />
         <div className="flex flex-wrap items-center gap-3">
           <StatusBadge status={data.verdict ?? "—"} />
-          <Badge variant="default">
-            <span className="font-mono">Score {fmt(data.composite_score)}</span>
-          </Badge>
+          <span
+            title={
+              data.score_caps?.applied_caps?.length
+                ? `Raw: ${data.score_caps.applied_caps[0].before} → Final: ${data.score_caps.applied_caps[0].after} (${data.score_caps.applied_caps[0].reason})`
+                : undefined
+            }
+          >
+            <Badge variant="default">
+              <span className="font-mono">
+                {data.score_caps?.applied_caps?.length ? "Final score " : "Score "}
+                {fmt(data.composite_score)}
+                {data.score_caps?.applied_caps?.length ? (
+                  <span className="ml-1 text-xs opacity-80">
+                    (capped from {data.raw_score ?? data.score_caps.applied_caps[0].before})
+                  </span>
+                ) : null}
+              </span>
+            </Badge>
+          </span>
           <Badge variant={data.confidence_band === "A" ? "success" : data.confidence_band === "B" ? "warning" : "neutral"}>
             Band {data.confidence_band ?? "—"}
           </Badge>
@@ -252,6 +268,61 @@ function ExecutionConsole({
           )}
         </div>
       </Card>
+      {/* Gate Summary: same "why" as Universe */}
+      <Card className="lg:col-span-2 w-full">
+        <CardHeader title="Gate Summary" />
+        <div className="space-y-3 text-sm">
+          <div>
+            <span className="block text-xs text-zinc-500 dark:text-zinc-500">Primary reason</span>
+            <p className="mt-0.5 text-zinc-700 dark:text-zinc-300">{data.primary_reason ?? "—"}</p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Required data missing</span>
+              <p className="mt-0.5 font-mono text-zinc-700 dark:text-zinc-300">
+                {sel?.required_data_missing?.length ? sel.required_data_missing.join(", ") : "None"}
+              </p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Required data stale</span>
+              <p className="mt-0.5 font-mono text-zinc-700 dark:text-zinc-300">
+                {sel?.required_data_stale?.length ? sel.required_data_stale.join(", ") : "None"}
+              </p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Optional missing</span>
+              <p className="mt-0.5 font-mono text-zinc-700 dark:text-zinc-300">
+                {sel?.optional_missing?.length ? sel.optional_missing.join(", ") : "None"}
+              </p>
+            </div>
+          </div>
+          {data.gates?.length ? (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-200 text-left text-zinc-600 dark:border-zinc-700 dark:text-zinc-500">
+                  <th className="py-2 pr-2">Gate</th>
+                  <th className="py-2 pr-2">Status</th>
+                  <th className="py-2">Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.gates.map((g, i) => (
+                  <tr key={i} className="border-b border-zinc-100 dark:border-zinc-800/50">
+                    <td className="py-2 pr-2 font-medium text-zinc-700 dark:text-zinc-300">{g.name}</td>
+                    <td className="py-2 pr-2">
+                      <StatusBadge status={g.status} />
+                    </td>
+                    <td className="py-2 text-zinc-500 dark:text-zinc-400">{g.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="text-zinc-500 dark:text-zinc-500">No gates evaluated.</p>
+          )}
+        </div>
+      </Card>
+
       {/* Candidates: full width, same as header */}
       <Card className="lg:col-span-2 w-full">
         <CardHeader
@@ -489,17 +560,29 @@ function ExecutionConsole({
             <RiskFlag
               icon={<Droplets className="h-4 w-4" />}
               label="stock liq"
-              value={liqReason(liq?.stock_liquidity_ok, liq?.reason, "stock")}
+              value={liqReason(liq?.stock_liquidity_ok, liq?.reason, "stock", liq?.liquidity_evaluated)}
               status={
-                liq?.stock_liquidity_ok == null ? "neutral" : liq.stock_liquidity_ok ? "ok" : "fail"
+                liq?.liquidity_evaluated === false
+                  ? "neutral"
+                  : liq?.stock_liquidity_ok == null
+                    ? "neutral"
+                    : liq.stock_liquidity_ok
+                      ? "ok"
+                      : "fail"
               }
             />
             <RiskFlag
               icon={<Droplets className="h-4 w-4" />}
               label="option liq"
-              value={liqReason(liq?.option_liquidity_ok, liq?.reason, "option")}
+              value={liqReason(liq?.option_liquidity_ok, liq?.reason, "option", liq?.liquidity_evaluated)}
               status={
-                liq?.option_liquidity_ok == null ? "neutral" : liq.option_liquidity_ok ? "ok" : "fail"
+                liq?.liquidity_evaluated === false
+                  ? "neutral"
+                  : liq?.option_liquidity_ok == null
+                    ? "neutral"
+                    : liq.option_liquidity_ok
+                      ? "ok"
+                      : "fail"
               }
             />
             <RiskFlag
@@ -556,8 +639,10 @@ function earningsBlockReason(_value: unknown): string {
 function liqReason(
   ok: boolean | null | undefined,
   reason: string | null | undefined,
-  kind: string
+  kind: string,
+  liquidityEvaluated?: boolean
 ): string {
+  if (liquidityEvaluated === false) return "Not evaluated";
   if (ok == null) return "Data not available";
   if (ok) return "OK";
   return reason && reason.trim() ? reason.trim() : `${kind} liquidity failed`;

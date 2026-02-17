@@ -28,10 +28,14 @@ This doc captures fact-finding (Phase A), root causes for “only 2/27 symbols h
 - **Write path:** Always `get_decision_store_path()` → `<REPO_ROOT>/out/decision_latest.json` (or test override via `set_output_dir`).
 - **Timestamp:** UI shows `pipeline_timestamp` (and universe `updated_at` / `as_of`) from artifact `metadata.pipeline_timestamp`; recompute sets it to “now” (UTC ISO).
 
-### Score in the UI
+### Score in the UI (raw vs final)
 
-- **Universe list “Score”** and **Symbol page “Score”** both show the **composite score** (0–100), not regime score alone.
-- Regime caps apply to that composite (e.g. NEUTRAL caps composite at 65; Band A may be unavailable). So the label “Score” is correct; no rename to “Regime score” needed for the main number. Score breakdown (tooltip/breakdown) can show regime_score and composite_score separately.
+- **Universe list “Score”** and **Symbol page “Score”** show the **final score** (risk-managed, after caps). Band is derived from final score.
+- **Raw score** (uncapped composite 0–100) and **final score** (capped) are both exposed. When a regime cap applies (e.g. NEUTRAL caps to 65), the UI shows both so users see why the displayed score differs from the composite.
+- **score_caps**: `{ regime_cap, applied_caps: [{ type, cap_value, before, after, reason }] }` — `applied_caps` is non-empty when a cap was applied.
+- **Universe tooltip:** “Raw: X → Final: Y (capped by Regime NEUTRAL caps score to 65)” when cap applies.
+- **Symbol page header:** “Final score 65 (capped from 89)” when cap applies; otherwise “Score 65”.
+- **Dashboard “Why this score” tooltip:** includes raw_score, final_score, and cap details when applicable.
 
 ---
 
@@ -58,6 +62,7 @@ To reproduce and debug “only 2/27 have full fields” and ORATS issues:
    So you can see which of the 5 have missing/stale data.
 
 4. **Symbol-diagnostics** (GET `/api/ui/symbol-diagnostics?symbol=X`) includes:
+   - `raw_score`, `score_caps`, `liquidity.liquidity_evaluated` (true when Stage2 ran; false when Stage2 did not run — show “Not evaluated”, not “failed”).
    - `symbol_eligibility.required_data_missing` / `required_data_stale`
    - `liquidity.reason`, `liquidity.missing_fields`, `liquidity.chain_missing_fields`
 

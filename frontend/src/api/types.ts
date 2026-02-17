@@ -294,17 +294,22 @@ export interface UiSystemHealthResponse {
 // =============================================================================
 
 export interface UiTrackedPosition {
+  id?: string | null;
   symbol: string;
   qty?: number | null;
   contracts?: number | null;
   avg_price?: number | null;
+  collateral?: number | null;
   notional?: number | null;
   updated_at?: string | null;
   status?: string | null;
+  is_test?: boolean;
 }
 
 export interface UiTrackedPositionsResponse {
   positions: UiTrackedPosition[];
+  capital_deployed?: number;
+  open_positions_count?: number;
 }
 
 // =============================================================================
@@ -313,8 +318,10 @@ export interface UiTrackedPositionsResponse {
 
 export interface PortfolioPosition {
   position_id: string;
+  id?: string | null;
   symbol: string;
   strategy: string;
+  is_test?: boolean;
   entry_credit?: number | null;
   quantity?: number | null;
   contracts?: number | null;
@@ -335,6 +342,8 @@ export interface PortfolioPosition {
 
 export interface PortfolioResponse {
   positions: PortfolioPosition[];
+  capital_deployed?: number;
+  open_positions_count?: number;
 }
 
 // =============================================================================

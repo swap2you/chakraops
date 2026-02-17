@@ -78,3 +78,22 @@ export async function apiPost<T>(path: string, payload: unknown): Promise<T> {
   }
   return (body ?? {}) as T;
 }
+
+export async function apiDelete<T>(path: string): Promise<T> {
+  const url = resolveUrl(path);
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: getHeaders(),
+  });
+  const text = await res.text();
+  let body: unknown;
+  try {
+    body = text ? JSON.parse(text) : undefined;
+  } catch {
+    body = undefined;
+  }
+  if (!res.ok) {
+    throw new ApiError(`API ${res.status}: ${res.statusText}`, res.status, body);
+  }
+  return (body ?? {}) as T;
+}

@@ -4,7 +4,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiGet, apiPost } from "./client";
+import { apiDelete, apiGet, apiPost } from "./client";
 import type {
   ArtifactListResponse,
   DecisionResponse,
@@ -59,12 +59,24 @@ function uiAccountsDefaultPath(): string {
   return `/api/ui/accounts/default`;
 }
 
+function uiAccountsPath(): string {
+  return `/api/ui/accounts`;
+}
+
 function uiPositionsPath(): string {
   return `/api/ui/positions`;
 }
 
 function uiPositionsManualExecutePath(): string {
   return `/api/ui/positions/manual-execute`;
+}
+
+function uiPositionsClosePath(positionId: string): string {
+  return `/api/ui/positions/${encodeURIComponent(positionId)}/close`;
+}
+
+function uiPositionsDeletePath(positionId: string): string {
+  return `/api/ui/positions/${encodeURIComponent(positionId)}`;
 }
 
 function uiPortfolioPath(): string {
@@ -125,6 +137,7 @@ export const queryKeys = {
   uiPositions: () => ["ui", "positions"] as const,
   uiTrackedPositions: () => ["ui", "positions", "tracked"] as const,
   uiAccountsDefault: () => ["ui", "accounts", "default"] as const,
+  uiAccounts: () => ["ui", "accounts"] as const,
   uiPortfolio: () => ["ui", "portfolio"] as const,
   uiAlerts: () => ["ui", "alerts"] as const,
   uiDiagnosticsHistory: (limit?: number) => ["ui", "diagnostics", "history", limit ?? 10] as const,
@@ -289,6 +302,72 @@ export function useDefaultAccount() {
   return useQuery({
     queryKey: queryKeys.uiAccountsDefault(),
     queryFn: () => apiGet<UiAccountsDefaultResponse>(uiAccountsDefaultPath()),
+  });
+}
+
+export interface UiAccountsResponse {
+  accounts: Array<{ account_id: string; [k: string]: unknown }>;
+}
+
+export function useAccounts() {
+  return useQuery({
+    queryKey: queryKeys.uiAccounts(),
+    queryFn: () => apiGet<UiAccountsResponse>(uiAccountsPath()),
+  });
+}
+
+export interface CreateAccountPayload {
+  account_id?: string;
+  provider: string;
+  account_type: string;
+  total_capital: number;
+  max_capital_per_trade_pct: number;
+  max_total_exposure_pct: number;
+  allowed_strategies?: string[];
+  is_default?: boolean;
+}
+
+export function useCreateAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CreateAccountPayload) =>
+      apiPost<{ account_id: string; [k: string]: unknown }>(uiAccountsPath(), payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiAccounts() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiAccountsDefault() });
+    },
+  });
+}
+
+export function useClosePosition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { positionId: string; close_price: number; close_time_utc?: string; close_fees?: number }) =>
+      apiPost(uiPositionsClosePath(payload.positionId), {
+        close_price: payload.close_price,
+        close_time_utc: payload.close_time_utc,
+        close_fees: payload.close_fees,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiTrackedPositions() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiPositions() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiPortfolio() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiAlerts() });
+    },
+  });
+}
+
+export function useDeletePosition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (positionId: string) =>
+      apiDelete<{ deleted: string }>(uiPositionsDeletePath(positionId)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiTrackedPositions() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiPositions() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiPortfolio() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiAlerts() });
+    },
   });
 }
 

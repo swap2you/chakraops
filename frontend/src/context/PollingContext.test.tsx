@@ -2,7 +2,7 @@
  * Phase 10: LIVE polling — pollTick increments on interval when LIVE; doesn't crash.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, act } from "@testing-library/react";
+import { render, screen, act } from "@/test/test-utils";
 import { PollingProvider, usePolling } from "./PollingContext";
 import { DataModeProvider } from "@/context/DataModeContext";
 import { ThemeProvider } from "@/context/ThemeContext";

@@ -51,14 +51,44 @@ def reset_output_dir() -> None:
 
 
 def get_decision_store_path() -> Path:
-    """Return canonical decision_latest.json path. ONE source of truth."""
+    """Return canonical decision_latest.json path (write target). ONE source of truth."""
     if _DEFAULT_OUTPUT_DIR is not None:
         return _DEFAULT_OUTPUT_DIR / "decision_latest.json"
     return DECISION_STORE_PATH
 
 
+def _frozen_path() -> Path:
+    """Path for EOD frozen snapshot (decision_frozen.json). Same dir as canonical store."""
+    return get_decision_store_path().parent / "decision_frozen.json"
+
+
+def get_active_decision_path(market_phase: Optional[str] = None) -> Path:
+    """
+    Path to read for UI/API: when market CLOSED and frozen exists, use decision_frozen.json;
+    else use decision_latest.json. Tests (set_output_dir) always use decision_latest.
+    """
+    if _DEFAULT_OUTPUT_DIR is not None:
+        return get_decision_store_path()
+    if market_phase is None:
+        try:
+            from app.market.market_hours import get_market_phase
+            market_phase = get_market_phase() or "OPEN"
+        except Exception:
+            market_phase = "OPEN"
+    if (market_phase or "OPEN").upper() != "OPEN":
+        frozen = _frozen_path()
+        if frozen.exists():
+            return frozen
+    return get_decision_store_path()
+
+
 def _decision_latest_path() -> Path:
     return get_decision_store_path()
+
+
+def _active_read_path() -> Path:
+    """Path to read from disk for current request (latest or frozen)."""
+    return get_active_decision_path()
 
 
 class EvaluationStoreV2:
@@ -69,9 +99,9 @@ class EvaluationStoreV2:
         self._load_latest_from_disk()
 
     def _load_latest_from_disk(self) -> None:
-        """Load decision_latest.json on startup if present and v2-compatible."""
-        path = _decision_latest_path()
-        logger.info("[EVAL_STORE_V2] DECISION_STORE_PATH=%s", path)
+        """Load active artifact (decision_latest or decision_frozen) from disk if present and v2-compatible."""
+        path = _active_read_path()
+        logger.debug("[EVAL_STORE_V2] Reading from %s", path)
         if not path.exists():
             logger.info("[EVAL_STORE_V2] No artifact at path (v2 not loaded)")
             return
@@ -87,6 +117,11 @@ class EvaluationStoreV2:
                 logger.info("[EVAL_STORE_V2] Artifact at path not v2 (skipped). Run evaluation to generate v2.")
         except Exception as e:
             logger.warning("[EVAL_STORE_V2] Failed to load %s: %s", path, e)
+
+    def reload_from_disk(self) -> None:
+        """Reload artifact from disk (canonical path). Use on every request to avoid stale cache."""
+        with _LOCK:
+            self._load_latest_from_disk()
 
     def get_latest(self) -> Optional[DecisionArtifactV2]:
         """Return latest artifact or None."""

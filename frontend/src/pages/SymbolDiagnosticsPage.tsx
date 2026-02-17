@@ -185,7 +185,6 @@ const INFO_DRAWER_CONTENT: Record<string, string> = {
 
 function ExecutionConsole({
   data,
-  symbol,
   onRecompute,
   isRecomputing,
   onOpenTradeTicket,

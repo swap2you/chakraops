@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { ExternalLink, Activity, Droplets, Zap, Info } from "lucide-react";
 import { useArtifactList, useDecision, useUniverse, useUiSystemHealth, useUiTrackedPositions } from "@/api/queries";
-import type { DecisionMode, UniverseSymbol } from "@/api/types";
+import type { DecisionMode, SymbolEvalSummary, UniverseSymbol } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import {
   Card,
@@ -88,8 +88,8 @@ export function DashboardPage() {
   const { data: health } = useUiSystemHealth();
   const { data: positionsRes } = useUiTrackedPositions();
 
-  const { universeSymbols, selectedSignals, isV2 } = useMemo(() => {
-    const artifact = (decision as { artifact?: { symbols?: UniverseSymbol[]; selected_candidates?: { symbol: string; strategy?: string }[] } })?.artifact;
+  const { universeSymbols, selectedSignals } = useMemo(() => {
+    const artifact = decision?.artifact;
     if (decision?.artifact_version === "v2" && artifact?.symbols) {
       return {
         universeSymbols: artifact.symbols,
@@ -98,20 +98,18 @@ export function DashboardPage() {
           verdict: "ELIGIBLE",
           candidate: c,
         })),
-        isV2: true,
       };
     }
-    // v2 only: no legacy merge. Use universe from API (also v2 store) or empty.
+    // v2 only: use universe from API (same v2 store) or empty
     const symbols = universe?.symbols ?? [];
-    const selected = (artifact?.selected_candidates ?? []).map((c: { symbol: string; strategy?: string }) => ({
+    const selected = (artifact?.selected_candidates ?? []).map((c) => ({
       symbol: c.symbol,
       verdict: "ELIGIBLE" as const,
       candidate: c,
     }));
     return {
-      universeSymbols: symbols as UniverseSymbol[],
+      universeSymbols: symbols as SymbolEvalSummary[],
       selectedSignals: selected,
-      isV2: false,
     };
   }, [universe?.symbols, decision]);
 
@@ -130,7 +128,7 @@ export function DashboardPage() {
   const capitalDeployed = openPositions.reduce((sum, p) => sum + (p.notional ?? 0), 0);
 
   const isReady = !!decision;
-  const metadata = (decision as { artifact?: { metadata?: { pipeline_timestamp?: string } }; metadata?: { pipeline_timestamp?: string } })?.artifact?.metadata ?? decision?.metadata;
+  const metadata = decision?.artifact?.metadata;
   const marketPhase = health?.market?.phase ?? "n/a";
   const oratsStatus = health?.orats?.status ?? "n/a";
   const lastEvalTs = metadata?.pipeline_timestamp ?? health?.market?.timestamp;
@@ -169,36 +167,38 @@ export function DashboardPage() {
         </select>
       </div>
 
-      <Card>
-        <CardHeader title="Status" />
-        <div className="flex flex-wrap items-center gap-6 text-sm">
-          <div>
-            <span className="block text-xs text-zinc-500 dark:text-zinc-500">Mode</span>
-            <span className="font-mono font-medium text-zinc-900 dark:text-zinc-200">{mode}</span>
-          </div>
-          <div>
-            <span className="block text-xs text-zinc-500 dark:text-zinc-500">Market</span>
-            <span className="font-mono text-zinc-700 dark:text-zinc-300">{marketPhase}</span>
-          </div>
-          <div>
-            <span className="block text-xs text-zinc-500 dark:text-zinc-500">Last evaluation</span>
-            <span className={`font-mono text-base font-medium ${evalFreshnessColor(lastEvalTs)}`}>{fmtTs(lastEvalTs)}</span>
-          </div>
-          <div>
-            <span className="block text-xs text-zinc-500 dark:text-zinc-500">ORATS</span>
-            <StatusBadge status={oratsStatus} />
-          </div>
-          {health?.api?.latency_ms != null && (
+      <section role="region" aria-label="Daily overview">
+        <Card>
+          <CardHeader title="Status" />
+          <div className="flex flex-wrap items-center gap-6 text-sm">
             <div>
-              <span className="block text-xs text-zinc-500 dark:text-zinc-500">API latency</span>
-              <span className="font-mono text-zinc-700 dark:text-zinc-300">{health.api.latency_ms}ms</span>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Mode</span>
+              <span className="font-mono font-medium text-zinc-900 dark:text-zinc-200">{mode}</span>
             </div>
-          )}
-        </div>
-      </Card>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Market</span>
+              <span className="font-mono text-zinc-700 dark:text-zinc-300">{marketPhase}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Last evaluation</span>
+              <span className={`font-mono text-base font-medium ${evalFreshnessColor(lastEvalTs)}`}>{fmtTs(lastEvalTs)}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">ORATS</span>
+              <StatusBadge status={oratsStatus} />
+            </div>
+            {health?.api?.latency_ms != null && (
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">API latency</span>
+                <span className="font-mono text-zinc-700 dark:text-zinc-300">{health.api.latency_ms}ms</span>
+              </div>
+            )}
+          </div>
+        </Card>
+      </section>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-        <div className="space-y-8 lg:col-span-2">
+        <section role="region" aria-label="Decision" className="space-y-8 lg:col-span-2">
           {aTier.length === 0 && bTier.length === 0 && selectedSignals.length === 0 ? (
             <Card>
               <EmptyState title="No eligible opportunities" message="No eligible opportunities in current run." />
@@ -216,8 +216,8 @@ export function DashboardPage() {
               )}
             </>
           )}
-        </div>
-        <div className="space-y-6">
+        </section>
+        <section role="region" aria-label="Trade plan" className="space-y-6">
           <StatCard
             label="Open positions"
             value={openPositions.length}
@@ -257,7 +257,7 @@ export function DashboardPage() {
               </div>
             )}
           </Card>
-        </div>
+        </section>
       </div>
 
       <Card>

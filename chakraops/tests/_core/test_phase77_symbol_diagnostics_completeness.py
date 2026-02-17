@@ -48,6 +48,7 @@ class TestPhase77SymbolDiagnosticsCompleteness:
 
     def test_api_symbol_diagnostics_has_required_keys(self, tmp_path):
         """Call /api/ui/symbol-diagnostics and assert response has known-good shape."""
+        pytest.importorskip("fastapi")
         from app.core.eval.evaluation_service_v2 import evaluate_universe
 
         evaluate_universe(["SPY"], mode="LIVE", output_dir=str(tmp_path))
@@ -74,6 +75,7 @@ class TestPhase77SymbolDiagnosticsCompleteness:
 
     def test_universe_and_symbol_diagnostics_agree(self, tmp_path):
         """Universe row for SPY score/band equals symbol-diagnostics summary score/band."""
+        pytest.importorskip("fastapi")
         from app.core.eval.evaluation_service_v2 import evaluate_universe
 
         evaluate_universe(["SPY"], mode="LIVE", output_dir=str(tmp_path))

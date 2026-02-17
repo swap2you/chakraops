@@ -22,9 +22,62 @@ export interface ArtifactListResponse {
 }
 
 // =============================================================================
-// DecisionResponse — GET /api/ui/decision/latest, GET /api/ui/decision/file/{filename}
+// DecisionResponse (v2) — GET /api/ui/decision/latest returns { artifact, artifact_version }
 // =============================================================================
 
+/** V2 symbol row from artifact / universe. All render fields typed as string | number | null (not {}). */
+export interface SymbolEvalSummary {
+  symbol: string;
+  verdict: string;
+  final_verdict: string;
+  score: number | null;
+  band: "A" | "B" | "C" | "D";
+  primary_reason: string | null;
+  stage_status: string;
+  stage1_status: string;
+  stage2_status: string;
+  provider_status: string | null;
+  data_freshness: string | null;
+  evaluated_at: string | null;
+  strategy: string | null;
+  price: number | null;
+  expiration: string | null;
+  has_candidates: boolean;
+  candidate_count: number;
+  band_reason: string | null;
+  score_breakdown?: unknown;
+  rank_score?: number | null;
+  capital_required?: number | null;
+  premium_yield_pct?: number | null;
+  market_cap?: number | null;
+}
+
+export interface DecisionArtifactV2Metadata {
+  artifact_version: "v2";
+  mode?: string;
+  pipeline_timestamp: string;
+  market_phase?: string;
+  universe_size?: number;
+  evaluated_count_stage1?: number;
+  evaluated_count_stage2?: number;
+  eligible_count?: number;
+  warnings?: string[];
+}
+
+export interface DecisionArtifactV2 {
+  artifact_version: "v2";
+  metadata: DecisionArtifactV2Metadata;
+  symbols: SymbolEvalSummary[];
+  selected_candidates?: Array<{ symbol: string; strategy?: string; [key: string]: unknown }>;
+}
+
+/** GET /api/ui/decision/latest (v2): { artifact, artifact_version } */
+export interface DecisionResponse {
+  artifact: DecisionArtifactV2;
+  artifact_version?: "v2" | string;
+}
+
+// Legacy types (kept for reference; API is v2-only)
 export interface DecisionCandidateContract {
   strategy: string;
   expiry: string;
@@ -89,30 +142,12 @@ export interface DecisionMetadata {
   pipeline_timestamp: string;
 }
 
-export interface DecisionResponse {
-  decision_snapshot: DecisionSnapshot;
-  execution_gate_result: ExecutionGateResult;
-  execution_gate: ExecutionGateResult;
-  execution_plan: ExecutionPlan;
-  dry_run_result: DryRunResult;
-  metadata: DecisionMetadata;
-}
-
 // =============================================================================
-// UniverseResponse — GET /api/ui/universe
+// UniverseResponse — GET /api/ui/universe (v2: symbols are SymbolEvalSummary[])
 // =============================================================================
 
-export interface UniverseSymbol {
-  symbol: string;
-  price?: number;
-  expiration?: string;
-  final_verdict?: string;
-  verdict?: string;
-  score?: number;
-  band?: string;
-  primary_reason?: string;
-  [key: string]: unknown;
-}
+/** @deprecated Use SymbolEvalSummary for v2. Kept for compatibility. */
+export type UniverseSymbol = SymbolEvalSummary;
 
 /** Phase 7.1: Merged universe row with explicit evaluation state. No blanks. */
 export interface UniverseMergedRow {
@@ -138,7 +173,7 @@ export interface UniverseResponse {
   source: string;
   updated_at: string;
   as_of: string;
-  symbols: UniverseSymbol[];
+  symbols: SymbolEvalSummary[];
   error?: string;
 }
 

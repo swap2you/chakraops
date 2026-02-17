@@ -42,6 +42,10 @@ function symbolDiagnosticsPath(symbol: string, recompute = false): string {
   return recompute ? `${base}&recompute=1` : base;
 }
 
+function symbolRecomputePath(symbol: string): string {
+  return `/api/ui/symbols/${encodeURIComponent(symbol)}/recompute`;
+}
+
 function uiSystemHealthPath(): string {
   return `/api/ui/system-health`;
 }
@@ -131,15 +135,28 @@ export function useSymbolDiagnostics(
   });
 }
 
+/** Response from POST /api/ui/symbols/{symbol}/recompute */
+export interface SymbolRecomputeResponse {
+  symbol: string;
+  pipeline_timestamp: string;
+  artifact_version: string;
+  updated: boolean;
+  score?: number;
+  band?: string;
+  verdict?: string;
+}
+
 export function useRecomputeSymbolDiagnostics() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (symbol: string) => {
-      const res = await apiGet<SymbolDiagnosticsResponseExtended>(symbolDiagnosticsPath(symbol, true));
+      const res = await apiPost<SymbolRecomputeResponse>(symbolRecomputePath(symbol), {});
       return { symbol, data: res };
     },
     onSuccess: (_, symbol) => {
       qc.invalidateQueries({ queryKey: queryKeys.symbolDiagnostics(symbol) });
+      qc.invalidateQueries({ queryKey: queryKeys.universe() });
+      qc.invalidateQueries({ queryKey: ["ui", "decision"] });
     },
   });
 }

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Literal
 
-from fastapi import APIRouter, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Header, HTTPException, Path, Query, Request
 
 from app.ui.live_dashboard_utils import list_decision_files, list_mock_files, load_decision_artifact
 
@@ -106,6 +106,7 @@ def ui_decision_latest(
     if mode == "LIVE":
         from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
         store = get_evaluation_store_v2()
+        store.reload_from_disk()
         artifact = store.get_latest()
         if artifact is None:
             raise HTTPException(status_code=404, detail="no v2 artifact; run evaluation")
@@ -167,13 +168,18 @@ def ui_universe(
     try:
         from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
         store = get_evaluation_store_v2()
+        store.reload_from_disk()
         artifact = store.get_latest()
         meta = artifact.metadata or {} if artifact else {}
         ts = meta.get("pipeline_timestamp") or now_iso
         symbols_out: List[Dict[str, Any]] = []
         if artifact and artifact.symbols:
+            diag_by_sym = getattr(artifact, "diagnostics_by_symbol", None) or {}
             for s in artifact.symbols:
-                symbols_out.append({
+                sym_key = (s.symbol or "").strip().upper()
+                diag = diag_by_sym.get(sym_key)
+                sel_el = (diag.symbol_eligibility or {}) if diag else {}
+                row: Dict[str, Any] = {
                     "symbol": s.symbol,
                     "verdict": s.verdict,
                     "final_verdict": s.final_verdict,
@@ -195,7 +201,11 @@ def ui_universe(
                     "premium_yield_pct": getattr(s, "premium_yield_pct", None),
                     "market_cap": getattr(s, "market_cap", None),
                     "rank_score": getattr(s, "rank_score", None),
-                })
+                }
+                row["required_data_missing"] = sel_el.get("required_data_missing") or []
+                row["required_data_stale"] = sel_el.get("required_data_stale") or []
+                row["optional_missing"] = sel_el.get("optional_missing") or []
+                symbols_out.append(row)
         return {
             "source": "ARTIFACT_V2",
             "updated_at": ts,
@@ -318,17 +328,30 @@ def ui_system_health(
     except Exception:
         pass
 
-    # Decision store (v2): CRITICAL if missing, not v2, band null, or timestamps mismatch
+    # Decision store (v2): CRITICAL if missing, not v2, band null. Include active_path and frozen.
     decision_store_status = "OK"
     decision_store_reason: str | None = None
+    canonical_path_str: str | None = None
+    active_path_str: str | None = None
+    frozen_in_effect: bool = False
     try:
-        from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2, get_decision_store_path
+        from app.core.eval.evaluation_store_v2 import (
+            get_evaluation_store_v2,
+            get_decision_store_path,
+            get_active_decision_path,
+            _frozen_path,
+        )
         store = get_evaluation_store_v2()
+        store.reload_from_disk()
         artifact = store.get_latest()
         store_path = get_decision_store_path()
-        if not store_path.exists():
+        active_path = get_active_decision_path(market_phase)
+        active_path_str = str(active_path)
+        canonical_path_str = str(store_path)
+        frozen_in_effect = active_path != store_path and _frozen_path().exists()
+        if not active_path.exists():
             decision_store_status = "CRITICAL"
-            decision_store_reason = "Store file missing"
+            decision_store_reason = "Active store file missing"
         elif artifact is None:
             decision_store_status = "CRITICAL"
             decision_store_reason = "No v2 artifact in store"
@@ -342,16 +365,12 @@ def ui_system_health(
                 if null_bands:
                     decision_store_status = "CRITICAL"
                     decision_store_reason = f"{len(null_bands)} symbol(s) have null band"
+        if decision_store_status == "OK" and (market_phase or "").upper() != "OPEN" and not _frozen_path().exists():
+            decision_store_status = "WARN"
+            decision_store_reason = "Market closed and no decision_frozen.json; serving decision_latest"
     except Exception as e:
         decision_store_status = "CRITICAL"
         decision_store_reason = str(e)
-
-    canonical_path_str: str | None = None
-    try:
-        from app.core.eval.evaluation_store_v2 import get_decision_store_path
-        canonical_path_str = str(get_decision_store_path())
-    except Exception:
-        pass
 
     return {
         "api": {"status": api_status, "latency_ms": api_latency_ms},
@@ -359,6 +378,8 @@ def ui_system_health(
             "status": decision_store_status,
             "reason": decision_store_reason,
             "canonical_path": canonical_path_str,
+            "active_path": active_path_str,
+            "frozen_in_effect": frozen_in_effect,
         },
         "orats": {
             "status": orats_status,
@@ -568,6 +589,8 @@ def _build_symbol_diagnostics_from_v2_store(
             "stock_liquidity_ok": liquidity.get("stock_liquidity_ok"),
             "option_liquidity_ok": liquidity.get("option_liquidity_ok"),
             "reason": liquidity.get("reason"),
+            "missing_fields": liquidity.get("missing_fields") or [],
+            "chain_missing_fields": liquidity.get("chain_missing_fields") or [],
         },
         "computed": {
             "rsi": technicals.get("rsi"),
@@ -608,6 +631,7 @@ def ui_symbol_diagnostics(
 
     from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
     store = get_evaluation_store_v2()
+    store.reload_from_disk()
     row = store.get_symbol(sym_upper)
     if row is not None:
         summary, candidates, gates, earnings, diagnostics_details = row
@@ -615,3 +639,40 @@ def ui_symbol_diagnostics(
 
     # Symbol not in store — 404 (no legacy path; use recompute=1 to add symbol)
     raise HTTPException(status_code=404, detail=f"Symbol {sym_upper} not in evaluation store. Use recompute=1 to evaluate.")
+
+
+@router.post("/symbols/{symbol}/recompute")
+def ui_symbol_recompute(
+    symbol: str = Path(..., min_length=1, max_length=12),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    Run full evaluation for one symbol and merge into the canonical store.
+    Updates decision_latest.json; Universe and Dashboard read from same store.
+    Returns pipeline_timestamp and updated symbol summary so UI can refetch.
+    """
+    _require_ui_key(x_ui_key)
+    sym_upper = symbol.strip().upper()
+    try:
+        from app.core.eval.evaluation_service_v2 import evaluate_single_symbol_and_merge
+        from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
+        merged = evaluate_single_symbol_and_merge(symbol=sym_upper)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Recompute failed: {e}")
+    store = get_evaluation_store_v2()
+    store.reload_from_disk()
+    row = store.get_symbol(sym_upper)
+    meta = (merged.metadata or {}) if merged else {}
+    ts = meta.get("pipeline_timestamp") or ""
+    result: Dict[str, Any] = {
+        "symbol": sym_upper,
+        "pipeline_timestamp": ts,
+        "artifact_version": "v2",
+        "updated": True,
+    }
+    if row is not None:
+        summary, _candidates, _gates, _earnings, _diag = row
+        result["score"] = summary.score
+        result["band"] = summary.band
+        result["verdict"] = summary.verdict
+    return result

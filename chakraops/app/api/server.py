@@ -78,6 +78,11 @@ _nightly_stop_event: Optional[threading.Event] = None
 _nightly_thread: Optional[threading.Thread] = None
 _last_nightly_eval_at: Optional[str] = None
 
+# EOD freeze: run eval + freeze_snapshot at this time ET when market open (e.g. 15:55)
+FREEZE_TIME_ET = os.getenv("FREEZE_TIME_ET", "15:55")
+FREEZE_TZ = os.getenv("FREEZE_TZ", "America/New_York")
+_last_freeze_run_date: Optional[str] = None  # YYYY-MM-DD to avoid double-run same day
+
 # EOD chain snapshot: 16:05 ET on trading days (Phase 3.1.3)
 EOD_CHAIN_TIME = os.getenv("EOD_CHAIN_TIME", "16:05")
 EOD_CHAIN_TZ = os.getenv("EOD_CHAIN_TZ", "America/New_York")
@@ -400,6 +405,40 @@ def _run_scheduled_evaluation() -> bool:
             _last_scheduled_eval_at = datetime.now(timezone.utc).isoformat()
             logger.info("[SCHEDULER] Triggered scheduled evaluation at %s", _last_scheduled_eval_at)
             print(f"[SCHEDULER] Triggered scheduled evaluation at {_last_scheduled_eval_at}")
+            # EOD freeze: if we're in the freeze window (e.g. 15:55 ET), run freeze_snapshot after eval
+            try:
+                from zoneinfo import ZoneInfo
+            except ImportError:
+                ZoneInfo = None  # type: ignore
+            if ZoneInfo:
+                global _last_freeze_run_date
+                tz = ZoneInfo(FREEZE_TZ)
+                now_et = datetime.now(tz).time()
+                try:
+                    hour, minute = map(int, FREEZE_TIME_ET.split(":"))
+                    from datetime import time as dt_time
+                    freeze_time = dt_time(hour, minute, 0)
+                    today = datetime.now(tz).strftime("%Y-%m-%d")
+                    if _last_freeze_run_date != today and now_et >= freeze_time:
+                        repo = Path(__file__).resolve().parents[2]
+                        script = repo / "scripts" / "freeze_snapshot.py"
+                        if script.exists():
+                            r = subprocess.run(
+                                [sys.executable, str(script)],
+                                cwd=str(repo),
+                                env={**os.environ, "PYTHONPATH": str(repo)},
+                                capture_output=True,
+                                text=True,
+                                timeout=30,
+                            )
+                            if r.returncode == 0:
+                                _last_freeze_run_date = today
+                                logger.info("[EOD_FREEZE] Ran freeze_snapshot.py: %s", (r.stdout or "").strip() or "ok")
+                                print("[EOD_FREEZE] Ran freeze_snapshot.py")
+                            else:
+                                logger.warning("[EOD_FREEZE] freeze_snapshot.py exit %s: %s", r.returncode, r.stderr or r.stdout)
+                except Exception as e:
+                    logger.debug("[EOD_FREEZE] Skip: %s", e)
             return True
         else:
             logger.debug("[SCHEDULER] Evaluation not started: %s", result.get("reason"))

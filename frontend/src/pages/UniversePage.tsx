@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUniverse, useRunEval } from "@/api/queries";
+import type { SymbolEvalSummary } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { Info } from "lucide-react";
 import {
@@ -76,22 +77,18 @@ const SORT_OPTIONS: { value: SortBy; label: string }[] = [
 const RANK_TOOLTIP =
   "Rank: band (A>B>C>D) → score desc → premium yield desc → capital required asc → market cap desc";
 
-function sortSymbols<T extends Record<string, unknown>>(list: T[], sortBy: SortBy): T[] {
+function sortSymbols(list: SymbolEvalSummary[], sortBy: SortBy): SymbolEvalSummary[] {
   const arr = [...list];
   if (sortBy === "rank") {
-    arr.sort((a, b) => ((b as { rank_score?: number }).rank_score ?? -Infinity) - ((a as { rank_score?: number }).rank_score ?? -Infinity));
+    arr.sort((a, b) => (b.rank_score ?? -Infinity) - (a.rank_score ?? -Infinity));
   } else if (sortBy === "score") {
-    arr.sort((a, b) => ((b.score ?? -Infinity) as number) - ((a.score ?? -Infinity) as number));
+    arr.sort((a, b) => (b.score ?? -Infinity) - (a.score ?? -Infinity));
   } else if (sortBy === "capital_required") {
-    arr.sort((a, b) => {
-      const ac = (a as { capital_required?: number }).capital_required ?? Infinity;
-      const bc = (b as { capital_required?: number }).capital_required ?? Infinity;
-      return ac - bc;
-    });
+    arr.sort((a, b) => (a.capital_required ?? Infinity) - (b.capital_required ?? Infinity));
   } else if (sortBy === "premium_yield") {
-    arr.sort((a, b) => ((b as { premium_yield_pct?: number }).premium_yield_pct ?? -Infinity) - ((a as { premium_yield_pct?: number }).premium_yield_pct ?? -Infinity));
+    arr.sort((a, b) => (b.premium_yield_pct ?? -Infinity) - (a.premium_yield_pct ?? -Infinity));
   } else if (sortBy === "market_cap") {
-    arr.sort((a, b) => ((b as { market_cap?: number }).market_cap ?? -Infinity) - ((a as { market_cap?: number }).market_cap ?? -Infinity));
+    arr.sort((a, b) => (b.market_cap ?? -Infinity) - (a.market_cap ?? -Infinity));
   }
   return arr;
 }
@@ -104,7 +101,7 @@ export function UniversePage() {
   const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("rank");
 
-  const symbols = universeData?.symbols ?? [];
+  const symbols: SymbolEvalSummary[] = universeData?.symbols ?? [];
   const source = universeData?.source ?? "n/a";
   const updated = universeData?.updated_at ?? "n/a";
 

@@ -10,6 +10,8 @@ Phase 8.8: Optional cache layer via fetch_with_cache (TTL 1 day for cores).
 from __future__ import annotations
 
 import logging
+import os
+import time
 from datetime import date
 from typing import Any, Dict, List, Optional
 
@@ -79,10 +81,15 @@ def fetch_core_snapshot(
 
     params_for_cache: Dict[str, Any] = {"as_of": date.today().isoformat()}
 
+    _debug_orats = os.getenv("DEBUG_ORATS", "0").strip() == "1"
+
     def _do_fetch() -> Dict[str, Any]:
+        t0 = time.perf_counter()
         try:
             resp = requests.get(url, params=params, timeout=timeout_sec)
         except requests.RequestException as e:
+            if _debug_orats:
+                logger.info("[ORATS_DEBUG] symbol=%s endpoint=cores error=%s", ticker_upper, e)
             raise OratsCoreError(
                 f"Request failed: {e}",
                 ticker=ticker_upper,
@@ -118,7 +125,15 @@ def fetch_core_snapshot(
                 http_status=200,
                 response_snippet=str(raw)[:200] if raw else "",
             )
-        return dict(rows[0])
+        out = dict(rows[0])
+        if _debug_orats:
+            latency_ms = int((time.perf_counter() - t0) * 1000)
+            quote_date = out.get("quoteDate") or out.get("quote_date")
+            logger.info(
+                "[ORATS_DEBUG] symbol=%s endpoint=cores fields=%s status=%s latency_ms=%d rows=1 quote_date=%s",
+                ticker_upper, ",".join(fields)[:80], resp.status_code, latency_ms, quote_date,
+            )
+        return out
 
     try:
         from app.core.data.cache_policy import get_ttl

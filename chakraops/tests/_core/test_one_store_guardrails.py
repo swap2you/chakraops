@@ -86,9 +86,12 @@ class TestOneStoreGuardrails:
         uni = client.get("/api/ui/universe")
         assert uni.status_code == 200
         uni_body = uni.json()
-        # Universe returns artifact_version v2; updated_at should match
         assert uni_body.get("artifact_version") == "v2"
-        assert uni_body.get("updated_at") == pipeline_ts or uni_body.get("as_of") == pipeline_ts
+        # decision/latest and universe must return same pipeline_timestamp as store
+        assert uni_body.get("updated_at") == pipeline_ts, (
+            f"universe.updated_at ({uni_body.get('updated_at')}) != decision/latest pipeline_timestamp ({pipeline_ts})"
+        )
+        assert dec_body.get("artifact", {}).get("metadata", {}).get("pipeline_timestamp") == pipeline_ts
 
         diag = client.get("/api/ui/symbol-diagnostics?symbol=SPY")
         if diag.status_code == 200:
@@ -117,3 +120,115 @@ class TestOneStoreGuardrails:
         assert spy.get("score") == d.get("composite_score"), "universe score must match symbol-diagnostics"
         assert spy.get("band") == d.get("confidence_band"), "universe band must match symbol-diagnostics"
         assert (spy.get("verdict") or spy.get("final_verdict")) == d.get("verdict"), "universe verdict must match"
+
+    def test_recompute_endpoint_writes_to_store_and_universe_sees_it(self, tmp_path):
+        """POST /api/ui/symbols/{symbol}/recompute updates canonical store; GET universe returns updated symbol."""
+        pytest.importorskip("fastapi")
+        from dataclasses import replace
+        from datetime import datetime, timezone
+        from unittest.mock import patch
+
+        from fastapi.testclient import TestClient
+
+        from app.core.eval.decision_artifact_v2 import DecisionArtifactV2, SymbolEvalSummary
+        from app.core.eval.evaluation_store_v2 import (
+            get_evaluation_store_v2,
+            reset_output_dir,
+            set_output_dir,
+        )
+        from app.api.server import app
+
+        set_output_dir(tmp_path)
+        try:
+            sym = SymbolEvalSummary(
+                symbol="SPY",
+                verdict="HOLD",
+                final_verdict="HOLD",
+                score=50,
+                band="C",
+                primary_reason="test",
+                stage_status="RUN",
+                stage1_status="PASS",
+                stage2_status="NOT_RUN",
+                provider_status="OK",
+                data_freshness=None,
+                evaluated_at=None,
+                strategy=None,
+                price=None,
+                expiration=None,
+                has_candidates=False,
+                candidate_count=0,
+            )
+            artifact = DecisionArtifactV2(
+                metadata={
+                    "artifact_version": "v2",
+                    "mode": "LIVE",
+                    "pipeline_timestamp": "2026-01-01T12:00:00Z",
+                    "universe_size": 1,
+                    "evaluated_count_stage1": 1,
+                    "evaluated_count_stage2": 0,
+                    "eligible_count": 0,
+                    "warnings": [],
+                },
+                symbols=[sym],
+                selected_candidates=[],
+            )
+            (tmp_path / "decision_latest.json").write_text(
+                json.dumps(artifact.to_dict(), indent=2),
+                encoding="utf-8",
+            )
+            # Force store to load from tmp_path (singleton may already exist)
+            store = get_evaluation_store_v2()
+            store.reload_from_disk()
+
+            def fake_merge(symbol: str, mode: str = "LIVE"):
+                store = get_evaluation_store_v2()
+                current = store.get_latest()
+                if not current:
+                    return None
+                sym_upper = symbol.strip().upper()
+                ts = datetime.now(timezone.utc).isoformat()
+                new_symbols = [
+                    replace(s, score=99, band="B") if (s.symbol or "").strip().upper() == sym_upper else s
+                    for s in current.symbols
+                ]
+                meta = dict(current.metadata)
+                meta["pipeline_timestamp"] = ts
+                merged = DecisionArtifactV2(
+                    metadata=meta,
+                    symbols=new_symbols,
+                    selected_candidates=current.selected_candidates,
+                    candidates_by_symbol=getattr(current, "candidates_by_symbol", {}) or {},
+                    gates_by_symbol=getattr(current, "gates_by_symbol", {}) or {},
+                    earnings_by_symbol=getattr(current, "earnings_by_symbol", {}) or {},
+                    diagnostics_by_symbol=getattr(current, "diagnostics_by_symbol", {}) or {},
+                    warnings=getattr(current, "warnings", []) or [],
+                )
+                store.set_latest(merged)
+                return merged
+
+            with patch(
+                "app.core.eval.evaluation_service_v2.evaluate_single_symbol_and_merge",
+                side_effect=fake_merge,
+            ):
+                client = TestClient(app)
+                r = client.post("/api/ui/symbols/SPY/recompute")
+            assert r.status_code == 200, r.text
+            body = r.json()
+            assert body.get("updated") is True
+            assert body.get("symbol") == "SPY"
+            assert body.get("score") == 99
+            assert body.get("band") == "B"
+            ts = body.get("pipeline_timestamp")
+            assert ts
+
+            uni = client.get("/api/ui/universe")
+            assert uni.status_code == 200
+            uni_body = uni.json()
+            assert uni_body.get("updated_at") == ts
+            spy = next((s for s in uni_body.get("symbols", []) if s.get("symbol") == "SPY"), None)
+            assert spy is not None
+            assert spy.get("score") == 99
+            assert spy.get("band") == "B"
+        finally:
+            reset_output_dir()

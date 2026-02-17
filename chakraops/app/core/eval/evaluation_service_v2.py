@@ -347,10 +347,14 @@ def _build_diagnostics_details(sr: Any, sym_upper: str, ts: str) -> SymbolDiagno
         "required_data_stale": sel_el.get("required_data_stale", []) or [],
         "reasons": sel_el.get("reasons", []) or [],
     }
+    stage2 = getattr(sr, "stage2", None)
+    chain_missing = list(getattr(stage2, "chain_missing_fields", None) or [])
     liquidity = {
         "stock_liquidity_ok": getattr(sr, "liquidity_ok", None),
         "option_liquidity_ok": getattr(sr, "liquidity_ok", None),
         "reason": getattr(sr, "liquidity_reason", None),
+        "missing_fields": list(getattr(sr, "missing_fields", None) or []),
+        "chain_missing_fields": chain_missing,
     }
     cap_hint = getattr(sr, "capital_hint", None)
     if isinstance(cap_hint, dict):

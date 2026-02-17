@@ -329,11 +329,13 @@ export function useRunDiagnostics() {
   });
 }
 
-// Notifications (Phase 8.3)
+// Notifications (Phase 8.3, 8.6)
 export interface UiNotification {
   timestamp_utc: string;
   severity: string;
   type: string;
+  /** Phase 8.6: Subtype (RUN_ERRORS, LOW_COMPLETENESS, ORATS_STALE, ORATS_DEGRADED, SCHEDULER_MISSED, RECOMPUTE_FAILED, etc.) */
+  subtype?: string | null;
   symbol?: string | null;
   message: string;
   details?: Record<string, unknown>;

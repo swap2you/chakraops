@@ -6,28 +6,53 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+# Phase 8.6: Restart grace window — do not emit SCHEDULER_MISSED for first N minutes after backend start.
+RESTART_GRACE_MINUTES = 10
+
+
+def _is_market_open() -> bool:
+    """True if US market (America/New_York) is in trading hours 9:30–16:00 ET."""
+    try:
+        from app.market.market_hours import is_market_open
+        return is_market_open()
+    except Exception:
+        return False
 
 
 def check_scheduler_health(
     last_run_timestamp: Optional[str],
     interval_minutes: int,
+    app_start_time_utc: Optional[float] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     If now - last_run > (interval_minutes * 2) -> return HEALTH alert payload for SCHEDULER_STALLED.
     Otherwise return None. Non-blocking; does not send anything.
+
+    Phase 8.6 gating:
+    - Restart grace: do not emit if now < app_start + 10 minutes.
+    - Market-hours: do not emit WARN/FAIL if US market is closed (skip; no downgrade needed).
     """
     if not last_run_timestamp or interval_minutes <= 0:
+        return None
+    now_ts = datetime.now(timezone.utc).timestamp()
+    # Restart grace: skip for first 10 minutes after backend start
+    if app_start_time_utc is not None:
+        grace_sec = RESTART_GRACE_MINUTES * 60
+        if (now_ts - app_start_time_utc) < grace_sec:
+            return None
+    # Market-hours: do not emit when market closed (avoids false WARN after hours)
+    if not _is_market_open():
         return None
     try:
         last_ts = datetime.fromisoformat(last_run_timestamp.replace("Z", "+00:00")).timestamp()
     except (ValueError, TypeError):
         return None
-    now = datetime.now(timezone.utc).timestamp()
     threshold_sec = interval_minutes * 2 * 60
-    if (now - last_ts) <= threshold_sec:
+    if (now_ts - last_ts) <= threshold_sec:
         return None
     return {
         "reason": "SCHEDULER_STALLED",
@@ -192,6 +217,7 @@ def run_watchdog_checks(
     requests_estimated: Optional[int] = None,
     max_requests_estimate: Optional[int] = None,
     cache_stats_by_endpoint: Optional[Dict[str, Dict[str, Any]]] = None,
+    app_start_time_utc: Optional[float] = None,
 ) -> None:
     """
     Run all watchdog checks and send Slack alerts if needed. Non-blocking; catches all exceptions.
@@ -201,8 +227,8 @@ def run_watchdog_checks(
         from app.core.alerts.slack_dispatcher import route_alert
     except ImportError:
         return
-    # SCHEDULER_STALLED -> HEALTH
-    payload = check_scheduler_health(last_run_timestamp, interval_minutes)
+    # SCHEDULER_STALLED -> HEALTH (gated by restart grace + market hours)
+    payload = check_scheduler_health(last_run_timestamp, interval_minutes, app_start_time_utc)
     if payload:
         try:
             from app.api.notifications_store import append_notification
@@ -211,6 +237,7 @@ def run_watchdog_checks(
                 "SCHEDULER_MISSED",
                 "Scheduler missed window; last run too old",
                 details=payload,
+                subtype="SCHEDULER_MISSED",
             )
         except Exception as e:
             logger.debug("[Watchdog] Failed to append SCHEDULER_MISSED notification: %s", e)
@@ -308,6 +335,7 @@ def collect_watchdog_warnings(
     requests_estimated: Optional[int] = None,
     max_requests_estimate: Optional[int] = None,
     cache_stats_by_endpoint: Optional[Dict[str, Dict[str, Any]]] = None,
+    app_start_time_utc: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """
     Run all watchdog checks and return any warning payloads (without sending alerts).
@@ -315,7 +343,7 @@ def collect_watchdog_warnings(
     """
     warnings: List[Dict[str, Any]] = []
     for fn, args in [
-        (check_scheduler_health, (last_run_timestamp, interval_minutes)),
+        (check_scheduler_health, (last_run_timestamp, interval_minutes, app_start_time_utc)),
         (check_orats_latency, (orats_rolling_avg_ms,)),
         (check_eval_wall_time, (wall_time_sec or 0, interval_minutes)),
         (check_cache_hit_rate, (cache_hit_rate_pct,)),

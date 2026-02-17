@@ -212,8 +212,9 @@ def test_format_daily_structured():
 # --- Watchdog ---
 
 
-def test_watchdog_scheduler_stalled():
-    """check_scheduler_health returns payload when last_run too old."""
+@patch("app.core.system.watchdog._is_market_open", return_value=True)
+def test_watchdog_scheduler_stalled(mock_market_open):
+    """check_scheduler_health returns payload when last_run too old and market open."""
     from datetime import datetime, timezone, timedelta
     old = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
     result = check_scheduler_health(old, interval_minutes=30)
@@ -226,6 +227,27 @@ def test_watchdog_scheduler_ok():
     from datetime import datetime, timezone, timedelta
     recent = (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat()
     result = check_scheduler_health(recent, interval_minutes=30)
+    assert result is None
+
+
+@patch("app.core.system.watchdog._is_market_open", return_value=False)
+def test_watchdog_scheduler_market_closed_no_emit(mock_market_open):
+    """Phase 8.6: When market closed, no SCHEDULER_MISSED emitted."""
+    from datetime import datetime, timezone, timedelta
+    old = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    result = check_scheduler_health(old, interval_minutes=30)
+    assert result is None
+
+
+def test_watchdog_scheduler_restart_grace_no_emit():
+    """Phase 8.6: When within 10 min of app start, no SCHEDULER_MISSED emitted."""
+    from datetime import datetime, timezone, timedelta
+    import time as _time
+    old = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    # Simulate app started 2 minutes ago
+    app_start = _time.time() - 120
+    with patch("app.core.system.watchdog._is_market_open", return_value=True):
+        result = check_scheduler_health(old, interval_minutes=30, app_start_time_utc=app_start)
     assert result is None
 
 

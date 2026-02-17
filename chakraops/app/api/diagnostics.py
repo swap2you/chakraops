@@ -6,7 +6,11 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import tempfile
+import threading
 import time
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
@@ -14,6 +18,8 @@ from typing import Any, Dict, List, Optional, Set
 logger = logging.getLogger(__name__)
 
 ALL_CHECKS = {"orats", "decision_store", "universe", "positions", "scheduler"}
+_RETENTION_LINES = 5000  # Phase 8.6
+_APPEND_LOCK = threading.Lock()
 
 
 def _diagnostics_history_path() -> Path:
@@ -27,12 +33,38 @@ def _diagnostics_history_path() -> Path:
     return out / "diagnostics_history.jsonl"
 
 
+def _prune_diagnostics_if_needed(path: Path) -> None:
+    """If file exceeds _RETENTION_LINES, rewrite with last N lines (atomic)."""
+    if not path.exists():
+        return
+    with open(path, "r", encoding="utf-8") as f:
+        lines = [ln.strip() for ln in f if ln.strip()]
+    if len(lines) <= _RETENTION_LINES:
+        return
+    kept = lines[-_RETENTION_LINES:]
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix="diagnostics_history.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            for ln in kept:
+                f.write(ln + "\n")
+        os.replace(tmp, path)
+    except Exception:
+        if os.path.exists(tmp):
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+        raise
+
+
 def _append_run(result: Dict[str, Any]) -> None:
-    """Append one run result as a JSON line."""
+    """Append one run result as a JSON line. Phase 8.6: prune to last N lines."""
     path = _diagnostics_history_path()
     line = json.dumps(result, default=str) + "\n"
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(line)
+    with _APPEND_LOCK:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(line)
+        _prune_diagnostics_if_needed(path)
 
 
 def _load_history(limit: int = 10) -> List[Dict[str, Any]]:
@@ -164,12 +196,16 @@ def _run_universe_check() -> Dict[str, Any]:
 
 
 def _run_positions_check() -> Dict[str, Any]:
-    """Positions GET/POST roundtrip using paper account."""
+    """Positions GET/POST roundtrip using paper account.
+    Phase 8.6: Unique run_id tag, guaranteed cleanup in finally, no pollution.
+    """
+    run_id = f"DIAG_TEST_{uuid.uuid4().hex[:12]}"
+    test_symbol = "DIAG_TEST"
+    created_position_id: Optional[str] = None
     try:
         from app.core.positions.service import list_positions, add_paper_position
         before = list_positions(status=None, symbol=None)
         before_ids = {p.position_id for p in before}
-        test_symbol = "DIAG_TEST"
         pos, errs = add_paper_position({
             "symbol": test_symbol,
             "strategy": "CSP",
@@ -177,6 +213,7 @@ def _run_positions_check() -> Dict[str, Any]:
             "strike": 100.0,
             "expiration": "2026-12-20",
             "credit_expected": 1.0,
+            "notes": run_id,
         })
         if errs or pos is None:
             return {
@@ -184,14 +221,9 @@ def _run_positions_check() -> Dict[str, Any]:
                 "status": "FAIL",
                 "details": {"error": "; ".join(errs) if errs else "Failed to create paper position"},
             }
+        created_position_id = pos.position_id
         after = list_positions(status=None, symbol=None)
         found = any(p.symbol == test_symbol and p.position_id == pos.position_id for p in after)
-        # Cleanup: close the test position so it doesn't pollute
-        try:
-            from app.core.positions.store import update_position
-            update_position(pos.position_id, {"status": "CLOSED", "closed_at": datetime.now(timezone.utc).isoformat()})
-        except Exception:
-            pass
         if found:
             return {
                 "check": "positions",
@@ -209,19 +241,67 @@ def _run_positions_check() -> Dict[str, Any]:
             "status": "FAIL",
             "details": {"error": str(e)},
         }
+    finally:
+        # Guaranteed cleanup: always close/remove DIAG_TEST positions we created
+        if created_position_id:
+            try:
+                from app.core.positions.store import update_position
+                update_position(
+                    created_position_id,
+                    {"status": "CLOSED", "closed_at": datetime.now(timezone.utc).isoformat()},
+                )
+            except Exception as cleanup_err:
+                logger.warning("[DIAGNOSTICS] Positions check cleanup failed for %s: %s", created_position_id, cleanup_err)
+        # Also close any other open DIAG_TEST positions from prior failed runs
+        try:
+            from app.core.positions.store import list_positions, update_position
+            all_pos = list_positions(status=None, symbol=test_symbol)
+            for p in all_pos:
+                if p.status in ("OPEN", "PARTIAL_EXIT") and (p.notes or "").startswith("DIAG_TEST_"):
+                    try:
+                        update_position(
+                            p.position_id,
+                            {"status": "CLOSED", "closed_at": datetime.now(timezone.utc).isoformat()},
+                        )
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
 
-def _run_scheduler_check() -> Dict[str, Any]:
-    """Scheduler: next_run_at present; last_run_at within expected window when market open."""
+def _run_scheduler_check(app_start_time_utc: Optional[float] = None) -> Dict[str, Any]:
+    """Scheduler: next_run_at present; last_run_at within expected window when market open.
+    Phase 8.6: Market-hours gating — when market closed, return PASS (no false WARN).
+    Restart grace — when within 10 min of app start, do not report scheduler missed.
+    """
     try:
-        from app.api.server import get_scheduler_status
+        from app.api.server import get_scheduler_status, get_app_start_time_utc
         from app.market.market_hours import get_market_phase, is_market_open
+        from app.core.system.watchdog import RESTART_GRACE_MINUTES
         sched = get_scheduler_status()
         next_run_at = sched.get("next_run_at")
         last_run_at = sched.get("last_run_at")
         interval_min = sched.get("interval_minutes") or 30
         market_open = is_market_open()
         phase = get_market_phase() or "UNKNOWN"
+        start_utc = app_start_time_utc if app_start_time_utc is not None else get_app_start_time_utc()
+        in_grace = False
+        if start_utc is not None:
+            elapsed_min = (datetime.now(timezone.utc).timestamp() - start_utc) / 60
+            in_grace = elapsed_min < RESTART_GRACE_MINUTES
+        # Market closed or in restart grace: skip WARN/FAIL (return PASS with note)
+        if not market_open or in_grace:
+            return {
+                "check": "scheduler",
+                "status": "PASS",
+                "details": {
+                    "next_run_at": next_run_at,
+                    "last_run_at": last_run_at,
+                    "market_open": market_open,
+                    "phase": phase,
+                    "note": "market closed" if not market_open else "restart grace window",
+                },
+            }
         if next_run_at is None and last_run_at is None:
             return {
                 "check": "scheduler",
@@ -235,7 +315,7 @@ def _run_scheduler_check() -> Dict[str, Any]:
                 "details": {"reason": "next_run_at missing", "last_run_at": last_run_at},
             }
         window_ok = True
-        if market_open and last_run_at:
+        if last_run_at:
             try:
                 last_dt = datetime.fromisoformat(last_run_at.replace("Z", "+00:00"))
                 max_age = timedelta(minutes=interval_min * 2)

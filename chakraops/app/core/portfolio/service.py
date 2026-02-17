@@ -62,7 +62,13 @@ def compute_portfolio_summary(
         if getattr(a, "active", True):
             total_equity += float(getattr(a, "total_capital", 0) or 0)
 
-    open_positions = [p for p in positions if (getattr(p, "status", "") or "").strip() in ("OPEN", "PARTIAL_EXIT")]
+    # Phase 8.6: Exclude DIAG_TEST positions (diagnostics sanity check) from portfolio totals
+    _exclude_diag = lambda p: (getattr(p, "symbol", "") or "").strip().upper().startswith("DIAG_TEST")
+    open_positions = [
+        p for p in positions
+        if (getattr(p, "status", "") or "").strip() in ("OPEN", "PARTIAL_EXIT")
+        and not _exclude_diag(p)
+    ]
     capital_in_use = sum(_capital_for_position(p) for p in open_positions)
 
     available = total_equity - capital_in_use
@@ -123,7 +129,12 @@ def compute_exposure(
     Returns list of { key, required_capital, pct_of_total_equity, pct_of_available_capital, position_count }
     """
     total_equity = sum(float(getattr(a, "total_capital", 0) or 0) for a in accounts if getattr(a, "active", True))
-    open_positions = [p for p in positions if (getattr(p, "status", "") or "").strip() in ("OPEN", "PARTIAL_EXIT")]
+    _exclude_diag = lambda p: (getattr(p, "symbol", "") or "").strip().upper().startswith("DIAG_TEST")
+    open_positions = [
+        p for p in positions
+        if (getattr(p, "status", "") or "").strip() in ("OPEN", "PARTIAL_EXIT")
+        and not _exclude_diag(p)
+    ]
     capital_in_use = sum(_capital_for_position(p) for p in open_positions)
     available = max(0.0, total_equity - capital_in_use)
 

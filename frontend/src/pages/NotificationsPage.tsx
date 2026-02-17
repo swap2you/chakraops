@@ -16,6 +16,7 @@ export function NotificationsPage() {
     return notifications.filter(
       (n) =>
         (n.type ?? "").toLowerCase().includes(q) ||
+        (n.subtype ?? "").toLowerCase().includes(q) ||
         (n.severity ?? "").toLowerCase().includes(q) ||
         (n.symbol ?? "").toLowerCase().includes(q) ||
         (n.message ?? "").toLowerCase().includes(q)
@@ -55,7 +56,7 @@ export function NotificationsPage() {
         <div className="space-y-3">
           <input
             type="text"
-            placeholder="Filter by type, severity, symbol, message…"
+            placeholder="Filter by type, subtype, severity, symbol, message…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             className="w-full max-w-md rounded border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:placeholder-zinc-500"
@@ -70,6 +71,7 @@ export function NotificationsPage() {
                     <th className="py-2 pr-2">Time (ET)</th>
                     <th className="py-2 pr-2">Severity</th>
                     <th className="py-2 pr-2">Type</th>
+                    <th className="py-2 pr-2">Subtype</th>
                     <th className="py-2 pr-2">Symbol</th>
                     <th className="py-2">Message</th>
                   </tr>
@@ -88,6 +90,7 @@ export function NotificationsPage() {
                         <StatusBadge status={n.severity ?? "—"} />
                       </td>
                       <td className="py-2 pr-2 font-medium text-zinc-700 dark:text-zinc-300">{n.type ?? "—"}</td>
+                      <td className="py-2 pr-2 text-zinc-600 dark:text-zinc-400">{n.subtype ?? "—"}</td>
                       <td className="py-2 pr-2 font-mono text-zinc-600 dark:text-zinc-400">{n.symbol ?? "—"}</td>
                       <td className="py-2 text-zinc-600 dark:text-zinc-400 truncate max-w-xs" title={n.message}>
                         {n.message ?? "—"}
@@ -123,6 +126,10 @@ export function NotificationsPage() {
             <p>
               <span className="text-zinc-500 dark:text-zinc-500">Type: </span>
               {selected.type ?? "—"}
+            </p>
+            <p>
+              <span className="text-zinc-500 dark:text-zinc-500">Subtype: </span>
+              {selected.subtype ?? "—"}
             </p>
             <p>
               <span className="text-zinc-500 dark:text-zinc-500">Symbol: </span>

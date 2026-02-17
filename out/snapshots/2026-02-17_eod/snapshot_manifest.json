@@ -1,0 +1,22 @@
+{
+  "created_at_utc": "2026-02-17T21:10:55.262221+00:00",
+  "created_at_et": "2026-02-17T16:10:55.262221-05:00",
+  "git_commit": "8f649b82e81b",
+  "files": [
+    {
+      "name": "notifications.jsonl",
+      "size_bytes": 1783,
+      "last_modified_utc": "2026-02-17T21:03:41.214456+00:00"
+    },
+    {
+      "name": "decision_latest.json",
+      "size_bytes": 115223,
+      "last_modified_utc": "2026-02-17T20:58:51.518195+00:00"
+    },
+    {
+      "name": "decision_frozen.json",
+      "size_bytes": 103005,
+      "last_modified_utc": "2026-02-17T16:32:11.855173+00:00"
+    }
+  ]
+}

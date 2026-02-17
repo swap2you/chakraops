@@ -360,6 +360,7 @@ def _append_alert_record(record: Dict[str, Any]) -> None:
                 "DATA_HEALTH",
                 record.get("summary", "Data health alert"),
                 details={"action_hint": record.get("action_hint")},
+                subtype=record.get("reason_code"),
             )
         except Exception as e:
             logger.debug("[ALERTS] Failed to append DATA_HEALTH to notifications: %s", e)
@@ -445,6 +446,7 @@ def process_run_completed(run: Any) -> None:
                 "severity": alert.severity.value,
                 "summary": alert.summary,
                 "action_hint": alert.action_hint,
+                "reason_code": alert.reason_code,
                 "sent": False,
                 "suppressed_reason": "alert_type_disabled",
             })
@@ -464,6 +466,7 @@ def process_run_completed(run: Any) -> None:
                 "severity": alert.severity.value,
                 "summary": alert.summary,
                 "action_hint": alert.action_hint,
+                "reason_code": alert.reason_code,
                 "sent": False,
                 "suppressed_reason": "cooldown",
             })
@@ -484,6 +487,7 @@ def process_run_completed(run: Any) -> None:
             "severity": alert.severity.value,
             "summary": alert.summary,
             "action_hint": alert.action_hint,
+            "reason_code": alert.reason_code,
             "sent": sent,
             "sent_at": datetime.now(timezone.utc).isoformat() if sent else None,
             "suppressed_reason": None if sent else "slack_not_configured",

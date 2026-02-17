@@ -52,6 +52,14 @@ logger = logging.getLogger(__name__)
 # Cooldown: 5 min between evaluate triggers (global)
 EVAL_COOLDOWN_SEC = 300
 _last_eval_ts: float = 0
+
+# Phase 8.6: Backend start time for scheduler watchdog grace window
+_APP_START_TIME_UTC: Optional[float] = None
+
+
+def get_app_start_time_utc() -> Optional[float]:
+    """Return backend start time (UTC timestamp). Used for restart grace window in watchdog."""
+    return _APP_START_TIME_UTC
 _eval_jobs: Dict[str, Dict[str, Any]] = {}
 _jobs_lock = threading.Lock()
 
@@ -486,6 +494,7 @@ def _scheduler_loop(stop_event: threading.Event, interval_minutes: int) -> None:
                 interval_minutes,
                 orats_rolling_avg_ms=None,
                 has_signals_in_24h=True,
+                app_start_time_utc=get_app_start_time_utc(),
             )
         except Exception as e:
             logger.debug("[SCHEDULER] Watchdog check skipped: %s", e)
@@ -568,6 +577,8 @@ def _collect_api_routes(app: FastAPI) -> list:
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     """Startup: ORATS token (hardcoded), boot probe, route count, scheduler. No token validation."""
+    global _APP_START_TIME_UTC
+    _APP_START_TIME_UTC = time.time()
     logger.info("[CONFIG] ORATS API token loaded (hardcoded, private mode)")
     print("[CONFIG] ORATS API token loaded (hardcoded, private mode)")
     base_url = "https://api.orats.io/datav2"

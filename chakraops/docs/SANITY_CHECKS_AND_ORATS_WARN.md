@@ -31,7 +31,12 @@ Sanity checks are operational diagnostics that validate core subsystems. Run the
 
 ### Persistence
 
-Results are appended to `out/diagnostics_history.jsonl` (one JSON line per run). No rotation; keep file size manageable by pruning old lines if needed.
+Results are appended to `out/diagnostics_history.jsonl` (one JSON line per run). Phase 8.6: Retention — file is pruned to last 5000 lines on each append.
+
+### Phase 8.6: Scheduler check gating
+
+- **Restart grace:** For the first 10 minutes after backend start, scheduler check returns PASS (no false SCHEDULER_MISSED).
+- **Market-hours:** When US market is closed (America/New_York), scheduler check returns PASS (no WARN/FAIL off-market).
 
 ---
 
@@ -48,6 +53,15 @@ When **ORATS** shows **WARN** (or **DEGRADED**):
   4. If ORATS is OK but WARN persists, the evaluation window may be too short — adjust `EVALUATION_QUOTE_WINDOW_MINUTES` in config.
 
 ORATS **WARN** is throttled for notifications: at most one notification per hour to avoid spam.
+
+### Notification subtype (Phase 8.6)
+
+Notifications include an optional `subtype` field for finer filtering:
+
+- `ORATS_STALE` — ORATS data stale
+- `SCHEDULER_MISSED` — Scheduler missed window
+- `RECOMPUTE_FAILED` — Symbol recompute failed
+- `RUN_ERRORS`, `LOW_COMPLETENESS` — DATA_HEALTH alert subtypes
 
 ---
 

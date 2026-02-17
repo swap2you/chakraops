@@ -484,7 +484,8 @@ async def ui_notifications_append(
         message = body.get("message", "")
         symbol = body.get("symbol")
         details = body.get("details") or {}
-        append_notification(severity=severity, ntype=ntype, message=message, symbol=symbol, details=details)
+        subtype = body.get("subtype")
+        append_notification(severity=severity, ntype=ntype, message=message, symbol=symbol, details=details, subtype=subtype)
         return {"status": "OK"}
     except Exception as e:
         import logging
@@ -544,6 +545,8 @@ def ui_portfolio(
         from app.core.positions.service import list_positions
         from app.core.positions.lifecycle import enrich_position_for_portfolio
         positions = list_positions(status=None, symbol=None)
+        # Phase 8.6: Exclude DIAG_TEST (diagnostics sanity check) from portfolio display
+        positions = [p for p in positions if not (p.symbol or "").strip().upper().startswith("DIAG_TEST")]
         mark_by_id: Dict[str, float] = {}
         underlying_by_symbol: Dict[str, float] = {}
         out: List[Dict[str, Any]] = [
@@ -825,7 +828,10 @@ def ui_symbol_recompute(
     except Exception as e:
         try:
             from app.api.notifications_store import append_notification
-            append_notification("WARN", "RECOMPUTE_FAILURE", str(e), symbol=sym_upper, details={"error": str(e)[:500]})
+            append_notification(
+                "WARN", "RECOMPUTE_FAILURE", str(e),
+                symbol=sym_upper, details={"error": str(e)[:500]}, subtype="RECOMPUTE_FAILED",
+            )
         except Exception:
             pass
         raise HTTPException(status_code=500, detail=f"Recompute failed: {e}")

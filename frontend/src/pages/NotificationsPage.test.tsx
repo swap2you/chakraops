@@ -8,6 +8,7 @@ const mockNotifications = {
       timestamp_utc: "2026-01-01T12:00:00Z",
       severity: "WARN",
       type: "ORATS_WARN",
+      subtype: "ORATS_STALE",
       symbol: null,
       message: "ORATS status WARN; data may be stale",
       details: {},
@@ -47,5 +48,11 @@ describe("NotificationsPage", () => {
     render(<NotificationsPage />);
     expect(screen.getByText(/ORATS_WARN/i)).toBeInTheDocument();
     expect(screen.getByText(/ORATS status WARN/i)).toBeInTheDocument();
+  });
+
+  it("shows subtype in table and filter includes subtype", () => {
+    render(<NotificationsPage />);
+    expect(screen.getByText(/ORATS_STALE/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Filter by type, subtype/i)).toBeInTheDocument();
   });
 });

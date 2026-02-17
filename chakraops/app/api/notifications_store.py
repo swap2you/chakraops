@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import tempfile
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,6 +16,8 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 _LOCK = threading.Lock()
+# Phase 8.6: Retention — keep last N lines
+_RETENTION_LINES = 5000
 _LAST_ORATS_WARN_AT: Optional[float] = None
 _ORATS_WARN_THROTTLE_SEC = 3600  # 1 hour
 
@@ -28,31 +32,60 @@ def _notifications_path() -> Path:
     return out / "notifications.jsonl"
 
 
+def _prune_if_needed(path: Path) -> None:
+    """If file exceeds _RETENTION_LINES, rewrite with last N lines (atomic)."""
+    if not path.exists():
+        return
+    with open(path, "r", encoding="utf-8") as f:
+        lines = [ln.strip() for ln in f if ln.strip()]
+    if len(lines) <= _RETENTION_LINES:
+        return
+    kept = lines[-_RETENTION_LINES:]
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix="notifications.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            for ln in kept:
+                f.write(ln + "\n")
+        os.replace(tmp, path)
+    except Exception:
+        if os.path.exists(tmp):
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+        raise
+
+
 def append_notification(
     severity: str,
     ntype: str,
     message: str,
     symbol: Optional[str] = None,
     details: Optional[Dict[str, Any]] = None,
+    subtype: Optional[str] = None,
 ) -> None:
     """
     Append a notification to out/notifications.jsonl.
     severity: INFO | WARN | CRITICAL
     ntype: ORATS_WARN | SCHEDULER_MISSED | RECOMPUTE_FAILURE | REQUIRED_DATA_MISSING | etc.
+    subtype: Optional (e.g. RUN_ERRORS, LOW_COMPLETENESS, ORATS_STALE, SCHEDULER_MISSED).
     """
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "timestamp_utc": now,
         "severity": severity,
         "type": ntype,
+        "subtype": subtype,
         "symbol": symbol,
         "message": message,
         "details": details or {},
     }
     path = _notifications_path()
+    line = json.dumps(record, default=str)
     with _LOCK:
         with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, default=str) + "\n")
+            f.write(line + "\n")
+        _prune_if_needed(path)
     logger.info("[NOTIFICATIONS] Appended %s %s: %s", ntype, severity, message[:80])
 
 
@@ -66,7 +99,7 @@ def append_orats_warn(message: str, details: Optional[Dict[str, Any]] = None) ->
         if last is not None and (now_ts - last) < _ORATS_WARN_THROTTLE_SEC:
             return
         _LAST_ORATS_WARN_AT = now_ts
-    append_notification("WARN", "ORATS_WARN", message, symbol=None, details=details)
+    append_notification("WARN", "ORATS_WARN", message, symbol=None, details=details, subtype="ORATS_STALE")
 
 
 def load_notifications(limit: int = 100) -> List[Dict[str, Any]]:

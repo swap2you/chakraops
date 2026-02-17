@@ -75,6 +75,42 @@ def get_eval_interval_seconds(utc_now: datetime | None = None) -> int:
     return EVAL_CADENCE_OPEN_SEC if is_market_open(utc_now) else POLL_INTERVAL_CLOSED_SEC
 
 
+def get_next_open_close_et(utc_now: datetime | None = None) -> tuple[str | None, str | None]:
+    """
+    Return (next_open_et, next_close_et) as ISO strings in ET.
+    next_open_et: next 9:30 AM ET (today or next weekday).
+    next_close_et: next 4:00 PM ET (today or next weekday).
+    """
+    from datetime import timedelta, time as dt_time
+    if utc_now is None:
+        utc_now = datetime.now(_UTC)
+    et = utc_now.astimezone(_US_EASTERN)
+    today = et.date()
+    open_t = dt_time(9, 30, 0)
+    close_t = dt_time(16, 0, 0)
+    now_t = et.time()
+    next_open = None
+    next_close = None
+    for d in range(8):
+        cand = today + timedelta(days=d)
+        if cand.weekday() >= 5:
+            continue
+        if next_open is None:
+            open_dt = datetime.combine(cand, open_t, tzinfo=_US_EASTERN)
+            if (d == 0 and now_t < open_t) or d > 0:
+                next_open = open_dt
+        if next_close is None:
+            close_dt = datetime.combine(cand, close_t, tzinfo=_US_EASTERN)
+            if (d == 0 and now_t < close_t) or d > 0:
+                next_close = close_dt
+        if next_open and next_close:
+            break
+    return (
+        next_open.isoformat() if next_open else None,
+        next_close.isoformat() if next_close else None,
+    )
+
+
 def get_mode_label(provider_name: str, market_open: bool) -> str:
     """UI mode string: LIVE (ThetaTerminal) or LIVE (yfinance, stocks-only) or SNAPSHOT ONLY (...)."""
     if "SNAPSHOT ONLY" in provider_name:
@@ -87,6 +123,7 @@ def get_mode_label(provider_name: str, market_open: bool) -> str:
 __all__ = [
     "is_market_open",
     "get_market_phase",
+    "get_next_open_close_et",
     "get_chain_source",
     "get_stage2_chain_source",
     "get_polling_interval_seconds",

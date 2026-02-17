@@ -109,6 +109,12 @@ export function SystemDiagnosticsPage() {
                 <p className="mt-1 text-zinc-600 dark:text-zinc-400">{decisionStore.reason}</p>
               </div>
             )}
+            {decisionStore?.evaluation_timestamp_utc && (
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">evaluation_timestamp (ET)</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{formatTimestampEt(decisionStore.evaluation_timestamp_utc)}</p>
+              </div>
+            )}
             {decisionStore?.canonical_path && (
               <div className="col-span-2">
                 <span className="block text-xs text-zinc-500 dark:text-zinc-500">path</span>
@@ -129,6 +135,16 @@ export function SystemDiagnosticsPage() {
               </p>
             </div>
             <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Age / threshold</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">
+                {orats?.age_minutes != null && orats?.staleness_threshold_minutes != null
+                  ? `${orats.age_minutes}m (threshold: ${orats.staleness_threshold_minutes}m)`
+                  : orats?.age_minutes != null
+                    ? `${orats.age_minutes}m`
+                    : "—"}
+              </p>
+            </div>
+            <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">last_success_at (ET)</span>
               <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{formatTimestampEt(orats?.last_success_at)}</p>
             </div>
@@ -138,7 +154,7 @@ export function SystemDiagnosticsPage() {
                 {orats?.avg_latency_seconds != null ? orats.avg_latency_seconds : "—"}
               </p>
             </div>
-            <div>
+            <div className="col-span-2">
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">last_error_reason</span>
               <p className="mt-1 text-zinc-600 dark:text-zinc-400">{orats?.last_error_reason ?? "—"}</p>
             </div>

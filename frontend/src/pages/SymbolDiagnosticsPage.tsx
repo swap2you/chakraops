@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Calendar, ChevronDown, ChevronRight, Database, Droplets, X } from "lucide-react";
-import { useSymbolDiagnostics, useRecomputeSymbolDiagnostics, useDefaultAccount } from "@/api/queries";
+import { useSymbolDiagnostics, useRecomputeSymbolDiagnostics, useDefaultAccount, useUiSystemHealth } from "@/api/queries";
 import type { SymbolDiagnosticsResponseExtended } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { TradeTicketDrawer } from "@/components/TradeTicketDrawer";
-import { Card, CardHeader, Badge, StatusBadge, Button } from "@/components/ui";
+import { Card, CardHeader, Badge, StatusBadge, Button, Tooltip } from "@/components/ui";
 import type { SymbolDiagnosticsCandidate } from "@/api/types";
 
 function verdictColor(v: string | null | undefined): string {
@@ -94,6 +94,8 @@ export function SymbolDiagnosticsPage() {
   const { data, isLoading, isError } = useSymbolDiagnostics(activeSymbol ?? "", shouldFetch);
   const recompute = useRecomputeSymbolDiagnostics();
   const { data: accountData } = useDefaultAccount();
+  const { data: health } = useUiSystemHealth();
+  const marketClosed = health?.market?.phase ? health.market.phase !== "OPEN" && health.market.phase !== "UNKNOWN" : false;
 
   const handleLookup = useCallback(() => {
     const s = symbol.trim().toUpperCase();
@@ -154,6 +156,8 @@ export function SymbolDiagnosticsPage() {
           symbol={activeSymbol ?? ""}
           onRecompute={() => activeSymbol && recompute.mutate(activeSymbol)}
           isRecomputing={recompute.isPending}
+          isRecomputeDisabled={marketClosed}
+          recomputeDisabledTooltip="Market closed: evaluation disabled to protect canonical decision. Use System Diagnostics or force to override."
           onOpenTradeTicket={(c) => setTradeTicketCandidate(c)}
           defaultCapital={getDefaultCapital(accountData?.account)}
         />
@@ -187,6 +191,8 @@ function ExecutionConsole({
   data,
   onRecompute,
   isRecomputing,
+  isRecomputeDisabled,
+  recomputeDisabledTooltip,
   onOpenTradeTicket,
   defaultCapital,
 }: {
@@ -194,10 +200,11 @@ function ExecutionConsole({
   symbol: string;
   onRecompute?: () => void;
   isRecomputing?: boolean;
+  isRecomputeDisabled?: boolean;
+  recomputeDisabledTooltip?: string;
   onOpenTradeTicket: (c: SymbolDiagnosticsCandidate) => void;
   defaultCapital?: number | null;
 }) {
-  const [explainOpen, setExplainOpen] = useState(false);
   const [infoDrawerKey, setInfoDrawerKey] = useState<string | null>(null);
   const comp = data.computed;
   const ep = data.exit_plan;
@@ -218,14 +225,18 @@ function ExecutionConsole({
           description={price != null ? `$${price.toFixed(2)}` : undefined}
           actions={
             onRecompute ? (
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={isRecomputing}
-                onClick={onRecompute}
-              >
-                {isRecomputing ? "Recomputing…" : "Recompute now"}
-              </Button>
+              <Tooltip content={isRecomputeDisabled ? recomputeDisabledTooltip : undefined}>
+                <span className="inline-block">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={isRecomputing || isRecomputeDisabled}
+                    onClick={onRecompute}
+                  >
+                    {isRecomputing ? "Recomputing…" : "Recompute now"}
+                  </Button>
+                </span>
+              </Tooltip>
             ) : undefined
           }
         />
@@ -476,46 +487,6 @@ function ExecutionConsole({
           </div>
         </Card>
 
-        <Card>
-          <button
-            type="button"
-            onClick={() => setExplainOpen((o) => !o)}
-            className="flex w-full items-center justify-between text-left"
-          >
-            <CardHeader title="Explain This Decision" />
-            {explainOpen ? <ChevronDown className="h-4 w-4 text-zinc-500" /> : <ChevronRight className="h-4 w-4 text-zinc-500" />}
-          </button>
-          {explainOpen && (
-            <div className="mt-2 border-t border-zinc-200 pt-3 dark:border-zinc-700">
-              <div className="space-y-1 text-xs">
-                {data.gates?.length ? (
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-zinc-200 text-left text-zinc-600 dark:border-zinc-700 dark:text-zinc-500">
-                        <th className="py-2 pr-2">Gate</th>
-                        <th className="py-2 pr-2">Status</th>
-                        <th className="py-2">Reason</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.gates.map((g, i) => (
-                        <tr key={i} className="border-b border-zinc-100 dark:border-zinc-800/50">
-                          <td className="py-2 pr-2 font-medium text-zinc-700 dark:text-zinc-300">{g.name}</td>
-                          <td className="py-2 pr-2">
-                            <StatusBadge status={g.status} />
-                          </td>
-                          <td className="py-2 text-zinc-500 dark:text-zinc-400">{g.reason}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <span className="text-zinc-500 dark:text-zinc-500">No gates evaluated.</span>
-                )}
-              </div>
-            </div>
-          )}
-        </Card>
       </div>
 
       {/* Right column */}

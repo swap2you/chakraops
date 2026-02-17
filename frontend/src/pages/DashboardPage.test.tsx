@@ -10,17 +10,20 @@ const mockDecision = {
     selected_candidates: [],
   },
   artifact_version: "v2",
+  evaluation_timestamp_utc: "2026-01-01T12:00:00Z",
+  decision_store_mtime_utc: "2026-01-01T12:00:00Z",
 };
-const mockUniverse = { symbols: [], updated_at: "2026-01-01T12:00:00Z", source: "ARTIFACT_V2" };
+const mockUniverse = { symbols: [], updated_at: "2026-01-01T12:00:00Z", evaluation_timestamp_utc: "2026-01-01T12:00:00Z", source: "ARTIFACT_V2" };
 const mockHealth = { api: { status: "OK" }, market: { phase: "OPEN" }, orats: { status: "OK" } };
 const mockFiles = { files: [{ name: "decision_latest.json" }] };
 const mockPositions = { positions: [] };
 
+const mockUseUiSystemHealth = vi.fn(() => ({ data: mockHealth }));
 vi.mock("@/api/queries", () => ({
   useArtifactList: () => ({ data: mockFiles }),
   useDecision: () => ({ data: mockDecision }),
   useUniverse: () => ({ data: mockUniverse }),
-  useUiSystemHealth: () => ({ data: mockHealth }),
+  useUiSystemHealth: (...args: unknown[]) => mockUseUiSystemHealth(...args),
   useUiTrackedPositions: () => ({ data: mockPositions }),
   useRunEval: () => ({
     mutate: vi.fn(),
@@ -57,5 +60,15 @@ describe("DashboardPage", () => {
     render(<DashboardPage />);
     const region = await screen.findByRole("region", { name: /daily overview/i });
     expect(region).toBeInTheDocument();
+  });
+
+  it("Run Evaluation button disabled when market closed (Phase 9)", async () => {
+    mockUseUiSystemHealth.mockReturnValue({
+      data: { ...mockHealth, market: { ...mockHealth.market, phase: "POST" } },
+    });
+    render(<DashboardPage />);
+    const btn = await screen.findByRole("button", { name: /run evaluation/i });
+    expect(btn).toBeDisabled();
+    mockUseUiSystemHealth.mockReturnValue({ data: mockHealth });
   });
 });

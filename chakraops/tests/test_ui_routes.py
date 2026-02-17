@@ -129,6 +129,8 @@ def test_ui_decision_latest_rejects_mock_data_source():
     class MockStore:
         def get_latest(self):
             return artifact
+        def reload_from_disk(self):
+            pass
     mock_store = MockStore()
 
     app = _get_app()
@@ -216,3 +218,106 @@ def test_ui_diagnostics_run_and_history(tmp_path):
             runs = hist1.json().get("runs") or []
             assert len(runs) >= 1
             assert runs[0]["timestamp_utc"] == body["timestamp_utc"]
+
+
+def test_ui_decision_latest_includes_evaluation_timestamp(tmp_path):
+    """Phase 9: decision/latest includes evaluation_timestamp_utc and decision_store_mtime_utc."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    from app.core.eval.decision_artifact_v2 import DecisionArtifactV2, SymbolEvalSummary
+
+    pipeline_ts = "2026-02-17T20:58:29Z"
+    sym = SymbolEvalSummary(
+        symbol="SPY",
+        verdict="HOLD",
+        final_verdict="HOLD",
+        score=50,
+        band="C",
+        primary_reason="test",
+        stage_status="RUN",
+        stage1_status="PASS",
+        stage2_status="NOT_RUN",
+        provider_status="OK",
+        data_freshness=None,
+        evaluated_at=None,
+        strategy=None,
+        price=None,
+        expiration=None,
+        has_candidates=False,
+        candidate_count=0,
+    )
+    artifact = DecisionArtifactV2(
+        metadata={"artifact_version": "v2", "pipeline_timestamp": pipeline_ts},
+        symbols=[sym],
+        selected_candidates=[],
+    )
+
+    class MockStore:
+        def get_latest(self):
+            return artifact
+        def reload_from_disk(self):
+            pass
+
+    app = _get_app()
+    with patch("app.core.eval.evaluation_store_v2.get_evaluation_store_v2", return_value=MockStore()):
+        with patch("app.api.ui_routes._get_decision_store_mtime_utc", return_value="2026-02-17T20:59:00Z"):
+            client = TestClient(app)
+            r = client.get("/api/ui/decision/latest?mode=LIVE")
+    assert r.status_code == 200
+    data = r.json()
+    assert "evaluation_timestamp_utc" in data
+    assert data["evaluation_timestamp_utc"] == pipeline_ts
+    assert "decision_store_mtime_utc" in data
+
+
+def test_ui_market_status_returns_phase():
+    """Phase 9: GET /api/ui/market/status returns is_open, phase, now_utc, now_et."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    app = _get_app()
+    client = TestClient(app)
+    r = client.get("/api/ui/market/status")
+    assert r.status_code == 200
+    data = r.json()
+    assert "is_open" in data
+    assert "phase" in data
+    assert "now_utc" in data
+
+
+def test_ui_eval_run_409_when_market_closed():
+    """Phase 9: POST eval/run returns 409 when market closed and force=false."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    app = _get_app()
+    with patch("app.market.market_hours.get_market_phase", return_value="POST"):
+        client = TestClient(app)
+        r = client.post("/api/ui/eval/run")
+    assert r.status_code == 409
+    assert "Market is closed" in r.json().get("detail", "")
+
+
+def test_ui_eval_run_success_when_force_true():
+    """Phase 9: POST eval/run succeeds when market closed but force=true (if eval succeeds)."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    app = _get_app()
+    with patch("app.market.market_hours.get_market_phase", return_value="POST"):
+        with patch("app.api.data_health.get_universe_symbols", return_value=["SPY"]):
+            with patch("app.core.eval.evaluation_service_v2.evaluate_universe") as mock_eval:
+                mock_artifact = type("A", (), {"metadata": {"pipeline_timestamp": "2026-02-17T21:00:00Z"}})()
+                mock_eval.return_value = mock_artifact
+                client = TestClient(app)
+                r = client.post("/api/ui/eval/run?force=true")
+    assert r.status_code == 200
+
+
+def test_ui_symbol_recompute_409_when_market_closed():
+    """Phase 9: POST symbols/{symbol}/recompute returns 409 when market closed and force=false."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    app = _get_app()
+    with patch("app.market.market_hours.get_market_phase", return_value="POST"):
+        client = TestClient(app)
+        r = client.post("/api/ui/symbols/SPY/recompute")
+    assert r.status_code == 409
+    assert "Market is closed" in r.json().get("detail", "")

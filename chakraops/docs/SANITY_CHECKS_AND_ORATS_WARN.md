@@ -54,6 +54,13 @@ When **ORATS** shows **WARN** (or **DEGRADED**):
 
 ORATS **WARN** is throttled for notifications: at most one notification per hour to avoid spam.
 
+### Phase 9: Actionable ORATS status
+
+- **15-min delay** = NORMAL during market open (within staleness window).
+- **WARN** only when `last_success_at` is older than configured staleness threshold (`EVALUATION_QUOTE_WINDOW_MINUTES`) during market open.
+- During market closed, WARN is still visible but does not imply urgent action.
+- System status exposes: `orats.last_success_at_utc`, `orats.age_minutes`, `orats.staleness_threshold_minutes`, `orats.last_error_reason`.
+
 ### Notification subtype (Phase 8.6)
 
 Notifications include an optional `subtype` field for finer filtering:

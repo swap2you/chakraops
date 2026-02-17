@@ -73,10 +73,13 @@ export interface DecisionArtifactV2 {
   selected_candidates?: Array<{ symbol: string; strategy?: string; [key: string]: unknown }>;
 }
 
-/** GET /api/ui/decision/latest (v2): { artifact, artifact_version } */
+/** GET /api/ui/decision/latest (v2): { artifact, artifact_version, evaluation_timestamp_utc, decision_store_mtime_utc } */
 export interface DecisionResponse {
   artifact: DecisionArtifactV2;
   artifact_version?: "v2" | string;
+  /** Phase 9: Canonical last evaluation time (pipeline_timestamp or file mtime). */
+  evaluation_timestamp_utc?: string | null;
+  decision_store_mtime_utc?: string | null;
 }
 
 // Legacy types (kept for reference; API is v2-only)
@@ -236,6 +239,10 @@ export interface UiSystemHealthOrats {
   last_success_at: string | null;
   avg_latency_seconds: number | null;
   last_error_reason?: string | null;
+  /** Phase 9 */
+  last_success_at_utc?: string | null;
+  age_minutes?: number | null;
+  staleness_threshold_minutes?: number | null;
 }
 
 export interface UiSystemHealthMarket {
@@ -257,7 +264,11 @@ export interface UiSystemHealthDecisionStore {
   status: "OK" | "CRITICAL";
   reason?: string | null;
   canonical_path?: string | null;
+  /** Phase 9 */
+  evaluation_timestamp_utc?: string | null;
+  decision_store_mtime_utc?: string | null;
 }
+
 
 export interface UiSystemHealthResponse {
   api: UiSystemHealthApi;

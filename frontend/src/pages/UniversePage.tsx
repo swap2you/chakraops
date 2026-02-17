@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useUniverse, useRunEval } from "@/api/queries";
+import { useUniverse, useRunEval, useUiSystemHealth } from "@/api/queries";
+import { formatTimestampEt } from "@/utils/formatTimestamp";
 import type { SymbolEvalSummary } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { Info } from "lucide-react";
@@ -18,23 +19,6 @@ import {
   EmptyState,
   Tooltip,
 } from "@/components/ui";
-
-/** Phase 8.5: Display timestamps in ET. */
-function fmtTs(s: string | null | undefined): string {
-  if (!s) return "n/a";
-  try {
-    const d = new Date(s);
-    return d.toLocaleString(undefined, {
-      timeZone: "America/New_York",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }) + " ET";
-  } catch {
-    return String(s);
-  }
-}
 
 /** Format score_breakdown for tooltip. Phase 7.7 trust feature. */
 function formatScoreCapTooltip(row: { score?: number | null; raw_score?: number | null; score_caps?: { regime_cap?: number | null; applied_caps?: Array<{ type: string; cap_value: number; before: number; after: number; reason: string }> } | null }): string | null {
@@ -113,13 +97,15 @@ export function UniversePage() {
   const navigate = useNavigate();
   const { data: universeData, isLoading: universeLoading, isError } = useUniverse();
   const runEval = useRunEval();
+  const { data: health } = useUiSystemHealth();
+  const marketClosed = health?.market?.phase ? health.market.phase !== "OPEN" && health.market.phase !== "UNKNOWN" : false;
   const [search, setSearch] = useState("");
   const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("rank");
 
   const symbols: SymbolEvalSummary[] = universeData?.symbols ?? [];
   const source = universeData?.source ?? "n/a";
-  const updated = universeData?.updated_at ?? "n/a";
+  const evalTs = (universeData as { evaluation_timestamp_utc?: string } | undefined)?.evaluation_timestamp_utc ?? universeData?.updated_at ?? "n/a";
 
   const filtered = useMemo(() => {
     let list = symbols;
@@ -160,18 +146,22 @@ export function UniversePage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Universe" subtext={`Source: ${source} · Updated ${fmtTs(updated)}`} />
+      <PageHeader title="Universe" subtext={`Source: ${source} · Updated ${formatTimestampEt(evalTs)}`} />
       <Card>
         <CardHeader title="Filters" />
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            disabled={runEval.isPending}
-            onClick={() => runEval.mutate({ mode: "LIVE" })}
-            className="rounded border border-emerald-600 bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {runEval.isPending ? "Running…" : "Run Evaluation"}
-          </button>
+          <Tooltip content={marketClosed ? "Market closed: evaluation disabled to protect canonical decision. Use System Diagnostics or force=true to override." : undefined}>
+            <span className="inline-block">
+              <button
+                type="button"
+                disabled={runEval.isPending || marketClosed}
+                onClick={() => runEval.mutate({ mode: "LIVE" })}
+                className="rounded border border-emerald-600 bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {runEval.isPending ? "Running…" : "Run Evaluation"}
+              </button>
+            </span>
+          </Tooltip>
           <input
             type="text"
             placeholder="Search symbol or reason…"
@@ -200,7 +190,7 @@ export function UniversePage() {
       <Card>
         <CardHeader
           title="Symbols"
-          description={`${filtered.length} of ${symbols.length} · Updated ${fmtTs(updated)}`}
+          description={`${filtered.length} of ${symbols.length} · Updated ${formatTimestampEt(evalTs)}`}
           actions={
             <div className="flex items-center gap-2">
               <span className="text-xs text-zinc-500 dark:text-zinc-400">Sort by</span>

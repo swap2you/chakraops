@@ -42,8 +42,9 @@ function symbolDiagnosticsPath(symbol: string, recompute = false): string {
   return recompute ? `${base}&recompute=1` : base;
 }
 
-function symbolRecomputePath(symbol: string): string {
-  return `/api/ui/symbols/${encodeURIComponent(symbol)}/recompute`;
+function symbolRecomputePath(symbol: string, force?: boolean): string {
+  const base = `/api/ui/symbols/${encodeURIComponent(symbol)}/recompute`;
+  return force ? `${base}?force=true` : base;
 }
 
 function uiSystemHealthPath(): string {
@@ -74,8 +75,9 @@ function uiAlertsPath(): string {
   return `/api/ui/alerts`;
 }
 
-function uiEvalRunPath(): string {
-  return `/api/ui/eval/run`;
+function uiEvalRunPath(force?: boolean): string {
+  const base = `/api/ui/eval/run`;
+  return force ? `${base}?force=true` : base;
 }
 
 function uiDiagnosticsRunPath(checks?: string): string {
@@ -86,6 +88,10 @@ function uiDiagnosticsRunPath(checks?: string): string {
 function uiDiagnosticsHistoryPath(limit?: number): string {
   const base = `/api/ui/diagnostics/history`;
   return limit != null ? `${base}?limit=${limit}` : base;
+}
+
+function uiMarketStatusPath(): string {
+  return `/api/ui/market/status`;
 }
 
 function uiNotificationsPath(limit?: number): string {
@@ -114,6 +120,7 @@ export const queryKeys = {
   uiAlerts: () => ["ui", "alerts"] as const,
   uiDiagnosticsHistory: (limit?: number) => ["ui", "diagnostics", "history", limit ?? 10] as const,
   uiNotifications: (limit?: number) => ["ui", "notifications", limit ?? 100] as const,
+  uiMarketStatus: () => ["ui", "marketStatus"] as const,
 };
 
 // =============================================================================
@@ -171,12 +178,14 @@ export interface SymbolRecomputeResponse {
 export function useRecomputeSymbolDiagnostics() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (symbol: string) => {
-      const res = await apiPost<SymbolRecomputeResponse>(symbolRecomputePath(symbol), {});
+    mutationFn: async (payload: string | { symbol: string; force?: boolean }) => {
+      const symbol = typeof payload === "string" ? payload : payload.symbol;
+      const force = typeof payload === "string" ? false : payload.force ?? false;
+      const res = await apiPost<SymbolRecomputeResponse>(symbolRecomputePath(symbol, force), {});
       return { symbol, data: res };
     },
-    onSuccess: (_, symbol) => {
-      qc.invalidateQueries({ queryKey: queryKeys.symbolDiagnostics(symbol) });
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: queryKeys.symbolDiagnostics(result.symbol) });
       qc.invalidateQueries({ queryKey: queryKeys.universe() });
       qc.invalidateQueries({ queryKey: ["ui", "decision"] });
     },
@@ -187,6 +196,24 @@ export function useUiSystemHealth() {
   return useQuery({
     queryKey: queryKeys.uiSystemHealth(),
     queryFn: () => apiGet<UiSystemHealthResponse>(uiSystemHealthPath()),
+  });
+}
+
+/** Phase 9: Market status for guardrails (is_open, phase, now_utc, now_et, next_open_et, next_close_et). */
+export interface UiMarketStatusResponse {
+  is_open: boolean;
+  phase: string;
+  now_utc: string;
+  now_et: string | null;
+  next_open_et?: string | null;
+  next_close_et?: string | null;
+  error?: string;
+}
+
+export function useMarketStatus() {
+  return useQuery({
+    queryKey: queryKeys.uiMarketStatus(),
+    queryFn: () => apiGet<UiMarketStatusResponse>(uiMarketStatusPath()),
   });
 }
 
@@ -278,6 +305,7 @@ export function useAlerts() {
 export interface RunEvalPayload {
   mode?: DecisionMode;
   symbols?: string[];
+  force?: boolean;
 }
 
 export interface RunEvalResponse {
@@ -290,8 +318,10 @@ export interface RunEvalResponse {
 export function useRunEval() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload?: RunEvalPayload) =>
-      apiPost<RunEvalResponse>(uiEvalRunPath(), payload ?? { mode: "LIVE" }),
+    mutationFn: (payload?: RunEvalPayload) => {
+      const force = payload?.force ?? false;
+      return apiPost<RunEvalResponse>(uiEvalRunPath(force), payload ?? { mode: "LIVE" });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["ui", "decision"] });
       qc.invalidateQueries({ queryKey: queryKeys.universe() });

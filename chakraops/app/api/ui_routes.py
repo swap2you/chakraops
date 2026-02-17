@@ -7,7 +7,7 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Path, Query, Request
 
@@ -92,6 +92,19 @@ def ui_decision_files(
     return {"mode": mode, "dir": out_dir, "files": files}
 
 
+def _get_decision_store_mtime_utc() -> Optional[str]:
+    """Return active decision store file mtime as ISO UTC string, or None."""
+    try:
+        from app.core.eval.evaluation_store_v2 import get_active_decision_path
+        path = get_active_decision_path()
+        if path.exists():
+            mtime = path.stat().st_mtime
+            return datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
+    except Exception:
+        pass
+    return None
+
+
 @router.get("/decision/latest")
 def ui_decision_latest(
     mode: Mode = Query("LIVE", description="LIVE or MOCK"),
@@ -101,6 +114,7 @@ def ui_decision_latest(
     Get decision artifact (v2 preferred). ONE source of truth.
     LIVE: EvaluationStoreV2 / out/decision_latest.json (v2).
     MOCK: out/mock/decision_latest.json; 404 if absent.
+    Phase 9: Includes evaluation_timestamp_utc (pipeline_timestamp or file mtime) and decision_store_mtime_utc.
     """
     _require_ui_key(x_ui_key)
     if mode == "LIVE":
@@ -112,14 +126,27 @@ def ui_decision_latest(
             raise HTTPException(status_code=404, detail="no v2 artifact; run evaluation")
         data = artifact.to_dict()
         _validate_live_artifact(data)
-        return {"artifact": data, "artifact_version": "v2"}
+        meta = data.get("metadata") or {}
+        pipeline_ts = meta.get("pipeline_timestamp")
+        store_mtime = _get_decision_store_mtime_utc()
+        eval_ts = pipeline_ts if pipeline_ts else store_mtime
+        return {
+            "artifact": data,
+            "artifact_version": "v2",
+            "evaluation_timestamp_utc": eval_ts,
+            "decision_store_mtime_utc": store_mtime,
+        }
 
     path = _output_dir() / "mock" / "decision_latest.json"
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"No decision_latest.json for mode={mode}")
     data = load_decision_artifact(path)
     if data.get("metadata", {}).get("artifact_version") == "v2":
-        return {"artifact": data, "artifact_version": "v2"}
+        meta = data.get("metadata") or {}
+        pipeline_ts = meta.get("pipeline_timestamp")
+        store_mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat() if path.exists() else None
+        eval_ts = pipeline_ts if pipeline_ts else store_mtime
+        return {"artifact": data, "artifact_version": "v2", "evaluation_timestamp_utc": eval_ts, "decision_store_mtime_utc": store_mtime}
     return data
 
 
@@ -152,7 +179,11 @@ def ui_decision_file(
     data = load_decision_artifact(path)
     if mode == "LIVE":
         _validate_live_artifact(data)
-    return data
+    meta = data.get("metadata") or {}
+    pipeline_ts = meta.get("pipeline_timestamp")
+    store_mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat()
+    eval_ts = pipeline_ts if pipeline_ts else store_mtime
+    return {**data, "evaluation_timestamp_utc": eval_ts, "decision_store_mtime_utc": store_mtime}
 
 
 @router.get("/universe")
@@ -210,33 +241,99 @@ def ui_universe(
                 row["required_data_stale"] = sel_el.get("required_data_stale") or []
                 row["optional_missing"] = sel_el.get("optional_missing") or []
                 symbols_out.append(row)
+        store_mtime = _get_decision_store_mtime_utc()
+        eval_ts = ts if ts else store_mtime
         return {
             "source": "ARTIFACT_V2",
             "updated_at": ts,
             "as_of": ts,
+            "evaluation_timestamp_utc": eval_ts,
+            "decision_store_mtime_utc": store_mtime,
             "symbols": symbols_out,
             "artifact_version": "v2",
         }
     except Exception as e:
+        try:
+            store_mtime = _get_decision_store_mtime_utc()
+        except Exception:
+            store_mtime = None
         return {
             "source": "UNKNOWN",
             "updated_at": now_iso,
             "as_of": now_iso,
+            "evaluation_timestamp_utc": now_iso,
+            "decision_store_mtime_utc": store_mtime,
             "symbols": [],
+            "error": str(e),
+        }
+
+
+@router.get("/market/status")
+def ui_market_status(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    Market status for UI guardrails. Phase 9.
+    Returns is_open, phase, now_utc, now_et, next_open_et, next_close_et.
+    """
+    _require_ui_key(x_ui_key)
+    try:
+        from app.market.market_hours import get_market_phase, is_market_open, get_next_open_close_et
+        now_utc = datetime.now(timezone.utc)
+        phase = get_market_phase() or "UNKNOWN"
+        market_open = is_market_open()
+        try:
+            from zoneinfo import ZoneInfo
+            et_tz = ZoneInfo("America/New_York")
+            now_et = now_utc.astimezone(et_tz).isoformat()
+        except Exception:
+            now_et = now_utc.isoformat()
+        next_open_et, next_close_et = get_next_open_close_et(now_utc)
+        return {
+            "is_open": market_open,
+            "phase": phase,
+            "now_utc": now_utc.isoformat(),
+            "now_et": now_et,
+            "next_open_et": next_open_et,
+            "next_close_et": next_close_et,
+        }
+    except Exception as e:
+        return {
+            "is_open": False,
+            "phase": "UNKNOWN",
+            "now_utc": datetime.now(timezone.utc).isoformat(),
+            "now_et": None,
+            "next_open_et": None,
+            "next_close_et": None,
             "error": str(e),
         }
 
 
 @router.post("/eval/run")
 def ui_eval_run(
+    force: bool = Query(False, description="Override market-closed guardrail"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
     """
     Trigger evaluate_universe() — ONE engine, ONE store.
     Uses configured universe, stores into EvaluationStoreV2, writes decision_latest.json (v2).
+    Phase 9: When market closed, returns 409 unless force=true.
     Returns {status, pipeline_timestamp, counts}.
     """
     _require_ui_key(x_ui_key)
+    try:
+        from app.market.market_hours import get_market_phase
+        phase = get_market_phase() or "OPEN"
+        if phase != "OPEN" and not force:
+            raise HTTPException(
+                status_code=409,
+                detail="Market is closed. Refusing to overwrite canonical decision. Use force=true to override.",
+            )
+        if phase != "OPEN" and force:
+            import logging
+            logging.getLogger(__name__).info("[EVAL] Run evaluation with force=true (market phase=%s)", phase)
+    except HTTPException:
+        raise
     try:
         from app.api.data_health import get_universe_symbols
         from app.core.eval.evaluation_service_v2 import evaluate_universe
@@ -279,13 +376,16 @@ def ui_system_health(
     api_status = "OK"
     api_latency_ms: float | None = None
 
-    # ORATS: data health
+    # ORATS: data health (Phase 9: age_minutes, staleness_threshold for actionable UI)
     orats_status = "UNKNOWN"
     orats_last_success: str | None = None
     orats_avg_latency: float | None = None
     orats_last_error: str | None = None
+    orats_age_minutes: float | None = None
+    orats_staleness_minutes: int = 30
     try:
         from app.api.data_health import get_data_health
+        from app.core.config.eval_config import EVALUATION_QUOTE_WINDOW_MINUTES
         dh = get_data_health()
         raw = (dh.get("status") or "UNKNOWN").upper()
         if raw == "OK":
@@ -297,6 +397,16 @@ def ui_system_health(
         orats_last_success = dh.get("last_success_at") or dh.get("effective_last_success_at")
         orats_avg_latency = dh.get("avg_latency_seconds")
         orats_last_error = dh.get("last_error_reason")
+        try:
+            orats_staleness_minutes = int(EVALUATION_QUOTE_WINDOW_MINUTES)
+        except (TypeError, ValueError):
+            orats_staleness_minutes = 30
+        if orats_last_success:
+            try:
+                success_dt = datetime.fromisoformat(orats_last_success.replace("Z", "+00:00"))
+                orats_age_minutes = (datetime.now(timezone.utc) - success_dt).total_seconds() / 60
+            except (ValueError, TypeError):
+                pass
     except Exception:
         orats_status = "DOWN"
         orats_last_error = "Failed to read data health"
@@ -343,6 +453,8 @@ def ui_system_health(
     canonical_path_str: str | None = None
     active_path_str: str | None = None
     frozen_in_effect: bool = False
+    decision_eval_ts: str | None = None
+    decision_store_mtime: str | None = None
     try:
         from app.core.eval.evaluation_store_v2 import (
             get_evaluation_store_v2,
@@ -377,6 +489,10 @@ def ui_system_health(
         if decision_store_status == "OK" and (market_phase or "").upper() != "OPEN" and not _frozen_path().exists():
             decision_store_status = "WARN"
             decision_store_reason = "Market closed and no decision_frozen.json; serving decision_latest"
+        eval_ts = (artifact.metadata or {}).get("pipeline_timestamp") if artifact else None
+        store_mtime = _get_decision_store_mtime_utc()
+        decision_eval_ts = eval_ts or store_mtime
+        decision_store_mtime = store_mtime
     except Exception as e:
         decision_store_status = "CRITICAL"
         decision_store_reason = str(e)
@@ -389,10 +505,15 @@ def ui_system_health(
             "canonical_path": canonical_path_str,
             "active_path": active_path_str,
             "frozen_in_effect": frozen_in_effect,
+            "evaluation_timestamp_utc": decision_eval_ts,
+            "decision_store_mtime_utc": decision_store_mtime,
         },
         "orats": {
             "status": orats_status,
             "last_success_at": orats_last_success,
+            "last_success_at_utc": orats_last_success,
+            "age_minutes": round(orats_age_minutes, 1) if orats_age_minutes is not None else None,
+            "staleness_threshold_minutes": orats_staleness_minutes,
             "avg_latency_seconds": orats_avg_latency,
             "last_error_reason": orats_last_error,
         },
@@ -812,15 +933,30 @@ def ui_symbol_diagnostics(
 @router.post("/symbols/{symbol}/recompute")
 def ui_symbol_recompute(
     symbol: str = Path(..., min_length=1, max_length=12),
+    force: bool = Query(False, description="Override market-closed guardrail"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
     """
     Run full evaluation for one symbol and merge into the canonical store.
     Updates decision_latest.json; Universe and Dashboard read from same store.
+    Phase 9: When market closed, returns 409 unless force=true.
     Returns pipeline_timestamp and updated symbol summary so UI can refetch.
     """
     _require_ui_key(x_ui_key)
     sym_upper = symbol.strip().upper()
+    try:
+        from app.market.market_hours import get_market_phase
+        phase = get_market_phase() or "OPEN"
+        if phase != "OPEN" and not force:
+            raise HTTPException(
+                status_code=409,
+                detail="Market is closed. Refusing to overwrite canonical decision. Use force=true to override.",
+            )
+        if phase != "OPEN" and force:
+            import logging
+            logging.getLogger(__name__).info("[RECOMPUTE] Symbol %s with force=true (market phase=%s)", sym_upper, phase)
+    except HTTPException:
+        raise
     try:
         from app.core.eval.evaluation_service_v2 import evaluate_single_symbol_and_merge
         from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2

@@ -45,6 +45,7 @@ vi.mock("@/api/queries", () => ({
   useSymbolDiagnostics: () => ({ data: mockDiagnosticsWithCap, isLoading: false, isError: false }),
   useRecomputeSymbolDiagnostics: () => ({ mutate: vi.fn(), isPending: false }),
   useDefaultAccount: () => ({ data: null }),
+  useUiSystemHealth: () => ({ data: { market: { phase: "OPEN" } } }),
 }));
 
 describe("SymbolDiagnosticsPage score UX", () => {

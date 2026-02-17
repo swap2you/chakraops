@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { formatTimestampEt } from "@/utils/formatTimestamp";
 import { Link } from "react-router-dom";
 import { ExternalLink, Activity, Droplets, Zap, Info } from "lucide-react";
 import { useArtifactList, useDecision, useUniverse, useUiSystemHealth, useUiTrackedPositions, useRunEval } from "@/api/queries";
@@ -20,23 +21,6 @@ import {
   StatusBadge,
   Tooltip,
 } from "@/components/ui";
-
-/** Phase 8.5: Display timestamps in ET. */
-function fmtTs(s: string | null | undefined): string {
-  if (!s) return "n/a";
-  try {
-    const d = new Date(s);
-    return d.toLocaleString(undefined, {
-      timeZone: "America/New_York",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }) + " ET";
-  } catch {
-    return String(s ?? "n/a");
-  }
-}
 
 /** Format score_breakdown for tooltip. Phase 7.7 trust feature. */
 function formatScoreBreakdown(bd: unknown): string {
@@ -151,7 +135,10 @@ export function DashboardPage() {
   const metadata = decision?.artifact?.metadata;
   const marketPhase = health?.market?.phase ?? "n/a";
   const oratsStatus = health?.orats?.status ?? "n/a";
-  const lastEvalTs = metadata?.pipeline_timestamp ?? health?.market?.timestamp;
+  const lastEvalTs = (decision as { evaluation_timestamp_utc?: string } | undefined)?.evaluation_timestamp_utc
+    ?? health?.decision_store?.evaluation_timestamp_utc
+    ?? metadata?.pipeline_timestamp
+    ?? health?.market?.timestamp;
 
   return (
     <div className="space-y-8">
@@ -185,14 +172,18 @@ export function DashboardPage() {
             </option>
           ))}
         </select>
-        <button
-          type="button"
-          disabled={runEval.isPending}
-          onClick={() => runEval.mutate({ mode: "LIVE" })}
-          className="rounded border border-emerald-600 bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {runEval.isPending ? "Running…" : "Run Evaluation"}
-        </button>
+        <Tooltip content={marketPhase !== "OPEN" ? "Market closed: evaluation disabled to protect canonical decision. Use System Diagnostics or force=true to override." : undefined}>
+          <span className="inline-block">
+            <button
+              type="button"
+              disabled={runEval.isPending || (marketPhase !== "OPEN" && marketPhase !== "UNKNOWN")}
+              onClick={() => runEval.mutate({ mode: "LIVE" })}
+              className="rounded border border-emerald-600 bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {runEval.isPending ? "Running…" : "Run Evaluation"}
+            </button>
+          </span>
+        </Tooltip>
       </div>
 
       <section role="region" aria-label="Daily overview">
@@ -209,7 +200,7 @@ export function DashboardPage() {
             </div>
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">Last evaluation</span>
-              <span className={`font-mono text-base font-medium ${evalFreshnessColor(lastEvalTs)}`}>{fmtTs(lastEvalTs)}</span>
+              <span className={`font-mono text-base font-medium ${evalFreshnessColor(lastEvalTs)}`}>{formatTimestampEt(lastEvalTs)}</span>
             </div>
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">ORATS</span>
@@ -256,7 +247,7 @@ export function DashboardPage() {
             <CardHeader title="Data freshness" />
             <p className="font-mono text-sm text-zinc-700 dark:text-zinc-300">{health?.orats?.status ?? "n/a"}</p>
             <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">
-              {health?.orats?.last_success_at ? fmtTs(health.orats.last_success_at) : "n/a"}
+              {health?.orats?.last_success_at ? formatTimestampEt(health.orats.last_success_at) : "n/a"}
             </p>
           </Card>
           <Card>

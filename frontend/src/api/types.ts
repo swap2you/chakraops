@@ -260,6 +260,16 @@ export interface UiSystemHealthScheduler {
   last_result?: string | null;
 }
 
+/** PR2: EOD freeze snapshot scheduler status. */
+export interface UiSystemHealthEodFreeze {
+  enabled?: boolean;
+  scheduled_time_et?: string | null;
+  last_run_at_utc?: string | null;
+  last_run_at_et?: string | null;
+  last_result?: string | null;
+  last_snapshot_dir?: string | null;
+}
+
 export interface UiSystemHealthDecisionStore {
   status: "OK" | "CRITICAL";
   reason?: string | null;
@@ -276,6 +286,7 @@ export interface UiSystemHealthResponse {
   orats: UiSystemHealthOrats;
   market: UiSystemHealthMarket;
   scheduler: UiSystemHealthScheduler;
+  eod_freeze?: UiSystemHealthEodFreeze;
 }
 
 // =============================================================================

@@ -92,6 +92,15 @@ def ui_decision_files(
     return {"mode": mode, "dir": out_dir, "files": files}
 
 
+def _get_eod_freeze_health() -> Dict[str, Any]:
+    """EOD freeze status for system health (PR2)."""
+    try:
+        from app.api.server import get_eod_freeze_status
+        return get_eod_freeze_status()
+    except Exception:
+        return {"enabled": False, "last_run_at_utc": None, "last_result": None, "last_snapshot_dir": None}
+
+
 def _get_decision_store_mtime_utc() -> Optional[str]:
     """Return active decision store file mtime as ISO UTC string, or None."""
     try:
@@ -530,6 +539,7 @@ def ui_system_health(
             "next_run_at": scheduler_next_run_at,
             "last_result": scheduler_last_result,
         },
+        "eod_freeze": _get_eod_freeze_health(),
     }
 
 
@@ -571,6 +581,138 @@ def ui_diagnostics_history(
         import logging
         logging.getLogger(__name__).exception("Error loading diagnostics history: %s", e)
         return {"runs": []}
+
+
+@router.post("/snapshots/freeze")
+def ui_snapshots_freeze(
+    skip_eval: bool = Query(False, description="Archive only, no evaluation"),
+    force_eval: bool = Query(False, description="Force eval when timing edge blocks (rare)"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    EOD freeze snapshot. Market-aware: eval+archive only during OPEN before 4 PM ET; else archive_only.
+    Never runs eval after market close. Returns {status, mode_used, snapshot_dir, manifest, ran_eval, eval_result?}.
+    """
+    _require_ui_key(x_ui_key)
+    import logging
+    log = logging.getLogger(__name__)
+    now_utc = datetime.now(timezone.utc)
+    try:
+        from zoneinfo import ZoneInfo
+        et_tz = ZoneInfo("America/New_York")
+    except Exception:
+        et_tz = timezone.utc
+    now_et = now_utc.astimezone(et_tz)
+    et_hour = now_et.hour + now_et.minute / 60.0 + now_et.second / 3600.0
+
+    from app.market.market_hours import get_market_phase
+    phase = get_market_phase(now_utc) or "UNKNOWN"
+    market_open = phase == "OPEN"
+    before_4pm_et = et_hour < 16.0
+
+    ran_eval = False
+    eval_result: Dict[str, Any] | None = None
+
+    if market_open and before_4pm_et and not skip_eval:
+        mode_used = "eval_then_archive"
+        try:
+            from app.api.data_health import get_universe_symbols
+            from app.core.eval.evaluation_service_v2 import evaluate_universe
+            symbols = list(get_universe_symbols())
+            if symbols:
+                artifact = evaluate_universe(symbols, mode="LIVE")
+                ran_eval = True
+                meta = artifact.metadata or {}
+                eval_result = {
+                    "pipeline_timestamp": meta.get("pipeline_timestamp"),
+                    "counts": {
+                        "universe_size": meta.get("universe_size", 0),
+                        "evaluated_count_stage1": meta.get("evaluated_count_stage1", 0),
+                        "evaluated_count_stage2": meta.get("evaluated_count_stage2", 0),
+                        "eligible_count": meta.get("eligible_count", 0),
+                    },
+                }
+                log.info("[FREEZE] Ran evaluation as part of freeze: %s symbols", len(symbols))
+        except Exception as e:
+            log.warning("[FREEZE] Eval failed, proceeding with archive_only: %s", e)
+            mode_used = "archive_only"
+    elif force_eval and market_open and not skip_eval:
+        mode_used = "eval_then_archive"
+        try:
+            from app.api.data_health import get_universe_symbols
+            from app.core.eval.evaluation_service_v2 import evaluate_universe
+            symbols = list(get_universe_symbols())
+            if symbols:
+                artifact = evaluate_universe(symbols, mode="LIVE")
+                ran_eval = True
+                meta = artifact.metadata or {}
+                eval_result = {"pipeline_timestamp": meta.get("pipeline_timestamp"), "counts": meta}
+                log.info("[FREEZE] Ran evaluation (force_eval) as part of freeze")
+        except Exception as e:
+            log.warning("[FREEZE] Eval (force_eval) failed: %s", e)
+            raise HTTPException(status_code=500, detail=f"Force eval failed: {e}")
+    else:
+        mode_used = "archive_only"
+
+    try:
+        from app.core.eval.evaluation_store_v2 import get_decision_store_path
+        out_dir = get_decision_store_path().parent
+        decision_path = get_decision_store_path()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    from app.core.snapshots.freeze import run_freeze_snapshot
+    result = run_freeze_snapshot(
+        out_dir=out_dir,
+        decision_store_path=decision_path,
+        extra_paths=[],
+        mode="archive_only",
+        now_utc=now_utc,
+    )
+    return {
+        "status": "OK",
+        "mode_used": mode_used,
+        "snapshot_dir": result["snapshot_dir"],
+        "manifest": result["manifest"],
+        "ran_eval": ran_eval,
+        "eval_result": eval_result,
+    }
+
+
+@router.get("/snapshots/latest")
+def ui_snapshots_latest(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Find latest snapshot folder in out/snapshots/*_eod. Returns manifest + path. 404 if none."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.eval.evaluation_store_v2 import get_decision_store_path
+        out_dir = get_decision_store_path().parent
+    except Exception:
+        out_dir = _repo_root().parent / "out"
+    snap_base = out_dir / "snapshots"
+    if not snap_base.exists():
+        raise HTTPException(status_code=404, detail="No snapshots directory. Run freeze first.")
+    dirs = [d for d in snap_base.iterdir() if d.is_dir() and d.name.endswith("_eod")]
+    if not dirs:
+        raise HTTPException(status_code=404, detail="No EOD snapshots found. Run freeze first.")
+    manifest_path = None
+    latest_dir = None
+    latest_mtime = 0.0
+    for d in dirs:
+        mp = d / "snapshot_manifest.json"
+        if mp.exists():
+            mtime = mp.stat().st_mtime
+            if mtime > latest_mtime:
+                latest_mtime = mtime
+                latest_dir = d
+                manifest_path = mp
+    if latest_dir is None or manifest_path is None:
+        raise HTTPException(status_code=404, detail="No snapshot manifest found. Run freeze first.")
+    import json
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+    return {"snapshot_dir": str(latest_dir), "manifest": manifest}
 
 
 @router.get("/notifications")

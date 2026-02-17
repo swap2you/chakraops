@@ -1,15 +1,17 @@
 import { useState } from "react";
-import { useUiSystemHealth, useDiagnosticsHistory, useRunDiagnostics } from "@/api/queries";
+import { useUiSystemHealth, useDiagnosticsHistory, useRunDiagnostics, useLatestSnapshot, useRunFreezeSnapshot } from "@/api/queries";
 import { formatTimestampEt, formatTimestampEtFull } from "@/utils/formatTimestamp";
 import { PageHeader } from "@/components/PageHeader";
-import { Card, CardHeader, StatusBadge, Button } from "@/components/ui";
+import { Card, CardHeader, StatusBadge, Button, Tooltip } from "@/components/ui";
 
 const DIAGNOSTIC_CHECKS = ["orats", "decision_store", "universe", "positions", "scheduler"] as const;
 
 export function SystemDiagnosticsPage() {
   const { data, isLoading, isError } = useUiSystemHealth();
   const { data: historyData } = useDiagnosticsHistory(10);
+  const { data: latestSnapshot, isError: snapshotError } = useLatestSnapshot();
   const runDiagnostics = useRunDiagnostics();
+  const runFreeze = useRunFreezeSnapshot();
   const [selectedChecks, setSelectedChecks] = useState<Set<string>>(new Set(DIAGNOSTIC_CHECKS));
   const [latestResult, setLatestResult] = useState<typeof runDiagnostics.data | null>(null);
 
@@ -44,6 +46,8 @@ export function SystemDiagnosticsPage() {
   const orats = data?.orats;
   const market = data?.market;
   const scheduler = data?.scheduler;
+  const eodFreeze = data?.eod_freeze;
+  const marketClosed = market?.phase ? market.phase !== "OPEN" && market.phase !== "UNKNOWN" : false;
 
   if (isLoading) {
     return (
@@ -207,6 +211,59 @@ export function SystemDiagnosticsPage() {
               <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{scheduler?.eod_next_at ?? "—"}</p>
             </div>
           </div>
+        </Card>
+        <Card>
+          <CardHeader
+            title="Freeze Snapshot (PR2)"
+            description="EOD archival. No eval after market close; archive-only always safe."
+          />
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Market phase</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{market?.phase ?? "—"}</p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Last snapshot</span>
+              <p className="mt-1 font-mono text-xs text-zinc-600 dark:text-zinc-400 truncate" title={latestSnapshot?.snapshot_dir}>
+                {latestSnapshot?.snapshot_dir ? latestSnapshot.snapshot_dir.split(/[/\\]/).pop() ?? latestSnapshot.snapshot_dir : snapshotError ? "—" : "None"}
+              </p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Last auto-freeze (ET)</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{formatTimestampEt(eodFreeze?.last_run_at_utc)}</p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Scheduled</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{eodFreeze?.scheduled_time_et ?? "15:58"} ET</p>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Tooltip content={marketClosed ? "Market closed or after 4 PM ET. Eval disabled to protect canonical decision. Use Archive Now for archive-only." : undefined}>
+              <span className="inline-block">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => runFreeze.mutate(false)}
+                  disabled={runFreeze.isPending || marketClosed}
+                >
+                  {runFreeze.isPending ? "Running…" : "Run EOD Freeze (eval + archive)"}
+                </Button>
+              </span>
+            </Tooltip>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => runFreeze.mutate(true)}
+              disabled={runFreeze.isPending}
+            >
+              Archive Now (no eval)
+            </Button>
+          </div>
+          {runFreeze.data && (
+            <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+              {runFreeze.data.ran_eval ? "Ran eval + archive." : "Archive only."} Snapshot: {runFreeze.data.snapshot_dir.split(/[/\\]/).pop()}
+            </p>
+          )}
         </Card>
       </div>
 

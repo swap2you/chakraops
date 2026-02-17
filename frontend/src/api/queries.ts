@@ -94,6 +94,15 @@ function uiMarketStatusPath(): string {
   return `/api/ui/market/status`;
 }
 
+function uiSnapshotsFreezePath(skipEval?: boolean): string {
+  const base = `/api/ui/snapshots/freeze`;
+  return skipEval ? `${base}?skip_eval=true` : base;
+}
+
+function uiSnapshotsLatestPath(): string {
+  return `/api/ui/snapshots/latest`;
+}
+
 function uiNotificationsPath(limit?: number): string {
   const base = `/api/ui/notifications`;
   return limit != null ? `${base}?limit=${limit}` : base;
@@ -121,6 +130,7 @@ export const queryKeys = {
   uiDiagnosticsHistory: (limit?: number) => ["ui", "diagnostics", "history", limit ?? 10] as const,
   uiNotifications: (limit?: number) => ["ui", "notifications", limit ?? 100] as const,
   uiMarketStatus: () => ["ui", "marketStatus"] as const,
+  uiSnapshotsLatest: () => ["ui", "snapshots", "latest"] as const,
 };
 
 // =============================================================================
@@ -214,6 +224,52 @@ export function useMarketStatus() {
   return useQuery({
     queryKey: queryKeys.uiMarketStatus(),
     queryFn: () => apiGet<UiMarketStatusResponse>(uiMarketStatusPath()),
+  });
+}
+
+/** PR2: Latest EOD snapshot manifest + path. */
+export interface UiSnapshotLatestResponse {
+  snapshot_dir: string;
+  manifest: { created_at_utc?: string; created_at_et?: string; files?: { name: string; size_bytes?: number }[] };
+}
+
+export function useLatestSnapshot() {
+  return useQuery({
+    queryKey: queryKeys.uiSnapshotsLatest(),
+    queryFn: async () => {
+      try {
+        return await apiGet<UiSnapshotLatestResponse>(uiSnapshotsLatestPath());
+      } catch (e: unknown) {
+        const err = e as { status?: number };
+        if (err?.status === 404) return null;
+        throw e;
+      }
+    },
+    retry: false,
+  });
+}
+
+/** PR2: Freeze snapshot response. */
+export interface UiFreezeSnapshotResponse {
+  status: string;
+  mode_used: string;
+  snapshot_dir: string;
+  manifest: Record<string, unknown>;
+  ran_eval: boolean;
+  eval_result?: Record<string, unknown>;
+}
+
+export function useRunFreezeSnapshot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (skipEval: boolean) =>
+      apiPost<UiFreezeSnapshotResponse>(uiSnapshotsFreezePath(skipEval), {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiSnapshotsLatest() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiSystemHealth() });
+      qc.invalidateQueries({ queryKey: ["ui", "decision"] });
+      qc.invalidateQueries({ queryKey: queryKeys.universe() });
+    },
   });
 }
 

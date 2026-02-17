@@ -87,10 +87,15 @@ _nightly_stop_event: Optional[threading.Event] = None
 _nightly_thread: Optional[threading.Thread] = None
 _last_nightly_eval_at: Optional[str] = None
 
-# EOD freeze: run eval + freeze_snapshot at this time ET when market open (e.g. 15:55)
-FREEZE_TIME_ET = os.getenv("FREEZE_TIME_ET", "15:55")
-FREEZE_TZ = os.getenv("FREEZE_TZ", "America/New_York")
-_last_freeze_run_date: Optional[str] = None  # YYYY-MM-DD to avoid double-run same day
+# EOD freeze: run eval + freeze snapshot archive at ~3:58 PM ET on market-open days (PR2)
+EOD_FREEZE_ENABLED = os.getenv("EOD_FREEZE_ENABLED", "true").lower() in ("true", "1", "yes")
+EOD_FREEZE_TIME_ET = os.getenv("EOD_FREEZE_TIME_ET", "15:58")  # 3:58 PM ET
+EOD_FREEZE_WINDOW_MINUTES = int(os.getenv("EOD_FREEZE_WINDOW_MINUTES", "10"))
+EOD_FREEZE_TZ = os.getenv("EOD_FREEZE_TZ", "America/New_York")
+_last_eod_freeze_date: Optional[str] = None  # YYYY-MM-DD
+_last_eod_freeze_at_utc: Optional[str] = None
+_last_eod_freeze_result: Optional[str] = None
+_last_eod_freeze_snapshot_dir: Optional[str] = None
 
 # EOD chain snapshot: 16:05 ET on trading days (Phase 3.1.3)
 EOD_CHAIN_TIME = os.getenv("EOD_CHAIN_TIME", "16:05")
@@ -381,6 +386,122 @@ def get_nightly_scheduler_status() -> Dict[str, Any]:
     }
 
 
+def _eod_freeze_state_path() -> Path:
+    """Path to persist last EOD freeze date (survives restart). Not a decision fallback."""
+    try:
+        from app.core.eval.evaluation_store_v2 import get_decision_store_path
+        return get_decision_store_path().parent / "eod_freeze_state.json"
+    except Exception:
+        return Path(__file__).resolve().parents[2].parent / "out" / "eod_freeze_state.json"
+
+
+def _load_eod_freeze_state() -> Dict[str, Any]:
+    """Load last EOD freeze state from disk."""
+    path = _eod_freeze_state_path()
+    if not path.exists():
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            import json
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_eod_freeze_state(state: Dict[str, Any]) -> None:
+    """Persist EOD freeze state to disk."""
+    path = _eod_freeze_state_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        import json
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2)
+    except Exception as e:
+        logger.warning("[EOD_FREEZE] Failed to persist state: %s", e)
+
+
+def _maybe_run_eod_freeze(ZoneInfo: Any) -> None:
+    """
+    If in EOD freeze window [15:58, 15:58+window] ET, market OPEN, and not run today:
+    run eval then freeze snapshot archive. Persist last_run_date to disk.
+    """
+    global _last_eod_freeze_date, _last_eod_freeze_at_utc, _last_eod_freeze_result, _last_eod_freeze_snapshot_dir
+    try:
+        from datetime import time as dt_time, timedelta
+        tz = ZoneInfo(EOD_FREEZE_TZ)
+        now_et = datetime.now(tz)
+        today = now_et.strftime("%Y-%m-%d")
+        try:
+            hour, minute = map(int, EOD_FREEZE_TIME_ET.split(":"))
+        except (ValueError, TypeError):
+            hour, minute = 15, 58
+        window_start = now_et.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        window_end = window_start + timedelta(minutes=EOD_FREEZE_WINDOW_MINUTES)
+        if now_et < window_start or now_et > window_end:
+            return
+        if get_market_phase(now_et.astimezone(timezone.utc)) != "OPEN":
+            return
+        state = _load_eod_freeze_state()
+        if state.get("last_run_date") == today:
+            return
+        # Run eval then archive
+        from app.api.data_health import get_universe_symbols
+        from app.core.eval.evaluation_service_v2 import evaluate_universe
+        from app.core.eval.evaluation_store_v2 import get_decision_store_path
+        from app.core.snapshots.freeze import run_freeze_snapshot
+        symbols = list(get_universe_symbols())
+        if not symbols:
+            logger.warning("[EOD_FREEZE] Universe empty, skipping")
+            return
+        logger.info("[EOD_FREEZE] Running eval + archive for %s", today)
+        print(f"[EOD_FREEZE] Running eval + archive for {today}")
+        evaluate_universe(symbols, mode="LIVE")
+        out_dir = get_decision_store_path().parent
+        result = run_freeze_snapshot(
+            out_dir=out_dir,
+            decision_store_path=get_decision_store_path(),
+            extra_paths=[],
+            mode="archive_only",
+            now_utc=datetime.now(timezone.utc),
+        )
+        _last_eod_freeze_date = today
+        _last_eod_freeze_at_utc = datetime.now(timezone.utc).isoformat()
+        _last_eod_freeze_result = "OK"
+        _last_eod_freeze_snapshot_dir = result["snapshot_dir"]
+        _save_eod_freeze_state({
+            "last_run_date": today,
+            "last_run_at_utc": _last_eod_freeze_at_utc,
+            "last_snapshot_dir": result["snapshot_dir"],
+        })
+        logger.info("[EOD_FREEZE] Done: %s", result["snapshot_dir"])
+        print(f"[EOD_FREEZE] Done: {result['snapshot_dir']}")
+    except Exception as e:
+        logger.exception("[EOD_FREEZE] Error: %s", e)
+        _last_eod_freeze_result = str(e)
+
+
+def get_eod_freeze_status() -> Dict[str, Any]:
+    """Get EOD freeze scheduler status for system health."""
+    state = _load_eod_freeze_state()
+    last_date = _last_eod_freeze_date or state.get("last_run_date")
+    last_utc = _last_eod_freeze_at_utc or state.get("last_run_at_utc")
+    last_dir = _last_eod_freeze_snapshot_dir or state.get("last_snapshot_dir")
+    try:
+        from zoneinfo import ZoneInfo
+        et_tz = ZoneInfo(EOD_FREEZE_TZ)
+        last_et = datetime.fromisoformat(last_utc.replace("Z", "+00:00")).astimezone(et_tz).isoformat() if last_utc else None
+    except Exception:
+        last_et = last_utc
+    return {
+        "enabled": EOD_FREEZE_ENABLED,
+        "scheduled_time_et": EOD_FREEZE_TIME_ET,
+        "last_run_at_utc": last_utc,
+        "last_run_at_et": last_et,
+        "last_result": _last_eod_freeze_result or ("OK" if last_date else None),
+        "last_snapshot_dir": last_dir,
+    }
+
+
 def _run_scheduled_evaluation() -> bool:
     """
     Attempt to run a scheduled evaluation.
@@ -417,40 +538,6 @@ def _run_scheduled_evaluation() -> bool:
             _last_scheduled_eval_result = "OK"
             logger.info("[SCHEDULER] Triggered scheduled evaluation at %s", _last_scheduled_eval_at)
             print(f"[SCHEDULER] Triggered scheduled evaluation at {_last_scheduled_eval_at}")
-            # EOD freeze: if we're in the freeze window (e.g. 15:55 ET), run freeze_snapshot after eval
-            try:
-                from zoneinfo import ZoneInfo
-            except ImportError:
-                ZoneInfo = None  # type: ignore
-            if ZoneInfo:
-                global _last_freeze_run_date
-                tz = ZoneInfo(FREEZE_TZ)
-                now_et = datetime.now(tz).time()
-                try:
-                    hour, minute = map(int, FREEZE_TIME_ET.split(":"))
-                    from datetime import time as dt_time
-                    freeze_time = dt_time(hour, minute, 0)
-                    today = datetime.now(tz).strftime("%Y-%m-%d")
-                    if _last_freeze_run_date != today and now_et >= freeze_time:
-                        repo = Path(__file__).resolve().parents[2]
-                        script = repo / "scripts" / "freeze_snapshot.py"
-                        if script.exists():
-                            r = subprocess.run(
-                                [sys.executable, str(script)],
-                                cwd=str(repo),
-                                env={**os.environ, "PYTHONPATH": str(repo)},
-                                capture_output=True,
-                                text=True,
-                                timeout=30,
-                            )
-                            if r.returncode == 0:
-                                _last_freeze_run_date = today
-                                logger.info("[EOD_FREEZE] Ran freeze_snapshot.py: %s", (r.stdout or "").strip() or "ok")
-                                print("[EOD_FREEZE] Ran freeze_snapshot.py")
-                            else:
-                                logger.warning("[EOD_FREEZE] freeze_snapshot.py exit %s: %s", r.returncode, r.stderr or r.stdout)
-                except Exception as e:
-                    logger.debug("[EOD_FREEZE] Skip: %s", e)
             return True
         else:
             logger.debug("[SCHEDULER] Evaluation not started: %s", result.get("reason"))
@@ -463,6 +550,16 @@ def _run_scheduled_evaluation() -> bool:
         logger.exception("[SCHEDULER] Error triggering evaluation: %s", e)
         _last_scheduled_eval_result = "FAILED"
         return False
+    # EOD freeze (PR2): on every tick, if in window [15:58, 15:58+window] ET and market OPEN, run eval+archive
+    if EOD_FREEZE_ENABLED and phase == "OPEN":
+        try:
+            from zoneinfo import ZoneInfo
+            _maybe_run_eod_freeze(ZoneInfo)
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug("[EOD_FREEZE] Skip: %s", e)
+    return False
 
 
 def _scheduler_loop(stop_event: threading.Event, interval_minutes: int) -> None:

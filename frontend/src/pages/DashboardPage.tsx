@@ -129,7 +129,7 @@ export function DashboardPage() {
   const eligibleFromDecision = selectedSignals.length > 0 && aTier.length === 0 && bTier.length === 0;
   const positions = positionsRes?.positions ?? [];
   const openPositions = positions.filter((p) => (p.status ?? "").toUpperCase() === "OPEN" || (p.status ?? "").toUpperCase() === "PARTIAL_EXIT");
-  const capitalDeployed = openPositions.reduce((sum, p) => sum + (p.notional ?? 0), 0);
+  const capitalDeployed = positionsRes?.capital_deployed ?? openPositions.reduce((sum, p) => sum + (p.collateral ?? p.notional ?? 0), 0);
 
   const isReady = !!decision;
   const metadata = decision?.artifact?.metadata;
@@ -266,7 +266,7 @@ export function DashboardPage() {
                     </Link>
                     <span className="font-mono text-zinc-500 dark:text-zinc-500">
                       {p.contracts != null ? `${p.contracts}×` : p.qty != null ? `${p.qty}` : ""}{" "}
-                      {p.notional != null ? `$${p.notional.toLocaleString()}` : ""}
+                      {p.collateral != null ? `$${p.collateral.toLocaleString()}` : p.notional != null ? `$${p.notional.toLocaleString()}` : ""}
                     </span>
                   </div>
                 ))}

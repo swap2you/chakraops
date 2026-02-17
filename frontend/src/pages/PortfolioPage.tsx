@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { usePortfolio } from "@/api/queries";
+import { usePortfolio, useAccounts, useDefaultAccount, useClosePosition, useDeletePosition } from "@/api/queries";
 import type { PortfolioPosition } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
+import { ClosePositionDrawer } from "@/components/ClosePositionDrawer";
 import {
   Card,
   CardHeader,
@@ -13,6 +15,7 @@ import {
   TableCell,
   EmptyState,
   Badge,
+  Button,
 } from "@/components/ui";
 
 function fmtNum(n: number | null | undefined): string {
@@ -34,9 +37,36 @@ function alertBadgeVariant(flag: string): "success" | "warning" | "danger" | "ne
   return "neutral";
 }
 
+function fmtCurrency(n: number | null | undefined): string {
+  if (n == null || Number.isNaN(n)) return "—";
+  return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 export function PortfolioPage() {
   const { data, isLoading, isError } = usePortfolio();
+  const { data: accountsData } = useAccounts();
+  const { data: defaultAccountData } = useDefaultAccount();
+  const deletePosition = useDeletePosition();
+  const [closeDrawerPosition, setCloseDrawerPosition] = useState<PortfolioPosition | null>(null);
+
   const positions = data?.positions ?? [];
+  const capitalDeployed = data?.capital_deployed ?? 0;
+  const openPositionsCount = data?.open_positions_count ?? positions.filter((p) => (p.status ?? "").toUpperCase() === "OPEN" || (p.status ?? "").toUpperCase() === "PARTIAL_EXIT").length;
+
+  const accounts = accountsData?.accounts ?? [];
+  const defaultAccount = defaultAccountData?.account;
+  const selectedAccount = defaultAccount ?? (accounts.length > 0 ? accounts[0] : null);
+  const totalCapital = (selectedAccount as { total_capital?: number })?.total_capital ?? 0;
+  const maxCapitalPct = (selectedAccount as { max_capital_per_trade_pct?: number })?.max_capital_per_trade_pct ?? 5;
+  const riskPerTrade = totalCapital > 0 ? (totalCapital * maxCapitalPct) / 100 : 0;
+  const buyingPower = totalCapital > 0 ? totalCapital - capitalDeployed : 0;
+
+  const isOpen = (p: PortfolioPosition) => {
+    const s = (p.status ?? "").toUpperCase();
+    return s === "OPEN" || s === "PARTIAL_EXIT";
+  };
+  const canDelete = (p: PortfolioPosition) =>
+    p.is_test === true || (p.status ?? "").toUpperCase() === "CLOSED" || (p.status ?? "").toUpperCase() === "ABORTED";
 
   if (isLoading) {
     return (
@@ -60,7 +90,32 @@ export function PortfolioPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Portfolio" subtext={`${positions.length} position(s)`} />
+      <PageHeader title="Portfolio" subtext={`${positions.length} position(s) · ${fmtCurrency(capitalDeployed)} deployed`} />
+
+      {accounts.length > 0 && (
+        <Card>
+          <CardHeader title="Account" />
+          <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-400">Account</span>
+              <span className="font-mono font-medium text-zinc-900 dark:text-zinc-200">{selectedAccount ? (selectedAccount as { account_id?: string }).account_id : "—"}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-400">Buying power</span>
+              <span className="font-mono text-zinc-700 dark:text-zinc-300">{fmtCurrency(buyingPower)}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-400">Risk per trade</span>
+              <span className="font-mono text-zinc-700 dark:text-zinc-300">{fmtCurrency(riskPerTrade)}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-400">Open positions</span>
+              <span className="font-mono text-zinc-700 dark:text-zinc-300">{openPositionsCount}</span>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <Card>
         <CardHeader title="Positions" />
         {positions.length === 0 ? (
@@ -79,6 +134,7 @@ export function PortfolioPage() {
               <TableHead>DTE</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Alert</TableHead>
+              <TableHead>Actions</TableHead>
             </TableHeader>
             <TableBody>
               {positions.map((row: PortfolioPosition) => (
@@ -122,12 +178,47 @@ export function PortfolioPage() {
                       </span>
                     )}
                   </TableCell>
+                  <TableCell>
+                    <span className="flex flex-wrap gap-1">
+                      {isOpen(row) && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setCloseDrawerPosition(row)}
+                        >
+                          Close
+                        </Button>
+                      )}
+                      {canDelete(row) && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={deletePosition.isPending}
+                          onClick={() => {
+                            if (window.confirm(`Delete position ${row.symbol} ${row.strategy}?`)) {
+                              deletePosition.mutate(row.position_id);
+                            }
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      )}
+                    </span>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         )}
       </Card>
+
+      {closeDrawerPosition && (
+        <ClosePositionDrawer
+          position={closeDrawerPosition}
+          onClose={() => setCloseDrawerPosition(null)}
+          onClosed={() => setCloseDrawerPosition(null)}
+        />
+      )}
     </div>
   );
 }

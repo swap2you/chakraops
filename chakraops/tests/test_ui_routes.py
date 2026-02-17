@@ -183,6 +183,62 @@ def test_ui_positions_post_persists_and_get_returns(tmp_path):
         assert positions[0].get("status") == "OPEN"
 
 
+def test_ui_positions_close_and_delete_guardrail(tmp_path):
+    """Phase 10.0: Close position computes realized_pnl; delete allowed only for CLOSED/test."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    positions_dir = tmp_path / "positions"
+    positions_dir.mkdir(parents=True, exist_ok=True)
+
+    app = _get_app()
+    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+        client = TestClient(app)
+        # Create OPEN position: CSP 1 contract @ 450, credit 2.50
+        post = client.post(
+            "/api/ui/positions",
+            json={
+                "symbol": "SPY",
+                "strategy": "CSP",
+                "contracts": 1,
+                "strike": 450.0,
+                "expiration": "2026-03-21",
+                "credit_expected": 2.50,
+            },
+        )
+        assert post.status_code == 200
+        pos = post.json()
+        pid = pos["position_id"]
+
+        # Try delete while OPEN -> 409
+        del_open = client.delete(f"/api/ui/positions/{pid}")
+        assert del_open.status_code == 409
+
+        # Close with close_price 1.00 (buy back at $1)
+        close_res = client.post(
+            f"/api/ui/positions/{pid}/close",
+            json={"close_price": 1.00},
+        )
+        assert close_res.status_code == 200
+        closed = close_res.json()
+        assert closed.get("status") == "CLOSED"
+        assert "realized_pnl" in closed
+        # open_credit 2.50 total 250, close_debit 100, pnl = 250 - 100 = 150
+        rpnl = closed.get("realized_pnl")
+        assert rpnl is not None
+        assert abs(rpnl - 150.0) < 0.01
+
+        # Delete CLOSED position -> 200
+        del_closed = client.delete(f"/api/ui/positions/{pid}")
+        assert del_closed.status_code == 200
+        assert del_closed.json().get("deleted") == pid
+
+        # Verify gone
+        get_after = client.get("/api/ui/positions")
+        assert get_after.status_code == 200
+        assert len(get_after.json().get("positions") or []) == 0
+
+
 def test_ui_diagnostics_run_and_history(tmp_path):
     """POST /api/ui/diagnostics/run runs checks; GET /api/ui/diagnostics/history returns runs. Skip if fastapi missing."""
     pytest.importorskip("fastapi")

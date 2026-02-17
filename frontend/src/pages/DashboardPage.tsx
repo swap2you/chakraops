@@ -101,42 +101,16 @@ export function DashboardPage() {
         isV2: true,
       };
     }
-    const snapshot = decision?.decision_snapshot;
-    const candidates = snapshot?.candidates ?? [];
-    const legacySelected = snapshot?.selected_signals ?? [];
-    const map = new Map<string, UniverseSymbol>();
-    for (const s of universe?.symbols ?? []) {
-      map.set((s.symbol || "").toUpperCase(), { ...s });
-    }
-    for (const c of candidates) {
-      const sym = (c.symbol || "").toUpperCase();
-      const existing = map.get(sym) ?? ({ symbol: c.symbol } as UniverseSymbol);
-      map.set(sym, {
-        ...existing,
-        symbol: c.symbol || existing.symbol,
-        verdict: c.verdict ?? existing.verdict,
-        final_verdict: c.verdict ?? existing.final_verdict,
-        score: (c as { score?: number }).score ?? existing.score,
-        band: (c as { band?: string }).band ?? existing.band,
-        primary_reason: (c as { primary_reason?: string }).primary_reason ?? existing.primary_reason,
-        expiration: c.candidate?.expiry ? String(c.candidate.expiry).slice(0, 10) : existing.expiration,
-        price: (c.candidate as { price?: number })?.price ?? existing.price,
-      });
-    }
-    for (const ss of legacySelected) {
-      const sym = (ss.symbol || "").toUpperCase();
-      if (!map.has(sym)) {
-        map.set(sym, {
-          symbol: ss.symbol,
-          verdict: ss.verdict,
-          final_verdict: ss.verdict,
-          expiration: ss.candidate?.expiry ? String(ss.candidate.expiry).slice(0, 10) : undefined,
-        } as UniverseSymbol);
-      }
-    }
+    // v2 only: no legacy merge. Use universe from API (also v2 store) or empty.
+    const symbols = universe?.symbols ?? [];
+    const selected = (artifact?.selected_candidates ?? []).map((c: { symbol: string; strategy?: string }) => ({
+      symbol: c.symbol,
+      verdict: "ELIGIBLE" as const,
+      candidate: c,
+    }));
     return {
-      universeSymbols: Array.from(map.values()),
-      selectedSignals: legacySelected,
+      universeSymbols: symbols as UniverseSymbol[],
+      selectedSignals: selected,
       isV2: false,
     };
   }, [universe?.symbols, decision]);

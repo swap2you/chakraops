@@ -23,11 +23,12 @@ def _repo_root() -> Path:
 
 
 def _output_dir() -> Path:
+    """Canonical out dir = parent of decision_latest.json (ONE store)."""
     try:
-        from app.core.settings import get_output_dir
-        return Path(get_output_dir())
+        from app.core.eval.evaluation_store_v2 import get_decision_store_path
+        return get_decision_store_path().parent
     except Exception:
-        return _repo_root() / "out"
+        return _repo_root().parent / "out"
 
 
 def _require_ui_key(x_ui_key: str | None = Header(None, alias="x-ui-key")) -> None:
@@ -107,8 +108,10 @@ def ui_decision_latest(
         store = get_evaluation_store_v2()
         artifact = store.get_latest()
         if artifact is None:
-            raise HTTPException(status_code=404, detail="No decision artifact (v2) in store. Run evaluation first.")
-        return {"artifact": artifact.to_dict(), "artifact_version": "v2"}
+            raise HTTPException(status_code=404, detail="no v2 artifact; run evaluation")
+        data = artifact.to_dict()
+        _validate_live_artifact(data)
+        return {"artifact": data, "artifact_version": "v2"}
 
     path = _output_dir() / "mock" / "decision_latest.json"
     if not path.exists():
@@ -187,6 +190,11 @@ def ui_universe(
                     "band_reason": getattr(s, "band_reason", None),
                     "max_loss": getattr(s, "max_loss", None),
                     "underlying_price": getattr(s, "underlying_price", None),
+                    "capital_required": getattr(s, "capital_required", None),
+                    "expected_credit": getattr(s, "expected_credit", None),
+                    "premium_yield_pct": getattr(s, "premium_yield_pct", None),
+                    "market_cap": getattr(s, "market_cap", None),
+                    "rank_score": getattr(s, "rank_score", None),
                 })
         return {
             "source": "ARTIFACT_V2",
@@ -310,8 +318,48 @@ def ui_system_health(
     except Exception:
         pass
 
+    # Decision store (v2): CRITICAL if missing, not v2, band null, or timestamps mismatch
+    decision_store_status = "OK"
+    decision_store_reason: str | None = None
+    try:
+        from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2, get_decision_store_path
+        store = get_evaluation_store_v2()
+        artifact = store.get_latest()
+        store_path = get_decision_store_path()
+        if not store_path.exists():
+            decision_store_status = "CRITICAL"
+            decision_store_reason = "Store file missing"
+        elif artifact is None:
+            decision_store_status = "CRITICAL"
+            decision_store_reason = "No v2 artifact in store"
+        else:
+            meta = artifact.metadata or {}
+            if meta.get("artifact_version") != "v2":
+                decision_store_status = "CRITICAL"
+                decision_store_reason = f"artifact_version={meta.get('artifact_version')}, expected v2"
+            else:
+                null_bands = [s for s in (artifact.symbols or []) if not s.band or s.band.strip() == ""]
+                if null_bands:
+                    decision_store_status = "CRITICAL"
+                    decision_store_reason = f"{len(null_bands)} symbol(s) have null band"
+    except Exception as e:
+        decision_store_status = "CRITICAL"
+        decision_store_reason = str(e)
+
+    canonical_path_str: str | None = None
+    try:
+        from app.core.eval.evaluation_store_v2 import get_decision_store_path
+        canonical_path_str = str(get_decision_store_path())
+    except Exception:
+        pass
+
     return {
         "api": {"status": api_status, "latency_ms": api_latency_ms},
+        "decision_store": {
+            "status": decision_store_status,
+            "reason": decision_store_reason,
+            "canonical_path": canonical_path_str,
+        },
         "orats": {
             "status": orats_status,
             "last_success_at": orats_last_success,

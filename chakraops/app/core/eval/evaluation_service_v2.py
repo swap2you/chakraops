@@ -18,6 +18,7 @@ from app.core.eval.decision_artifact_v2 import (
     SymbolEvalSummary,
     assign_band,
     assign_band_reason,
+    compute_rank_score,
 )
 from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
 
@@ -204,6 +205,19 @@ def evaluate_universe(
         price_val = getattr(sr, "price", None)
         score_bd = getattr(sr, "score_breakdown", None)
         band_rsn = assign_band_reason(score)  # NEVER use sr.band_reason — band_reason from score only, no verdict
+        # Phase 8.0: ranking fields
+        capital_req: Optional[float] = max_loss_val if max_loss_val is not None else (price_val * 100 if price_val and price_val > 0 else None)
+        expected_cr: Optional[float] = None
+        prem_yield: Optional[float] = None
+        mcap: Optional[float] = getattr(sr, "market_cap", None)
+        if sc and isinstance(sc, dict):
+            expected_cr = sc.get("credit_estimate")
+        if expected_cr is None and cds:
+            first_ct = asdict(cds[0]) if hasattr(cds[0], "__dataclass_fields__") else (cds[0] if isinstance(cds[0], dict) else {})
+            expected_cr = first_ct.get("credit_estimate")
+        if capital_req and capital_req > 0 and expected_cr is not None:
+            prem_yield = (expected_cr / capital_req) * 100
+        rk = compute_rank_score(band, float(score) if score is not None else None, prem_yield, capital_req, mcap)
         symbols_out.append(SymbolEvalSummary(
             symbol=sym_upper,
             verdict=verdict,
@@ -226,6 +240,11 @@ def evaluate_universe(
             band_reason=band_rsn,
             max_loss=max_loss_val,
             underlying_price=price_val,
+            capital_required=capital_req,
+            expected_credit=expected_cr,
+            premium_yield_pct=prem_yield,
+            market_cap=mcap,
+            rank_score=rk,
         ))
 
         # Phase 7.7: diagnostics_by_symbol
@@ -438,6 +457,14 @@ def _build_symbol_data_from_staged(
         first_ct = asdict(cds[0]) if hasattr(cds[0], "__dataclass_fields__") else (cds[0] if isinstance(cds[0], dict) else {})
         max_loss_val = first_ct.get("max_loss")
     price_val = getattr(sr, "price", None)
+    capital_req: Optional[float] = max_loss_val if max_loss_val is not None else (price_val * 100 if price_val and price_val > 0 else None)
+    expected_cr: Optional[float] = sc.get("credit_estimate") if sc and isinstance(sc, dict) else None
+    if expected_cr is None and cds:
+        first_ct = asdict(cds[0]) if hasattr(cds[0], "__dataclass_fields__") else (cds[0] if isinstance(cds[0], dict) else {})
+        expected_cr = first_ct.get("credit_estimate")
+    prem_yield: Optional[float] = (expected_cr / capital_req * 100) if capital_req and capital_req > 0 and expected_cr is not None else None
+    mcap: Optional[float] = getattr(sr, "market_cap", None)
+    rk = compute_rank_score(band, float(score) if score is not None else None, prem_yield, capital_req, mcap)
     summary = SymbolEvalSummary(
         symbol=sym_upper,
         verdict=verdict,
@@ -460,6 +487,11 @@ def _build_symbol_data_from_staged(
         band_reason=assign_band_reason(score),  # from score only, never verdict
         max_loss=max_loss_val,
         underlying_price=price_val,
+        capital_required=capital_req,
+        expected_credit=expected_cr,
+        premium_yield_pct=prem_yield,
+        market_cap=mcap,
+        rank_score=rk,
     )
     return summary, cand_list, gates, earnings
 

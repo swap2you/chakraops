@@ -5,6 +5,7 @@ import { Card, CardHeader, StatusBadge } from "@/components/ui";
 export function SystemDiagnosticsPage() {
   const { data, isLoading, isError } = useUiSystemHealth();
   const api = data?.api;
+  const decisionStore = data?.decision_store;
   const orats = data?.orats;
   const market = data?.market;
   const scheduler = data?.scheduler;
@@ -38,7 +39,7 @@ export function SystemDiagnosticsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="System Status" subtext="API, ORATS, market, and scheduler" />
+      <PageHeader title="System Status" subtext="API, Decision Store, ORATS, market, and scheduler" />
       <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
         <Card>
           <CardHeader title="API" />
@@ -53,6 +54,34 @@ export function SystemDiagnosticsPage() {
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">latency_ms</span>
               <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{api?.latency_ms ?? "—"}</p>
             </div>
+          </div>
+        </Card>
+        <Card className={decisionStore?.status === "CRITICAL" ? "border-red-500 dark:border-red-600" : ""}>
+          <CardHeader
+            title="Decision Store"
+            description={decisionStore?.status === "CRITICAL" ? decisionStore.reason ?? "CRITICAL" : undefined}
+          />
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">status</span>
+              <p className="mt-1">
+                <StatusBadge status={decisionStore?.status ?? "—"} />
+              </p>
+            </div>
+            {decisionStore?.reason && (
+              <div className="col-span-2">
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">reason</span>
+                <p className="mt-1 text-zinc-600 dark:text-zinc-400">{decisionStore.reason}</p>
+              </div>
+            )}
+            {decisionStore?.canonical_path && (
+              <div className="col-span-2">
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">path</span>
+                <p className="mt-1 font-mono text-xs text-zinc-600 dark:text-zinc-400 truncate" title={decisionStore.canonical_path}>
+                  {decisionStore.canonical_path}
+                </p>
+              </div>
+            )}
           </div>
         </Card>
         <Card>

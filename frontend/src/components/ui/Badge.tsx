@@ -40,6 +40,6 @@ export function StatusBadge({ status }: { status: string }) {
   let v: BadgeVariant = "neutral";
   if (s === "OK" || s === "PASS" || s === "ELIGIBLE") v = "success";
   else if (s === "WARN" || s === "FAIL" || s === "HOLD") v = "warning";
-  else if (s === "DOWN" || s === "BLOCKED") v = "danger";
+  else if (s === "DOWN" || s === "BLOCKED" || s === "CRITICAL") v = "danger";
   return <Badge variant={v}>{status || "—"}</Badge>;
 }

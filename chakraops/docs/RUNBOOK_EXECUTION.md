@@ -4,9 +4,29 @@ Human runbook for clean-room startup and troubleshooting.
 
 ---
 
+## Canonical Store Path (ONE pipeline / ONE store)
+
+**The canonical decision store path is:**
+```
+<REPO_ROOT>/out/decision_latest.json
+```
+- **REPO_ROOT** = parent of `chakraops/` (e.g. `C:\Development\Workspace\ChakraOps`)
+- All UI pages (Universe, Dashboard, Symbol) read from this store via v2 artifact only
+- `scripts/run_and_save.py` and uvicorn both use this path regardless of current working directory
+
+---
+
 ## Golden Path (copy-paste)
 
-Run from `chakraops/` for backend; run from `frontend/` for React UI.
+**From repo root** (for path-independent commands):
+```powershell
+cd C:\Development\Workspace\ChakraOps
+```
+
+**From chakraops package** (backend commands require PYTHONPATH):
+```powershell
+cd C:\Development\Workspace\ChakraOps\chakraops
+```
 
 ```powershell
 # Terminal 0: Activate venv, install deps
@@ -41,6 +61,29 @@ Invoke-WebRequest -Uri "http://localhost:8000/api/ui/universe" -UseBasicParsing 
 Invoke-WebRequest -Uri "http://localhost:8000/api/ui/symbol-diagnostics?symbol=SPY" -UseBasicParsing | Select-Object StatusCode
 ```
 Expected: StatusCode 200 for each smoke.
+
+---
+
+## Sanity Check
+
+After running evaluation and starting the backend:
+```powershell
+cd C:\Development\Workspace\ChakraOps\chakraops
+$env:PYTHONPATH = (Get-Location).Path
+python scripts/sanity_one_pipeline.py
+```
+
+**Expected output (PASS):**
+```
+============================================================
+Sanity: ONE pipeline / ONE store / store-first verification
+============================================================
+  [PASS] run_and_save.py --symbols SPY,AAPL --output-dir out
+  [PASS] Store file exists, artifact_version=v2
+  ...
+============================================================
+PASS: All sanity checks passed.
+```
 
 ---
 

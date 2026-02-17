@@ -97,14 +97,42 @@ def test_ui_decision_files_ordering(tmp_path):
     assert names[-1] == "decision_a.json"
 
 
-def test_ui_decision_latest_rejects_mock_data_source(tmp_path):
+def test_ui_decision_latest_rejects_mock_data_source():
     """LIVE mode returns 400 when artifact has data_source mock/scenario."""
     from fastapi.testclient import TestClient
-    (tmp_path / "decision_latest.json").write_text(
-        json.dumps({"data_source": "mock", "x": 1})
+    from app.core.eval.decision_artifact_v2 import DecisionArtifactV2, SymbolEvalSummary
+
+    sym = SymbolEvalSummary(
+        symbol="SPY",
+        verdict="HOLD",
+        final_verdict="HOLD",
+        score=50,
+        band="C",
+        primary_reason="test",
+        stage_status="RUN",
+        stage1_status="PASS",
+        stage2_status="NOT_RUN",
+        provider_status="OK",
+        data_freshness=None,
+        evaluated_at=None,
+        strategy=None,
+        price=None,
+        expiration=None,
+        has_candidates=False,
+        candidate_count=0,
     )
+    artifact = DecisionArtifactV2(
+        metadata={"artifact_version": "v2", "data_source": "mock"},
+        symbols=[sym],
+        selected_candidates=[],
+    )
+    class MockStore:
+        def get_latest(self):
+            return artifact
+    mock_store = MockStore()
+
     app = _get_app()
-    with patch("app.api.ui_routes._output_dir", return_value=tmp_path):
+    with patch("app.core.eval.evaluation_store_v2.get_evaluation_store_v2", return_value=mock_store):
         client = TestClient(app)
         r = client.get("/api/ui/decision/latest?mode=LIVE")
     assert r.status_code == 400

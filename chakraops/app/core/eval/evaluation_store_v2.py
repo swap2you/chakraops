@@ -44,6 +44,12 @@ def set_output_dir(path: Path) -> None:
     _DEFAULT_OUTPUT_DIR = Path(path).resolve()
 
 
+def reset_output_dir() -> None:
+    """Reset output dir to canonical (for test isolation)."""
+    global _DEFAULT_OUTPUT_DIR
+    _DEFAULT_OUTPUT_DIR = None
+
+
 def get_decision_store_path() -> Path:
     """Return canonical decision_latest.json path. ONE source of truth."""
     if _DEFAULT_OUTPUT_DIR is not None:

@@ -213,8 +213,15 @@ export interface UiSystemHealthScheduler {
   eod_next_at?: string | null;
 }
 
+export interface UiSystemHealthDecisionStore {
+  status: "OK" | "CRITICAL";
+  reason?: string | null;
+  canonical_path?: string | null;
+}
+
 export interface UiSystemHealthResponse {
   api: UiSystemHealthApi;
+  decision_store?: UiSystemHealthDecisionStore;
   orats: UiSystemHealthOrats;
   market: UiSystemHealthMarket;
   scheduler: UiSystemHealthScheduler;

@@ -49,6 +49,31 @@ def assign_band_reason(score: Optional[int | float]) -> str:
     return f"Band {b} because score < {TIER_C_MIN}"
 
 
+def _band_rank_value(band: str) -> int:
+    """Numeric value for band ordering (A > B > C > D). Phase 8.0."""
+    return {"A": 4, "B": 3, "C": 2, "D": 1}.get((band or "D").upper(), 1)
+
+
+def compute_rank_score(
+    band: str,
+    score: Optional[float],
+    premium_yield_pct: Optional[float],
+    capital_required: Optional[float],
+    market_cap: Optional[float],
+) -> float:
+    """
+    Phase 8.0: Sortable rank_score.
+    Primary: band (A>B>C>D), Secondary: score desc, Tertiary: premium_yield desc,
+    Quaternary: capital_required asc, Tie-breaker: market_cap desc.
+    """
+    band_val = _band_rank_value(band) * 100_000
+    score_val = (score if score is not None else 0) * 100
+    yield_val = (premium_yield_pct if premium_yield_pct is not None else 0) * 10
+    cap_val = -(capital_required or 999_999) / 100  # lower capital = higher rank
+    mcap_val = (market_cap or 0) / 1e9
+    return band_val + score_val + yield_val + cap_val + mcap_val
+
+
 @dataclass
 class SymbolEvalSummary:
     """One row per universe symbol. All fields explicit (no optional blanks)."""
@@ -74,6 +99,12 @@ class SymbolEvalSummary:
     band_reason: Optional[str] = None  # "Band A because score >= TIER_A_MIN"
     max_loss: Optional[float] = None  # capital required for selected candidate
     underlying_price: Optional[float] = None  # spot at evaluation
+    # Phase 8.0: Ranking fields
+    capital_required: Optional[float] = None  # underlying_price * 100
+    expected_credit: Optional[float] = None  # from selected candidate if eligible
+    premium_yield_pct: Optional[float] = None  # expected_credit / capital_required
+    market_cap: Optional[float] = None  # if available
+    rank_score: Optional[float] = None  # sortable numeric score
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

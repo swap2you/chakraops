@@ -62,8 +62,39 @@ function formatScoreBreakdown(bd: unknown): string {
 }
 
 type VerdictFilter = "all" | "ELIGIBLE" | "HOLD" | "BLOCKED" | "NOT_EVALUATED";
+type SortBy = "rank" | "score" | "capital_required" | "premium_yield" | "market_cap";
 
 const VERDICT_FILTER_OPTIONS: VerdictFilter[] = ["all", "ELIGIBLE", "HOLD", "BLOCKED", "NOT_EVALUATED"];
+const SORT_OPTIONS: { value: SortBy; label: string }[] = [
+  { value: "rank", label: "Rank" },
+  { value: "score", label: "Score" },
+  { value: "capital_required", label: "Capital Required" },
+  { value: "premium_yield", label: "Premium Yield" },
+  { value: "market_cap", label: "Market Cap" },
+];
+
+const RANK_TOOLTIP =
+  "Rank: band (A>B>C>D) → score desc → premium yield desc → capital required asc → market cap desc";
+
+function sortSymbols<T extends Record<string, unknown>>(list: T[], sortBy: SortBy): T[] {
+  const arr = [...list];
+  if (sortBy === "rank") {
+    arr.sort((a, b) => ((b as { rank_score?: number }).rank_score ?? -Infinity) - ((a as { rank_score?: number }).rank_score ?? -Infinity));
+  } else if (sortBy === "score") {
+    arr.sort((a, b) => ((b.score ?? -Infinity) as number) - ((a.score ?? -Infinity) as number));
+  } else if (sortBy === "capital_required") {
+    arr.sort((a, b) => {
+      const ac = (a as { capital_required?: number }).capital_required ?? Infinity;
+      const bc = (b as { capital_required?: number }).capital_required ?? Infinity;
+      return ac - bc;
+    });
+  } else if (sortBy === "premium_yield") {
+    arr.sort((a, b) => ((b as { premium_yield_pct?: number }).premium_yield_pct ?? -Infinity) - ((a as { premium_yield_pct?: number }).premium_yield_pct ?? -Infinity));
+  } else if (sortBy === "market_cap") {
+    arr.sort((a, b) => ((b as { market_cap?: number }).market_cap ?? -Infinity) - ((a as { market_cap?: number }).market_cap ?? -Infinity));
+  }
+  return arr;
+}
 
 export function UniversePage() {
   const navigate = useNavigate();
@@ -71,6 +102,7 @@ export function UniversePage() {
   const runEval = useRunEval();
   const [search, setSearch] = useState("");
   const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>("all");
+  const [sortBy, setSortBy] = useState<SortBy>("rank");
 
   const symbols = universeData?.symbols ?? [];
   const source = universeData?.source ?? "n/a";
@@ -89,8 +121,8 @@ export function UniversePage() {
           (s.primary_reason ?? "").toUpperCase().includes(q)
       );
     }
-    return list;
-  }, [symbols, verdictFilter, search]);
+    return sortSymbols(list, sortBy);
+  }, [symbols, verdictFilter, search, sortBy]);
 
   const isLoading = universeLoading;
   if (isLoading) {
@@ -156,6 +188,27 @@ export function UniversePage() {
         <CardHeader
           title="Symbols"
           description={`${filtered.length} of ${symbols.length} · Updated ${fmtTs(updated)}`}
+          actions={
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">Sort by</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortBy)}
+                className="rounded border border-zinc-200 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+              >
+                {SORT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              {sortBy === "rank" && (
+                <Tooltip content={RANK_TOOLTIP} className="max-w-xs">
+                  <Info className="h-4 w-4 cursor-help text-zinc-500" />
+                </Tooltip>
+              )}
+            </div>
+          }
         />
         {filtered.length === 0 ? (
           <EmptyState

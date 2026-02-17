@@ -1,6 +1,9 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""Phase 10: Load view models from decision_latest.json + persistence for API."""
+"""Phase 10: Load view models from decision_latest.json + persistence for API.
+
+v2-only: Reads from canonical path <REPO_ROOT>/out/decision_latest.json.
+"""
 
 from __future__ import annotations
 
@@ -9,18 +12,19 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 try:
-    from app.core.settings import get_output_dir
+    from app.core.eval.evaluation_store_v2 import get_decision_store_path
 except ImportError:
-    def get_output_dir() -> str:
-        return "out"
+    def get_decision_store_path() -> Path:
+        return Path("out") / "decision_latest.json"
 
 
 def _decision_latest_path() -> Path:
-    return Path(get_output_dir()) / "decision_latest.json"
+    """Canonical decision store path — ONE source of truth."""
+    return get_decision_store_path()
 
 
 def load_decision_artifact() -> Optional[Dict[str, Any]]:
-    """Load decision_latest.json. Returns None if missing or invalid."""
+    """Load decision_latest.json from canonical path. Returns None if missing or invalid. v2-only."""
     p = _decision_latest_path()
     if not p.exists():
         return None
@@ -33,32 +37,41 @@ def load_decision_artifact() -> Optional[Dict[str, Any]]:
 
 
 def build_daily_overview_from_artifact(artifact: Dict[str, Any]) -> Dict[str, Any]:
-    """Build daily-overview dict from artifact (decision_snapshot, daily_trust_report, metadata)."""
-    report = artifact.get("daily_trust_report") or {}
+    """Build daily-overview dict from v2 artifact (metadata, symbols, selected_candidates)."""
     meta = artifact.get("metadata") or {}
-    snapshot = artifact.get("decision_snapshot") or {}
-    stats = snapshot.get("stats") or {}
-    why = snapshot.get("why_no_trade") or {}
-    date_str = report.get("date") or meta.get("cycle_id") or ""
-    if not date_str and meta.get("pipeline_timestamp"):
-        date_str = str(meta["pipeline_timestamp"])[:10]
-    links = {}
-    if meta.get("pipeline_timestamp"):
-        links["latest_decision_ts"] = meta["pipeline_timestamp"]
+    symbols = artifact.get("symbols") or []
+    selected = artifact.get("selected_candidates") or []
+    ts = meta.get("pipeline_timestamp") or ""
+    date_str = str(ts)[:10] if ts else ""
+    links: Dict[str, Any] = {}
+    if ts:
+        links["latest_decision_ts"] = ts
+    eligible_count = int(meta.get("eligible_count", 0) or sum(
+        1 for s in symbols if (s.get("verdict") or "").upper() == "ELIGIBLE"
+    ))
+    # Derive top blockers from primary_reason of HOLD/BLOCKED symbols
+    blockers: List[Dict[str, Any]] = []
+    for s in symbols:
+        v = (s.get("verdict") or "").upper()
+        if v in ("HOLD", "BLOCKED"):
+            reason = s.get("primary_reason") or ""
+            if reason:
+                blockers.append({"code": v, "reason": reason})
+    why_summary = blockers[0]["reason"] if blockers else ""
     return {
         "date": date_str,
-        "run_mode": report.get("run_mode") or meta.get("run_mode") or "DRY_RUN",
-        "config_frozen": report.get("config_frozen", False),
-        "freeze_violation_changed_keys": report.get("freeze_violation_changed_keys") or [],
-        "regime": meta.get("regime") or report.get("regime"),
-        "regime_reason": meta.get("regime_reason") or report.get("regime_reason"),
-        "symbols_evaluated": int(stats.get("symbols_evaluated") or report.get("trades_considered", 0) or 0),
-        "selected_signals": len(snapshot.get("selected_signals") or []),
-        "trades_ready": report.get("trades_ready", 0),
-        "no_trade": report.get("trades_ready", 0) == 0,
-        "why_summary": str(why.get("summary") or report.get("summary") or ""),
-        "top_blockers": list(report.get("top_blocking_reasons") or []),
-        "risk_posture": str(meta.get("risk_posture") or report.get("risk_posture") or "CONSERVATIVE"),
+        "run_mode": meta.get("mode") or "DRY_RUN",
+        "config_frozen": meta.get("config_frozen", False),
+        "freeze_violation_changed_keys": list(meta.get("freeze_violation_changed_keys") or []),
+        "regime": meta.get("regime"),
+        "regime_reason": meta.get("regime_reason"),
+        "symbols_evaluated": len(symbols) or int(meta.get("universe_size", 0)),
+        "selected_signals": len(selected),
+        "trades_ready": eligible_count,
+        "no_trade": eligible_count == 0,
+        "why_summary": str(why_summary),
+        "top_blockers": blockers[:5],
+        "risk_posture": str(meta.get("risk_posture") or "CONSERVATIVE"),
         "links": links,
     }
 
@@ -141,24 +154,22 @@ def get_alerts_for_api(daily_overview: Optional[Dict[str, Any]] = None) -> Dict[
 
 
 def get_decision_history_for_api() -> List[Dict[str, Any]]:
-    """Build decision-history list (latest record from artifact + meta). Returns [] on error."""
+    """Build decision-history list from v2 artifact. Returns [] on error."""
     artifact = load_decision_artifact()
     if not artifact:
         return []
+    overview = build_daily_overview_from_artifact(artifact)
     meta = artifact.get("metadata") or {}
-    report = artifact.get("daily_trust_report") or {}
-    snapshot = artifact.get("decision_snapshot") or {}
     ts = meta.get("pipeline_timestamp") or ""
-    date_str = ts[:10] if ts else report.get("date") or ""
-    why = snapshot.get("why_no_trade") or {}
-    rationale = str(why.get("summary") or report.get("summary") or "")
-    outcome = "NO_TRADE" if report.get("trades_ready", 0) == 0 else "TRADE"
+    date_str = str(ts)[:10] if ts else overview.get("date", "")
+    eligible = overview.get("trades_ready", 0) or meta.get("eligible_count", 0)
+    outcome = "NO_TRADE" if eligible == 0 else "TRADE"
     return [{
         "date": date_str,
         "evaluated_at": ts,
         "outcome": outcome,
-        "rationale": rationale,
-        "overview": build_daily_overview_from_artifact(artifact) if artifact else None,
+        "rationale": overview.get("why_summary", ""),
+        "overview": overview,
         "trade_plan": None,
         "positions": get_positions_for_api(),
     }]

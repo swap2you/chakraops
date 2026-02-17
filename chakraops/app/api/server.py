@@ -556,6 +556,15 @@ async def _lifespan(app: FastAPI):
         print("Set OPENAI_API_KEY in chakraops/.env and restart to enable read-aloud on Strategy page.")
     print("=================================")
 
+    # Canonical store path (ONE pipeline / ONE store)
+    try:
+        from app.core.eval.evaluation_store_v2 import get_decision_store_path
+        store_path = get_decision_store_path()
+        logger.info("[STORE] Canonical decision store path: %s", store_path)
+        print(f"[STORE] Canonical decision store path: {store_path}")
+    except Exception as e:
+        logger.warning("Could not resolve store path: %s", e)
+
     # Phase 5: Clear stale run lock on startup (e.g. after crash)
     try:
         from app.core.eval.evaluation_store import clear_stale_run_lock

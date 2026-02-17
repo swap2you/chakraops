@@ -97,23 +97,25 @@ def ui_decision_latest(
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
     """
-    Get decision_latest.json content.
-    LIVE: out/decision_latest.json; validates data_source.
+    Get decision artifact (v2 preferred). ONE source of truth.
+    LIVE: EvaluationStoreV2 / out/decision_latest.json (v2).
     MOCK: out/mock/decision_latest.json; 404 if absent.
     """
     _require_ui_key(x_ui_key)
-    out_base = _output_dir()
     if mode == "LIVE":
-        path = out_base / "decision_latest.json"
-    else:
-        path = out_base / "mock" / "decision_latest.json"
+        from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
+        store = get_evaluation_store_v2()
+        artifact = store.get_latest()
+        if artifact is None:
+            raise HTTPException(status_code=404, detail="No decision artifact (v2) in store. Run evaluation first.")
+        return {"artifact": artifact.to_dict(), "artifact_version": "v2"}
 
+    path = _output_dir() / "mock" / "decision_latest.json"
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"No decision_latest.json for mode={mode}")
-
     data = load_decision_artifact(path)
-    if mode == "LIVE":
-        _validate_live_artifact(data)
+    if data.get("metadata", {}).get("artifact_version") == "v2":
+        return {"artifact": data, "artifact_version": "v2"}
     return data
 
 
@@ -153,48 +155,89 @@ def ui_decision_file(
 def ui_universe(
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """UI-friendly universe snapshot: source, updated_at, as_of, symbols with key fields."""
+    """
+    UI-friendly universe: ONE source of truth from DecisionArtifactV2.
+    Returns symbols array from artifact (no NOT_EVALUATED placeholders if eval has run).
+    """
     _require_ui_key(x_ui_key)
-    from app.api.data_health import fetch_universe_from_canonical_snapshot
-    from app.api.response_normalizers import normalize_universe_snapshot
-    from app.market.market_hours import get_market_phase
-
-    phase = get_market_phase()
+    now_iso = datetime.now(timezone.utc).isoformat()
     try:
-        if phase == "OPEN":
-            result = fetch_universe_from_canonical_snapshot()
-            if result.get("all_failed"):
-                return {
-                    "source": "LIVE_COMPUTE",
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                    "as_of": datetime.now(timezone.utc).isoformat(),
-                    "symbols": [],
-                }
-            out = normalize_universe_snapshot({**result, "error": None, "source": "LIVE_COMPUTE"})
-        else:
-            from app.core.eval.run_artifacts import build_universe_from_latest_artifact
-            artifact = build_universe_from_latest_artifact()
-            if artifact:
-                out = normalize_universe_snapshot({**artifact, "error": None, "source": "ARTIFACT_LATEST"})
-            else:
-                result = fetch_universe_from_canonical_snapshot()
-                out = normalize_universe_snapshot({**result, "error": None, "source": "LIVE_COMPUTE_NO_ARTIFACT"})
+        from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
+        store = get_evaluation_store_v2()
+        artifact = store.get_latest()
+        meta = artifact.metadata or {} if artifact else {}
+        ts = meta.get("pipeline_timestamp") or now_iso
+        symbols_out: List[Dict[str, Any]] = []
+        if artifact and artifact.symbols:
+            for s in artifact.symbols:
+                symbols_out.append({
+                    "symbol": s.symbol,
+                    "verdict": s.verdict,
+                    "final_verdict": s.final_verdict,
+                    "score": s.score,
+                    "band": s.band,
+                    "primary_reason": s.primary_reason or "",
+                    "stage_status": s.stage_status,
+                    "provider_status": s.provider_status or "n/a",
+                    "data_freshness": s.data_freshness,
+                    "strategy": s.strategy,
+                    "price": s.price,
+                    "expiration": s.expiration,
+                    "score_breakdown": getattr(s, "score_breakdown", None),
+                    "band_reason": getattr(s, "band_reason", None),
+                    "max_loss": getattr(s, "max_loss", None),
+                    "underlying_price": getattr(s, "underlying_price", None),
+                })
+        return {
+            "source": "ARTIFACT_V2",
+            "updated_at": ts,
+            "as_of": ts,
+            "symbols": symbols_out,
+            "artifact_version": "v2",
+        }
     except Exception as e:
         return {
-            "source": "LIVE_COMPUTE",
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-            "as_of": datetime.now(timezone.utc).isoformat(),
+            "source": "UNKNOWN",
+            "updated_at": now_iso,
+            "as_of": now_iso,
             "symbols": [],
             "error": str(e),
         }
 
-    updated = out.get("updated_at") or datetime.now(timezone.utc).isoformat()
-    return {
-        "source": out.get("source", "UNKNOWN"),
-        "updated_at": updated,
-        "as_of": updated,
-        "symbols": out.get("symbols", []),
-    }
+
+@router.post("/eval/run")
+def ui_eval_run(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    Trigger evaluate_universe() — ONE engine, ONE store.
+    Uses configured universe, stores into EvaluationStoreV2, writes decision_latest.json (v2).
+    Returns {status, pipeline_timestamp, counts}.
+    """
+    _require_ui_key(x_ui_key)
+    try:
+        from app.api.data_health import get_universe_symbols
+        from app.core.eval.evaluation_service_v2 import evaluate_universe
+        symbols = list(get_universe_symbols())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    if not symbols:
+        return {"status": "FAILED", "reason": "Universe is empty", "pipeline_timestamp": None, "counts": {}}
+    try:
+        artifact = evaluate_universe(symbols, mode="LIVE")
+        meta = artifact.metadata or {}
+        return {
+            "status": "OK",
+            "pipeline_timestamp": meta.get("pipeline_timestamp"),
+            "counts": {
+                "universe_size": meta.get("universe_size", 0),
+                "evaluated_count_stage1": meta.get("evaluated_count_stage1", 0),
+                "evaluated_count_stage2": meta.get("evaluated_count_stage2", 0),
+                "eligible_count": meta.get("eligible_count", 0),
+            },
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/system-health")
@@ -426,121 +469,47 @@ def ui_positions_tracked(
         return {"positions": []}
 
 
-@router.get("/symbol-diagnostics")
-def ui_symbol_diagnostics(
-    symbol: str = Query(..., min_length=1, max_length=12),
-    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+def _build_symbol_diagnostics_from_v2_store(
+    summary: Any,
+    candidates: List[Any],
+    gates: List[Any],
+    earnings: Any | None,
+    diagnostics_details: Any | None,
+    symbol: str,
 ) -> Dict[str, Any]:
-    """UI-friendly symbol diagnostics: primary_reason, key fields, stage breakdown, execution confidence data."""
-    _require_ui_key(x_ui_key)
-    from app.api.symbol_diagnostics import get_symbol_diagnostics
-
-    result = get_symbol_diagnostics(symbol=symbol)
-    eligibility = result.get("eligibility") or {}
-    symbol_eligibility = result.get("symbol_eligibility") or {}
-    liquidity = result.get("liquidity") or {}
-
-    # --- Eligibility trace computed (RSI, ATR, S/R) ---
-    el_trace = result.get("eligibility_trace") or {}
-    computed_in = el_trace.get("computed") or {}
-    computed_out: Dict[str, Any] = {
-        "rsi": el_trace.get("rsi14") or computed_in.get("RSI14"),
-        "atr": computed_in.get("ATR14"),
-        "atr_pct": el_trace.get("atr_pct") or computed_in.get("ATR_pct"),
-        "support_level": el_trace.get("support_level") or computed_in.get("support_level"),
-        "resistance_level": el_trace.get("resistance_level") or computed_in.get("resistance_level"),
-    }
-
-    # --- Staged evaluation: score, band, capital hint ---
-    capital_hint = eligibility.get("capital_hint") or {}
-    if isinstance(capital_hint, dict):
-        confidence_band = capital_hint.get("band")
-        suggested_capital_pct = capital_hint.get("suggested_capital_pct")
-        band_reason = capital_hint.get("band_reason")
-    else:
-        confidence_band = getattr(capital_hint, "band", None)
-        suggested_capital_pct = getattr(capital_hint, "suggested_capital_pct", None)
-        band_reason = getattr(capital_hint, "band_reason", None)
-
-    # --- Candidate contract list (already computed by evaluation) ---
-    candidate_trades = result.get("candidate_trades") or []
-
-    # --- Exit plan (T1, T2, T3, stop) from build_exit_plan using already-fetched data ---
-    exit_plan_out: Dict[str, Any] = {"t1": None, "t2": None, "t3": None, "stop": None}
-    try:
-        from app.core.lifecycle.exit_planner import build_exit_plan
-
-        spot = None
-        stock = result.get("stock")
-        if stock and isinstance(stock, dict):
-            spot = stock.get("price")
-        mode_decision = el_trace.get("mode_decision", "NONE")
-        stage2_trace = result.get("stage2_trace") or {}
-
-        ep = build_exit_plan(
-            symbol=result.get("symbol", symbol),
-            mode_decision=mode_decision,
-            spot=spot,
-            eligibility_trace=el_trace,
-            stage2_trace=stage2_trace,
-            candles_meta=None,
-        )
-        sp = (ep.get("structure_plan") or {}) if isinstance(ep, dict) else {}
-        if sp:
-            exit_plan_out["t1"] = sp.get("T1")
-            exit_plan_out["t2"] = sp.get("T2")
-            exit_plan_out["t3"] = sp.get("T3")
-            exit_plan_out["stop"] = sp.get("stop_hint_price")
-    except Exception:
-        pass  # Exit plan optional; omit on error
-
-    # --- Ranking: score_breakdown, rank_reasons ---
-    score_breakdown = eligibility.get("score_breakdown")
-    rank_reasons = eligibility.get("rank_reasons")
-
-    # --- Provider status for empty/missing data (reduce UI confusion) ---
-    options = result.get("options") or {}
-    expirations_count = options.get("expirations_count", 0) if isinstance(options, dict) else 0
-    provider_status = "OK"
-    provider_message = ""
-    if result.get("error"):
-        provider_status = "ERROR"
-        provider_message = str(result.get("error", ""))[:200]
-    elif expirations_count == 0:
-        provider_status = "NO_CHAIN"
-        provider_message = "No option chain expirations available for this symbol."
-    elif result.get("not_found") or result.get("provider_404"):
-        provider_status = "NOT_FOUND"
-        provider_message = result.get("provider_message") or "Symbol or quote data not found."
-
-    # Phase 7.3: Structured explanation for symbol-diagnostics UI
-    spot = None
-    if result.get("stock") and isinstance(result["stock"], dict):
-        spot = result["stock"].get("price")
-    el_trace = result.get("eligibility_trace") or {}
-    support = computed_out.get("support_level") or el_trace.get("support_level")
-    support_condition = None
-    if support is not None and isinstance(support, (int, float)):
-        support_condition = f"Support ${float(support):.2f}" + (f" vs spot ${float(spot):.2f}" if spot is not None else "")
-    liq_ok = liquidity.get("stock_liquidity_ok") and liquidity.get("option_liquidity_ok")
-    explanation: Dict[str, Any] = {
-        "stock_regime_reason": (el_trace.get("regime") or result.get("regime") or "").strip() or None,
-        "support_condition": support_condition,
-        "liquidity_condition": liquidity.get("reason") if not liq_ok else "OK",
-        "iv_condition": eligibility.get("primary_reason") or None,
-    }
-    out: Dict[str, Any] = {
-        "symbol": result.get("symbol"),
-        "provider_status": provider_status,
-        "provider_message": provider_message,
-        "primary_reason": eligibility.get("primary_reason"),
-        "verdict": eligibility.get("verdict"),
-        "in_universe": result.get("in_universe"),
-        "stock": result.get("stock"),
+    """Build full SymbolDiagnosticsResponseExtended from v2 store (summary + candidates + gates + earnings + diagnostics_details)."""
+    c_dicts = [c.to_dict() if hasattr(c, "to_dict") else (c if isinstance(c, dict) else {}) for c in candidates]
+    g_list = [{"name": g.name, "status": g.status, "reason": g.reason, "pass": g.status == "PASS"} for g in gates] if gates else []
+    diag = diagnostics_details
+    if diag and hasattr(diag, "to_dict"):
+        diag = diag.to_dict()
+    diag = diag or {}
+    technicals = diag.get("technicals") or {}
+    exit_plan = diag.get("exit_plan") or {}
+    risk_flags = diag.get("risk_flags") or {}
+    explanation = diag.get("explanation") or {}
+    stock = diag.get("stock") or {}
+    symbol_eligibility = diag.get("symbol_eligibility") or {}
+    liquidity = diag.get("liquidity") or {}
+    earnings_out = None
+    if earnings:
+        earnings_out = {
+            "earnings_days": getattr(earnings, "earnings_days", None),
+            "earnings_block": getattr(earnings, "earnings_block", None),
+            "note": getattr(earnings, "note", None) or "Not evaluated",
+        }
+    return {
+        "symbol": symbol,
+        "provider_status": getattr(summary, "provider_status", "OK") or "OK",
+        "provider_message": "",
+        "primary_reason": getattr(summary, "primary_reason", None),
+        "verdict": getattr(summary, "verdict", "HOLD"),
+        "in_universe": True,
+        "stock": stock if stock else None,
         "explanation": explanation,
-        "gates": result.get("gates", []),
-        "blockers": result.get("blockers", []),
-        "notes": result.get("notes", []),
+        "gates": g_list,
+        "blockers": [],
+        "notes": [],
         "symbol_eligibility": {
             "status": symbol_eligibility.get("status"),
             "required_data_missing": symbol_eligibility.get("required_data_missing") or [],
@@ -552,16 +521,49 @@ def ui_symbol_diagnostics(
             "option_liquidity_ok": liquidity.get("option_liquidity_ok"),
             "reason": liquidity.get("reason"),
         },
-        # --- Execution confidence (all from already-computed evaluation) ---
-        "computed": computed_out,
-        "regime": el_trace.get("regime"),
-        "composite_score": eligibility.get("score"),
-        "confidence_band": confidence_band,
-        "suggested_capital_pct": suggested_capital_pct,
-        "band_reason": band_reason,
-        "candidates": candidate_trades,
-        "exit_plan": exit_plan_out,
-        "score_breakdown": score_breakdown,
-        "rank_reasons": rank_reasons,
+        "computed": {
+            "rsi": technicals.get("rsi"),
+            "atr": technicals.get("atr"),
+            "atr_pct": technicals.get("atr_pct"),
+            "support_level": technicals.get("support_level"),
+            "resistance_level": technicals.get("resistance_level"),
+        },
+        "regime": diag.get("regime") or getattr(summary, "regime", None),
+        "composite_score": getattr(summary, "score", None),
+        "confidence_band": getattr(summary, "band", "D"),
+        "suggested_capital_pct": diag.get("suggested_capital_pct"),
+        "band_reason": getattr(summary, "band_reason", None),
+        "candidates": c_dicts,
+        "exit_plan": {"t1": exit_plan.get("t1"), "t2": exit_plan.get("t2"), "t3": exit_plan.get("t3"), "stop": exit_plan.get("stop")},
+        "score_breakdown": diag.get("score_breakdown"),
+        "rank_reasons": diag.get("rank_reasons"),
+        "earnings": earnings_out,
     }
-    return out
+
+
+@router.get("/symbol-diagnostics")
+def ui_symbol_diagnostics(
+    symbol: str = Query(..., min_length=1, max_length=12),
+    recompute: int = Query(0, description="1 to run single-symbol eval and update store"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Store-first symbol diagnostics. Default: serve from EvaluationStoreV2. recompute=1: run eval, update store, return result."""
+    _require_ui_key(x_ui_key)
+    sym_upper = symbol.strip().upper()
+
+    if recompute:
+        from app.core.eval.evaluation_service_v2 import evaluate_single_symbol_and_merge
+        try:
+            evaluate_single_symbol_and_merge(symbol=sym_upper)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Recompute failed: {e}")
+
+    from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
+    store = get_evaluation_store_v2()
+    row = store.get_symbol(sym_upper)
+    if row is not None:
+        summary, candidates, gates, earnings, diagnostics_details = row
+        return _build_symbol_diagnostics_from_v2_store(summary, candidates, gates, earnings, diagnostics_details, sym_upper)
+
+    # Symbol not in store — 404 (no legacy path; use recompute=1 to add symbol)
+    raise HTTPException(status_code=404, detail=f"Symbol {sym_upper} not in evaluation store. Use recompute=1 to evaluate.")

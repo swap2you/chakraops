@@ -1,0 +1,298 @@
+{
+  "metadata": {
+    "artifact_version": "v2",
+    "mode": "LIVE",
+    "pipeline_timestamp": "2026-02-17T02:40:36.791520+00:00",
+    "market_phase": "POST",
+    "universe_size": 2,
+    "evaluated_count_stage1": 2,
+    "evaluated_count_stage2": 1,
+    "eligible_count": 1,
+    "warnings": []
+  },
+  "symbols": [
+    {
+      "symbol": "SPY",
+      "verdict": "ELIGIBLE",
+      "final_verdict": "ELIGIBLE",
+      "score": 65,
+      "band": "B",
+      "primary_reason": "Chain evaluated, contract selected: delta=0.3997, DTE=30-45, bid=$11.72 (CSP V2)",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "PASS",
+      "provider_status": "OK",
+      "data_freshness": "2026-02-13T20:59:55Z",
+      "evaluated_at": "2026-02-17T02:40:38.949477+00:00",
+      "strategy": "CSP",
+      "price": 681.51,
+      "expiration": "2026-03-20",
+      "has_candidates": true,
+      "candidate_count": 1,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 80,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 89,
+        "csp_notional": 67500.0,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "band_reason": "Band B because score >= 60 and < 80",
+      "max_loss": 66328.0,
+      "underlying_price": 681.51
+    },
+    {
+      "symbol": "AAPL",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 60,
+      "band": "B",
+      "primary_reason": "FAIL_REGIME_CONFLICT; FAIL_NOT_NEAR_RESISTANCE; FAIL_RSI_RANGE; FAIL_RSI_CSP; FAIL_RSI_CC; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-02-13T20:59:51Z",
+      "evaluated_at": "2026-02-17T02:40:38.948975+00:00",
+      "strategy": null,
+      "price": 255.66,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "band_reason": "Band B because score >= 60 and < 80",
+      "max_loss": null,
+      "underlying_price": 255.66
+    }
+  ],
+  "selected_candidates": [
+    {
+      "symbol": "SPY",
+      "strategy": "CSP",
+      "expiry": "2026-03-20",
+      "strike": null,
+      "delta": null,
+      "credit_estimate": null,
+      "max_loss": null,
+      "why_this_trade": "delta=0.3997, DTE=30-45, bid=$11.72 (CSP V2)"
+    }
+  ],
+  "candidates_by_symbol": {
+    "SPY": [
+      {
+        "symbol": "SPY",
+        "strategy": "CSP",
+        "expiry": "2026-03-20",
+        "strike": 675.0,
+        "delta": -0.3997,
+        "credit_estimate": 11.72,
+        "max_loss": 66328.0,
+        "why_this_trade": "delta=0.3997, bid=$11.72 (CSP V2)"
+      }
+    ],
+    "AAPL": []
+  },
+  "gates_by_symbol": {
+    "SPY": [
+      {
+        "name": "Stock Quality (Stage 1)",
+        "status": "PASS",
+        "reason": "Stock qualified (score: 60)"
+      },
+      {
+        "name": "Options Liquidity (Stage 2)",
+        "status": "PASS",
+        "reason": "delta=0.3997, bid=$11.72"
+      }
+    ],
+    "AAPL": [
+      {
+        "name": "Stock Quality (Stage 1)",
+        "status": "PASS",
+        "reason": "Stock qualified (score: 60)"
+      }
+    ]
+  },
+  "earnings_by_symbol": {
+    "SPY": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "note": "Not evaluated"
+    },
+    "AAPL": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "note": "Not evaluated"
+    }
+  },
+  "diagnostics_by_symbol": {
+    "SPY": {
+      "technicals": {
+        "rsi": 43.78791587835875,
+        "atr": 30.992138158306098,
+        "atr_pct": 0.04545968193370898,
+        "support_level": 676.57,
+        "resistance_level": 690.68
+      },
+      "exit_plan": {
+        "t1": 686.095,
+        "t2": 690.68,
+        "t3": 699.85,
+        "stop": 630.0818
+      },
+      "risk_flags": {
+        "earnings_days": null,
+        "earnings_block": false,
+        "stock_liq": null,
+        "option_liq": null,
+        "data_status": "OK",
+        "missing_required": []
+      },
+      "explanation": {
+        "stock_regime_reason": "UP",
+        "support_condition": "Support $676.57 vs spot $681.51",
+        "liquidity_condition": "OK",
+        "iv_condition": "Chain evaluated, contract selected: delta=0.3997, DTE=30-45, bid=$11.72 (CSP V2)"
+      },
+      "stock": {
+        "price": 681.51,
+        "bid": 681.5,
+        "ask": 681.52,
+        "volume": 4169330,
+        "avg_option_volume_20d": 9285719.2,
+        "avg_stock_volume_20d": 88991424.4,
+        "quote_as_of": "2026-02-13T20:59:55Z"
+      },
+      "symbol_eligibility": {
+        "status": "PASS",
+        "required_data_missing": [],
+        "required_data_stale": [],
+        "reasons": []
+      },
+      "liquidity": {
+        "stock_liquidity_ok": true,
+        "option_liquidity_ok": true,
+        "reason": "delta=0.3997, bid=$11.72"
+      },
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 80,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 89,
+        "csp_notional": 67500.0,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "High data completeness",
+          "Options liquidity passed"
+        ],
+        "penalty": null
+      },
+      "suggested_capital_pct": 0.03,
+      "regime": "NEUTRAL",
+      "options": {
+        "expirations_count": 0,
+        "contracts_count": null,
+        "underlying_price": 681.51
+      }
+    },
+    "AAPL": {
+      "technicals": {
+        "rsi": 39.5852168099511,
+        "atr": 6.534307986343671,
+        "atr_pct": 0.025546594676455044,
+        "support_level": 255.46,
+        "resistance_level": 261.64
+      },
+      "exit_plan": {
+        "t1": null,
+        "t2": null,
+        "t3": null,
+        "stop": null
+      },
+      "risk_flags": {
+        "earnings_days": null,
+        "earnings_block": false,
+        "stock_liq": null,
+        "option_liq": null,
+        "data_status": "OK",
+        "missing_required": []
+      },
+      "explanation": {
+        "stock_regime_reason": "SIDEWAYS",
+        "support_condition": "Support $255.46 vs spot $255.66",
+        "liquidity_condition": "Liquidity failed",
+        "iv_condition": "FAIL_REGIME_CONFLICT; FAIL_NOT_NEAR_RESISTANCE; FAIL_RSI_RANGE; FAIL_RSI_CSP; FAIL_RSI_CC; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS"
+      },
+      "stock": {
+        "price": 255.66,
+        "bid": 255.62,
+        "ask": 255.69,
+        "volume": 1667510,
+        "avg_option_volume_20d": 1040427.4,
+        "avg_stock_volume_20d": 1276669998.55,
+        "quote_as_of": "2026-02-13T20:59:51Z"
+      },
+      "symbol_eligibility": {
+        "status": "PASS",
+        "required_data_missing": [],
+        "required_data_stale": [],
+        "reasons": []
+      },
+      "liquidity": {
+        "stock_liquidity_ok": false,
+        "option_liquidity_ok": false,
+        "reason": ""
+      },
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "High data completeness",
+          "Capital efficient"
+        ],
+        "penalty": null
+      },
+      "suggested_capital_pct": 0.02,
+      "regime": "NEUTRAL",
+      "options": {
+        "expirations_count": 0,
+        "contracts_count": null,
+        "underlying_price": 255.66
+      }
+    }
+  },
+  "warnings": []
+}

@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { ExternalLink, Activity, Droplets, Zap } from "lucide-react";
+import { ExternalLink, Activity, Droplets, Zap, Info } from "lucide-react";
 import { useArtifactList, useDecision, useUniverse, useUiSystemHealth, useUiTrackedPositions } from "@/api/queries";
 import type { DecisionMode, UniverseSymbol } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
@@ -18,6 +18,7 @@ import {
   TableCell,
   EmptyState,
   StatusBadge,
+  Tooltip,
 } from "@/components/ui";
 
 function fmtTs(s: string | null | undefined): string {
@@ -28,6 +29,39 @@ function fmtTs(s: string | null | undefined): string {
   } catch {
     return String(s ?? "n/a");
   }
+}
+
+/** Format score_breakdown for tooltip. Phase 7.7 trust feature. */
+function formatScoreBreakdown(bd: unknown): string {
+  if (bd == null || typeof bd !== "object") return "";
+  const o = bd as Record<string, unknown>;
+  const parts: string[] = [];
+  if (typeof o.stage1_score === "number") parts.push(`Stage1: ${o.stage1_score}`);
+  if (typeof o.stage2_score === "number") parts.push(`Stage2: ${o.stage2_score}`);
+  if (o.components && typeof o.components === "object") {
+    const comp = o.components as Record<string, unknown>;
+    Object.entries(comp).forEach(([k, v]) => {
+      if (typeof v === "number") parts.push(`${k}: ${v}`);
+    });
+  }
+  const dq = typeof o.data_quality_score === "number" ? o.data_quality_score : null;
+  const reg = typeof o.regime_score === "number" ? o.regime_score : null;
+  const liq = typeof o.options_liquidity_score === "number" ? o.options_liquidity_score : null;
+  const fit = typeof o.strategy_fit_score === "number" ? o.strategy_fit_score : null;
+  const cap = typeof o.capital_efficiency_score === "number" ? o.capital_efficiency_score : null;
+  const comp = typeof o.composite_score === "number" ? o.composite_score : null;
+  if (parts.length === 0 && (dq != null || reg != null || liq != null || fit != null || cap != null || comp != null)) {
+    if (dq != null) parts.push(`Data: ${dq}`);
+    if (reg != null) parts.push(`Regime: ${reg}`);
+    if (liq != null) parts.push(`Liquidity: ${liq}`);
+    if (fit != null) parts.push(`Strategy: ${fit}`);
+    if (cap != null) parts.push(`Capital: ${cap}`);
+    if (comp != null) parts.push(`Composite: ${comp}`);
+  }
+  const caps = o.caps_applied;
+  if (Array.isArray(caps) && caps.length > 0) parts.push(`Caps: ${(caps as string[]).join(", ")}`);
+  else if (typeof caps === "string") parts.push(`Caps: ${caps}`);
+  return parts.length ? parts.join(" · ") : "";
 }
 
 function evalFreshnessColor(ts: string | null | undefined): string {
@@ -54,10 +88,22 @@ export function DashboardPage() {
   const { data: health } = useUiSystemHealth();
   const { data: positionsRes } = useUiTrackedPositions();
 
-  const mergedBySymbol = useMemo(() => {
+  const { universeSymbols, selectedSignals, isV2 } = useMemo(() => {
+    const artifact = (decision as { artifact?: { symbols?: UniverseSymbol[]; selected_candidates?: { symbol: string; strategy?: string }[] } })?.artifact;
+    if (decision?.artifact_version === "v2" && artifact?.symbols) {
+      return {
+        universeSymbols: artifact.symbols,
+        selectedSignals: (artifact.selected_candidates ?? []).map((c) => ({
+          symbol: c.symbol,
+          verdict: "ELIGIBLE",
+          candidate: c,
+        })),
+        isV2: true,
+      };
+    }
     const snapshot = decision?.decision_snapshot;
     const candidates = snapshot?.candidates ?? [];
-    const selectedSignals = snapshot?.selected_signals ?? [];
+    const legacySelected = snapshot?.selected_signals ?? [];
     const map = new Map<string, UniverseSymbol>();
     for (const s of universe?.symbols ?? []) {
       map.set((s.symbol || "").toUpperCase(), { ...s });
@@ -77,7 +123,7 @@ export function DashboardPage() {
         price: (c.candidate as { price?: number })?.price ?? existing.price,
       });
     }
-    for (const ss of selectedSignals) {
+    for (const ss of legacySelected) {
       const sym = (ss.symbol || "").toUpperCase();
       if (!map.has(sym)) {
         map.set(sym, {
@@ -88,12 +134,16 @@ export function DashboardPage() {
         } as UniverseSymbol);
       }
     }
-    return map;
-  }, [universe?.symbols, decision?.decision_snapshot]);
+    return {
+      universeSymbols: Array.from(map.values()),
+      selectedSignals: legacySelected,
+      isV2: false,
+    };
+  }, [universe?.symbols, decision]);
 
-  const universeSymbols = Array.from(mergedBySymbol.values());
-  const snapshot = decision?.decision_snapshot;
-  const selectedSignals = snapshot?.selected_signals ?? [];
+  const selectedBySymbol = new Map(
+    selectedSignals.map((s) => [s.symbol.toUpperCase(), (s.candidate as { strategy?: string })?.strategy ?? "n/a"])
+  );
   const aTier = universeSymbols.filter(
     (s) => (s.band ?? "").toUpperCase() === "A" && ((s.final_verdict ?? s.verdict ?? "").toUpperCase() === "ELIGIBLE")
   );
@@ -101,15 +151,12 @@ export function DashboardPage() {
     (s) => (s.band ?? "").toUpperCase() === "B" && ((s.final_verdict ?? s.verdict ?? "").toUpperCase() === "ELIGIBLE")
   );
   const eligibleFromDecision = selectedSignals.length > 0 && aTier.length === 0 && bTier.length === 0;
-  const selectedBySymbol = new Map(
-    selectedSignals.map((s) => [s.symbol.toUpperCase(), s.candidate?.strategy ?? "n/a"])
-  );
   const positions = positionsRes?.positions ?? [];
   const openPositions = positions.filter((p) => (p.status ?? "").toUpperCase() === "OPEN" || (p.status ?? "").toUpperCase() === "PARTIAL_EXIT");
   const capitalDeployed = openPositions.reduce((sum, p) => sum + (p.notional ?? 0), 0);
 
   const isReady = !!decision;
-  const metadata = decision?.metadata;
+  const metadata = (decision as { artifact?: { metadata?: { pipeline_timestamp?: string } }; metadata?: { pipeline_timestamp?: string } })?.artifact?.metadata ?? decision?.metadata;
   const marketPhase = health?.market?.phase ?? "n/a";
   const oratsStatus = health?.orats?.status ?? "n/a";
   const lastEvalTs = metadata?.pipeline_timestamp ?? health?.market?.timestamp;
@@ -309,11 +356,34 @@ function CandidatePanel({
                 <TableCell>
                   <StatusBadge status={row.final_verdict ?? row.verdict ?? "n/a"} />
                 </TableCell>
-                <TableCell numeric>{row.score ?? "n/a"}</TableCell>
+                <TableCell numeric>
+                  <span className="inline-flex items-center gap-1">
+                    {row.score ?? "n/a"}
+                    {(() => {
+                      const rb = row as { score_breakdown?: unknown };
+                      const txt = formatScoreBreakdown(rb.score_breakdown);
+                      return txt ? (
+                        <Tooltip content={`Why this score: ${txt}`} className="max-w-md">
+                          <Info className="h-3.5 w-3.5 shrink-0 cursor-help text-zinc-500" />
+                        </Tooltip>
+                      ) : null;
+                    })()}
+                  </span>
+                </TableCell>
                 <TableCell>
-                  <Badge variant={row.band === "A" ? "success" : row.band === "B" ? "warning" : "neutral"}>
-                    {row.band ?? "n/a"}
-                  </Badge>
+                  <span className="inline-flex items-center gap-1">
+                    <Badge variant={row.band === "A" ? "success" : row.band === "B" ? "warning" : "neutral"}>
+                      {row.band ?? "n/a"}
+                    </Badge>
+                    {(() => {
+                      const rb = row as { band_reason?: string };
+                      return rb.band_reason ? (
+                        <Tooltip content={`Why this band: ${rb.band_reason}`} className="max-w-md">
+                          <Info className="h-3.5 w-3.5 shrink-0 cursor-help text-zinc-500" />
+                        </Tooltip>
+                      ) : null;
+                    })()}
+                  </span>
                 </TableCell>
                 <TableCell className="font-mono text-zinc-700 dark:text-zinc-300">
                   {selectedBySymbol.get(row.symbol.toUpperCase()) ?? "n/a"}

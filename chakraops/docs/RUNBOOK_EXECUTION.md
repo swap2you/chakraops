@@ -80,3 +80,52 @@ Expected: StatusCode 200 for each smoke.
 
 - **LIVE:** Decision artifacts from `scripts/run_and_save.py` → `out/decision_*.json`, `out/decision_latest.json`.
 - **MOCK:** Scenario data in `out/mock/` only. Strict separation.
+
+---
+
+## Canonical Store Path (ONE pipeline / ONE store)
+
+The decision artifact has a **single canonical path** used by scripts, API, and scheduler:
+
+```
+<REPO_ROOT>/out/decision_latest.json
+```
+
+- **REPO_ROOT** = parent of `chakraops/` (e.g. `C:\Development\Workspace\ChakraOps`).
+- **Latest** is written **only** by `EvaluationStoreV2` when `evaluate_universe` or `evaluate_single_symbol_and_merge` runs.
+- `scripts/run_and_save.py` writes timestamped copies to `--output-dir` but **never** writes `decision_latest.json` directly; the store does that.
+- Server startup logs the resolved path: `[STORE] Canonical decision store path: ...`
+
+---
+
+## Sanity Script
+
+Verifies ONE pipeline / ONE store invariants. Run after the backend is started.
+
+```powershell
+cd C:\Development\Workspace\ChakraOps\chakraops
+$env:PYTHONPATH = (Get-Location).Path
+python scripts/sanity_one_pipeline.py
+```
+
+The script:
+1. Runs `run_and_save.py --symbols SPY,AAPL --output-dir out`
+2. Reads the canonical store file
+3. Calls API: `/api/ui/decision/latest`, `/api/ui/universe`, `/api/ui/symbol-diagnostics?symbol=SPY`
+4. Verifies: `artifact_version == v2`, store vs API `pipeline_timestamp` match, universe/symbol-diagnostics score/band consistency
+
+**Exit codes:**
+- `0` – PASS
+- `2` – SANITY FAIL
+
+### SANITY FAIL: What it means and how to diagnose
+
+| Message | Cause | How to diagnose |
+|---------|-------|------------------|
+| `run_and_save failed` | Evaluation or store write failed | Check stderr of run_and_save; ORATS/env issues |
+| `Store file not found` | No artifact at canonical path | Run `run_and_save.py` first; check `[STORE] Canonical decision store path` at server startup |
+| `decision/latest not v2` | API returned non-v2 or 404 | Ensure backend uses EvaluationStoreV2; restart server and re-run evaluation |
+| `decision/latest metadata.pipeline_timestamp != store` | API serving stale or different artifact | Restart server so it loads the store; or API read from wrong path |
+| `Universe SPY score/band == decision symbols SPY` fail | Universe and decision response disagree | Single store should be source; check ui_routes universe vs decision path |
+| `symbol-diagnostics SPY vs store SPY` fail | Symbol-diagnostics not store-first | Check `_build_symbol_diagnostics_from_v2_store` uses store only |
+| `API: Connection refused` / `Cannot reach API` | Server not running | Start backend on port 8000 before running sanity |

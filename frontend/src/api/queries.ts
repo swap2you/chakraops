@@ -37,8 +37,9 @@ function universePath(): string {
   return `/api/ui/universe`;
 }
 
-function symbolDiagnosticsPath(symbol: string): string {
-  return `/api/ui/symbol-diagnostics?symbol=${encodeURIComponent(symbol)}`;
+function symbolDiagnosticsPath(symbol: string, recompute = false): string {
+  const base = `/api/ui/symbol-diagnostics?symbol=${encodeURIComponent(symbol)}`;
+  return recompute ? `${base}&recompute=1` : base;
 }
 
 function uiSystemHealthPath(): string {
@@ -63,6 +64,10 @@ function uiPortfolioPath(): string {
 
 function uiAlertsPath(): string {
   return `/api/ui/alerts`;
+}
+
+function uiEvalRunPath(): string {
+  return `/api/ui/eval/run`;
 }
 
 // =============================================================================
@@ -123,6 +128,19 @@ export function useSymbolDiagnostics(
     queryFn: () =>
       apiGet<SymbolDiagnosticsResponseExtended>(symbolDiagnosticsPath(symbol)),
     enabled: enabled && symbol.trim().length > 0,
+  });
+}
+
+export function useRecomputeSymbolDiagnostics() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (symbol: string) => {
+      const res = await apiGet<SymbolDiagnosticsResponseExtended>(symbolDiagnosticsPath(symbol, true));
+      return { symbol, data: res };
+    },
+    onSuccess: (_, symbol) => {
+      qc.invalidateQueries({ queryKey: queryKeys.symbolDiagnostics(symbol) });
+    },
   });
 }
 
@@ -187,5 +205,30 @@ export function useAlerts() {
   return useQuery({
     queryKey: queryKeys.uiAlerts(),
     queryFn: () => apiGet<UiAlertsResponse>(uiAlertsPath()),
+  });
+}
+
+export interface RunEvalPayload {
+  mode?: DecisionMode;
+  symbols?: string[];
+}
+
+export interface RunEvalResponse {
+  status: "OK" | "FAILED";
+  reason?: string;
+  pipeline_timestamp?: string;
+  counts?: { universe_size?: number; evaluated_count_stage1?: number; evaluated_count_stage2?: number; eligible_count?: number };
+}
+
+export function useRunEval() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload?: RunEvalPayload) =>
+      apiPost<RunEvalResponse>(uiEvalRunPath(), payload ?? { mode: "LIVE" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "decision"] });
+      qc.invalidateQueries({ queryKey: queryKeys.universe() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiAlerts() });
+    },
   });
 }

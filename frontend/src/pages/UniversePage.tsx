@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useUniverse, useDecision } from "@/api/queries";
-import { mergeUniverseWithDecision, buildSymbolsFromDecision } from "@/lib/mergeUniverseDecision";
+import { useUniverse, useRunEval } from "@/api/queries";
 import { PageHeader } from "@/components/PageHeader";
+import { Info } from "lucide-react";
 import {
   Card,
   CardHeader,
@@ -15,6 +15,7 @@ import {
   Badge,
   StatusBadge,
   EmptyState,
+  Tooltip,
 } from "@/components/ui";
 
 function fmtTs(s: string | null | undefined): string {
@@ -27,6 +28,39 @@ function fmtTs(s: string | null | undefined): string {
   }
 }
 
+/** Format score_breakdown for tooltip. Phase 7.7 trust feature. */
+function formatScoreBreakdown(bd: unknown): string {
+  if (bd == null || typeof bd !== "object") return "";
+  const o = bd as Record<string, unknown>;
+  const parts: string[] = [];
+  if (typeof o.stage1_score === "number") parts.push(`Stage1: ${o.stage1_score}`);
+  if (typeof o.stage2_score === "number") parts.push(`Stage2: ${o.stage2_score}`);
+  if (o.components && typeof o.components === "object") {
+    const comp = o.components as Record<string, unknown>;
+    Object.entries(comp).forEach(([k, v]) => {
+      if (typeof v === "number") parts.push(`${k}: ${v}`);
+    });
+  }
+  const dq = typeof o.data_quality_score === "number" ? o.data_quality_score : null;
+  const reg = typeof o.regime_score === "number" ? o.regime_score : null;
+  const liq = typeof o.options_liquidity_score === "number" ? o.options_liquidity_score : null;
+  const fit = typeof o.strategy_fit_score === "number" ? o.strategy_fit_score : null;
+  const cap = typeof o.capital_efficiency_score === "number" ? o.capital_efficiency_score : null;
+  const comp = typeof o.composite_score === "number" ? o.composite_score : null;
+  if (parts.length === 0 && (dq != null || reg != null || liq != null || fit != null || cap != null || comp != null)) {
+    if (dq != null) parts.push(`Data: ${dq}`);
+    if (reg != null) parts.push(`Regime: ${reg}`);
+    if (liq != null) parts.push(`Liquidity: ${liq}`);
+    if (fit != null) parts.push(`Strategy: ${fit}`);
+    if (cap != null) parts.push(`Capital: ${cap}`);
+    if (comp != null) parts.push(`Composite: ${comp}`);
+  }
+  const caps = o.caps_applied;
+  if (Array.isArray(caps) && caps.length > 0) parts.push(`Caps: ${(caps as string[]).join(", ")}`);
+  else if (typeof caps === "string") parts.push(`Caps: ${caps}`);
+  return parts.length ? parts.join(" · ") : "";
+}
+
 type VerdictFilter = "all" | "ELIGIBLE" | "HOLD" | "BLOCKED" | "NOT_EVALUATED";
 
 const VERDICT_FILTER_OPTIONS: VerdictFilter[] = ["all", "ELIGIBLE", "HOLD", "BLOCKED", "NOT_EVALUATED"];
@@ -34,19 +68,13 @@ const VERDICT_FILTER_OPTIONS: VerdictFilter[] = ["all", "ELIGIBLE", "HOLD", "BLO
 export function UniversePage() {
   const navigate = useNavigate();
   const { data: universeData, isLoading: universeLoading, isError } = useUniverse();
-  const { data: decision } = useDecision("LIVE");
+  const runEval = useRunEval();
   const [search, setSearch] = useState("");
   const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>("all");
 
-  const baseSymbols = universeData?.symbols ?? [];
-  const symbols = useMemo(() => {
-    if (baseSymbols.length > 0) {
-      return mergeUniverseWithDecision(baseSymbols, decision);
-    }
-    return buildSymbolsFromDecision(decision);
-  }, [baseSymbols, decision]);
+  const symbols = universeData?.symbols ?? [];
   const source = universeData?.source ?? "n/a";
-  const updated = universeData?.updated_at ?? decision?.metadata?.pipeline_timestamp ?? "n/a";
+  const updated = universeData?.updated_at ?? "n/a";
 
   const filtered = useMemo(() => {
     let list = symbols;
@@ -91,6 +119,14 @@ export function UniversePage() {
       <Card>
         <CardHeader title="Filters" />
         <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            disabled={runEval.isPending}
+            onClick={() => runEval.mutate({ mode: "LIVE" })}
+            className="rounded border border-emerald-600 bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {runEval.isPending ? "Running…" : "Run Evaluation"}
+          </button>
           <input
             type="text"
             placeholder="Search symbol or reason…"
@@ -154,12 +190,33 @@ export function UniversePage() {
                     <StatusBadge status={row.final_verdict ?? row.verdict ?? "n/a"} />
                   </TableCell>
                   <TableCell numeric>
-                    {row.score != null ? String(row.score) : "n/a"}
+                    <span className="inline-flex items-center gap-1">
+                      {row.score != null ? String(row.score) : "n/a"}
+                      {(() => {
+                        const rb = row as { score_breakdown?: unknown };
+                        const txt = formatScoreBreakdown(rb.score_breakdown);
+                        return txt ? (
+                          <Tooltip content={`Why this score: ${txt}`} className="max-w-md">
+                            <Info className="h-3.5 w-3.5 shrink-0 cursor-help text-zinc-500" />
+                          </Tooltip>
+                        ) : null;
+                      })()}
+                    </span>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={row.band === "A" ? "success" : row.band === "B" ? "warning" : "neutral"}>
-                      {row.band ?? "n/a"}
-                    </Badge>
+                    <span className="inline-flex items-center gap-1">
+                      <Badge variant={row.band === "A" ? "success" : row.band === "B" ? "warning" : "neutral"}>
+                        {row.band ?? "n/a"}
+                      </Badge>
+                      {(() => {
+                        const rb = row as { band_reason?: string };
+                        return rb.band_reason ? (
+                          <Tooltip content={`Why this band: ${rb.band_reason}`} className="max-w-md">
+                            <Info className="h-3.5 w-3.5 shrink-0 cursor-help text-zinc-500" />
+                          </Tooltip>
+                        ) : null;
+                      })()}
+                    </span>
                   </TableCell>
                   <TableCell className="font-mono text-zinc-600 dark:text-zinc-400">
                     {row.stage_status ?? "n/a"}

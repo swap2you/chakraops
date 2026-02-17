@@ -3,7 +3,9 @@
 # SPDX-License-Identifier: MIT
 """Single source of truth for decision snapshots. Uses staged evaluator pipeline.
 
-Read-only: no broker calls. Writes out/decision_<timestamp>.json and out/decision_latest.json.
+Read-only: no broker calls. Writes timestamped copies to --output-dir.
+Latest (decision_latest.json) is written ONLY by EvaluationStoreV2 to canonical path
+<REPO_ROOT>/out/decision_latest.json.
 
 Usage:
   cd chakraops
@@ -36,6 +38,21 @@ except ImportError:
 DEFAULT_SYMBOLS = ["SPY", "AAPL"]
 
 
+def _band_from_hint(capital_hint: Any, score: int) -> str:
+    """Derive band A/B/C/NONE from capital_hint or score."""
+    if capital_hint and isinstance(capital_hint, dict):
+        band = capital_hint.get("band")
+        if band in ("A", "B", "C"):
+            return band
+    if score >= 80:
+        return "A"
+    if score >= 60:
+        return "B"
+    if score >= 40:
+        return "C"
+    return "NONE"
+
+
 def _build_decision_artifact_from_evaluation(eval_result: Any) -> Dict[str, Any]:
     """Convert UniverseEvaluationResult to decision artifact shape for Live Decision Monitor."""
     ts = datetime.now(timezone.utc).isoformat()
@@ -47,11 +64,29 @@ def _build_decision_artifact_from_evaluation(eval_result: Any) -> Dict[str, Any]
     selected_signals: List[Dict[str, Any]] = []
     exclusions: List[Dict[str, Any]] = []
 
+    symbol_summaries: List[Dict[str, Any]] = []
     for s in symbols:
         sym = getattr(s, "symbol", "?") or "?"
         verdict = str(getattr(s, "verdict", "") or "")
         reason = getattr(s, "primary_reason", None) or ""
         cds = getattr(s, "candidate_trades", []) or []
+        stage_reached = getattr(s, "stage_reached", "") or "STAGE1_ONLY"
+        sc = getattr(s, "selected_contract", None) or {}
+        strategy = (sc.get("strategy") if isinstance(sc, dict) else None) or (cds[0].strategy if cds else None)
+        band = _band_from_hint(getattr(s, "capital_hint", None), getattr(s, "score", 0))
+        symbol_summaries.append({
+            "symbol": sym,
+            "verdict": verdict,
+            "score": getattr(s, "score", 0),
+            "band": band,
+            "primary_reason": reason or "",
+            "strategy": strategy if strategy else None,
+            "stage1_status": "STAGE2" if stage_reached == "STAGE2_CHAIN" else "STAGE1",
+            "stage2_status": "PASS" if (getattr(s, "liquidity_ok", False) and stage_reached == "STAGE2_CHAIN") else ("SKIP" if stage_reached != "STAGE2_CHAIN" else "FAIL"),
+            "provider_status": "OK" if (getattr(s, "data_completeness", 0) or 0) >= 0.75 else "INCOMPLETE",
+            "data_freshness": getattr(s, "quote_date", None) or getattr(s, "fetched_at", None),
+            "evaluated_at": getattr(s, "fetched_at", None) or ts,
+        })
         for ct in cds:
             ct_dict = asdict(ct) if hasattr(ct, "__dataclass_fields__") else (ct if isinstance(ct, dict) else {})
             candidates.append({"symbol": sym, "verdict": verdict, "candidate": ct_dict})
@@ -86,6 +121,7 @@ def _build_decision_artifact_from_evaluation(eval_result: Any) -> Dict[str, Any]
             "data_source": "run_and_save",
             "pipeline_timestamp": ts,
         },
+        "symbol_summaries": symbol_summaries,
     }
 
 
@@ -110,7 +146,7 @@ def _resolve_symbols(args: argparse.Namespace) -> List[str]:
 
 
 def run_one(args: argparse.Namespace, out_dir: Path) -> Tuple[int, Optional[Path]]:
-    """Run staged evaluation once and write decision artifacts. Returns (exit_code, path_written)."""
+    """Run staged evaluation once and write DecisionArtifactV2. Returns (exit_code, path_written)."""
     symbols = _resolve_symbols(args)
     if not symbols:
         print("No symbols to evaluate")
@@ -122,25 +158,23 @@ def run_one(args: argparse.Namespace, out_dir: Path) -> Tuple[int, Optional[Path
         print(f"Evaluating {len(symbols)} symbols: {symbols}")
 
     try:
-        from app.core.eval.universe_evaluator import run_universe_evaluation_staged
-        result = run_universe_evaluation_staged(symbols, use_staged=True)
+        from app.core.eval.evaluation_service_v2 import evaluate_universe
+        from app.core.eval.evaluation_store_v2 import get_decision_store_path
+        # evaluate_universe writes to canonical DECISION_STORE_PATH via store
+        artifact = evaluate_universe(symbols, mode="LIVE")
     except Exception as e:
         print(f"Evaluation failed: {e}")
         return 1, None
 
-    artifact = _build_decision_artifact_from_evaluation(result)
     ts = datetime.now(timezone.utc)
     fname = f"decision_{ts.strftime('%Y-%m-%dT%H%M%S')}Z.json"
     out_path = out_dir / fname
+    artifact_dict = artifact.to_dict()
     with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(artifact, f, indent=2)
-
-    latest_path = out_dir / "decision_latest.json"
-    with open(latest_path, "w", encoding="utf-8") as f:
-        json.dump(artifact, f, indent=2)
-
+        json.dump(artifact_dict, f, indent=2, default=str)
+    latest_path = get_decision_store_path()
     print(f"Wrote {out_path}")
-    print(f"Latest: {latest_path}")
+    print(f"Latest: {latest_path} (v2, written by store)")
     return 0, out_path
 
 
@@ -177,9 +211,18 @@ def main() -> int:
     if args.all and args.symbols:
         raise ValueError("Cannot use --all and --symbols together")
 
+    # Canonical out dir = parent of decision_latest.json (same as store)
+    try:
+        from app.core.eval.evaluation_store_v2 import get_decision_store_path
+        _canonical_out = get_decision_store_path().parent
+    except Exception:
+        _canonical_out = _REPO_ROOT / "out"
     out_dir = Path(args.output_dir)
     if not out_dir.is_absolute():
-        out_dir = _REPO_ROOT / out_dir
+        if out_dir == Path("out") or str(out_dir) == "out":
+            out_dir = _canonical_out
+        else:
+            out_dir = (_canonical_out.parent / out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if args.realtime:

@@ -106,6 +106,9 @@ class SymbolEvaluationResult:
     contract_eligibility: Optional[Dict[str, Any]] = None  # { status: PASS|FAIL|UNAVAILABLE, reasons: [] }
     # Phase 3.2.2: Explicit liquidity gate results (underlying + option)
     liquidity_gates: Optional[Dict[str, Any]] = None  # { underlying: {...}, option: {...} }
+    # Phase 7.7: Diagnostics persistence (eligibility_trace, stage2_trace for Symbol page)
+    eligibility_trace: Optional[Dict[str, Any]] = None
+    stage2_trace: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -894,6 +897,12 @@ def run_universe_evaluation_staged(universe_symbols: List[str], use_staged: bool
                 contract_data=getattr(sr, "contract_data", None),
                 contract_eligibility=getattr(sr, "contract_eligibility", None),
                 liquidity_gates=getattr(sr, "liquidity_gates", None),
+                eligibility_trace=getattr(sr, "eligibility_trace", None),
+                stage2_trace=(
+                    getattr(getattr(sr, "stage2", None), "stage2_trace", None)
+                    if getattr(sr, "stage2", None) is not None
+                    else None
+                ),
             )
 
             # Add selected contract if available

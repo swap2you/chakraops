@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Calendar, ChevronDown, ChevronRight, Database, Droplets, X } from "lucide-react";
-import { useSymbolDiagnostics, useDefaultAccount } from "@/api/queries";
+import { useSymbolDiagnostics, useRecomputeSymbolDiagnostics, useDefaultAccount } from "@/api/queries";
 import type { SymbolDiagnosticsResponseExtended } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { TradeTicketDrawer } from "@/components/TradeTicketDrawer";
@@ -92,6 +92,7 @@ export function SymbolDiagnosticsPage() {
 
   const shouldFetch = activeSymbol != null && isValidSymbol(activeSymbol);
   const { data, isLoading, isError } = useSymbolDiagnostics(activeSymbol ?? "", shouldFetch);
+  const recompute = useRecomputeSymbolDiagnostics();
   const { data: accountData } = useDefaultAccount();
 
   const handleLookup = useCallback(() => {
@@ -150,6 +151,9 @@ export function SymbolDiagnosticsPage() {
       {data && !isLoading && (
         <ExecutionConsole
           data={data}
+          symbol={activeSymbol ?? ""}
+          onRecompute={() => activeSymbol && recompute.mutate(activeSymbol)}
+          isRecomputing={recompute.isPending}
           onOpenTradeTicket={(c) => setTradeTicketCandidate(c)}
           defaultCapital={getDefaultCapital(accountData?.account)}
         />
@@ -181,10 +185,16 @@ const INFO_DRAWER_CONTENT: Record<string, string> = {
 
 function ExecutionConsole({
   data,
+  symbol,
+  onRecompute,
+  isRecomputing,
   onOpenTradeTicket,
   defaultCapital,
 }: {
   data: SymbolDiagnosticsResponseExtended;
+  symbol: string;
+  onRecompute?: () => void;
+  isRecomputing?: boolean;
   onOpenTradeTicket: (c: SymbolDiagnosticsCandidate) => void;
   defaultCapital?: number | null;
 }) {
@@ -204,7 +214,22 @@ function ExecutionConsole({
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {/* Symbol header */}
       <Card className="lg:col-span-2">
-        <CardHeader title={data.symbol ?? "—"} description={price != null ? `$${price.toFixed(2)}` : undefined} />
+        <CardHeader
+          title={data.symbol ?? "—"}
+          description={price != null ? `$${price.toFixed(2)}` : undefined}
+          actions={
+            onRecompute ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={isRecomputing}
+                onClick={onRecompute}
+              >
+                {isRecomputing ? "Recomputing…" : "Recompute now"}
+              </Button>
+            ) : undefined
+          }
+        />
         <div className="flex flex-wrap items-center gap-3">
           <StatusBadge status={data.verdict ?? "—"} />
           <Badge variant="default">
@@ -226,6 +251,91 @@ function ExecutionConsole({
               Provider: {providerStatus}
             </button>
           )}
+        </div>
+      </Card>
+      {/* Candidates: full width, same as header */}
+      <Card className="lg:col-span-2 w-full">
+        <CardHeader
+          title="Candidates"
+          actions={
+            candidates.length > 0 ? (
+              <Button variant="primary" size="sm" onClick={() => onOpenTradeTicket(candidates[0])}>
+                Open Trade Ticket
+              </Button>
+            ) : null
+          }
+        />
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[800px] text-sm">
+            <thead>
+              <tr className="border-b border-zinc-200 text-left text-zinc-600 dark:border-zinc-700 dark:text-zinc-500">
+                <th className="py-2 pr-2">strategy</th>
+                <th className="py-2 pr-2">strike</th>
+                <th className="py-2 pr-2">expiry</th>
+                <th className="py-2 pr-2">DTE</th>
+                <th className="py-2 pr-2">delta</th>
+                <th className="py-2 pr-2">credit</th>
+                <th className="py-2 pr-2">max_loss</th>
+                <th className="py-2 pr-2">ret%</th>
+                <th className="py-2 pr-2">cap util %</th>
+                <th className="py-2 pr-2 max-w-[100px]">regime</th>
+                <th className="py-2 pr-2 max-w-[100px]">support</th>
+                <th className="py-2 pr-2 max-w-[100px]">liquidity</th>
+                <th className="py-2 pr-2 max-w-[100px]">iv</th>
+                <th className="py-2 pr-2">delta cond</th>
+              </tr>
+            </thead>
+            <tbody>
+              {candidates.length === 0 ? (
+                <tr>
+                  <td colSpan={14} className="py-3 text-zinc-500">No candidates.</td>
+                </tr>
+              ) : (
+                candidates.map((c, i) => {
+                  const dte = computeDte(c.expiry);
+                  const retPct = computeExpectedReturnPct(c.strike ?? undefined, c.credit_estimate ?? undefined);
+                  const inBand = deltaInBand(c.delta ?? undefined, c.strategy ?? "");
+                  const maxLoss = c.max_loss ?? 0;
+                  const capUtilPct = totalCapital != null && totalCapital > 0 && maxLoss > 0
+                    ? (maxLoss / totalCapital) * 100
+                    : null;
+                  return (
+                    <tr
+                      key={i}
+                      className={`border-b border-zinc-100 last:border-0 hover:bg-zinc-50 dark:border-zinc-800/50 dark:hover:bg-zinc-800/30 ${
+                        i % 2 === 1 ? "bg-zinc-50/50 dark:bg-zinc-900/30" : ""
+                      }`}
+                    >
+                      <td className="py-2 pr-2 font-mono text-zinc-700 dark:text-zinc-300">{c.strategy ?? "—"}</td>
+                      <td className="py-2 pr-2 font-mono font-bold text-zinc-900 dark:text-zinc-100 text-right tabular-nums">{fmt(c.strike)}</td>
+                      <td className="py-2 pr-2 font-mono">{c.expiry ?? "—"}</td>
+                      <td className="py-2 pr-2">{dte != null ? dte : "—"}</td>
+                      <td className={`py-2 pr-2 font-mono ${inBand ? "text-emerald-400 font-semibold" : ""}`}>
+                        {c.delta != null ? c.delta.toFixed(3) : "—"}
+                      </td>
+                      <td className="py-2 pr-2">{fmt(c.credit_estimate)}</td>
+                      <td className="py-2 pr-2">{fmt(c.max_loss)}</td>
+                      <td className="py-2 pr-2">{retPct != null ? retPct.toFixed(2) + "%" : "—"}</td>
+                      <td className="py-2 pr-2 font-mono">{capUtilPct != null ? capUtilPct.toFixed(2) + "%" : "—"}</td>
+                      <td className="py-2 pr-2 max-w-[100px] truncate text-zinc-600 dark:text-zinc-400" title={expl?.stock_regime_reason ?? ""}>
+                        {expl?.stock_regime_reason ?? "—"}
+                      </td>
+                      <td className="py-2 pr-2 max-w-[100px] truncate text-zinc-600 dark:text-zinc-400" title={expl?.support_condition ?? ""}>
+                        {expl?.support_condition ?? "—"}
+                      </td>
+                      <td className="py-2 pr-2 max-w-[100px] truncate text-zinc-600 dark:text-zinc-400" title={expl?.liquidity_condition ?? ""}>
+                        {expl?.liquidity_condition ?? "—"}
+                      </td>
+                      <td className="py-2 pr-2 max-w-[100px] truncate text-zinc-600 dark:text-zinc-400" title={expl?.iv_condition ?? ""}>
+                        {expl?.iv_condition ?? "—"}
+                      </td>
+                      <td className="py-2 pr-2">{deltaCondition(c.delta ?? undefined, c.strategy ?? "")}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </Card>
       {/* Left column */}
@@ -293,105 +403,6 @@ function ExecutionConsole({
                 </span>
               </button>
             </div>
-          </div>
-        </Card>
-
-        <Card>
-          <CardHeader
-            title="Candidates"
-            actions={
-              candidates.length > 0 ? (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => onOpenTradeTicket(candidates[0])}
-                >
-                  Open Trade Ticket
-                </Button>
-              ) : null
-            }
-          />
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-zinc-200 text-left text-zinc-600 dark:border-zinc-700 dark:text-zinc-500">
-                  <th className="py-2 pr-2">strategy</th>
-                  <th className="py-2 pr-2">strike</th>
-                  <th className="py-2 pr-2">expiry</th>
-                  <th className="py-2 pr-2">DTE</th>
-                  <th className="py-2 pr-2">delta</th>
-                  <th className="py-2 pr-2">credit</th>
-                  <th className="py-2 pr-2">max_loss</th>
-                  <th className="py-2 pr-2">ret%</th>
-                  <th className="py-2 pr-2">cap util %</th>
-                  <th className="py-2 pr-2 max-w-[100px]">regime</th>
-                  <th className="py-2 pr-2 max-w-[100px]">support</th>
-                  <th className="py-2 pr-2 max-w-[100px]">liquidity</th>
-                  <th className="py-2 pr-2 max-w-[100px]">iv</th>
-                  <th className="py-2 pr-2">delta cond</th>
-                </tr>
-              </thead>
-              <tbody>
-                {candidates.length === 0 ? (
-                  <tr>
-                    <td colSpan={14} className="py-3 text-zinc-500">
-                      No candidates.
-                    </td>
-                  </tr>
-                ) : (
-                  candidates.map((c, i) => {
-                    const dte = computeDte(c.expiry);
-                    const retPct = computeExpectedReturnPct(c.strike ?? undefined, c.credit_estimate ?? undefined);
-                    const inBand = deltaInBand(c.delta ?? undefined, c.strategy ?? "");
-                    const maxLoss = c.max_loss ?? 0;
-                    const capUtilPct = totalCapital != null && totalCapital > 0 && maxLoss > 0
-                      ? (maxLoss / totalCapital) * 100
-                      : null;
-                    return (
-                      <tr
-                        key={i}
-                        className={`border-b border-zinc-100 last:border-0 hover:bg-zinc-50 dark:border-zinc-800/50 dark:hover:bg-zinc-800/30 ${
-                          i % 2 === 1 ? "bg-zinc-50/50 dark:bg-zinc-900/30" : ""
-                        }`}
-                      >
-                        <td className="py-2 pr-2 font-mono text-zinc-700 dark:text-zinc-300">{c.strategy ?? "—"}</td>
-                        <td className="py-2 pr-2 font-mono font-bold text-zinc-900 dark:text-zinc-100 text-right tabular-nums">
-                          {fmt(c.strike)}
-                        </td>
-                        <td className="py-2 pr-2 font-mono">{c.expiry ?? "—"}</td>
-                        <td className="py-2 pr-2">{dte != null ? dte : "—"}</td>
-                        <td
-                          className={`py-2 pr-2 font-mono ${
-                            inBand ? "text-emerald-400 font-semibold" : ""
-                          }`}
-                        >
-                          {c.delta != null ? c.delta.toFixed(3) : "—"}
-                        </td>
-                        <td className="py-2 pr-2">{fmt(c.credit_estimate)}</td>
-                        <td className="py-2 pr-2">{fmt(c.max_loss)}</td>
-                        <td className="py-2 pr-2">{retPct != null ? retPct.toFixed(2) + "%" : "—"}</td>
-                        <td className="py-2 pr-2 font-mono">
-                          {capUtilPct != null ? capUtilPct.toFixed(2) + "%" : "—"}
-                        </td>
-                        <td className="py-2 pr-2 max-w-[100px] truncate text-zinc-600 dark:text-zinc-400" title={expl?.stock_regime_reason ?? ""}>
-                          {expl?.stock_regime_reason ?? "—"}
-                        </td>
-                        <td className="py-2 pr-2 max-w-[100px] truncate text-zinc-600 dark:text-zinc-400" title={expl?.support_condition ?? ""}>
-                          {expl?.support_condition ?? "—"}
-                        </td>
-                        <td className="py-2 pr-2 max-w-[100px] truncate text-zinc-600 dark:text-zinc-400" title={expl?.liquidity_condition ?? ""}>
-                          {expl?.liquidity_condition ?? "—"}
-                        </td>
-                        <td className="py-2 pr-2 max-w-[100px] truncate text-zinc-600 dark:text-zinc-400" title={expl?.iv_condition ?? ""}>
-                          {expl?.iv_condition ?? "—"}
-                        </td>
-                        <td className="py-2 pr-2">{deltaCondition(c.delta ?? undefined, c.strategy ?? "")}</td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
           </div>
         </Card>
 

@@ -34,7 +34,12 @@ from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
+import os
+
 from app.core.models.data_quality import build_data_incomplete_reason
+
+# Phase 7.5: Debug instrumentation for batch eval (CHAKRAOPS_DEBUG_EVAL=1)
+_DEBUG_EVAL = os.getenv("CHAKRAOPS_DEBUG_EVAL", "").strip() in ("1", "true", "yes")
 from app.core.eval.strategy_rationale import StrategyRationale, build_rationale_from_staged
 from app.core.eval.confidence_band import compute_confidence_band, CapitalHint
 from app.core.eval.scoring import (
@@ -521,6 +526,8 @@ def evaluate_stage1(symbol: str, canonical_snapshot: Optional[Any] = None) -> St
 
         # Compute stage 1 score
         result.stage1_score = _compute_stage1_score(result)
+        if _DEBUG_EVAL:
+            _log_stage1_debug(symbol, result)
         
         # Qualified for stage 2
         result.stock_verdict = StockVerdict.QUALIFIED
@@ -532,6 +539,8 @@ def evaluate_stage1(symbol: str, canonical_snapshot: Optional[Any] = None) -> St
         result.stock_verdict_reason = f"Evaluation error: {e}"
         result.error = str(e)
 
+    if _DEBUG_EVAL and result.stock_verdict != StockVerdict.QUALIFIED:
+        _log_stage1_debug(symbol, result)
     return result
 
 
@@ -555,6 +564,48 @@ def _compute_stage1_score(result: Stage1Result) -> int:
         score = min(score, DATA_INCOMPLETE_SCORE_CAP)
     
     return max(0, min(100, score))
+
+
+def _log_stage1_debug(symbol: str, r: Stage1Result) -> None:
+    """Phase 7.5: Structured debug log per symbol (CHAKRAOPS_DEBUG_EVAL=1)."""
+    d = {
+        "symbol": symbol,
+        "stage1_raw_score": r.stage1_score,  # final after _compute_stage1_score
+        "stage1_status": r.stock_verdict.value if hasattr(r.stock_verdict, "value") else str(r.stock_verdict),
+        "required_missing": r.missing_fields[:5] if r.missing_fields else [],
+        "provider_status": "OK" if r.data_completeness >= 0.75 else "INCOMPLETE",
+        "regime": r.regime or "UNKNOWN",
+        "ivr_band": r.ivr_band or "UNKNOWN",
+        "data_completeness": round(r.data_completeness, 2),
+    }
+    logger.info("[EVAL_DEBUG] stage1 %s", d)
+
+
+def _log_stage2_entry_debug(symbol: str, entered: bool, reason: str) -> None:
+    """Phase 7.5: Stage2 entry decision log (CHAKRAOPS_DEBUG_EVAL=1)."""
+    logger.info("[EVAL_DEBUG] stage2_entry symbol=%s entered=%s reason=%s", symbol, entered, reason)
+
+
+def _log_stage2_result_debug(symbol: str, stage2: Stage2Result) -> None:
+    """Phase 7.5: Stage2 result log (CHAKRAOPS_DEBUG_EVAL=1)."""
+    reason = "OK"
+    if stage2.error:
+        reason = f"ERROR:{stage2.error}"
+    elif not stage2.liquidity_ok:
+        reason = stage2.liquidity_reason or "NO_CONTRACT"
+        if stage2.chain_missing_fields:
+            reason += f" missing={stage2.chain_missing_fields[:3]}"
+        if stage2.puts_with_required_fields == 0 and stage2.contracts_evaluated > 0:
+            reason += " NO_CHAIN_REQUIRED_FIELDS"
+    d = {
+        "symbol": symbol,
+        "entered_stage2": True,
+        "liquidity_ok": stage2.liquidity_ok,
+        "reason": reason,
+        "puts_with_required_fields": stage2.puts_with_required_fields,
+        "chain_missing_fields": (stage2.chain_missing_fields or [])[:3],
+    }
+    logger.info("[EVAL_DEBUG] stage2_result %s", d)
 
 
 # ============================================================================
@@ -1908,7 +1959,17 @@ def evaluate_universe_staged(
         if s1.stock_verdict == StockVerdict.QUALIFIED
     ]
     qualified.sort(key=lambda x: x[1].stage1_score, reverse=True)
+    top_symbols = {s for s, _ in qualified[:top_k]}
     top_candidates = qualified[:top_k]
+
+    if _DEBUG_EVAL:
+        for symbol in stage1_results:
+            if symbol in top_symbols:
+                _log_stage2_entry_debug(symbol, True, "IN_TOP_K")
+            else:
+                s1 = stage1_results[symbol]
+                reason = "NOT_QUALIFIED" if s1.stock_verdict != StockVerdict.QUALIFIED else "NOT_IN_TOP_K"
+                _log_stage2_entry_debug(symbol, False, reason)
     
     logger.info(
         "[STAGED_EVAL] Stage 1 complete: %d qualified, advancing top %d to stage 2",
@@ -1977,7 +2038,10 @@ def evaluate_universe_staged(
         for future in as_completed(future_to_symbol):
             symbol = future_to_symbol[future]
             try:
-                results[symbol] = future.result()
+                res = future.result()
+                results[symbol] = res
+                if _DEBUG_EVAL and res.stage2 is not None:
+                    _log_stage2_result_debug(symbol, res.stage2)
             except Exception as e:
                 logger.exception("[STAGED_EVAL] Stage 2 error for %s: %s", symbol, e)
                 # Fall back to stage 1 only
@@ -2043,6 +2107,8 @@ def evaluate_universe_staged(
                 result.position_reason = "POSITION_ALREADY_OPEN"
 
     # Phase 3: Explainable scoring and capital-aware composite (after regime + position gates).
+    # Phase 7.5: For Stage1-only, preserve stage1_score (with regime cap) to avoid flattening
+    # when compute_score_breakdown would yield identical composite for all (NEUTRAL + HOLD + no liquidity).
     for result in results.values():
         put_strike = None
         if result.stage2 and result.stage2.selected_contract:
@@ -2058,11 +2124,21 @@ def evaluate_universe_staged(
                 price=result.price,
                 selected_put_strike=put_strike,
             )
-            if market_regime_value == "RISK_OFF":
-                composite = min(composite, 50)
-            elif market_regime_value == "NEUTRAL":
-                composite = min(composite, 65)
-            result.score = max(0, min(100, composite))
+            if result.stage_reached == EvaluationStage.STAGE1_ONLY:
+                # Preserve stage1_score to maintain ranking; apply regime cap
+                raw = result.stage1.stage1_score if result.stage1 else result.score
+                if market_regime_value == "RISK_OFF":
+                    result.score = min(raw, 50)
+                elif market_regime_value == "NEUTRAL":
+                    result.score = min(raw, 65)
+                else:
+                    result.score = raw
+            else:
+                if market_regime_value == "RISK_OFF":
+                    composite = min(composite, 50)
+                elif market_regime_value == "NEUTRAL":
+                    composite = min(composite, 65)
+                result.score = max(0, min(100, composite))
             result.score_breakdown = breakdown.to_dict()
             result.rank_reasons = build_rank_reasons(
                 breakdown, result.regime, result.data_completeness,
@@ -2105,10 +2181,19 @@ def evaluate_universe_staged(
         except Exception as e:
             logger.debug("[STAGED_EVAL] Confidence band for %s: %s", result.symbol, e)
 
-    # Score normalization check: warn if all scores are identical (may indicate evaluation bug)
+    # Score flattening check: warn if all scores identical (Phase 7.5: preserve stage1_score for Stage1-only)
     all_scores = [r.score for r in results.values() if r.score > 0]
     if all_scores and len(set(all_scores)) == 1 and len(all_scores) > 1:
-        logger.warning("[EVAL] score_flattened=true - all %d non-zero scores identical (%d)", len(all_scores), all_scores[0])
+        s0 = all_scores[0]
+        # NEUTRAL regime cap=65 can produce legitimate flattening when all Stage2 symbols
+        if market_regime_value == "NEUTRAL" and s0 == 65:
+            if _DEBUG_EVAL:
+                logger.info("[EVAL] score_flattened=expected regime_cap=65 (NEUTRAL) n=%d", len(all_scores))
+        else:
+            logger.warning(
+                "[EVAL] score_flattened=true - all %d non-zero scores identical (%d) regime=%s",
+                len(all_scores), s0, market_regime_value
+            )
 
     duration = time.time() - start_time
     eligible_count = sum(1 for r in results.values() if r.final_verdict == FinalVerdict.ELIGIBLE)

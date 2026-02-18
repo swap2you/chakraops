@@ -183,6 +183,89 @@ def test_ui_positions_post_persists_and_get_returns(tmp_path):
         assert positions[0].get("status") == "OPEN"
 
 
+def test_ui_positions_post_409_when_collateral_exceeds_max_per_trade(tmp_path):
+    """Phase 11.0: POST positions returns 409 when collateral exceeds max_collateral_per_trade."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    positions_dir = tmp_path / "positions"
+    accounts_dir = tmp_path / "accounts"
+    positions_dir.mkdir(parents=True, exist_ok=True)
+    accounts_dir.mkdir(parents=True, exist_ok=True)
+    accounts_file = accounts_dir / "accounts.json"
+    accounts_file.write_text(
+        '[{"account_id":"acct_1","provider":"Manual","account_type":"Taxable","total_capital":100000,'
+        '"max_capital_per_trade_pct":5,"max_total_exposure_pct":30,"allowed_strategies":["CSP"],'
+        '"is_default":true,"max_collateral_per_trade":30000,"max_total_collateral":100000}]',
+        encoding="utf-8",
+    )
+
+    def _fake_accounts_path():
+        return accounts_file
+
+    app = _get_app()
+    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+        with patch("app.core.accounts.store._accounts_path", side_effect=_fake_accounts_path):
+            client = TestClient(app)
+            # CSP 1 @ 450 = 45000 collateral > 30000 max
+            r = client.post(
+                "/api/ui/positions",
+                json={
+                    "symbol": "SPY",
+                    "strategy": "CSP",
+                    "contracts": 1,
+                    "strike": 450.0,
+                    "expiration": "2026-03-21",
+                    "credit_expected": 2.50,
+                },
+            )
+    assert r.status_code == 409
+    assert "exceeds max per trade" in str(r.json().get("detail", {}))
+
+
+def test_ui_positions_post_success_when_within_limits(tmp_path):
+    """Phase 11.0: POST positions succeeds when within sizing limits; decision_ref persisted."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    positions_dir = tmp_path / "positions"
+    accounts_dir = tmp_path / "accounts"
+    positions_dir.mkdir(parents=True, exist_ok=True)
+    accounts_dir.mkdir(parents=True, exist_ok=True)
+    accounts_file = accounts_dir / "accounts.json"
+    accounts_file.write_text(
+        '[{"account_id":"acct_1","provider":"Manual","account_type":"Taxable","total_capital":100000,'
+        '"max_capital_per_trade_pct":5,"max_total_exposure_pct":30,"allowed_strategies":["CSP"],'
+        '"is_default":true,"max_collateral_per_trade":50000,"max_total_collateral":100000}]',
+        encoding="utf-8",
+    )
+
+    def _fake_accounts_path():
+        return accounts_file
+
+    app = _get_app()
+    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+        with patch("app.core.accounts.store._accounts_path", side_effect=_fake_accounts_path):
+            client = TestClient(app)
+            r = client.post(
+                "/api/ui/positions",
+                json={
+                    "symbol": "SPY",
+                    "strategy": "CSP",
+                    "contracts": 1,
+                    "strike": 450.0,
+                    "expiration": "2026-03-21",
+                    "credit_expected": 2.50,
+                    "decision_ref": {"evaluation_timestamp_utc": "2026-02-17T20:00:00Z", "artifact_source": "LIVE"},
+                },
+            )
+    assert r.status_code == 200
+    body = r.json()
+    assert body.get("symbol") == "SPY"
+    assert body.get("decision_ref") is not None
+    assert body["decision_ref"].get("evaluation_timestamp_utc") == "2026-02-17T20:00:00Z"
+
+
 def test_ui_positions_close_and_delete_guardrail(tmp_path):
     """Phase 10.0: Close position computes realized_pnl; delete allowed only for CLOSED/test."""
     pytest.importorskip("fastapi")

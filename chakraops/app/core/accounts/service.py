@@ -113,6 +113,10 @@ def create_account(data: Dict[str, Any]) -> Tuple[Optional[Account], List[str]]:
     account_id = data.get("account_id") or generate_account_id()
     now = datetime.now(timezone.utc).isoformat()
 
+    mcp = data.get("max_collateral_per_trade")
+    mtc = data.get("max_total_collateral")
+    mpo = data.get("max_positions_open")
+    mcc = data.get("min_credit_per_contract")
     account = Account(
         account_id=account_id,
         provider=data["provider"],
@@ -125,6 +129,10 @@ def create_account(data: Dict[str, Any]) -> Tuple[Optional[Account], List[str]]:
         created_at=now,
         updated_at=now,
         active=bool(data.get("active", True)),
+        max_collateral_per_trade=float(mcp) if mcp is not None else None,
+        max_total_collateral=float(mtc) if mtc is not None else None,
+        max_positions_open=int(mpo) if mpo is not None else None,
+        min_credit_per_contract=float(mcc) if mcc is not None else None,
     )
 
     try:

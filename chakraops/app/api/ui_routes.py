@@ -1001,16 +1001,18 @@ async def ui_positions_create(
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
     """
-    Create a paper position from a candidate (symbol, strategy, contract details, credit, max_loss).
-    Body: symbol, strategy, contracts?, strike?, expiration?, credit_expected?, decision_snapshot_id? (optional).
+    Create a paper position from a candidate.
+    Phase 11.0: Requires contract identity (symbol, strategy, strike, expiration, contracts).
+    Optional: option_symbol, contract_key, decision_ref, open_credit, open_price, open_time_utc.
+    Returns 409 when sizing limits exceeded (max_collateral_per_trade, max_total_collateral, max_positions_open).
     """
     _require_ui_key(x_ui_key)
     try:
         from app.core.positions.service import add_paper_position
         body = await request.json()
-        position, errors = add_paper_position(body)
+        position, errors, status_code = add_paper_position(body)
         if errors:
-            raise HTTPException(status_code=400, detail={"errors": errors})
+            raise HTTPException(status_code=status_code, detail={"errors": errors})
         return position.to_dict()
     except HTTPException:
         raise

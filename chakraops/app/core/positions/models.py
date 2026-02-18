@@ -76,6 +76,10 @@ class Position:
     underlying: Optional[str] = None  # Same as symbol
     option_type: Optional[str] = None  # PUT | CALL
     open_credit: Optional[float] = None  # Credit received at open
+    # Phase 11.0: Contract identity and decision reference
+    option_symbol: Optional[str] = None  # OCC option symbol
+    contract_key: Optional[str] = None  # Derived key (strike-expiry-type)
+    decision_ref: Optional[Dict[str, Any]] = None  # evaluation_timestamp_utc, artifact_source, selected_contract_key
     open_price: Optional[float] = None
     open_fees: Optional[float] = None
     open_time_utc: Optional[str] = None
@@ -143,7 +147,8 @@ class Position:
         # Phase 10.0
         for key in ("id", "underlying", "option_type", "open_credit", "open_price", "open_fees",
                     "open_time_utc", "close_debit", "close_price", "close_fees", "close_time_utc",
-                    "collateral", "realized_pnl", "is_test", "created_at_utc", "updated_at_utc"):
+                    "collateral", "realized_pnl", "is_test", "created_at_utc", "updated_at_utc",
+                    "option_symbol", "contract_key", "decision_ref"):
             v = getattr(self, key, None)
             if v is not None or key == "is_test":
                 d[key] = v
@@ -184,6 +189,9 @@ class Position:
             id=d.get("id") or d.get("position_id"),
             underlying=d.get("underlying") or d.get("symbol"),
             option_type=d.get("option_type"),
+            option_symbol=d.get("option_symbol"),
+            contract_key=d.get("contract_key"),
+            decision_ref=d.get("decision_ref"),
             open_credit=d.get("open_credit") or d.get("credit_expected") or d.get("entry_credit"),
             open_price=d.get("open_price"),
             open_fees=d.get("open_fees"),

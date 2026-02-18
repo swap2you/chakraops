@@ -134,11 +134,18 @@ def update_account(account_id: str, updates: Dict) -> Optional[Account]:
 
     from datetime import datetime, timezone
     # Apply updates
+    sizing_keys = ("max_collateral_per_trade", "max_total_collateral", "max_positions_open", "min_credit_per_contract")
     for key in ("provider", "account_type", "total_capital",
                 "max_capital_per_trade_pct", "max_total_exposure_pct",
-                "allowed_strategies", "active"):
+                "allowed_strategies", "active") + sizing_keys:
         if key in updates:
-            setattr(target, key, updates[key])
+            v = updates[key]
+            if key == "max_positions_open":
+                setattr(target, key, int(v) if v is not None else None)
+            elif key in ("max_collateral_per_trade", "max_total_collateral", "min_credit_per_contract"):
+                setattr(target, key, float(v) if v is not None else None)
+            else:
+                setattr(target, key, v)
     target.updated_at = datetime.now(timezone.utc).isoformat()
 
     # Handle is_default changes

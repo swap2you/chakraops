@@ -36,6 +36,11 @@ class Account:
         created_at: ISO datetime when account was created.
         updated_at: ISO datetime when account was last updated.
         active: Whether this account is active.
+        Phase 11.0 sizing (optional, for guardrails):
+        max_collateral_per_trade: Max $ collateral per trade (None = no limit).
+        max_total_collateral: Max $ total open collateral (None = no limit).
+        max_positions_open: Max number of open positions (None = no limit).
+        min_credit_per_contract: Min $ credit per contract (None = no limit).
     """
     account_id: str
     provider: str
@@ -48,6 +53,11 @@ class Account:
     created_at: str = ""
     updated_at: str = ""
     active: bool = True
+    # Phase 11.0: Account-based sizing guardrails (optional)
+    max_collateral_per_trade: Optional[float] = None
+    max_total_collateral: Optional[float] = None
+    max_positions_open: Optional[int] = None
+    min_credit_per_contract: Optional[float] = None
 
     def __post_init__(self) -> None:
         now = datetime.now(timezone.utc).isoformat()
@@ -57,7 +67,7 @@ class Account:
             self.updated_at = now
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d: Dict[str, Any] = {
             "account_id": self.account_id,
             "provider": self.provider,
             "account_type": self.account_type,
@@ -70,9 +80,18 @@ class Account:
             "updated_at": self.updated_at,
             "active": self.active,
         }
+        for key in ("max_collateral_per_trade", "max_total_collateral", "max_positions_open", "min_credit_per_contract"):
+            v = getattr(self, key, None)
+            if v is not None:
+                d[key] = v
+        return d
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "Account":
+        mcp = d.get("max_collateral_per_trade")
+        mtc = d.get("max_total_collateral")
+        mpo = d.get("max_positions_open")
+        mcc = d.get("min_credit_per_contract")
         return cls(
             account_id=d["account_id"],
             provider=d.get("provider", "Manual"),
@@ -85,6 +104,10 @@ class Account:
             created_at=d.get("created_at", ""),
             updated_at=d.get("updated_at", ""),
             active=bool(d.get("active", True)),
+            max_collateral_per_trade=float(mcp) if mcp is not None else None,
+            max_total_collateral=float(mtc) if mtc is not None else None,
+            max_positions_open=int(mpo) if mpo is not None else None,
+            min_credit_per_contract=float(mcc) if mcc is not None else None,
         )
 
 

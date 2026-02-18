@@ -205,14 +205,30 @@ def manual_execute(data: Dict[str, Any]) -> Tuple[Optional[Position], List[str]]
         return None, [str(e)]
 
 
-# Paper positions: same store, account_id="paper", no account validation
+# Paper positions: same store, account_id="paper"; sizing validated against default account
 PAPER_ACCOUNT_ID = "paper"
 
 
-def add_paper_position(data: Dict[str, Any]) -> Tuple[Optional[Position], List[str]]:
-    """Create a paper position from a candidate (symbol, strategy, contract details, credit, max_loss).
-    Does not require an existing account. Uses account_id=PAPER_ACCOUNT_ID.
-    Returns (position, errors).
+def _compute_collateral(strategy: str, strike: float, contracts: int) -> float:
+    """CSP/CC collateral = strike * 100 * contracts."""
+    if (strategy or "").upper() in ("CSP", "CC") and strike and contracts:
+        return float(strike) * 100 * int(contracts)
+    return 0.0
+
+
+def _derive_contract_key(strategy: str, strike: float, expiration: str) -> str:
+    """Derive contract_key from strike-expiry-type."""
+    opt = "PUT" if (strategy or "").upper() == "CSP" else "CALL"
+    exp = (expiration or "")[:10] if expiration else ""
+    return f"{strike}-{exp}-{opt}"
+
+
+def add_paper_position(data: Dict[str, Any]) -> Tuple[Optional[Position], List[str], int]:
+    """Create a paper position from a candidate.
+    Phase 11.0: Requires contract identity (underlying, option_type, strike, expiry, contracts).
+    Optional: option_symbol, contract_key, decision_ref, open_credit, open_price, open_time_utc.
+    Validates against default account sizing; returns 409 if limits exceeded.
+    Returns (position, errors, status_code).
     """
     errors: List[str] = []
     if not data.get("symbol"):
@@ -221,33 +237,91 @@ def add_paper_position(data: Dict[str, Any]) -> Tuple[Optional[Position], List[s
     if strategy not in VALID_STRATEGIES:
         errors.append(f"strategy must be one of {sorted(VALID_STRATEGIES)}")
     if strategy in ("CSP", "CC"):
-        contracts = data.get("contracts", 1)
-        if not isinstance(contracts, int) or contracts <= 0:
+        contracts_val = data.get("contracts", 1)
+        if not isinstance(contracts_val, int) or contracts_val <= 0:
             errors.append("contracts must be a positive integer for options strategies")
+        strike_val = data.get("strike")
+        if strike_val is None:
+            errors.append("strike is required for CSP/CC")
+        exp_val = data.get("expiration") or data.get("expiry")
+        if not exp_val:
+            errors.append("expiration is required for CSP/CC")
     if errors:
-        return None, errors
+        return None, errors, 400
+
+    strike_val = data.get("strike")
+    exp_val = data.get("expiration") or data.get("expiry")
+    contracts_val = int(data.get("contracts", 1))
+    collateral = _compute_collateral(strategy, float(strike_val or 0), contracts_val)
+    option_type = "PUT" if strategy == "CSP" else "CALL"
+    contract_key = data.get("contract_key") or (_derive_contract_key(strategy, float(strike_val or 0), exp_val or "") if strategy in ("CSP", "CC") else None)
+    option_symbol = data.get("option_symbol")
+
+    # Phase 11.0: Sizing validation against default account
+    default_account = account_store.get_default_account()
+    if default_account and collateral > 0:
+        mcp = getattr(default_account, "max_collateral_per_trade", None)
+        if mcp is not None and collateral > float(mcp):
+            return None, [f"Collateral ${collateral:,.0f} exceeds max per trade ${mcp:,.0f}"], 409
+        mtc = getattr(default_account, "max_total_collateral", None)
+        if mtc is not None:
+            open_positions = store.list_positions(status=None, symbol=None, exclude_test=False)
+            total_collateral = 0.0
+            for p in open_positions:
+                if (p.status or "").upper() in ("OPEN", "PARTIAL_EXIT"):
+                    c = getattr(p, "collateral", None)
+                    if c is not None:
+                        total_collateral += float(c)
+                    elif p.strike and p.contracts:
+                        total_collateral += _compute_collateral(p.strategy or "", float(p.strike), int(p.contracts))
+            if total_collateral + collateral > float(mtc):
+                return None, [f"Total collateral would be ${total_collateral + collateral:,.0f}, exceeds max ${mtc:,.0f}"], 409
+        mpo = getattr(default_account, "max_positions_open", None)
+        if mpo is not None:
+            open_count = sum(1 for p in store.list_positions(status=None, symbol=None, exclude_test=False)
+                            if (p.status or "").upper() in ("OPEN", "PARTIAL_EXIT"))
+            if open_count >= int(mpo):
+                return None, [f"Max open positions ({mpo}) already reached"], 409
+        mcc = getattr(default_account, "min_credit_per_contract", None)
+        if mcc is not None:
+            credit = data.get("open_credit") or data.get("credit_expected") or data.get("credit")
+            if credit is not None:
+                per_contract = float(credit) / contracts_val if contracts_val else 0
+                if per_contract < float(mcc):
+                    return None, [f"Credit per contract ${per_contract:.2f} below minimum ${mcc:.2f}"], 409
 
     now = datetime.now(timezone.utc).isoformat()
     position_id = data.get("position_id") or generate_position_id()
-    contracts = int(data.get("contracts", 1))
+    decision_ref = data.get("decision_ref")
+    if decision_ref is not None and not isinstance(decision_ref, dict):
+        decision_ref = None
+
     position = Position(
         position_id=position_id,
         account_id=PAPER_ACCOUNT_ID,
         symbol=data["symbol"].upper().strip(),
         strategy=strategy,
-        contracts=contracts,
-        strike=data.get("strike"),
-        expiration=data.get("expiration"),
+        contracts=contracts_val,
+        strike=strike_val,
+        expiration=exp_val,
         credit_expected=data.get("credit_expected") or data.get("credit"),
         quantity=data.get("quantity"),
         status="OPEN",
         opened_at=data.get("created_at") or now,
         closed_at=None,
         notes=data.get("notes", ""),
+        underlying=data["symbol"].upper().strip(),
+        option_type=option_type,
+        option_symbol=option_symbol,
+        contract_key=contract_key,
+        decision_ref=decision_ref,
+        open_credit=data.get("open_credit") or data.get("credit_expected") or data.get("credit"),
+        open_price=data.get("open_price"),
+        open_time_utc=data.get("open_time_utc") or now,
     )
     try:
         created = store.create_position(position)
         logger.info("[POSITIONS] Paper position created: %s %s %s", position.symbol, position.strategy, position_id)
-        return created, []
+        return created, [], 200
     except ValueError as e:
-        return None, [str(e)]
+        return None, [str(e)], 400

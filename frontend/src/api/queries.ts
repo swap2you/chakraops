@@ -404,6 +404,12 @@ export function useManualExecute() {
   });
 }
 
+export interface DecisionRef {
+  evaluation_timestamp_utc: string;
+  artifact_source?: string;
+  selected_contract_key?: string;
+}
+
 export interface SavePaperPositionPayload {
   symbol: string;
   strategy: string;
@@ -412,8 +418,12 @@ export interface SavePaperPositionPayload {
   expiration?: string;
   credit_expected?: number;
   credit?: number;
+  open_credit?: number;
   max_loss?: number;
   decision_snapshot_id?: string;
+  decision_ref?: DecisionRef;
+  option_symbol?: string;
+  contract_key?: string;
   created_at?: string;
 }
 

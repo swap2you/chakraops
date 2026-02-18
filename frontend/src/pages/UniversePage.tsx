@@ -3,8 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { useUniverse, useRunEval, useUiSystemHealth } from "@/api/queries";
 import { formatTimestampEt } from "@/utils/formatTimestamp";
 import type { SymbolEvalSummary } from "@/api/types";
+import type { SymbolDiagnosticsCandidate } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
-import { Info } from "lucide-react";
+import { TradeTicketDrawer } from "@/components/TradeTicketDrawer";
+import { Info, FileEdit } from "lucide-react";
 import {
   Card,
   CardHeader,
@@ -108,6 +110,7 @@ export function UniversePage() {
   const [search, setSearch] = useState("");
   const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("rank");
+  const [tradeTicket, setTradeTicket] = useState<{ symbol: string; candidate: SymbolDiagnosticsCandidate } | null>(null);
 
   const symbols: SymbolEvalSummary[] = universeData?.symbols ?? [];
   const source = universeData?.source ?? "n/a";
@@ -238,6 +241,7 @@ export function UniversePage() {
               <TableHead>Primary reason</TableHead>
               <TableHead>Price</TableHead>
               <TableHead>Expiration</TableHead>
+              <TableHead>Actions</TableHead>
             </TableHeader>
             <TableBody>
               {filtered.map((row) => (
@@ -303,12 +307,50 @@ export function UniversePage() {
                   <TableCell className="font-mono text-zinc-600 dark:text-zinc-400">
                     {row.expiration ?? "n/a"}
                   </TableCell>
+                  <TableCell>
+                    {((row.final_verdict ?? row.verdict) ?? "").toUpperCase() === "ELIGIBLE" &&
+                    row.strategy &&
+                    row.price != null &&
+                    row.expiration ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTradeTicket({
+                            symbol: row.symbol,
+                            candidate: {
+                              strategy: row.strategy ?? "CSP",
+                              strike: row.price ?? undefined,
+                              expiry: row.expiration ?? undefined,
+                            },
+                          });
+                        }}
+                        className="inline-flex items-center gap-1 rounded border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                      >
+                        <FileEdit className="h-3.5 w-3.5" />
+                        Open Ticket
+                      </button>
+                    ) : null}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         )}
       </Card>
+
+      {tradeTicket && (
+        <TradeTicketDrawer
+          symbol={tradeTicket.symbol}
+          candidate={tradeTicket.candidate}
+          onClose={() => setTradeTicket(null)}
+          decisionRef={
+            evalTs && evalTs !== "n/a"
+              ? { evaluation_timestamp_utc: evalTs, artifact_source: "LIVE" }
+              : undefined
+          }
+        />
+      )}
     </div>
   );
 }

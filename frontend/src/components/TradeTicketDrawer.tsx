@@ -1,13 +1,16 @@
 import { useState } from "react";
 import { X, Copy, Check, Bookmark } from "lucide-react";
 import { Button } from "@/components/ui";
-import { useDefaultAccount, useManualExecute, useSavePaperPosition } from "@/api/queries";
+import { useDefaultAccount, useManualExecute, useSavePaperPosition, useUiTrackedPositions } from "@/api/queries";
 import type { SymbolDiagnosticsCandidate } from "@/api/types";
+import type { DecisionRef } from "@/api/queries";
 
 interface TradeTicketDrawerProps {
   symbol: string;
   candidate: SymbolDiagnosticsCandidate;
   onClose: () => void;
+  /** Phase 11.0: Decision reference for save payload */
+  decisionRef?: DecisionRef | null;
 }
 
 function fmt(n: number | null | undefined): string {
@@ -19,18 +22,26 @@ function fmt(n: number | null | undefined): string {
 const defaultCredit = (c: SymbolDiagnosticsCandidate, q: number) =>
   (c.credit_estimate ?? 0) * q;
 
-export function TradeTicketDrawer({ symbol, candidate, onClose }: TradeTicketDrawerProps) {
+export function TradeTicketDrawer({ symbol, candidate, onClose, decisionRef }: TradeTicketDrawerProps) {
   const [qty, setQty] = useState(1);
   const [entryCredit, setEntryCredit] = useState(defaultCredit(candidate, 1));
   const [copied, setCopied] = useState(false);
   const { data: accountData } = useDefaultAccount();
+  const { data: positionsData } = useUiTrackedPositions();
   const manualExecute = useManualExecute();
   const savePaperPosition = useSavePaperPosition();
   const defaultAccount = accountData?.account ?? null;
 
   const strike = candidate.strike ?? 0;
   const notional = strike * 100 * qty;
+  const collateral = notional;
   const credit = entryCredit;
+  const capitalDeployed = positionsData?.capital_deployed ?? 0;
+  const openCount = positionsData?.open_positions_count ?? 0;
+  const maxPerTrade = (defaultAccount as { max_collateral_per_trade?: number } | null)?.max_collateral_per_trade;
+  const maxTotal = (defaultAccount as { max_total_collateral?: number } | null)?.max_total_collateral;
+  const maxPositions = (defaultAccount as { max_positions_open?: number } | null)?.max_positions_open;
+  const remainingCapacity = maxTotal != null ? Math.max(0, maxTotal - capitalDeployed) : null;
 
   const orderText = [
     `Symbol: ${symbol}`,
@@ -75,15 +86,22 @@ export function TradeTicketDrawer({ symbol, candidate, onClose }: TradeTicketDra
   const handleSavePosition = () => {
     const strategy = (candidate.strategy ?? "CSP").toUpperCase();
     const fillCredit = Number.isFinite(credit) ? credit : defaultCredit(candidate, qty);
+    const exp = candidate.expiry ?? undefined;
+    const stk = candidate.strike ?? undefined;
+    const contractKey =
+      stk && exp && strategy ? `${stk}-${String(exp).slice(0, 10)}-${strategy === "CSP" ? "PUT" : "CALL"}` : undefined;
     savePaperPosition.mutate(
       {
         symbol: symbol.toUpperCase(),
         strategy,
         contracts: qty,
-        strike: candidate.strike ?? undefined,
-        expiration: candidate.expiry ?? undefined,
+        strike: stk,
+        expiration: exp,
         credit_expected: fillCredit,
+        open_credit: fillCredit,
         max_loss: candidate.max_loss != null ? candidate.max_loss * qty : undefined,
+        contract_key: contractKey,
+        decision_ref: decisionRef ?? undefined,
       },
       {
         onSuccess: () => onClose(),
@@ -117,6 +135,12 @@ export function TradeTicketDrawer({ symbol, candidate, onClose }: TradeTicketDra
         </div>
         <div className="flex-1 overflow-auto p-5">
           <div className="space-y-4">
+            <div>
+              <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-500">Contract</span>
+              <p className="font-mono text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                {symbol} · {(candidate.strategy ?? "CSP").toUpperCase()} {fmt(candidate.strike)} {candidate.expiry ?? ""} · {qty} contract{qty !== 1 ? "s" : ""}
+              </p>
+            </div>
             <div>
               <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-500">Underlying</span>
               <p className="font-mono text-lg font-semibold text-zinc-900 dark:text-zinc-100">{symbol}</p>
@@ -176,11 +200,40 @@ export function TradeTicketDrawer({ symbol, candidate, onClose }: TradeTicketDra
               />
             </div>
             <div>
-              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Notional</span>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Notional / Collateral</span>
               <p className="font-mono text-lg font-semibold text-zinc-900 dark:text-zinc-100">
                 ${notional.toLocaleString()}
               </p>
             </div>
+            {(maxPerTrade != null || maxTotal != null || maxPositions != null) && (
+              <div className="space-y-1 rounded border border-zinc-200 bg-zinc-50 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-900/50">
+                <span className="block font-medium text-zinc-600 dark:text-zinc-400">Sizing</span>
+                {maxPerTrade != null && (
+                  <p>
+                    Max per trade: ${maxPerTrade.toLocaleString()}
+                    {collateral > maxPerTrade && (
+                      <span className="ml-1 text-red-600 dark:text-red-400">(exceeded)</span>
+                    )}
+                  </p>
+                )}
+                {maxTotal != null && (
+                  <p>
+                    Remaining capacity: ${(remainingCapacity ?? 0).toLocaleString()}
+                    {remainingCapacity != null && collateral > remainingCapacity && (
+                      <span className="ml-1 text-red-600 dark:text-red-400">(exceeded)</span>
+                    )}
+                  </p>
+                )}
+                {maxPositions != null && (
+                  <p>
+                    Open positions: {openCount} / {maxPositions}
+                    {openCount >= maxPositions && (
+                      <span className="ml-1 text-red-600 dark:text-red-400">(limit reached)</span>
+                    )}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
         <div className="space-y-2 border-t border-zinc-200 p-4 dark:border-zinc-800">

@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Calendar, ChevronDown, ChevronRight, Database, Droplets, X } from "lucide-react";
-import { useDataMode } from "@/context/DataModeContext";
-import { useSymbolDiagnostics, useRecomputeSymbolDiagnostics, useDefaultAccount, useUiSystemHealth, useDecision } from "@/api/queries";
+import { useSymbolDiagnostics, useRecomputeSymbolDiagnostics, useDefaultAccount, useUiSystemHealth } from "@/api/queries";
 import type { SymbolDiagnosticsResponseExtended } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { TradeTicketDrawer } from "@/components/TradeTicketDrawer";
@@ -84,7 +83,6 @@ function deltaCondition(delta: number | null | undefined, strategy: string): str
 }
 
 export function SymbolDiagnosticsPage() {
-  const { mode } = useDataMode();
   const [searchParams] = useSearchParams();
   const symbolFromUrl = searchParams.get("symbol")?.trim().toUpperCase() ?? "";
   const runIdFromUrl = searchParams.get("run_id")?.trim() ?? null;
@@ -94,8 +92,11 @@ export function SymbolDiagnosticsPage() {
   const [tradeTicketCandidate, setTradeTicketCandidate] = useState<SymbolDiagnosticsCandidate | null>(null);
 
   const shouldFetch = activeSymbol != null && isValidSymbol(activeSymbol);
-  const { data, isLoading, isError } = useSymbolDiagnostics(activeSymbol ?? "", shouldFetch);
-  const { data: decisionData } = useDecision(mode, undefined);
+  const { data, isLoading, isError } = useSymbolDiagnostics(
+    activeSymbol ?? "",
+    shouldFetch,
+    runIdFromUrl || undefined
+  );
   const recompute = useRecomputeSymbolDiagnostics();
   const { data: accountData } = useDefaultAccount();
   const { data: health } = useUiSystemHealth();
@@ -154,10 +155,10 @@ export function SymbolDiagnosticsPage() {
       {isLoading && <p className="text-xs text-zinc-500">Loading…</p>}
       {isError && <p className="text-xs text-red-400">Failed to load.</p>}
 
-      {runIdFromUrl && decisionData && decisionData.run_id !== runIdFromUrl && (
+      {runIdFromUrl && data && data.exact_run === false && (
         <div className="rounded border border-amber-500/50 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
           <strong>Exact run not available.</strong> The requested evaluation run (
-          <code className="font-mono">{runIdFromUrl.slice(0, 8)}…</code>) is no longer current. Showing latest decision.
+          <code className="font-mono">{runIdFromUrl.slice(0, 8)}…</code>) was not found in history. Showing latest decision.
         </div>
       )}
 

@@ -125,6 +125,9 @@ class CandidateRow:
     credit_estimate: Optional[float]
     max_loss: Optional[float]
     why_this_trade: Optional[str]
+    # Phase 11.3: Exact contract identity from decision artifact (no recompute)
+    contract_key: Optional[str] = None  # strike-expiry-PUT|CALL
+    option_symbol: Optional[str] = None  # OCC symbol when available
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

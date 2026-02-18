@@ -1,6 +1,7 @@
 import { Outlet } from "react-router-dom";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NotificationBell } from "@/components/NotificationBell";
+import { AfterHoursBanner } from "@/components/AfterHoursBanner";
 import { Sidebar } from "./Sidebar";
 
 export function AppLayout() {
@@ -12,6 +13,7 @@ export function AppLayout() {
           <NotificationBell />
           <ThemeToggle />
         </header>
+        <AfterHoursBanner />
         <main className="flex-1 overflow-auto px-6 py-6 lg:px-10">
           <div className="mx-auto max-w-screen-2xl">
             <Outlet />

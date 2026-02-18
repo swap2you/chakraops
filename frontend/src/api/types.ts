@@ -45,6 +45,12 @@ export interface SymbolEvalSummary {
   has_candidates: boolean;
   candidate_count: number;
   band_reason: string | null;
+  /** Phase 11.3: From selected candidate (strike-expiry-PUT|CALL) */
+  selected_contract_key?: string | null;
+  /** Phase 11.3: OCC option symbol when ELIGIBLE */
+  option_symbol?: string | null;
+  /** Phase 11.3: Strike from selected candidate when ELIGIBLE */
+  strike?: number | null;
   score_breakdown?: unknown;
   raw_score?: number | null;
   final_score?: number | null;
@@ -264,7 +270,7 @@ export interface UiSystemHealthScheduler {
   last_result?: string | null;
 }
 
-/** PR2: EOD freeze snapshot scheduler status. */
+/** PR2: EOD freeze snapshot scheduler status. Phase 11.3: last_error, next_scheduled_et. */
 export interface UiSystemHealthEodFreeze {
   enabled?: boolean;
   scheduled_time_et?: string | null;
@@ -272,6 +278,10 @@ export interface UiSystemHealthEodFreeze {
   last_run_at_et?: string | null;
   last_result?: string | null;
   last_snapshot_dir?: string | null;
+  /** Phase 11.3: Error message when last_result=FAIL */
+  last_error?: string | null;
+  /** Phase 11.3: Next scheduled run (ET) */
+  next_scheduled_et?: string | null;
 }
 
 export interface UiSystemHealthDecisionStore {
@@ -420,6 +430,10 @@ export interface SymbolDiagnosticsCandidate {
   credit_estimate?: number | null;
   max_loss?: number | null;
   why_this_trade?: string | null;
+  /** Phase 11.3: Exact contract key from decision (strike-expiry-PUT|CALL) */
+  contract_key?: string | null;
+  /** Phase 11.3: OCC option symbol when available */
+  option_symbol?: string | null;
 }
 
 /** Score breakdown (raw_score, final_score, composite_score, caps). */
@@ -488,4 +502,8 @@ export interface SymbolDiagnosticsResponseExtended extends SymbolDiagnosticsResp
   provider_status?: string | null;
   /** Human-readable message when provider_status is not OK. */
   provider_message?: string | null;
+  /** Phase 11.2: True when run_id matched history; false when fallback to latest. */
+  exact_run?: boolean;
+  /** Phase 11.2: Run ID when fetched with run_id param. */
+  run_id?: string | null;
 }

@@ -22,6 +22,11 @@ import {
   Tooltip,
 } from "@/components/ui";
 
+function isOptionsStrategy(s: string | null | undefined): boolean {
+  const upper = (s ?? "").toUpperCase();
+  return upper === "CSP" || upper === "CC";
+}
+
 /** Phase 10.1: Raw → Pre-cap → Final and cap reason for Universe row tooltip. */
 function formatScoreCapTooltip(row: {
   score?: number | null;
@@ -115,6 +120,7 @@ export function UniversePage() {
   const symbols: SymbolEvalSummary[] = universeData?.symbols ?? [];
   const source = universeData?.source ?? "n/a";
   const evalTs = (universeData as { evaluation_timestamp_utc?: string } | undefined)?.evaluation_timestamp_utc ?? universeData?.updated_at ?? "n/a";
+  const runId = (universeData as { run_id?: string } | undefined)?.run_id ?? undefined;
 
   const filtered = useMemo(() => {
     let list = symbols;
@@ -310,18 +316,24 @@ export function UniversePage() {
                   <TableCell>
                     {((row.final_verdict ?? row.verdict) ?? "").toUpperCase() === "ELIGIBLE" &&
                     row.strategy &&
-                    row.price != null &&
-                    row.expiration ? (
+                    (row.strike ?? row.capital_required != null) &&
+                    row.expiration &&
+                    (isOptionsStrategy(row.strategy)
+                      ? (row.selected_contract_key ?? row.option_symbol)
+                      : true) ? (
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
+                          const strikeVal = row.strike ?? (row.capital_required != null ? row.capital_required / 100 : undefined);
                           setTradeTicket({
                             symbol: row.symbol,
                             candidate: {
                               strategy: row.strategy ?? "CSP",
-                              strike: row.price ?? undefined,
+                              strike: strikeVal ?? undefined,
                               expiry: row.expiration ?? undefined,
+                              contract_key: row.selected_contract_key ?? undefined,
+                              option_symbol: row.option_symbol ?? undefined,
                             },
                           });
                         }}
@@ -346,7 +358,12 @@ export function UniversePage() {
           onClose={() => setTradeTicket(null)}
           decisionRef={
             evalTs && evalTs !== "n/a"
-              ? { evaluation_timestamp_utc: evalTs, artifact_source: "LIVE" }
+              ? {
+                  evaluation_timestamp_utc: evalTs,
+                  artifact_source: "LIVE",
+                  run_id: runId,
+                  selected_contract_key: tradeTicket.candidate.contract_key,
+                }
               : undefined
           }
         />

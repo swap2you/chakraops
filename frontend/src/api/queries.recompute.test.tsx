@@ -41,7 +41,9 @@ describe("useRecomputeSymbolDiagnostics", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     const apiPost = vi.mocked(client.apiPost);
     expect(apiPost).toHaveBeenCalledWith("/api/ui/symbols/SPY/recompute", {});
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["ui", "symbolDiagnostics", "SPY"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["ui", "symbolDiagnostics", "SPY"],
+    });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["ui", "universe"] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["ui", "decision"] });
   });

@@ -267,10 +267,11 @@ def test_ui_positions_post_success_when_within_limits(tmp_path):
 
 
 def test_ui_position_decision_with_run_id(tmp_path):
-    """Phase 11.1: Create position with decision_ref.run_id; GET decision returns exact_run when run matches."""
+    """Phase 11.1/11.2: Create position with decision_ref.run_id; write history; GET decision returns exact_run when history exists."""
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
     from app.core.eval.decision_artifact_v2 import DecisionArtifactV2, SymbolEvalSummary
+    from app.core.eval.evaluation_store_v2 import set_output_dir, reset_output_dir, get_evaluation_store_v2
 
     run_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
     sym = SymbolEvalSummary(
@@ -302,19 +303,16 @@ def test_ui_position_decision_with_run_id(tmp_path):
         selected_candidates=[],
     )
 
-    class MockStore:
-        def get_latest(self):
-            return artifact
-
-        def reload_from_disk(self):
-            pass
-
     positions_dir = tmp_path / "positions"
     positions_dir.mkdir(parents=True, exist_ok=True)
 
-    app = _get_app()
-    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
-        with patch("app.core.eval.evaluation_store_v2.get_evaluation_store_v2", return_value=MockStore()):
+    try:
+        set_output_dir(tmp_path)
+        store = get_evaluation_store_v2()
+        store.set_latest(artifact)  # writes latest + history
+
+        app = _get_app()
+        with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
             client = TestClient(app)
             post = client.post(
                 "/api/ui/positions",
@@ -328,18 +326,19 @@ def test_ui_position_decision_with_run_id(tmp_path):
                     "decision_ref": {"run_id": run_id, "evaluation_timestamp_utc": "2026-02-17T21:00:00Z"},
                 },
             )
-    assert post.status_code == 200
-    pid = post.json()["position_id"]
+        assert post.status_code == 200
+        pid = post.json()["position_id"]
 
-    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
-        with patch("app.core.eval.evaluation_store_v2.get_evaluation_store_v2", return_value=MockStore()):
+        with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
             client = TestClient(app)
             r = client.get(f"/api/ui/positions/{pid}/decision")
-    assert r.status_code == 200
-    data = r.json()
-    assert data.get("run_id") == run_id
-    assert data.get("exact_run") is True
-    assert "warning" not in data or data.get("warning") is None
+        assert r.status_code == 200
+        data = r.json()
+        assert data.get("run_id") == run_id
+        assert data.get("exact_run") is True
+        assert "warning" not in data or data.get("warning") is None
+    finally:
+        reset_output_dir()
 
 
 def test_ui_position_decision_warning_when_run_mismatch(tmp_path):
@@ -612,6 +611,120 @@ def test_ui_symbol_recompute_409_when_market_closed():
         r = client.post("/api/ui/symbols/SPY/recompute")
     assert r.status_code == 409
     assert "Market is closed" in r.json().get("detail", "")
+
+
+def test_ui_universe_includes_selected_contract_key_when_eligible(tmp_path):
+    """Phase 11.3: Universe row includes selected_contract_key and option_symbol when ELIGIBLE."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    from app.core.eval.evaluation_store_v2 import set_output_dir, reset_output_dir, get_evaluation_store_v2
+
+    artifact = {
+        "metadata": {
+            "artifact_version": "v2",
+            "pipeline_timestamp": "2026-02-17T20:00:00Z",
+            "run_id": "run-11-3-test",
+        },
+        "symbols": [
+            {
+                "symbol": "SPY",
+                "verdict": "ELIGIBLE",
+                "final_verdict": "ELIGIBLE",
+                "score": 65,
+                "band": "B",
+                "primary_reason": "test",
+                "stage_status": "RUN",
+                "stage1_status": "PASS",
+                "stage2_status": "PASS",
+                "provider_status": "OK",
+                "data_freshness": "2026-02-17",
+                "evaluated_at": "2026-02-17",
+                "strategy": "CSP",
+                "price": 450.0,
+                "expiration": "2026-03-20",
+                "has_candidates": True,
+                "candidate_count": 1,
+            }
+        ],
+        "selected_candidates": [
+            {
+                "symbol": "SPY",
+                "strategy": "CSP",
+                "expiry": "2026-03-20",
+                "strike": 450.0,
+                "delta": -0.25,
+                "credit_estimate": 2.50,
+                "max_loss": 45000,
+                "why_this_trade": "test",
+                "contract_key": "450-2026-03-20-PUT",
+                "option_symbol": "SPY  260320P00450000",
+            }
+        ],
+    }
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "decision_latest.json").write_text(json.dumps(artifact), encoding="utf-8")
+
+    try:
+        set_output_dir(tmp_path)
+        store = get_evaluation_store_v2()
+        store.reload_from_disk()
+        app = _get_app()
+        client = TestClient(app)
+        r = client.get("/api/ui/universe")
+        assert r.status_code == 200
+        data = r.json()
+        symbols = data.get("symbols") or []
+        assert len(symbols) == 1
+        row = symbols[0]
+        assert row.get("symbol") == "SPY"
+        assert row.get("verdict") == "ELIGIBLE"
+        assert row.get("selected_contract_key") == "450-2026-03-20-PUT"
+        assert row.get("option_symbol") == "SPY  260320P00450000"
+        assert row.get("strike") == 450.0
+    finally:
+        reset_output_dir()
+
+
+def test_eod_freeze_failure_writes_state_and_notification(tmp_path):
+    """Phase 11.3: EOD freeze failure sets last_result=FAIL, last_error in state and appends EOD_FREEZE_FAILED."""
+    pytest.importorskip("fastapi")
+    from datetime import datetime, timedelta, timezone
+    from zoneinfo import ZoneInfo
+    from app.api.server import _maybe_run_eod_freeze, _load_eod_freeze_state, _eod_freeze_state_path
+    from app.api.notifications_store import load_notifications, _notifications_path
+
+    et_tz = ZoneInfo("America/New_York")
+    now_et = datetime(2026, 2, 17, 15, 59, 0, tzinfo=et_tz)
+
+    state_path = tmp_path / "eod_freeze_state.json"
+    notif_path = tmp_path / "notifications.jsonl"
+    notif_path.parent.mkdir(parents=True, exist_ok=True)
+    notif_path.write_text("")
+
+    with patch("app.api.server._eod_freeze_state_path", return_value=state_path):
+        with patch("app.api.server.get_market_phase", return_value="OPEN"):
+            with patch("app.api.notifications_store._notifications_path", return_value=notif_path):
+                with patch("app.api.server.datetime") as mock_dt:
+                    def _mock_now(tz=None):
+                        if tz is timezone.utc or (tz is not None and "UTC" in str(tz)):
+                            return now_et.astimezone(timezone.utc)
+                        return now_et
+                    mock_dt.now.side_effect = _mock_now
+                    with patch("app.api.server.EOD_FREEZE_TIME_ET", "15:58"):
+                        with patch("app.api.server.EOD_FREEZE_WINDOW_MINUTES", 10):
+                            with patch("app.api.data_health.get_universe_symbols", return_value=["SPY"]):
+                                with patch("app.core.eval.evaluation_service_v2.evaluate_universe") as mock_eval:
+                                    mock_eval.side_effect = RuntimeError("Test failure")
+                                    _maybe_run_eod_freeze(ZoneInfo)
+    state = json.loads(state_path.read_text())
+    assert state.get("last_result") == "FAIL"
+    assert "Test failure" in (state.get("last_error") or "")
+
+    with patch("app.api.notifications_store._notifications_path", return_value=notif_path):
+        notifs = load_notifications(limit=10)
+    eod_fail = [n for n in notifs if n.get("subtype") == "EOD_FREEZE_FAILED" or n.get("type") == "EOD_FREEZE_FAILED"]
+    assert len(eod_fail) >= 1
+    assert "Test failure" in (eod_fail[0].get("message", ""))
 
 
 def test_ui_snapshots_freeze_archive_only_when_market_closed(tmp_path):

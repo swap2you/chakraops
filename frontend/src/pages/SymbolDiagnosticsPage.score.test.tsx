@@ -43,8 +43,9 @@ const mockDiagnosticsWithCap = {
   computed: {},
 };
 
+const useSymbolDiagnosticsMock = vi.fn();
 vi.mock("@/api/queries", () => ({
-  useSymbolDiagnostics: () => ({ data: mockDiagnosticsWithCap, isLoading: false, isError: false }),
+  useSymbolDiagnostics: (...args: unknown[]) => useSymbolDiagnosticsMock(...args),
   useRecomputeSymbolDiagnostics: () => ({ mutate: vi.fn(), isPending: false }),
   useDefaultAccount: () => ({ data: null }),
   useUiSystemHealth: () => ({ data: { market: { phase: "OPEN" } } }),
@@ -52,7 +53,11 @@ vi.mock("@/api/queries", () => ({
 
 describe("SymbolDiagnosticsPage score UX", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: mockDiagnosticsWithCap,
+      isLoading: false,
+      isError: false,
+    });
     window.history.pushState({}, "", "/symbol-diagnostics?symbol=SPY");
   });
 
@@ -65,5 +70,38 @@ describe("SymbolDiagnosticsPage score UX", () => {
   it("shows Not evaluated for liquidity when liquidity_evaluated=false", async () => {
     render(<SymbolDiagnosticsPage />);
     expect(screen.getAllByText("Not evaluated").length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("SymbolDiagnosticsPage run_id fetch (Phase 11.2)", () => {
+  it("does not show exact run warning when exact_run is true", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: { ...mockDiagnosticsWithCap, exact_run: true, run_id: "run-123" },
+      isLoading: false,
+      isError: false,
+    });
+    window.history.pushState(
+      {},
+      "",
+      "/symbol-diagnostics?symbol=SPY&run_id=run-123"
+    );
+    render(<SymbolDiagnosticsPage />);
+    expect(screen.queryByText(/Exact run not available/)).not.toBeInTheDocument();
+  });
+
+  it("shows exact run warning when run_id in URL and exact_run is false", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: { ...mockDiagnosticsWithCap, exact_run: false },
+      isLoading: false,
+      isError: false,
+    });
+    window.history.pushState(
+      {},
+      "",
+      "/symbol-diagnostics?symbol=SPY&run_id=missing-run-uuid"
+    );
+    render(<SymbolDiagnosticsPage />);
+    expect(screen.getByText(/Exact run not available/)).toBeInTheDocument();
+    expect(screen.getByText(/was not found in history/)).toBeInTheDocument();
   });
 });

@@ -38,9 +38,12 @@ function universePath(): string {
   return `/api/ui/universe`;
 }
 
-function symbolDiagnosticsPath(symbol: string, recompute = false): string {
+function symbolDiagnosticsPath(symbol: string, recompute = false, runId?: string | null): string {
   const base = `/api/ui/symbol-diagnostics?symbol=${encodeURIComponent(symbol)}`;
-  return recompute ? `${base}&recompute=1` : base;
+  const params = [base];
+  if (recompute) params.push("recompute=1");
+  if (runId) params.push(`run_id=${encodeURIComponent(runId)}`);
+  return params.length > 1 ? params.join("&") : base;
 }
 
 function symbolRecomputePath(symbol: string, force?: boolean): string {
@@ -144,8 +147,8 @@ export const queryKeys = {
       ? (["ui", "decision", mode, filename] as const)
       : (["ui", "decision", mode, "latest"] as const),
   universe: () => ["ui", "universe"] as const,
-  symbolDiagnostics: (symbol: string) =>
-    ["ui", "symbolDiagnostics", symbol] as const,
+  symbolDiagnostics: (symbol: string, runId?: string | null) =>
+    (["ui", "symbolDiagnostics", symbol, runId ?? ""] as const),
   uiSystemHealth: () => ["ui", "systemHealth"] as const,
   uiPositions: () => ["ui", "positions"] as const,
   uiTrackedPositions: () => ["ui", "positions", "tracked"] as const,
@@ -192,12 +195,15 @@ export function useUniverse() {
 
 export function useSymbolDiagnostics(
   symbol: string,
-  enabled = true
+  enabled = true,
+  runId?: string | null
 ) {
   return useQuery({
-    queryKey: queryKeys.symbolDiagnostics(symbol),
+    queryKey: queryKeys.symbolDiagnostics(symbol, runId),
     queryFn: () =>
-      apiGet<SymbolDiagnosticsResponseExtended>(symbolDiagnosticsPath(symbol)),
+      apiGet<SymbolDiagnosticsResponseExtended>(
+        symbolDiagnosticsPath(symbol, false, runId)
+      ),
     enabled: enabled && symbol.trim().length > 0,
   });
 }
@@ -223,7 +229,7 @@ export function useRecomputeSymbolDiagnostics() {
       return { symbol, data: res };
     },
     onSuccess: (result) => {
-      qc.invalidateQueries({ queryKey: queryKeys.symbolDiagnostics(result.symbol) });
+      qc.invalidateQueries({ queryKey: ["ui", "symbolDiagnostics", result.symbol] });
       qc.invalidateQueries({ queryKey: queryKeys.universe() });
       qc.invalidateQueries({ queryKey: ["ui", "decision"] });
     },

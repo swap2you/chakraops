@@ -264,6 +264,18 @@ export function SystemDiagnosticsPage() {
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">Scheduled</span>
               <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{eodFreeze?.scheduled_time_et ?? "15:58"} ET</p>
             </div>
+            {eodFreeze?.next_scheduled_et && (
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">next_scheduled_et</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{eodFreeze.next_scheduled_et}</p>
+              </div>
+            )}
+            {eodFreeze?.last_error && (
+              <div className="col-span-2">
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">last_error</span>
+                <p className="mt-1 text-red-600 dark:text-red-400">{eodFreeze.last_error}</p>
+              </div>
+            )}
           </div>
           <div className="mt-4 flex flex-wrap gap-3">
             <Tooltip content={marketClosed ? "Market closed or after 4 PM ET. Eval disabled to protect canonical decision. Use Archive Now for archive-only." : undefined}>

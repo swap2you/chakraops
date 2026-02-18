@@ -146,33 +146,48 @@ def evaluate_universe(
             expiry_val = str(expiry_val)[:10]
 
         if verdict == "ELIGIBLE":
+            _opt_sym: Optional[str] = None
+            _ct_key: Optional[str] = None
             if sc and isinstance(sc, dict):
                 strategy_val = str(sc.get("strategy", "CSP"))
                 expiry_val = expiry_val or str(sc.get("expiration", "") or sc.get("expiry", ""))[:10]
+                contract_d = sc.get("contract") or sc
+                _opt_sym = contract_d.get("option_symbol") if isinstance(contract_d, dict) else None
+                st = sc.get("strike") or (contract_d.get("strike") if isinstance(contract_d, dict) else None)
+                if st is not None and expiry_val:
+                    opt_type = "PUT" if (strategy_val or "CSP").upper() == "CSP" else "CALL"
+                    _ct_key = f"{st}-{expiry_val[:10]}-{opt_type}"
                 selected_candidates.append(CandidateRow(
                     symbol=sym_upper,
                     strategy=strategy_val,
                     expiry=expiry_val or None,
-                    strike=sc.get("strike"),
-                    delta=sc.get("delta"),
+                    strike=sc.get("strike") or (contract_d.get("strike") if isinstance(contract_d, dict) else None),
+                    delta=sc.get("delta") or (contract_d.get("delta") if isinstance(contract_d, dict) else None),
                     credit_estimate=sc.get("credit_estimate"),
                     max_loss=sc.get("max_loss"),
                     why_this_trade=sc.get("selection_reason") or sc.get("why_this_trade"),
+                    contract_key=_ct_key,
+                    option_symbol=_opt_sym,
                 ))
             elif cds:
                 first = cds[0]
                 ft = asdict(first) if hasattr(first, "__dataclass_fields__") else (first if isinstance(first, dict) else {})
                 strategy_val = str(ft.get("strategy", "CSP"))
                 expiry_val = expiry_val or str(ft.get("expiry") or ft.get("expiration") or "")[:10]
+                _opt_sym = ft.get("option_symbol")
+                st = ft.get("strike")
+                _ct_key = f"{st}-{expiry_val[:10]}-{'PUT' if (strategy_val or 'CSP').upper() == 'CSP' else 'CALL'}" if (st is not None and expiry_val) else None
                 selected_candidates.append(CandidateRow(
                     symbol=sym_upper,
                     strategy=strategy_val,
                     expiry=expiry_val or None,
-                    strike=ft.get("strike"),
+                    strike=st,
                     delta=ft.get("delta"),
                     credit_estimate=ft.get("credit_estimate"),
                     max_loss=ft.get("max_loss"),
                     why_this_trade=ft.get("why_this_trade"),
+                    contract_key=_ct_key,
+                    option_symbol=_opt_sym,
                 ))
 
         gates: List[GateEvaluation] = []
@@ -422,18 +437,27 @@ def _build_symbol_data_from_staged(
     stage2_ran = stage_reached_val == "STAGE2_CHAIN"
 
     cds = getattr(sr, "candidate_trades", []) or []
+    sc = getattr(sr, "selected_contract", None)
+    contract_d = (sc.get("contract") or sc) if sc and isinstance(sc, dict) else {}
     cand_list: List[CandidateRow] = []
-    for ct in cds:
+    for i, ct in enumerate(cds):
         ct_dict = asdict(ct) if hasattr(ct, "__dataclass_fields__") else (ct if isinstance(ct, dict) else {})
+        strat = str(ct_dict.get("strategy", "CSP"))
+        exp = ct_dict.get("expiry")
+        st = ct_dict.get("strike")
+        _opt_sym = contract_d.get("option_symbol") if isinstance(contract_d, dict) and i == 0 else None
+        _ct_key = f"{st}-{str(exp)[:10]}-{'PUT' if (strat or 'CSP').upper() == 'CSP' else 'CALL'}" if (st is not None and exp) else None
         cand_list.append(CandidateRow(
             symbol=sym_upper,
-            strategy=str(ct_dict.get("strategy", "CSP")),
-            expiry=ct_dict.get("expiry"),
-            strike=ct_dict.get("strike"),
+            strategy=strat,
+            expiry=exp,
+            strike=st,
             delta=ct_dict.get("delta"),
             credit_estimate=ct_dict.get("credit_estimate"),
             max_loss=ct_dict.get("max_loss"),
             why_this_trade=ct_dict.get("why_this_trade"),
+            contract_key=_ct_key if i == 0 else None,
+            option_symbol=_opt_sym if i == 0 else None,
         ))
 
     sc = getattr(sr, "selected_contract", None)

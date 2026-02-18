@@ -97,4 +97,21 @@ describe("SystemDiagnosticsPage", () => {
     const btn = screen.getByRole("button", { name: /Run EOD Freeze \(eval \+ archive\)/i });
     expect(btn).toBeDisabled();
   });
+
+  it("shows eod_freeze last_error when present (Phase 11.3)", () => {
+    mockUseUiSystemHealth.mockReturnValueOnce({
+      data: {
+        ...mockHealth,
+        eod_freeze: {
+          ...mockHealth.eod_freeze,
+          last_error: "Connection refused",
+          last_result: "FAIL",
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<SystemDiagnosticsPage />);
+    expect(screen.getByText(/Connection refused/)).toBeInTheDocument();
+  });
 });

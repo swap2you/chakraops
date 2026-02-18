@@ -476,8 +476,18 @@ def _maybe_run_eod_freeze(ZoneInfo: Any) -> None:
         logger.info("[EOD_FREEZE] Done: %s", result["snapshot_dir"])
         print(f"[EOD_FREEZE] Done: {result['snapshot_dir']}")
     except Exception as e:
+        err_msg = str(e)
         logger.exception("[EOD_FREEZE] Error: %s", e)
-        _last_eod_freeze_result = str(e)
+        _last_eod_freeze_result = "FAIL"
+        state = _load_eod_freeze_state()
+        state["last_result"] = "FAIL"
+        state["last_error"] = err_msg
+        _save_eod_freeze_state(state)
+        try:
+            from app.api.notifications_store import append_notification
+            append_notification("CRITICAL", "EOD_FREEZE_FAILED", f"EOD freeze failed: {err_msg[:200]}", subtype="EOD_FREEZE_FAILED")
+        except Exception as notif_err:
+            logger.warning("[EOD_FREEZE] Failed to append notification: %s", notif_err)
 
 
 def get_eod_freeze_status() -> Dict[str, Any]:
@@ -486,19 +496,52 @@ def get_eod_freeze_status() -> Dict[str, Any]:
     last_date = _last_eod_freeze_date or state.get("last_run_date")
     last_utc = _last_eod_freeze_at_utc or state.get("last_run_at_utc")
     last_dir = _last_eod_freeze_snapshot_dir or state.get("last_snapshot_dir")
+    last_error = state.get("last_error")
     try:
         from zoneinfo import ZoneInfo
+        from datetime import timedelta
         et_tz = ZoneInfo(EOD_FREEZE_TZ)
         last_et = datetime.fromisoformat(last_utc.replace("Z", "+00:00")).astimezone(et_tz).isoformat() if last_utc else None
+        now_et = datetime.now(et_tz)
+        try:
+            hour, minute = map(int, EOD_FREEZE_TIME_ET.split(":"))
+        except (ValueError, TypeError):
+            hour, minute = 15, 58
+        window_start_today = now_et.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        window_end_today = window_start_today + timedelta(minutes=EOD_FREEZE_WINDOW_MINUTES)
+        today_str = now_et.strftime("%Y-%m-%d")
+        if get_market_phase(now_et.astimezone(timezone.utc)) != "OPEN":
+            next_date = now_et
+            while next_date.weekday() >= 5:  # skip weekend
+                next_date += timedelta(days=1)
+            next_scheduled = next_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        elif last_date == today_str:
+            next_scheduled = now_et + timedelta(days=1)
+            while next_scheduled.weekday() >= 5:
+                next_scheduled += timedelta(days=1)
+            next_scheduled = next_scheduled.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        elif now_et < window_start_today:
+            next_scheduled = window_start_today
+        elif now_et <= window_end_today:
+            next_scheduled = now_et  # "now" — would run
+        else:
+            next_date = now_et + timedelta(days=1)
+            while next_date.weekday() >= 5:
+                next_date += timedelta(days=1)
+            next_scheduled = next_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        next_scheduled_et = next_scheduled.strftime("%Y-%m-%d %H:%M ET")
     except Exception:
         last_et = last_utc
+        next_scheduled_et = None
     return {
         "enabled": EOD_FREEZE_ENABLED,
         "scheduled_time_et": EOD_FREEZE_TIME_ET,
         "last_run_at_utc": last_utc,
         "last_run_at_et": last_et,
-        "last_result": _last_eod_freeze_result or ("OK" if last_date else None),
+        "last_result": _last_eod_freeze_result or state.get("last_result") or ("OK" if last_date else None),
         "last_snapshot_dir": last_dir,
+        "last_error": last_error,
+        "next_scheduled_et": next_scheduled_et,
     }
 
 

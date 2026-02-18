@@ -114,17 +114,46 @@ def _get_decision_store_mtime_utc() -> Optional[str]:
     return None
 
 
-@router.get("/decision/latest")
-def ui_decision_latest(
+@router.get("/decision")
+def ui_decision(
+    symbol: str | None = Query(default=None, description="Symbol for exact run fetch"),
+    run_id: str | None = Query(default=None, description="Run ID for exact run fetch; requires symbol"),
     mode: Mode = Query("LIVE", description="LIVE or MOCK"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
     """
-    Get decision artifact (v2 preferred). ONE source of truth.
-    LIVE: EvaluationStoreV2 / out/decision_latest.json (v2).
-    MOCK: out/mock/decision_latest.json; 404 if absent.
-    Phase 9: Includes evaluation_timestamp_utc (pipeline_timestamp or file mtime) and decision_store_mtime_utc.
+    Phase 11.2: Get decision artifact.
+    If symbol and run_id provided: load from history; 404 if missing.
+    If run_id absent: load latest (same as /decision/latest).
     """
+    _require_ui_key(x_ui_key)
+    if run_id and symbol:
+        from app.core.eval.evaluation_store_v2 import get_decision_by_run
+        artifact = get_decision_by_run(symbol.strip().upper(), run_id.strip())
+        if artifact is None:
+            raise HTTPException(status_code=404, detail="exact run not found")
+        if mode != "LIVE":
+            raise HTTPException(status_code=400, detail="exact run fetch only for LIVE mode")
+        data = artifact.to_dict()
+        _validate_live_artifact(data)
+        meta = data.get("metadata") or {}
+        pipeline_ts = meta.get("pipeline_timestamp")
+        return {
+            "artifact": data,
+            "artifact_version": "v2",
+            "evaluation_timestamp_utc": pipeline_ts,
+            "run_id": meta.get("run_id"),
+            "exact_run": True,
+        }
+    # Fall back to latest
+    return _ui_decision_latest_impl(mode, x_ui_key)
+
+
+def _ui_decision_latest_impl(
+    mode: Mode,
+    x_ui_key: str | None,
+) -> Dict[str, Any]:
+    """Shared logic for /decision/latest and /decision (no run_id)."""
     _require_ui_key(x_ui_key)
     if mode == "LIVE":
         from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
@@ -160,6 +189,20 @@ def ui_decision_latest(
         eval_ts = pipeline_ts if pipeline_ts else store_mtime
         return {"artifact": data, "artifact_version": "v2", "evaluation_timestamp_utc": eval_ts, "decision_store_mtime_utc": store_mtime}
     return data
+
+
+@router.get("/decision/latest")
+def ui_decision_latest(
+    mode: Mode = Query("LIVE", description="LIVE or MOCK"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    Get decision artifact (v2 preferred). ONE source of truth.
+    LIVE: EvaluationStoreV2 / out/decision_latest.json (v2).
+    MOCK: out/mock/decision_latest.json; 404 if absent.
+    Phase 9: Includes evaluation_timestamp_utc (pipeline_timestamp or file mtime) and decision_store_mtime_utc.
+    """
+    return _ui_decision_latest_impl(mode, x_ui_key)
 
 
 @router.get("/decision/file/{filename}")
@@ -216,6 +259,11 @@ def ui_universe(
         meta = artifact.metadata or {} if artifact else {}
         ts = meta.get("pipeline_timestamp") or now_iso
         symbols_out: List[Dict[str, Any]] = []
+        sel_by_sym: Dict[str, Any] = {}
+        for c in getattr(artifact, "selected_candidates", []) or []:
+            sym_k = (getattr(c, "symbol", "") or "").strip().upper()
+            if sym_k:
+                sel_by_sym[sym_k] = c
         if artifact and artifact.symbols:
             diag_by_sym = getattr(artifact, "diagnostics_by_symbol", None) or {}
             for s in artifact.symbols:
@@ -254,10 +302,15 @@ def ui_universe(
                 row["required_data_missing"] = sel_el.get("required_data_missing") or []
                 row["required_data_stale"] = sel_el.get("required_data_stale") or []
                 row["optional_missing"] = sel_el.get("optional_missing") or []
+                sel_cand = sel_by_sym.get(sym_key)
+                if sel_cand and (s.verdict or "").upper() == "ELIGIBLE":
+                    row["selected_contract_key"] = getattr(sel_cand, "contract_key", None)
+                    row["option_symbol"] = getattr(sel_cand, "option_symbol", None)
+                    row["strike"] = getattr(sel_cand, "strike", None)
                 symbols_out.append(row)
         store_mtime = _get_decision_store_mtime_utc()
         eval_ts = ts if ts else store_mtime
-        return {
+        out_d: Dict[str, Any] = {
             "source": "ARTIFACT_V2",
             "updated_at": ts,
             "as_of": ts,
@@ -266,6 +319,9 @@ def ui_universe(
             "symbols": symbols_out,
             "artifact_version": "v2",
         }
+        if meta.get("run_id"):
+            out_d["run_id"] = meta["run_id"]
+        return out_d
     except Exception as e:
         try:
             store_mtime = _get_decision_store_mtime_utc()
@@ -1069,14 +1125,14 @@ def ui_position_decision(
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
     """
-    Phase 11.1: Get decision for a position.
-    If position has decision_ref.run_id and it matches current artifact, return exact run.
-    Else return latest with warning 'exact run not available'.
+    Phase 11.1/11.2: Get decision for a position.
+    If position has decision_ref.run_id: try load from history -> exact_run=true; if missing -> exact_run=false + warning, return latest.
+    If no run_id: exact_run=false + warning, return latest.
     """
     _require_ui_key(x_ui_key)
     try:
         from app.core.positions.service import get_position
-        from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
+        from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2, get_decision_by_run
         position = get_position(position_id)
         if position is None:
             raise HTTPException(status_code=404, detail="Position not found")
@@ -1084,20 +1140,26 @@ def ui_position_decision(
         if not isinstance(decision_ref, dict):
             decision_ref = {}
         run_id = decision_ref.get("run_id")
-        store = get_evaluation_store_v2()
-        store.reload_from_disk()
-        artifact = store.get_latest()
+        sym = (getattr(position, "symbol", "") or "").strip().upper()
+        artifact = None
+        exact_run = False
+        if run_id and sym:
+            artifact = get_decision_by_run(sym, run_id)
+            if artifact is not None:
+                exact_run = True
+        if artifact is None:
+            store = get_evaluation_store_v2()
+            store.reload_from_disk()
+            artifact = store.get_latest()
         if artifact is None:
             raise HTTPException(status_code=404, detail="No decision artifact; run evaluation")
         data = artifact.to_dict()
         meta = data.get("metadata") or {}
-        current_run_id = meta.get("run_id")
-        exact_run = bool(run_id and current_run_id and run_id == current_run_id)
         result: Dict[str, Any] = {
             "artifact": data,
             "artifact_version": "v2",
             "evaluation_timestamp_utc": meta.get("pipeline_timestamp") or meta.get("evaluation_timestamp_utc"),
-            "run_id": current_run_id,
+            "run_id": meta.get("run_id"),
             "exact_run": exact_run,
         }
         if not exact_run and run_id:
@@ -1211,6 +1273,8 @@ def _build_symbol_diagnostics_from_v2_store(
     earnings: Any | None,
     diagnostics_details: Any | None,
     symbol: str,
+    selected_contract_key: Optional[str] = None,
+    option_symbol: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build full SymbolDiagnosticsResponseExtended from v2 store (summary + candidates + gates + earnings + diagnostics_details)."""
     c_dicts = [c.to_dict() if hasattr(c, "to_dict") else (c if isinstance(c, dict) else {}) for c in candidates]
@@ -1281,16 +1345,19 @@ def _build_symbol_diagnostics_from_v2_store(
         "score_breakdown": diag.get("score_breakdown"),
         "rank_reasons": diag.get("rank_reasons"),
         "earnings": earnings_out,
+        "selected_contract_key": selected_contract_key,
+        "option_symbol": option_symbol,
     }
 
 
 @router.get("/symbol-diagnostics")
 def ui_symbol_diagnostics(
     symbol: str = Query(..., min_length=1, max_length=12),
+    run_id: str | None = Query(default=None, description="Phase 11.2: Fetch from history for this run; fallback to latest if missing"),
     recompute: int = Query(0, description="1 to run single-symbol eval and update store"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """Store-first symbol diagnostics. Default: serve from EvaluationStoreV2. recompute=1: run eval, update store, return result."""
+    """Store-first symbol diagnostics. run_id: try history first. recompute=1: run eval, update store."""
     _require_ui_key(x_ui_key)
     sym_upper = symbol.strip().upper()
 
@@ -1301,13 +1368,53 @@ def ui_symbol_diagnostics(
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Recompute failed: {e}")
 
+    # Phase 11.2: Try exact run from history when run_id provided
+    if run_id and run_id.strip():
+        from app.core.eval.evaluation_store_v2 import get_decision_by_run
+        artifact = get_decision_by_run(sym_upper, run_id.strip())
+        if artifact is not None:
+            summary = None
+            for s in artifact.symbols:
+                if (getattr(s, "symbol", "") or "").strip().upper() == sym_upper:
+                    summary = s
+                    break
+            if summary is not None:
+                candidates = getattr(artifact, "candidates_by_symbol", {}) or {}
+                gates = getattr(artifact, "gates_by_symbol", {}) or {}
+                earnings_by = getattr(artifact, "earnings_by_symbol", {}) or {}
+                diag_by = getattr(artifact, "diagnostics_by_symbol", {}) or {}
+                sel_c = next((c for c in (getattr(artifact, "selected_candidates", []) or []) if (getattr(c, "symbol", "") or "").strip().upper() == sym_upper), None)
+                _sel_key = getattr(sel_c, "contract_key", None) if sel_c else None
+                _opt_sym = getattr(sel_c, "option_symbol", None) if sel_c else None
+                result = _build_symbol_diagnostics_from_v2_store(
+                    summary,
+                    candidates.get(sym_upper, []),
+                    gates.get(sym_upper, []),
+                    earnings_by.get(sym_upper),
+                    diag_by.get(sym_upper),
+                    sym_upper,
+                    selected_contract_key=_sel_key,
+                    option_symbol=_opt_sym,
+                )
+                result["exact_run"] = True
+                result["run_id"] = (artifact.metadata or {}).get("run_id")
+                return result
+
     from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
     store = get_evaluation_store_v2()
     store.reload_from_disk()
     row = store.get_symbol(sym_upper)
     if row is not None:
         summary, candidates, gates, earnings, diagnostics_details = row
-        return _build_symbol_diagnostics_from_v2_store(summary, candidates, gates, earnings, diagnostics_details, sym_upper)
+        artifact = store.get_latest()
+        sel_c = next((c for c in (getattr(artifact, "selected_candidates", []) or []) if (getattr(c, "symbol", "") or "").strip().upper() == sym_upper), None) if artifact else None
+        _sel_key = getattr(sel_c, "contract_key", None) if sel_c else None
+        _opt_sym = getattr(sel_c, "option_symbol", None) if sel_c else None
+        out = _build_symbol_diagnostics_from_v2_store(summary, candidates, gates, earnings, diagnostics_details, sym_upper, selected_contract_key=_sel_key, option_symbol=_opt_sym)
+        if run_id and run_id.strip():
+            out["exact_run"] = False
+            out["run_id"] = None
+        return out
 
     # Symbol not in store — 404 (no legacy path; use recompute=1 to add symbol)
     raise HTTPException(status_code=404, detail=f"Symbol {sym_upper} not in evaluation store. Use recompute=1 to evaluate.")

@@ -89,7 +89,8 @@ export function TradeTicketDrawer({ symbol, candidate, onClose, decisionRef }: T
     const exp = candidate.expiry ?? undefined;
     const stk = candidate.strike ?? undefined;
     const contractKey =
-      stk && exp && strategy ? `${stk}-${String(exp).slice(0, 10)}-${strategy === "CSP" ? "PUT" : "CALL"}` : undefined;
+      candidate.contract_key ??
+      (stk && exp && strategy ? `${stk}-${String(exp).slice(0, 10)}-${strategy === "CSP" ? "PUT" : "CALL"}` : undefined);
     savePaperPosition.mutate(
       {
         symbol: symbol.toUpperCase(),

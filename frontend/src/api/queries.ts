@@ -17,7 +17,8 @@ import type {
   PortfolioMetricsResponse,
   UiAlertsResponse,
 } from "./types";
-import type { DecisionMode } from "./types";
+import type { DecisionMode, DecisionRef } from "./types";
+export type { DecisionRef };
 
 // =============================================================================
 // Paths
@@ -167,6 +168,20 @@ function uiSnapshotsLatestPath(): string {
 function uiWheelOverviewPath(accountId?: string | null): string {
   const base = `/api/ui/wheel/overview`;
   return accountId ? `${base}?account_id=${encodeURIComponent(accountId)}` : base;
+}
+
+/** Phase 20.0: Manual wheel actions */
+function uiWheelAssignPath(symbol: string): string {
+  return `/api/ui/wheel/${encodeURIComponent(symbol)}/assign`;
+}
+function uiWheelUnassignPath(symbol: string): string {
+  return `/api/ui/wheel/${encodeURIComponent(symbol)}/unassign`;
+}
+function uiWheelResetPath(symbol: string): string {
+  return `/api/ui/wheel/${encodeURIComponent(symbol)}/reset`;
+}
+function uiWheelRepairPath(): string {
+  return `/api/ui/wheel/repair`;
 }
 
 function uiNotificationsPath(limit?: number): string {
@@ -475,13 +490,6 @@ export function useManualExecute() {
   });
 }
 
-export interface DecisionRef {
-  run_id?: string;
-  evaluation_timestamp_utc?: string;
-  artifact_source?: string;
-  selected_contract_key?: string;
-}
-
 export interface SavePaperPositionPayload {
   symbol: string;
   strategy: string;
@@ -585,10 +593,19 @@ export interface WheelOverviewSuggestedCandidate {
   option_symbol?: string;
 }
 
+/** Phase 20.0: Last wheel action for manual override indicator */
+export interface WheelOverviewLastWheelAction {
+  action?: string;
+  at_utc?: string;
+}
+
 export interface WheelOverviewRow {
   symbol: string;
   wheel_state: string;
   last_updated_utc?: string | null;
+  /** Phase 20.0: True when symbol has a recent ASSIGNED/UNASSIGNED/RESET action */
+  manual_override?: boolean;
+  last_wheel_action?: WheelOverviewLastWheelAction | null;
   next_action: WheelOverviewNextAction;
   suggested_candidate?: WheelOverviewSuggestedCandidate | null;
   risk_status: string;
@@ -604,10 +621,18 @@ export interface WheelOverviewRow {
   } | null;
 }
 
+/** Phase 20.0: Wheel state integrity from diagnostics (enables Repair button when FAIL) */
+export interface WheelOverviewIntegrity {
+  status?: "PASS" | "FAIL";
+  recommended_action?: string | null;
+  details?: { mismatches?: unknown[]; symbols_checked?: number };
+}
+
 export interface WheelOverviewResponse {
   symbols: Record<string, WheelOverviewRow>;
   risk_status: string;
   run_id?: string | null;
+  wheel_integrity?: WheelOverviewIntegrity | null;
   error?: string;
 }
 
@@ -616,6 +641,55 @@ export function useWheelOverview(accountId?: string | null, enabled = true) {
     queryKey: queryKeys.uiWheelOverview(accountId),
     queryFn: () => apiGet<WheelOverviewResponse>(uiWheelOverviewPath(accountId)),
     enabled,
+  });
+}
+
+/** Phase 20.0: POST /api/ui/wheel/{symbol}/assign */
+export function useWheelAssign() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (symbol: string) => apiPost<{ symbol: string; state: string }>(uiWheelAssignPath(symbol), {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "wheel"] });
+    },
+  });
+}
+
+/** Phase 20.0: POST /api/ui/wheel/{symbol}/unassign */
+export function useWheelUnassign() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (symbol: string) => apiPost<{ symbol: string; state: string }>(uiWheelUnassignPath(symbol), {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "wheel"] });
+    },
+  });
+}
+
+/** Phase 20.0: POST /api/ui/wheel/{symbol}/reset (body: { confirm: true }) */
+export function useWheelReset() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (symbol: string) => apiPost<{ symbol: string; state: string }>(uiWheelResetPath(symbol), { confirm: true }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "wheel"] });
+    },
+  });
+}
+
+/** Phase 20.0: POST /api/ui/wheel/repair — rebuild wheel_state from open positions */
+export interface WheelRepairResponse {
+  repaired_symbols: string[];
+  removed_symbols: string[];
+  status: string;
+}
+export function useWheelRepair() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<WheelRepairResponse>(uiWheelRepairPath(), {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "wheel"] });
+    },
   });
 }
 
@@ -791,7 +865,7 @@ export function useRunSchedulerOnce() {
 // Diagnostics (Phase 8.2)
 export interface DiagnosticsRunResponse {
   timestamp_utc: string;
-  checks: Array<{ check: string; status: string; details: Record<string, unknown> }>;
+  checks: Array<{ check: string; status: string; details: Record<string, unknown>; recommended_action?: string | null }>;
   overall_status: string;
 }
 

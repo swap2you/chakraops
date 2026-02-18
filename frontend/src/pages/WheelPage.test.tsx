@@ -5,6 +5,10 @@ import { WheelPage } from "./WheelPage";
 const useWheelOverview = vi.fn();
 const useDefaultAccount = vi.fn();
 const useAccounts = vi.fn();
+const useWheelAssign = vi.fn();
+const useWheelUnassign = vi.fn();
+const useWheelReset = vi.fn();
+const useWheelRepair = vi.fn();
 
 vi.mock("@/api/queries", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/api/queries")>();
@@ -13,14 +17,22 @@ vi.mock("@/api/queries", async (importOriginal) => {
     useWheelOverview: (...args: unknown[]) => useWheelOverview(...args),
     useDefaultAccount: (...args: unknown[]) => useDefaultAccount(...args),
     useAccounts: (...args: unknown[]) => useAccounts(...args),
+    useWheelAssign: (...args: unknown[]) => useWheelAssign(...args),
+    useWheelUnassign: (...args: unknown[]) => useWheelUnassign(...args),
+    useWheelReset: (...args: unknown[]) => useWheelReset(...args),
+    useWheelRepair: (...args: unknown[]) => useWheelRepair(...args),
   };
 });
+
+const mockMutation = () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null, data: null });
 
 const mockWheelOverview = {
   symbols: {
     SPY: {
       symbol: "SPY",
       wheel_state: "EMPTY",
+      last_updated_utc: "2026-02-17T18:00:00Z",
+      manual_override: false,
       next_action: {
         action_type: "OPEN_TICKET",
         suggested_contract_key: "100-2026-12-20-PUT",
@@ -44,6 +56,7 @@ const mockWheelOverview = {
   },
   risk_status: "PASS",
   run_id: "run-abc",
+  wheel_integrity: { status: "PASS" },
 };
 
 describe("WheelPage", () => {
@@ -56,6 +69,10 @@ describe("WheelPage", () => {
     });
     useDefaultAccount.mockReturnValue({ data: { account: { account_id: "paper" } } });
     useAccounts.mockReturnValue({ data: { accounts: [{ account_id: "paper" }] } });
+    useWheelAssign.mockReturnValue(mockMutation());
+    useWheelUnassign.mockReturnValue(mockMutation());
+    useWheelReset.mockReturnValue(mockMutation());
+    useWheelRepair.mockReturnValue(mockMutation());
   });
 
   it("renders wheel table with symbol rows", () => {
@@ -103,5 +120,51 @@ describe("WheelPage", () => {
     const dialog = screen.getByRole("dialog", { name: /trade ticket/i });
     expect(dialog).toBeInTheDocument();
     expect(screen.getAllByText(/2026-12-20/).length).toBeGreaterThan(0);
+  });
+
+  it("Phase 20: shows Repair wheel state section and Assign when state is EMPTY", () => {
+    render(<WheelPage />);
+    expect(screen.getByRole("button", { name: /repair wheel state/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Assign$/i })).toBeInTheDocument();
+  });
+
+  it("Phase 20: shows Unassign and Reset when state is ASSIGNED", () => {
+    useWheelOverview.mockReturnValue({
+      data: {
+        ...mockWheelOverview,
+        symbols: {
+          SPY: {
+            ...mockWheelOverview.symbols.SPY,
+            wheel_state: "ASSIGNED",
+            last_updated_utc: "2026-02-17T18:00:00Z",
+            manual_override: true,
+          },
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<WheelPage />);
+    expect(screen.getByRole("button", { name: /unassign/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Reset$/i })).toBeInTheDocument();
+  });
+
+  it("Phase 20: shows manual override and last_updated when present", () => {
+    useWheelOverview.mockReturnValue({
+      data: {
+        ...mockWheelOverview,
+        symbols: {
+          SPY: {
+            ...mockWheelOverview.symbols.SPY,
+            manual_override: true,
+            last_updated_utc: "2026-02-17T18:00:00Z",
+          },
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<WheelPage />);
+    expect(screen.getByTitle(/manual override/i)).toBeInTheDocument();
   });
 });

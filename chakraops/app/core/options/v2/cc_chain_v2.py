@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -27,6 +28,7 @@ from app.core.config.wheel_strategy_config import (
     MAX_SPREAD_PCT,
 )
 from app.core.config.wheel_strategy_config import get_dte_range
+from app.core.options.orats_chain_pipeline import _delta_to_decimal
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +202,7 @@ def run_cc_stage2_v2(
     trace["available"] = len(enrichment_rows) > 0
 
     # Candidate mapping
+    _debug_delta_samples: List[Tuple[Any, float, float]] = []
     candidates: List[Dict[str, Any]] = []
     missing_counts: Dict[str, int] = {f: 0 for f in REQUIRED_FIELDS}
     for row in enrichment_rows:
@@ -219,12 +222,15 @@ def run_cc_stage2_v2(
             strike = float(strike_raw) if strike_raw is not None else None
         except (TypeError, ValueError):
             strike = None
+        delta_decimal = _delta_to_decimal(delta_raw) if delta_raw is not None else None
+        if os.environ.get("CHAKRAOPS_DEBUG_DELTA") == "1" and delta_raw is not None and delta_decimal is not None and len(_debug_delta_samples) < 3:
+            _debug_delta_samples.append((delta_raw, delta_decimal, abs(delta_decimal)))
         c = {
             "optionSymbol": option_symbol,
             "putCall": "C",
             "strike": strike,
             "exp": exp_raw,
-            "delta": float(delta_raw) if delta_raw is not None and not isinstance(delta_raw, str) else None,
+            "delta": delta_decimal,
             "bid": float(bid) if bid is not None and not isinstance(bid, str) else None,
             "ask": float(ask) if ask is not None and not isinstance(ask, str) else None,
             "open_interest": _safe_oi(oi_raw),
@@ -256,6 +262,15 @@ def run_cc_stage2_v2(
     trace["otm_contracts_in_delta_band"] = len(in_delta_band)
     trace["otm_calls_in_delta_band"] = len(in_delta_band)
 
+    if os.environ.get("CHAKRAOPS_DEBUG_DELTA") == "1":
+        min_abs = round(min(abs_deltas), 4) if abs_deltas else None
+        max_abs = round(max(abs_deltas), 4) if abs_deltas else None
+        logger.info(
+            "[DEBUG_DELTA] symbol=%s strategy=CC quote_date=%s target_band=(%.2f,%.2f) count_total=%d count_in_band=%d min_abs_delta_dec=%s max_abs_delta_dec=%s samples=%s",
+            symbol, trace.get("quote_as_of") or trace.get("snapshot_time") or "—",
+            delta_lo, delta_hi, len(otm_calls), len(in_delta_band), min_abs, max_abs, _debug_delta_samples[:3],
+        )
+
     def _spread_pct(c: Dict) -> Optional[float]:
         b, a = c.get("bid"), c.get("ask")
         if b is None or a is None:
@@ -272,9 +287,11 @@ def run_cc_stage2_v2(
         "rejected_due_to_oi": 0,
         "rejected_due_to_spread": 0,
     }
+    first_delta_rejection_sample: List[Dict[str, Any]] = []
     for c in otm_calls:
         passes_req = all(c.get(f) is not None for f in REQUIRED_FIELDS)
-        delta_abs = abs(float(c["delta"])) if c.get("delta") is not None else None
+        d_raw = c.get("delta")
+        delta_abs = abs(float(d_raw)) if d_raw is not None else None
         passes_delta = delta_abs is not None and delta_lo <= delta_abs <= delta_hi
         oi = c.get("open_interest")
         passes_oi = oi is not None and oi >= min_open_interest
@@ -287,6 +304,13 @@ def run_cc_stage2_v2(
                 rejected_counts["rejected_due_to_missing_fields"] += 1
             elif not passes_delta:
                 rejected_counts["rejected_due_to_delta"] += 1
+                if not first_delta_rejection_sample and d_raw is not None:
+                    first_delta_rejection_sample.append({
+                        "observed_delta_decimal_raw": round(float(d_raw), 4),
+                        "observed_delta_decimal_abs": round(delta_abs, 4) if delta_abs is not None else None,
+                        "observed_delta_pct_abs": round(delta_abs * 100, 1) if delta_abs is not None else None,
+                        "target_range_decimal": f"{delta_lo}-{delta_hi}",
+                    })
             elif not passes_oi:
                 rejected_counts["rejected_due_to_oi"] += 1
             elif not passes_spread:
@@ -294,10 +318,12 @@ def run_cc_stage2_v2(
 
     table_rows: List[Dict[str, Any]] = []
     sample_rejections: List[Dict[str, Any]] = []
+    sample_rejected_due_to_delta: List[Dict[str, Any]] = []
     for c in otm_calls[:20]:
         passes_req = all(c.get(f) is not None for f in REQUIRED_FIELDS)
-        delta_abs = abs(float(c["delta"])) if c.get("delta") is not None else None
-        passes_delta = delta_abs is not None and delta_lo <= delta_abs <= delta_hi
+        d_raw = c.get("delta")
+        d_abs = abs(float(d_raw)) if d_raw is not None else None
+        passes_delta = d_abs is not None and delta_lo <= d_abs <= delta_hi
         oi = c.get("open_interest")
         passes_oi = oi is not None and oi >= min_open_interest
         sp = _spread_pct(c)
@@ -306,6 +332,13 @@ def run_cc_stage2_v2(
             rej = "missing_required_fields"
         elif not passes_delta:
             rej = "delta_out_of_band"
+            if len(sample_rejected_due_to_delta) < 3 and d_raw is not None:
+                sample_rejected_due_to_delta.append({
+                    "observed_delta_decimal_raw": round(float(d_raw), 4),
+                    "observed_delta_decimal_abs": round(d_abs, 4) if d_abs is not None else None,
+                    "observed_delta_pct_abs": round(d_abs * 100, 1) if d_abs is not None else None,
+                    "target_range_decimal": f"{delta_lo}-{delta_hi}",
+                })
         elif not passes_oi:
             rej = "oi_below_min"
         elif not passes_spread:
@@ -315,7 +348,7 @@ def run_cc_stage2_v2(
         row = {
             "exp": c.get("exp"), "strike": c.get("strike"),
             "OTM?": c.get("strike") is not None and c["strike"] > spot,
-            "abs_delta": round(delta_abs, 4) if delta_abs is not None else None,
+            "abs_delta": round(d_abs, 4) if d_abs is not None else None,
             "bid": c.get("bid"), "ask": c.get("ask"),
             "spread_pct": round(sp, 4) if sp is not None else None,
             "oi": oi,
@@ -327,6 +360,7 @@ def run_cc_stage2_v2(
         if rej and len(sample_rejections) < 10:
             sample_rejections.append(row)
     trace["rejection_counts"] = rejected_counts
+    trace["sample_rejected_due_to_delta"] = first_delta_rejection_sample if first_delta_rejection_sample else sample_rejected_due_to_delta
     trace["rejected_counts"] = rejected_counts
     trace["sample_rejections"] = sample_rejections[:10]
     trace["top_candidates_table"] = table_rows[:10]

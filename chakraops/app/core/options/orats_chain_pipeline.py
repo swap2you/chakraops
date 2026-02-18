@@ -421,6 +421,28 @@ def _safe_float(val: Any) -> Optional[float]:
         return None
 
 
+def _delta_to_decimal(raw: Any) -> Optional[float]:
+    """
+    Normalize ORATS delta to canonical decimal in [-1, 1].
+    ORATS may return decimal (e.g. -0.32) or percent (e.g. -32 or 32).
+    If |raw| > 1.5 treat as percent and divide by 100; otherwise use as decimal.
+    Log once per process if percent form detected (no fallback pipeline).
+    """
+    v = _safe_float(raw)
+    if v is None:
+        return None
+    if abs(v) > 1.5:
+        normalized = v / 100.0
+        if not getattr(_delta_to_decimal, "_logged_percent", False):
+            logger.info(
+                "[ORATS_DELTA] Normalized delta from percent to decimal: raw=%s -> %s (will not log again this process)",
+                v, normalized,
+            )
+            _delta_to_decimal._logged_percent = True
+        return normalized
+    return v
+
+
 def _safe_int(val: Any) -> Optional[int]:
     """Safely convert to int, returning None for invalid values."""
     if val is None:
@@ -644,9 +666,10 @@ def fetch_base_chain(
             try:
                 strike = float(row.get("strike"))
                 dte = int(row.get("dte", 0))
-                delta = row.get("delta")
+                delta_raw = row.get("delta")
                 stock_price = row.get("stockPrice") or row.get("stkPx")
-                put_delta = -float(delta) if delta is not None else None
+                delta_decimal = _delta_to_decimal(delta_raw)
+                put_delta = -delta_decimal if delta_decimal is not None else None
                 put_contract = BaseContract(
                     symbol=symbol.upper(),
                     expiration=expiration,
@@ -1024,7 +1047,7 @@ def merge_chain_and_liquidity(
             mid=_safe_float(mid),
             volume=_safe_int(enrichment.get("volume")),
             open_interest=_safe_int(open_interest),
-            delta=_safe_float(enrichment.get("delta")) or base.delta,
+            delta=_delta_to_decimal(enrichment.get("delta")) if enrichment.get("delta") is not None else base.delta,
             gamma=_safe_float(enrichment.get("gamma")),
             theta=_safe_float(enrichment.get("theta")),
             vega=_safe_float(enrichment.get("vega")),

@@ -1,7 +1,15 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ExternalLink, Ticket } from "lucide-react";
-import { useWheelOverview, useDefaultAccount, useAccounts } from "@/api/queries";
+import { ExternalLink, Ticket, Wrench } from "lucide-react";
+import {
+  useWheelOverview,
+  useDefaultAccount,
+  useAccounts,
+  useWheelAssign,
+  useWheelUnassign,
+  useWheelReset,
+  useWheelRepair,
+} from "@/api/queries";
 import type { WheelOverviewRow, WheelOverviewSuggestedCandidate } from "@/api/queries";
 import type { SymbolDiagnosticsCandidate } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
@@ -19,6 +27,7 @@ import {
   Button,
   EmptyState,
 } from "@/components/ui";
+import { formatTimestampEt } from "@/utils/formatTimestamp";
 
 function fmt(n: number | null | undefined): string {
   if (n == null) return "—";
@@ -50,11 +59,19 @@ export function WheelPage() {
 
   const { data, isLoading, isError } = useWheelOverview(accountId, !!selectedAccount);
   const [openTicket, setOpenTicket] = useState<{ symbol: string; row: WheelOverviewRow } | null>(null);
+  const [repairConfirmed, setRepairConfirmed] = useState(false);
+  const wheelAssign = useWheelAssign();
+  const wheelUnassign = useWheelUnassign();
+  const wheelReset = useWheelReset();
+  const wheelRepair = useWheelRepair();
 
   const symbols = data?.symbols ?? {};
   const rows = Object.values(symbols);
   const riskStatus = data?.risk_status ?? "PASS";
   const runId = data?.run_id ?? null;
+  const wheelIntegrity = data?.wheel_integrity;
+  const integrityFail = wheelIntegrity?.status === "FAIL";
+  const repairEnabled = integrityFail || repairConfirmed;
 
   if (isLoading) {
     return (
@@ -86,6 +103,43 @@ export function WheelPage() {
         subtext={`${rows.length} symbol(s) · Risk: ${riskStatus}`}
       />
 
+      {/* Phase 20.0: Repair wheel state — enabled when integrity FAIL or user confirms */}
+      <Card>
+        <CardHeader
+          title="Wheel state"
+          description={integrityFail ? (wheelIntegrity?.recommended_action ?? "Wheel state does not match open positions.") : "Repair rebuilds wheel_state from open positions and recent actions."}
+        />
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+            <input
+              type="checkbox"
+              checked={repairConfirmed}
+              onChange={(e) => setRepairConfirmed(e.target.checked)}
+              className="rounded border-zinc-300 dark:border-zinc-600"
+            />
+            Run repair anyway (even if integrity is PASS)
+          </label>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!repairEnabled || wheelRepair.isPending}
+            onClick={() => wheelRepair.mutate()}
+            className="gap-1"
+          >
+            <Wrench className="h-4 w-4" />
+            Repair wheel state
+          </Button>
+          {wheelRepair.isError && (
+            <span className="text-sm text-red-500 dark:text-red-400">{String(wheelRepair.error)}</span>
+          )}
+          {wheelRepair.data && (
+            <span className="text-sm text-emerald-600 dark:text-emerald-400">
+              Repaired: {wheelRepair.data.repaired_symbols?.length ?? 0}, removed: {wheelRepair.data.removed_symbols?.length ?? 0}
+            </span>
+          )}
+        </div>
+      </Card>
+
       {rows.length === 0 ? (
         <Card>
           <EmptyState
@@ -101,6 +155,7 @@ export function WheelPage() {
               <TableHeader>
                 <TableHead>Symbol</TableHead>
                 <TableHead>State</TableHead>
+                <TableHead>Updated</TableHead>
                 <TableHead>Open Position</TableHead>
                 <TableHead>Next Action</TableHead>
                 <TableHead>Risk</TableHead>
@@ -140,6 +195,14 @@ export function WheelPage() {
                         <Badge variant={row.wheel_state === "OPEN" ? "success" : row.wheel_state === "CLOSED" ? "neutral" : "warning"}>
                           {row.wheel_state}
                         </Badge>
+                        {row.manual_override && (
+                          <span className="ml-1 text-xs text-zinc-500 dark:text-zinc-400" title="Manual override">(manual)</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                          {row.last_updated_utc ? formatTimestampEt(row.last_updated_utc) : "—"}
+                        </span>
                       </TableCell>
                       <TableCell>
                         {pos ? (
@@ -187,17 +250,51 @@ export function WheelPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        {canOpen && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setOpenTicket({ symbol: row.symbol, row })}
-                            className="gap-1"
-                          >
-                            <Ticket className="h-4 w-4" />
-                            Open ticket
-                          </Button>
-                        )}
+                        <div className="flex flex-wrap justify-end gap-1">
+                          {/* Phase 20.0: Assign when EMPTY; Unassign when ASSIGNED; Reset when CLOSED or any */}
+                          {row.wheel_state === "EMPTY" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={wheelAssign.isPending}
+                              onClick={() => wheelAssign.mutate(row.symbol)}
+                            >
+                              Assign
+                            </Button>
+                          )}
+                          {(row.wheel_state === "ASSIGNED" || row.wheel_state === "OPEN") && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={wheelUnassign.isPending}
+                              onClick={() => wheelUnassign.mutate(row.symbol)}
+                            >
+                              Unassign
+                            </Button>
+                          )}
+                          {(row.wheel_state === "CLOSED" || row.wheel_state === "ASSIGNED" || row.wheel_state === "OPEN") && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={wheelReset.isPending}
+                              onClick={() => wheelReset.mutate(row.symbol)}
+                              className="text-zinc-500"
+                            >
+                              Reset
+                            </Button>
+                          )}
+                          {canOpen && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setOpenTicket({ symbol: row.symbol, row })}
+                              className="gap-1"
+                            >
+                              <Ticket className="h-4 w-4" />
+                              Open ticket
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   );

@@ -10,17 +10,23 @@ const useClosePosition = vi.fn();
 const useDeletePosition = vi.fn();
 const usePositionEvents = vi.fn();
 const usePortfolioRisk = vi.fn();
+const useRefreshMarks = vi.fn();
 
-vi.mock("@/api/queries", () => ({
-  usePortfolio: (...args: unknown[]) => usePortfolio(...args),
-  usePortfolioMetrics: (...args: unknown[]) => usePortfolioMetrics(...args),
-  useAccounts: (...args: unknown[]) => useAccounts(...args),
-  useDefaultAccount: (...args: unknown[]) => useDefaultAccount(...args),
-  useClosePosition: (...args: unknown[]) => useClosePosition(...args),
-  useDeletePosition: (...args: unknown[]) => useDeletePosition(...args),
-  usePositionEvents: (...args: unknown[]) => usePositionEvents(...args),
-  usePortfolioRisk: (...args: unknown[]) => usePortfolioRisk(...args),
-}));
+vi.mock("@/api/queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/api/queries")>();
+  return {
+    ...actual,
+    usePortfolio: (...args: unknown[]) => usePortfolio(...args),
+    usePortfolioMetrics: (...args: unknown[]) => usePortfolioMetrics(...args),
+    useAccounts: (...args: unknown[]) => useAccounts(...args),
+    useDefaultAccount: (...args: unknown[]) => useDefaultAccount(...args),
+    useClosePosition: (...args: unknown[]) => useClosePosition(...args),
+    useDeletePosition: (...args: unknown[]) => useDeletePosition(...args),
+    usePositionEvents: (...args: unknown[]) => usePositionEvents(...args),
+    usePortfolioRisk: (...args: unknown[]) => usePortfolioRisk(...args),
+    useRefreshMarks: (...args: unknown[]) => useRefreshMarks(...args),
+  };
+});
 
 const mockMetrics = {
   open_positions_count: 1,
@@ -102,6 +108,7 @@ describe("PortfolioPage", () => {
     useDeletePosition.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false });
     usePositionEvents.mockReturnValue({ data: { position_id: "pos_1", events: [] }, isLoading: false });
     usePortfolioRisk.mockReturnValue({ data: { status: "PASS", metrics: {}, breaches: [] } });
+    useRefreshMarks.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false });
   });
 
   it("renders without throwing", () => {

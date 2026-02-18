@@ -81,7 +81,7 @@ def refresh_marks(
             continue
         if not (getattr(p, "contract_key", None) or getattr(p, "option_symbol", None)):
             skipped += 1
-            errors.append(f"{p.position_id}: no contract_key/option_symbol")
+            # Do not add to errors: equity or legacy positions without option id; skip without failing refresh.
             continue
         symbol = (p.symbol or "").strip().upper()
         if not symbol:

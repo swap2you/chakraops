@@ -3,7 +3,7 @@ import { clsx } from "clsx";
 
 interface TooltipProps {
   children: React.ReactNode;
-  content: string;
+  content?: string | null;
   className?: string;
 }
 

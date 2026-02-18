@@ -105,6 +105,22 @@ def test_stage1_blocks_on_missing_bid_ask_volume():
     assert "incomplete" in result.stock_verdict_reason.lower() or "missing" in result.stock_verdict_reason.lower()
 
 
+def test_compute_required_missing_iv_rank_present():
+    """When symbol dict has iv_rank set, required_data_missing must NOT include iv_rank."""
+    from app.core.symbols.data_dependencies import compute_required_missing
+    sym = {"symbol": "SPY", "price": 450.0, "bid": 449.0, "ask": 451.0, "volume": 1_000_000, "quote_date": "2026-02-17", "iv_rank": 25.0}
+    missing = compute_required_missing(sym)
+    assert "iv_rank" not in missing
+
+
+def test_compute_required_missing_iv_rank_absent():
+    """When symbol dict has iv_rank None/missing, required_data_missing must include iv_rank."""
+    from app.core.symbols.data_dependencies import compute_required_missing
+    sym = {"symbol": "SPY", "price": 450.0, "bid": 449.0, "ask": 451.0, "volume": 1_000_000, "quote_date": "2026-02-17", "iv_rank": None}
+    missing = compute_required_missing(sym)
+    assert "iv_rank" in missing
+
+
 def test_no_avg_volume_in_optional_evaluation_fields():
     """data_dependencies must not list avg_volume as optional."""
     from app.core.symbols.data_dependencies import OPTIONAL_EVALUATION_FIELDS

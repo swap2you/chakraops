@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { usePortfolio, usePortfolioMetrics, usePortfolioRisk, useRefreshMarks, useAccounts, useDefaultAccount, useClosePosition, useDeletePosition } from "@/api/queries";
+import { usePortfolio, usePortfolioMetrics, usePortfolioRisk, useRefreshMarks, useAccounts, useDefaultAccount, useDeletePosition } from "@/api/queries";
 import type { PortfolioPosition } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { ClosePositionDrawer } from "@/components/ClosePositionDrawer";

@@ -339,8 +339,16 @@ def _build_diagnostics_details(sr: Any, sym_upper: str, ts: str) -> SymbolDiagno
             exit_plan_dict["t2"] = sp.get("T2")
             exit_plan_dict["t3"] = sp.get("T3")
             exit_plan_dict["stop"] = sp.get("stop_hint_price")
-    except Exception:
-        pass
+        missing_ep = (ep.get("missing_fields") or []) if isinstance(ep, dict) else []
+        has_any_level = any((exit_plan_dict.get("t1"), exit_plan_dict.get("t2"), exit_plan_dict.get("stop")))
+        if not has_any_level:
+            exit_plan_dict["status"] = "NOT_AVAILABLE"
+            exit_plan_dict["reason"] = "Exit plan not computed: " + ", ".join(missing_ep) if missing_ep else "Missing inputs (resistance_level, support_level, or ATR14)."
+        else:
+            exit_plan_dict["status"] = "AVAILABLE"
+    except Exception as e:
+        exit_plan_dict["status"] = "NOT_AVAILABLE"
+        exit_plan_dict["reason"] = f"Exit plan error: {e}"
     lg = getattr(sr, "liquidity_gates", None) or {}
     underlying_liq = lg.get("underlying") or {}
     option_liq = lg.get("option") or {}
@@ -405,6 +413,8 @@ def _build_diagnostics_details(sr: Any, sym_upper: str, ts: str) -> SymbolDiagno
         "contracts_count": contracts_count,
         "underlying_price": spot,
     }
+    top_rej = getattr(sr, "top_rejection_reasons", None) or {}
+    sample_rejected_due_to_delta = top_rej.get("sample_rejected_due_to_delta") or []
     return SymbolDiagnosticsDetails(
         technicals=technicals,
         exit_plan=exit_plan_dict,
@@ -418,6 +428,8 @@ def _build_diagnostics_details(sr: Any, sym_upper: str, ts: str) -> SymbolDiagno
         suggested_capital_pct=suggested_pct,
         regime=getattr(sr, "regime", None),
         options=options,
+        reasons_explained=None,  # never persisted; computed on-demand in API
+        sample_rejected_due_to_delta=sample_rejected_due_to_delta,
     )
 
 

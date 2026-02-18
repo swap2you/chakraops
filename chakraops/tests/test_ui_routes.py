@@ -883,8 +883,8 @@ def test_ui_marks_refresh_with_mock_fetcher(tmp_path):
         assert data["positions"][0]["unrealized_pnl"] == 150.0
 
 
-def test_ui_marks_refresh_skips_position_without_contract(tmp_path):
-    """Phase 15.0: Positions without contract_key/option_symbol are skipped with reason."""
+def test_ui_marks_refresh_skips_equity_without_failing(tmp_path):
+    """Phase 15.0: Equity positions (no contract_key/option_symbol) are skipped; refresh does not fail."""
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
 
@@ -905,7 +905,9 @@ def test_ui_marks_refresh_skips_position_without_contract(tmp_path):
         data = r.json()
         assert data["updated_count"] == 0
         assert data["skipped_count"] >= 1
-        assert any("contract_key" in e or "option_symbol" in e for e in data.get("errors", []))
+        # Equity positions must not add to errors (no MARK_REFRESH_FAILED for missing contract_key)
+        errors = data.get("errors") or []
+        assert not any("no contract_key" in e or "no option_symbol" in e or "contract_key" in e.lower() and "option_symbol" in e.lower() for e in errors)
 
 
 def test_ui_portfolio_mtm_returns_totals(tmp_path):

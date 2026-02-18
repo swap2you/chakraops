@@ -721,6 +721,9 @@ def _select_csp_candidates(
                     "strike": c.strike,
                     "expiration": exp.isoformat(),
                     "abs_delta": round(delta_mag, 4),
+                    "observed_delta_decimal": round(delta_mag, 4),
+                    "observed_delta_pct": round(delta_mag * 100, 1) if delta_mag is not None else None,
+                    "target_range_decimal": f"{delta_lo}-{delta_hi}",
                     "option_type": getattr(c.option_type, "value", str(c.option_type)),
                 })
             continue
@@ -1080,6 +1083,7 @@ def evaluate_stage2(
             result.top_rejection_reasons = {
                 "rejection_counts": result.rejection_counts,
                 "sample_rejected_candidates": v2_result.sample_rejections,
+                "sample_rejected_due_to_delta": trace.get("sample_rejected_due_to_delta") or [],
                 "top_rejection_reason": v2_result.top_rejection or v2_result.top_rejection_reason,
             }
             result.strikes_options_telemetry = {
@@ -1490,15 +1494,18 @@ def build_eligibility_layers(
       or PASS (chain fetched, at least one candidate passed).
     """
     if stage1 is None:
-        symbol_eligibility = {"status": "FAIL", "reasons": ["Stage 1 not run"]}
+        symbol_eligibility = {"status": "FAIL", "reasons": ["Stage 1 not run"], "required_data_missing": [], "required_data_stale": []}
     else:
         passed = stage1.stock_verdict == StockVerdict.QUALIFIED
+        missing = list(stage1.missing_fields) if getattr(stage1, "missing_fields", None) else []
         symbol_eligibility = {
             "status": "PASS" if passed else "FAIL",
             "reasons": [] if passed else [stage1.stock_verdict_reason or "Stage 1 did not qualify"],
+            "required_data_missing": missing,
+            "required_data_stale": [],
         }
-        if stage1.missing_fields and not passed:
-            symbol_eligibility["reasons"].append(f"Missing required fields: {', '.join(stage1.missing_fields)}")
+        if missing and not passed:
+            symbol_eligibility["reasons"].append(f"Missing required fields: {', '.join(missing)}")
 
     if stage2 is None:
         contract_data = {"available": False, "as_of": None, "source": "NONE"}

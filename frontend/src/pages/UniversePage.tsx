@@ -299,13 +299,24 @@ export function UniversePage() {
                     {row.provider_status ?? "n/a"}
                   </TableCell>
                   <TableCell className="font-mono text-zinc-600 dark:text-zinc-400">
-                    {row.data_freshness ? fmtTs(row.data_freshness) : "n/a"}
+                    {row.data_freshness ? formatTimestampEt(row.data_freshness) : "n/a"}
                   </TableCell>
                   <TableCell className="font-mono text-zinc-600 dark:text-zinc-400">
                     {row.strategy ?? "n/a"}
                   </TableCell>
-                  <TableCell className="max-w-xs truncate text-zinc-600 dark:text-zinc-400" title={row.primary_reason ?? ""}>
-                    {row.primary_reason ?? "n/a"}
+                  <TableCell className="max-w-xs truncate text-zinc-600 dark:text-zinc-400">
+                    <Tooltip
+                      content={
+                        (row.reasons_explained?.length
+                          ? row.reasons_explained.map((r) => r.message).join("\n") + (row.primary_reason ? "\n\nDebug: " + row.primary_reason : "")
+                          : row.primary_reason) ?? "n/a"
+                      }
+                      className="max-w-sm"
+                    >
+                      <span className="block truncate">
+                        {row.reasons_explained?.[0]?.message ?? row.primary_reason ?? "n/a"}
+                      </span>
+                    </Tooltip>
                   </TableCell>
                   <TableCell numeric>
                     {row.price != null ? String(row.price) : "n/a"}

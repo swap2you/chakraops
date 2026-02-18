@@ -49,3 +49,16 @@ def save_state_atomic(state: Dict[str, Any]) -> None:
     from app.core.io.atomic import atomic_write_json
     path = _wheel_state_path()
     atomic_write_json(path, state, indent=2)
+
+
+def clear_symbol_from_state(symbol: str) -> None:
+    """Phase 20.0: Remove symbol from wheel state (reset). Does not delete positions."""
+    symbol = (symbol or "").strip().upper()
+    if not symbol:
+        return
+    state_data = load_state()
+    symbols = state_data.get("symbols") or {}
+    if symbol in symbols:
+        del symbols[symbol]
+        save_state_atomic(state_data)
+    logger.info("[WHEEL] Cleared state for symbol %s", symbol)

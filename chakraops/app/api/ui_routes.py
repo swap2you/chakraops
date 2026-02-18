@@ -321,6 +321,8 @@ def ui_universe(
                 row["required_data_missing"] = sel_el.get("required_data_missing") or []
                 row["required_data_stale"] = sel_el.get("required_data_stale") or []
                 row["optional_missing"] = sel_el.get("optional_missing") or []
+                sample = (getattr(diag, "sample_rejected_due_to_delta", None) or (diag.get("sample_rejected_due_to_delta") if isinstance(diag, dict) else None) or []) if diag else []
+                row["reasons_explained"] = _compute_reasons_explained(s.primary_reason, sel_el, sample)
                 sel_cand = sel_by_sym.get(sym_key)
                 if sel_cand and (s.verdict or "").upper() == "ELIGIBLE":
                     row["selected_contract_key"] = getattr(sel_cand, "contract_key", None)
@@ -728,6 +730,21 @@ def ui_stores_repair(
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Error repairing store %s: %s", store, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/decisions/archive/prune")
+def ui_decisions_archive_prune(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Prune decision archive (out/decisions/<symbol>/*.json) to at most DECISION_ARCHIVE_MAX per symbol. Safe to call repeatedly."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.eval.evaluation_store_v2 import prune_decision_archives
+        return prune_decision_archives()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error pruning decision archives: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1202,6 +1219,12 @@ def ui_wheel_overview(
 
         wheel_state_data = load_state()
         symbols_map = wheel_state_data.get("symbols") or {}
+        last_wheel_actions: Dict[str, Dict[str, Any]] = {}
+        try:
+            from app.core.wheel.actions_store import get_last_wheel_action_per_symbol
+            last_wheel_actions = get_last_wheel_action_per_symbol()
+        except Exception:
+            pass
 
         artifact = None
         run_id = None
@@ -1278,10 +1301,14 @@ def ui_wheel_overview(
                     "contracts": getattr(p0, "contracts", None),
                 }
             score_info = symbol_scores.get(sym) or {}
+            last_action = last_wheel_actions.get(sym)
+            manual_override = bool(last_action and last_action.get("action") in ("ASSIGNED", "UNASSIGNED", "RESET"))
             rows[sym] = {
                 "symbol": sym,
                 "wheel_state": ws.get("state", "EMPTY"),
                 "last_updated_utc": ws.get("last_updated_utc"),
+                "manual_override": manual_override,
+                "last_wheel_action": last_action,
                 "linked_position_ids": ws.get("linked_position_ids") or [],
                 "next_action": next_action,
                 "suggested_candidate": suggested_candidate,
@@ -1292,15 +1319,138 @@ def ui_wheel_overview(
                 "links": {"run_id": run_id},
                 "open_position": pos_info,
             }
-        return {
+        wheel_integrity: Optional[Dict[str, Any]] = None
+        try:
+            from app.api.diagnostics import _run_wheel_state_integrity_check
+            wheel_integrity = _run_wheel_state_integrity_check()
+        except Exception:
+            pass
+        payload: Dict[str, Any] = {
             "symbols": rows,
             "risk_status": risk_status,
             "run_id": run_id,
         }
+        if wheel_integrity is not None:
+            payload["wheel_integrity"] = {
+                "status": wheel_integrity.get("status"),
+                "recommended_action": wheel_integrity.get("recommended_action"),
+                "details": wheel_integrity.get("details"),
+            }
+        return payload
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Error loading wheel overview: %s", e)
         return {"symbols": {}, "risk_status": "FAIL", "error": str(e)}
+
+
+def _wheel_notify(symbol: str, subtype: str, message: str) -> None:
+    """Phase 20.0: Append WHEEL_STATE notification."""
+    try:
+        from app.api.notifications_store import append_notification
+        append_notification("INFO", "WHEEL_STATE", message, symbol=symbol, subtype=subtype)
+    except Exception:
+        pass
+
+
+@router.post("/wheel/{symbol}/assign")
+def ui_wheel_assign(
+    symbol: str,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Phase 20.0: Manual assign — set wheel state to ASSIGNED for symbol."""
+    _require_ui_key(x_ui_key)
+    symbol = (symbol or "").strip().upper()
+    if not symbol:
+        raise HTTPException(status_code=400, detail="symbol required")
+    try:
+        from app.core.wheel.actions_store import append_wheel_action
+        from app.core.wheel.state_machine import update_state_from_position_event
+        append_wheel_action(symbol, "ASSIGNED")
+        new_state = update_state_from_position_event(symbol, "ASSIGNED", "")
+        _wheel_notify(symbol, "ASSIGNED", f"Wheel state set to ASSIGNED for {symbol}")
+        return {"symbol": symbol, "state": new_state}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Wheel assign failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/wheel/{symbol}/unassign")
+def ui_wheel_unassign(
+    symbol: str,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Phase 20.0: Manual unassign — set wheel state to EMPTY for symbol."""
+    _require_ui_key(x_ui_key)
+    symbol = (symbol or "").strip().upper()
+    if not symbol:
+        raise HTTPException(status_code=400, detail="symbol required")
+    try:
+        from app.core.wheel.actions_store import append_wheel_action
+        from app.core.wheel.state_machine import update_state_from_position_event
+        append_wheel_action(symbol, "UNASSIGNED")
+        new_state = update_state_from_position_event(symbol, "UNASSIGNED", "")
+        _wheel_notify(symbol, "UNASSIGNED", f"Wheel state set to EMPTY for {symbol}")
+        return {"symbol": symbol, "state": new_state}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Wheel unassign failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/wheel/{symbol}/reset")
+async def ui_wheel_reset(
+    symbol: str,
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Phase 20.0: Reset — clear wheel state entry for symbol (positions unchanged). Requires body {confirm: true}."""
+    _require_ui_key(x_ui_key)
+    symbol = (symbol or "").strip().upper()
+    if not symbol:
+        raise HTTPException(status_code=400, detail="symbol required")
+    try:
+        body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    except Exception:
+        body = {}
+    if body.get("confirm") is not True:
+        raise HTTPException(status_code=400, detail="Body must include { \"confirm\": true }")
+    try:
+        from app.core.wheel.actions_store import append_wheel_action
+        from app.core.wheel.state_store import clear_symbol_from_state
+        append_wheel_action(symbol, "RESET")
+        clear_symbol_from_state(symbol)
+        _wheel_notify(symbol, "RESET", f"Wheel state cleared for {symbol}")
+        return {"symbol": symbol, "state": "cleared"}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Wheel reset failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/wheel/repair")
+def ui_wheel_repair(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+    exclude_test: bool = Query(default=True),
+) -> Dict[str, Any]:
+    """Phase 20.0: Rebuild wheel_state from open positions and wheel actions. Returns repaired_symbols, removed_symbols, status."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.positions.service import list_positions
+        from app.core.wheel.repair import repair_wheel_state
+        from app.api.notifications_store import append_notification
+        positions = list_positions(status=None, symbol=None, exclude_test=exclude_test)
+        open_pos = [p for p in positions if (p.status or "").upper() in ("OPEN", "PARTIAL_EXIT")]
+        result = repair_wheel_state(open_pos)
+        append_notification(
+            "INFO", "WHEEL_STATE", "Wheel state repaired from open positions.",
+            subtype="REPAIRED", details=result,
+        )
+        return result
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Wheel repair failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/positions/marks/refresh")
@@ -1735,6 +1885,20 @@ def _liquidity_evaluated(summary: Any) -> bool:
     return stage2_status != "NOT_RUN"
 
 
+def _compute_reasons_explained(
+    primary_reason: Optional[str],
+    symbol_eligibility: Dict[str, Any],
+    sample_rejected_due_to_delta: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Compute reasons_explained on-demand for API (not persisted). Uses code + sample only."""
+    try:
+        from app.core.eval.reason_codes import explain_reasons
+        top_rej = {"sample_rejected_due_to_delta": sample_rejected_due_to_delta} if sample_rejected_due_to_delta else None
+        return explain_reasons(primary_reason or "", symbol_eligibility, {}, top_rej)
+    except Exception:
+        return []
+
+
 def _build_symbol_diagnostics_from_v2_store(
     summary: Any,
     candidates: List[Any],
@@ -1747,7 +1911,16 @@ def _build_symbol_diagnostics_from_v2_store(
 ) -> Dict[str, Any]:
     """Build full SymbolDiagnosticsResponseExtended from v2 store (summary + candidates + gates + earnings + diagnostics_details)."""
     c_dicts = [c.to_dict() if hasattr(c, "to_dict") else (c if isinstance(c, dict) else {}) for c in candidates]
-    g_list = [{"name": g.name, "status": g.status, "reason": g.reason, "pass": g.status == "PASS"} for g in gates] if gates else []
+    from app.core.eval.reason_codes import format_reason_for_display
+    g_list = [
+        {
+            "name": g.name,
+            "status": g.status,
+            "reason": format_reason_for_display(g.reason) or (g.reason or ""),
+            "pass": g.status == "PASS",
+        }
+        for g in (gates or [])
+    ]
     diag = diagnostics_details
     if diag and hasattr(diag, "to_dict"):
         diag = diag.to_dict()
@@ -1810,9 +1983,22 @@ def _build_symbol_diagnostics_from_v2_store(
         "suggested_capital_pct": diag.get("suggested_capital_pct"),
         "band_reason": getattr(summary, "band_reason", None),
         "candidates": c_dicts,
-        "exit_plan": {"t1": exit_plan.get("t1"), "t2": exit_plan.get("t2"), "t3": exit_plan.get("t3"), "stop": exit_plan.get("stop")},
+        "exit_plan": {
+            "t1": exit_plan.get("t1"),
+            "t2": exit_plan.get("t2"),
+            "t3": exit_plan.get("t3"),
+            "stop": exit_plan.get("stop"),
+            "status": exit_plan.get("status"),
+            "reason": exit_plan.get("reason"),
+        },
         "score_breakdown": diag.get("score_breakdown"),
         "rank_reasons": diag.get("rank_reasons"),
+        "reasons_explained": _compute_reasons_explained(
+            getattr(summary, "primary_reason", None),
+            symbol_eligibility,
+            diag.get("sample_rejected_due_to_delta") or [],
+        ),
+        "sample_rejected_due_to_delta": diag.get("sample_rejected_due_to_delta") or [],
         "earnings": earnings_out,
         "selected_contract_key": selected_contract_key,
         "option_symbol": option_symbol,

@@ -27,3 +27,4 @@ Thumbs.db
 # Data / logs (keep structure, ignore large or sensitive)
 *.db
 logs/
+out/

@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Calendar, ChevronDown, ChevronRight, Database, Droplets, X } from "lucide-react";
+import { Calendar, Database, Droplets, X } from "lucide-react";
 import { useSymbolDiagnostics, useRecomputeSymbolDiagnostics, useDefaultAccount, useUiSystemHealth } from "@/api/queries";
 import type { SymbolDiagnosticsResponseExtended } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { TradeTicketDrawer } from "@/components/TradeTicketDrawer";
 import { Card, CardHeader, Badge, StatusBadge, Button, Tooltip } from "@/components/ui";
 import type { SymbolDiagnosticsCandidate } from "@/api/types";
+import { buildReasonsFromPrimary, formatGateReason } from "@/reasons/parsePrimaryReason";
 
 function verdictColor(v: string | null | undefined): string {
   const s = (v ?? "").toUpperCase();
@@ -291,13 +292,42 @@ function ExecutionConsole({
           )}
         </div>
       </Card>
-      {/* Gate Summary: same "why" as Universe */}
+      {/* Gate Summary: reasons_explained from backend; fallback to primary_reason mapping (rejected_due_to_delta=N → rejected_count) */}
       <Card className="lg:col-span-2 w-full">
         <CardHeader title="Gate Summary" />
         <div className="space-y-3 text-sm">
           <div>
-            <span className="block text-xs text-zinc-500 dark:text-zinc-500">Primary reason</span>
-            <p className="mt-0.5 text-zinc-700 dark:text-zinc-300">{data.primary_reason ?? "—"}</p>
+            <span className="block text-xs text-zinc-500 dark:text-zinc-500">Reasons</span>
+            {(() => {
+              const reasons = (data.reasons_explained?.length ? data.reasons_explained : buildReasonsFromPrimary(data.primary_reason));
+              if (!reasons.length) {
+                return <p className="mt-0.5 text-zinc-700 dark:text-zinc-300">{data.primary_reason ?? "—"}</p>;
+              }
+              return (
+                <>
+                  <ul className="mt-1 list-disc pl-4 text-zinc-700 dark:text-zinc-300 space-y-0.5">
+                    {(reasons.length > 3 ? reasons.slice(0, 3) : reasons).map((r, i) => (
+                      <li key={i}>{r.message}</li>
+                    ))}
+                  </ul>
+                  {reasons.length > 3 ? (
+                    <details className="mt-1">
+                      <summary className="cursor-pointer text-zinc-500 dark:text-zinc-400">Show more…</summary>
+                      <ul className="mt-1 list-disc pl-4 text-zinc-600 dark:text-zinc-400 space-y-0.5">
+                        {reasons.slice(3).map((r, i) => (
+                          <li key={i}>{r.message}</li>
+                        ))}
+                      </ul>
+                    </details>
+                  ) : null}
+                </>
+              );
+            })()}
+            {data.primary_reason ? (
+              <Tooltip content={data.primary_reason} className="max-w-sm">
+                <span className="mt-1 block text-xs text-zinc-400 dark:text-zinc-500 cursor-help">Debug: raw reason</span>
+              </Tooltip>
+            ) : null}
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <div>
@@ -335,7 +365,7 @@ function ExecutionConsole({
                     <td className="py-2 pr-2">
                       <StatusBadge status={g.status} />
                     </td>
-                    <td className="py-2 text-zinc-500 dark:text-zinc-400">{g.reason}</td>
+                    <td className="py-2 text-zinc-500 dark:text-zinc-400">{formatGateReason(g.reason) || g.reason || "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -505,6 +535,9 @@ function ExecutionConsole({
       <div className="space-y-4">
         <Card>
           <CardHeader title="Exit Plan" />
+          {ep?.status === "NOT_AVAILABLE" && ep?.reason ? (
+            <p className="text-sm text-amber-700 dark:text-amber-400">{ep.reason}</p>
+          ) : null}
           <div className="flex flex-wrap gap-4 text-sm">
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">T1</span>

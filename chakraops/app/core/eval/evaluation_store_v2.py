@@ -11,8 +11,8 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# Phase 11.2: Keep last N decision history files per symbol
-DECISION_HISTORY_KEEP = int(os.getenv("DECISION_HISTORY_KEEP", "50"))
+# Phase 11.2: Keep last N decision history files per symbol (configurable; DECISION_ARCHIVE_MAX overrides)
+DECISION_HISTORY_KEEP = int(os.getenv("DECISION_ARCHIVE_MAX", os.getenv("DECISION_HISTORY_KEEP", "50")))
 
 from app.core.eval.decision_artifact_v2 import (
     CandidateRow,
@@ -265,6 +265,37 @@ class EvaluationStoreV2:
             earnings = self._artifact.earnings_by_symbol.get(sym_upper)
             diagnostics_details = self._artifact.diagnostics_by_symbol.get(sym_upper)
             return (summary, candidates, gates, earnings, diagnostics_details)
+
+
+def prune_decision_archives() -> Dict[str, Any]:
+    """Prune all symbol directories under out/decisions to at most DECISION_HISTORY_KEEP files each. Safe to call repeatedly."""
+    removed = 0
+    symbols_affected: List[str] = []
+    hist = _history_dir()
+    if not hist.exists() or not hist.is_dir():
+        return {"removed": 0, "symbols_affected": [], "max_per_symbol": DECISION_HISTORY_KEEP}
+    for sym_dir in hist.iterdir():
+        if not sym_dir.is_dir():
+            continue
+        sym = sym_dir.name
+        files: List[tuple[float, Path]] = []
+        for p in sym_dir.iterdir():
+            if p.suffix == ".json" and p.is_file():
+                try:
+                    files.append((p.stat().st_mtime, p))
+                except OSError:
+                    pass
+        if len(files) <= DECISION_HISTORY_KEEP:
+            continue
+        files.sort(key=lambda x: x[0], reverse=True)
+        for _mtime, p in files[DECISION_HISTORY_KEEP:]:
+            try:
+                p.unlink()
+                removed += 1
+            except OSError as e:
+                logger.warning("[EVAL_STORE_V2] Prune failed %s: %s", p, e)
+        symbols_affected.append(sym)
+    return {"removed": removed, "symbols_affected": symbols_affected, "max_per_symbol": DECISION_HISTORY_KEEP}
 
 
 # Singleton instance

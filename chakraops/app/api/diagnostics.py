@@ -511,7 +511,9 @@ def _run_wheel_state_integrity_check() -> Dict[str, Any]:
                     "state": entry.get("state", "EMPTY"),
                 })
         status = "FAIL" if mismatches else "PASS"
-        act = "Review wheel state vs positions; consider manual ASSIGNED/UNASSIGNED override." if mismatches else None
+        act = None
+        if mismatches:
+            act = "Run Wheel Repair (POST /api/ui/wheel/repair). Or review wheel state vs positions; consider manual ASSIGNED/UNASSIGNED override."
         return {
             "check": "wheel_state_integrity",
             "status": status,

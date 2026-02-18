@@ -1,10 +1,8 @@
 {
-"last_run_at_utc": "2026-02-18T04:06:07.312238+00:00",
-"last_result": "FAIL",
+"last_run_at_utc": "2026-02-18T21:34:33.230305+00:00",
+"last_result": "PASS",
 "updated_count": 0,
-"skipped_count": 1,
-"error_count": 1,
-"errors_sample": [
-"pos_1: no contract_key/option_symbol"
-]
+"skipped_count": 0,
+"error_count": 0,
+"errors_sample": []
 }

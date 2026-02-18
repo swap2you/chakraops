@@ -179,9 +179,15 @@ class SymbolDiagnosticsDetails:
     regime: Optional[str] = None
     # Provider/options metadata
     options: Dict[str, Any] = field(default_factory=dict)  # expirations_count, contracts_count, underlying_price
+    # Phase: plain-English reasons — NOT persisted; computed on-demand in API from codes + sample
+    reasons_explained: Optional[List[Dict[str, Any]]] = None  # [{ code, severity, title, message, metrics }]
+    # Delta rejection sample (code-only: numbers + target range); persisted so API can compute message
+    sample_rejected_due_to_delta: Optional[List[Dict[str, Any]]] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+        d = asdict(self)
+        d.pop("reasons_explained", None)  # do not persist explanation text; compute at response time
+        return d
 
 
 @dataclass

@@ -60,6 +60,8 @@ export interface SymbolEvalSummary {
   capital_required?: number | null;
   premium_yield_pct?: number | null;
   market_cap?: number | null;
+  /** Plain-English reasons with key numbers (additive; keep primary_reason for debug). */
+  reasons_explained?: ReasonExplained[];
 }
 
 export interface DecisionArtifactV2Metadata {
@@ -443,6 +445,19 @@ export interface SymbolDiagnosticsExitPlan {
   t2?: number | null;
   t3?: number | null;
   stop?: number | null;
+  /** NOT_AVAILABLE when missing inputs; AVAILABLE when computed. */
+  status?: string | null;
+  /** Plain-English reason when status is NOT_AVAILABLE. */
+  reason?: string | null;
+}
+
+/** One explained reason (code → plain-English with metrics). */
+export interface ReasonExplained {
+  code: string;
+  severity?: string;
+  title?: string;
+  message: string;
+  metrics?: Record<string, unknown>;
 }
 
 /** Candidate trade (strike, expiry, delta, credit_estimate, max_loss). */
@@ -530,4 +545,6 @@ export interface SymbolDiagnosticsResponseExtended extends SymbolDiagnosticsResp
   exact_run?: boolean;
   /** Phase 11.2: Run ID when fetched with run_id param. */
   run_id?: string | null;
+  /** Plain-English reasons with key numbers (top 3+ show more; raw codes in debug). */
+  reasons_explained?: ReasonExplained[];
 }

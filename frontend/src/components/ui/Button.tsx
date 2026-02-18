@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 
-type ButtonVariant = "primary" | "secondary" | "ghost";
+type ButtonVariant = "primary" | "secondary" | "ghost" | "outline";
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -17,6 +17,8 @@ const variantClasses: Record<ButtonVariant, string> = {
     "bg-zinc-100 text-zinc-900 hover:bg-zinc-200 border border-zinc-300 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700 dark:border-zinc-700",
   ghost:
     "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800",
+  outline:
+    "border border-zinc-300 bg-transparent hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800",
 };
 
 const sizeClasses = { sm: "px-2 py-1 text-xs", md: "px-3 py-1.5 text-sm" };

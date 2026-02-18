@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiDelete, apiGet, apiPost } from "./client";
 import type {
   ArtifactListResponse,
+  DecisionArtifactV2,
   DecisionResponse,
   UniverseResponse,
   SymbolDiagnosticsResponseExtended,
@@ -79,6 +80,10 @@ function uiPositionsDeletePath(positionId: string): string {
   return `/api/ui/positions/${encodeURIComponent(positionId)}`;
 }
 
+function uiPositionDecisionPath(positionId: string): string {
+  return `/api/ui/positions/${encodeURIComponent(positionId)}/decision`;
+}
+
 function uiPortfolioPath(): string {
   return `/api/ui/portfolio`;
 }
@@ -147,6 +152,8 @@ export const queryKeys = {
   uiAccountsDefault: () => ["ui", "accounts", "default"] as const,
   uiAccounts: () => ["ui", "accounts"] as const,
   uiPortfolio: () => ["ui", "portfolio"] as const,
+  uiPositionDecision: (positionId: string) =>
+    ["ui", "positionDecision", positionId] as const,
   uiAlerts: () => ["ui", "alerts"] as const,
   uiDiagnosticsHistory: (limit?: number) => ["ui", "diagnostics", "history", limit ?? 10] as const,
   uiNotifications: (limit?: number) => ["ui", "notifications", limit ?? 100] as const,
@@ -445,6 +452,25 @@ export function usePortfolio() {
   return useQuery({
     queryKey: queryKeys.uiPortfolio(),
     queryFn: () => apiGet<PortfolioResponse>(uiPortfolioPath()),
+  });
+}
+
+/** Phase 11.1: GET /api/ui/positions/{id}/decision — decision for a position (exact run or latest with warning) */
+export interface PositionDecisionResponse {
+  artifact: DecisionArtifactV2;
+  artifact_version?: string;
+  evaluation_timestamp_utc?: string | null;
+  run_id?: string | null;
+  exact_run: boolean;
+  warning?: string | null;
+}
+
+export function usePositionDecision(positionId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.uiPositionDecision(positionId ?? ""),
+    queryFn: () =>
+      apiGet<PositionDecisionResponse>(uiPositionDecisionPath(positionId!)),
+    enabled: enabled && !!positionId,
   });
 }
 

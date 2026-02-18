@@ -75,13 +75,15 @@ export interface DecisionArtifactV2 {
   selected_candidates?: Array<{ symbol: string; strategy?: string; [key: string]: unknown }>;
 }
 
-/** GET /api/ui/decision/latest (v2): { artifact, artifact_version, evaluation_timestamp_utc, decision_store_mtime_utc } */
+/** GET /api/ui/decision/latest (v2): { artifact, artifact_version, evaluation_timestamp_utc, run_id } */
 export interface DecisionResponse {
   artifact: DecisionArtifactV2;
   artifact_version?: "v2" | string;
   /** Phase 9: Canonical last evaluation time (pipeline_timestamp or file mtime). */
   evaluation_timestamp_utc?: string | null;
   decision_store_mtime_utc?: string | null;
+  /** Phase 11.1: Stable run id (uuid) for traceability */
+  run_id?: string | null;
 }
 
 // Legacy types (kept for reference; API is v2-only)
@@ -318,6 +320,14 @@ export interface UiTrackedPositionsResponse {
 // Portfolio — GET /api/ui/portfolio (lifecycle-enriched positions)
 // =============================================================================
 
+/** Phase 11.1: decision_ref links position to evaluation run */
+export interface DecisionRef {
+  run_id?: string | null;
+  evaluation_timestamp_utc?: string | null;
+  artifact_source?: string | null;
+  selected_contract_key?: string | null;
+}
+
 export interface PortfolioPosition {
   position_id: string;
   id?: string | null;
@@ -325,6 +335,7 @@ export interface PortfolioPosition {
   strategy: string;
   is_test?: boolean;
   entry_credit?: number | null;
+  decision_ref?: DecisionRef | null;
   quantity?: number | null;
   contracts?: number | null;
   strike?: number | null;

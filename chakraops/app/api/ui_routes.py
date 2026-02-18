@@ -139,12 +139,15 @@ def ui_decision_latest(
         pipeline_ts = meta.get("pipeline_timestamp")
         store_mtime = _get_decision_store_mtime_utc()
         eval_ts = pipeline_ts if pipeline_ts else store_mtime
-        return {
+        result: Dict[str, Any] = {
             "artifact": data,
             "artifact_version": "v2",
             "evaluation_timestamp_utc": eval_ts,
             "decision_store_mtime_utc": store_mtime,
         }
+        if meta.get("run_id"):
+            result["run_id"] = meta["run_id"]
+        return result
 
     path = _output_dir() / "mock" / "decision_latest.json"
     if not path.exists():
@@ -1058,6 +1061,56 @@ async def ui_positions_close(
         import logging
         logging.getLogger(__name__).exception("Error closing position: %s", e)
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/positions/{position_id}/decision")
+def ui_position_decision(
+    position_id: str,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    Phase 11.1: Get decision for a position.
+    If position has decision_ref.run_id and it matches current artifact, return exact run.
+    Else return latest with warning 'exact run not available'.
+    """
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.positions.service import get_position
+        from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
+        position = get_position(position_id)
+        if position is None:
+            raise HTTPException(status_code=404, detail="Position not found")
+        decision_ref = getattr(position, "decision_ref", None) or {}
+        if not isinstance(decision_ref, dict):
+            decision_ref = {}
+        run_id = decision_ref.get("run_id")
+        store = get_evaluation_store_v2()
+        store.reload_from_disk()
+        artifact = store.get_latest()
+        if artifact is None:
+            raise HTTPException(status_code=404, detail="No decision artifact; run evaluation")
+        data = artifact.to_dict()
+        meta = data.get("metadata") or {}
+        current_run_id = meta.get("run_id")
+        exact_run = bool(run_id and current_run_id and run_id == current_run_id)
+        result: Dict[str, Any] = {
+            "artifact": data,
+            "artifact_version": "v2",
+            "evaluation_timestamp_utc": meta.get("pipeline_timestamp") or meta.get("evaluation_timestamp_utc"),
+            "run_id": current_run_id,
+            "exact_run": exact_run,
+        }
+        if not exact_run and run_id:
+            result["warning"] = "exact run not available; showing latest decision"
+        elif not run_id:
+            result["warning"] = "exact run not available; position has no run_id"
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error loading position decision: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/positions/{position_id}")

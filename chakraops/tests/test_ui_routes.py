@@ -266,6 +266,158 @@ def test_ui_positions_post_success_when_within_limits(tmp_path):
     assert body["decision_ref"].get("evaluation_timestamp_utc") == "2026-02-17T20:00:00Z"
 
 
+def test_ui_position_decision_with_run_id(tmp_path):
+    """Phase 11.1: Create position with decision_ref.run_id; GET decision returns exact_run when run matches."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    from app.core.eval.decision_artifact_v2 import DecisionArtifactV2, SymbolEvalSummary
+
+    run_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+    sym = SymbolEvalSummary(
+        symbol="SPY",
+        verdict="ELIGIBLE",
+        final_verdict="ELIGIBLE",
+        score=75,
+        band="B",
+        primary_reason="test",
+        stage_status="RUN",
+        stage1_status="PASS",
+        stage2_status="PASS",
+        provider_status="OK",
+        data_freshness=None,
+        evaluated_at=None,
+        strategy=None,
+        price=None,
+        expiration=None,
+        has_candidates=True,
+        candidate_count=1,
+    )
+    artifact = DecisionArtifactV2(
+        metadata={
+            "artifact_version": "v2",
+            "pipeline_timestamp": "2026-02-17T21:00:00Z",
+            "run_id": run_id,
+        },
+        symbols=[sym],
+        selected_candidates=[],
+    )
+
+    class MockStore:
+        def get_latest(self):
+            return artifact
+
+        def reload_from_disk(self):
+            pass
+
+    positions_dir = tmp_path / "positions"
+    positions_dir.mkdir(parents=True, exist_ok=True)
+
+    app = _get_app()
+    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+        with patch("app.core.eval.evaluation_store_v2.get_evaluation_store_v2", return_value=MockStore()):
+            client = TestClient(app)
+            post = client.post(
+                "/api/ui/positions",
+                json={
+                    "symbol": "SPY",
+                    "strategy": "CSP",
+                    "contracts": 1,
+                    "strike": 450.0,
+                    "expiration": "2026-03-21",
+                    "credit_expected": 2.50,
+                    "decision_ref": {"run_id": run_id, "evaluation_timestamp_utc": "2026-02-17T21:00:00Z"},
+                },
+            )
+    assert post.status_code == 200
+    pid = post.json()["position_id"]
+
+    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+        with patch("app.core.eval.evaluation_store_v2.get_evaluation_store_v2", return_value=MockStore()):
+            client = TestClient(app)
+            r = client.get(f"/api/ui/positions/{pid}/decision")
+    assert r.status_code == 200
+    data = r.json()
+    assert data.get("run_id") == run_id
+    assert data.get("exact_run") is True
+    assert "warning" not in data or data.get("warning") is None
+
+
+def test_ui_position_decision_warning_when_run_mismatch(tmp_path):
+    """Phase 11.1: Position with run_id but current artifact has different run_id returns warning."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    from app.core.eval.decision_artifact_v2 import DecisionArtifactV2, SymbolEvalSummary
+
+    pos_run_id = "old-run-1111-2222-3333-444455556666"
+    current_run_id = "new-run-aaaa-bbbb-cccc-ddddeeeeffff"
+    sym = SymbolEvalSummary(
+        symbol="SPY",
+        verdict="HOLD",
+        final_verdict="HOLD",
+        score=50,
+        band="C",
+        primary_reason="test",
+        stage_status="RUN",
+        stage1_status="PASS",
+        stage2_status="NOT_RUN",
+        provider_status="OK",
+        data_freshness=None,
+        evaluated_at=None,
+        strategy=None,
+        price=None,
+        expiration=None,
+        has_candidates=False,
+        candidate_count=0,
+    )
+    artifact = DecisionArtifactV2(
+        metadata={
+            "artifact_version": "v2",
+            "pipeline_timestamp": "2026-02-17T22:00:00Z",
+            "run_id": current_run_id,
+        },
+        symbols=[sym],
+        selected_candidates=[],
+    )
+
+    class MockStore:
+        def get_latest(self):
+            return artifact
+
+        def reload_from_disk(self):
+            pass
+
+    positions_dir = tmp_path / "positions"
+    positions_dir.mkdir(parents=True, exist_ok=True)
+
+    app = _get_app()
+    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+        with patch("app.core.eval.evaluation_store_v2.get_evaluation_store_v2", return_value=MockStore()):
+            client = TestClient(app)
+            post = client.post(
+                "/api/ui/positions",
+                json={
+                    "symbol": "SPY",
+                    "strategy": "CSP",
+                    "contracts": 1,
+                    "strike": 450.0,
+                    "expiration": "2026-03-21",
+                    "credit_expected": 2.50,
+                    "decision_ref": {"run_id": pos_run_id},
+                },
+            )
+    assert post.status_code == 200
+    pid = post.json()["position_id"]
+
+    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+        with patch("app.core.eval.evaluation_store_v2.get_evaluation_store_v2", return_value=MockStore()):
+            client = TestClient(app)
+            r = client.get(f"/api/ui/positions/{pid}/decision")
+    assert r.status_code == 200
+    data = r.json()
+    assert data.get("exact_run") is False
+    assert "exact run not available" in (data.get("warning") or "")
+
+
 def test_ui_positions_close_and_delete_guardrail(tmp_path):
     """Phase 10.0: Close position computes realized_pnl; delete allowed only for CLOSED/test."""
     pytest.importorskip("fastapi")

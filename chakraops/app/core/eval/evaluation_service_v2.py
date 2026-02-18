@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -265,10 +266,13 @@ def evaluate_universe(
         # Phase 7.7: diagnostics_by_symbol
         diagnostics_by_symbol[sym_upper] = _build_diagnostics_details(sr, sym_upper, ts)
 
+    run_id_val = str(uuid.uuid4())
     metadata = {
         "artifact_version": "v2",
         "mode": mode,
         "pipeline_timestamp": ts,
+        "evaluation_timestamp_utc": ts,
+        "run_id": run_id_val,
         "market_phase": phase,
         "universe_size": len(symbols),
         "evaluated_count_stage1": len(staged_symbols),
@@ -574,10 +578,13 @@ def evaluate_single_symbol_and_merge(symbol: str, mode: str = "LIVE") -> Decisio
         diagnostics_details = _build_diagnostics_details(sr, sym_upper, ts)
 
     if current is None:
+        run_id_val = str(uuid.uuid4())
         metadata = {
             "artifact_version": "v2",
             "mode": mode,
             "pipeline_timestamp": ts,
+            "evaluation_timestamp_utc": ts,
+            "run_id": run_id_val,
             "market_phase": phase,
             "universe_size": 1,
             "evaluated_count_stage1": 1 if sr else 0,
@@ -624,6 +631,8 @@ def evaluate_single_symbol_and_merge(symbol: str, mode: str = "LIVE") -> Decisio
 
         meta = dict(current.metadata)
         meta["pipeline_timestamp"] = ts
+        meta["evaluation_timestamp_utc"] = ts
+        meta["run_id"] = str(uuid.uuid4())
         meta["eligible_count"] = len([s for s in symbols_list if s.verdict == "ELIGIBLE"])
 
         merged = DecisionArtifactV2(

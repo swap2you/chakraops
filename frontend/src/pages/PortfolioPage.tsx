@@ -179,7 +179,29 @@ export function PortfolioPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <span className="flex flex-wrap gap-1">
+                    <span className="flex flex-wrap items-center gap-1">
+                      <Link
+                        to={
+                          row.decision_ref?.run_id
+                            ? `/symbol-diagnostics?symbol=${encodeURIComponent(row.symbol)}&run_id=${encodeURIComponent(row.decision_ref.run_id)}`
+                            : `/symbol-diagnostics?symbol=${encodeURIComponent(row.symbol)}`
+                        }
+                        className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                        title={
+                          row.decision_ref?.run_id
+                            ? `Decision (run_id ${row.decision_ref.run_id.slice(0, 8)}…)`
+                            : "Decision (latest — run not traced)"
+                        }
+                      >
+                        {row.decision_ref?.run_id
+                          ? `Decision (run ${row.decision_ref.run_id.slice(0, 8)}…)`
+                          : "Decision (latest)"}
+                      </Link>
+                      {!row.decision_ref?.run_id && (
+                        <Badge variant="warning" className="shrink-0">
+                          no run
+                        </Badge>
+                      )}
                       {isOpen(row) && (
                         <Button
                           size="sm"

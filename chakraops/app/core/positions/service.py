@@ -223,6 +223,39 @@ def _derive_contract_key(strategy: str, strike: float, expiration: str) -> str:
     return f"{strike}-{exp}-{opt}"
 
 
+def _resolve_run_id_from_timestamp(evaluation_timestamp_utc: str) -> Optional[str]:
+    """
+    Phase 11.1: Attempt to resolve run_id from evaluation_timestamp_utc.
+    Try canonical artifact first, then run artifacts latest.
+    """
+    if not evaluation_timestamp_utc or not isinstance(evaluation_timestamp_utc, str):
+        return None
+    ts = evaluation_timestamp_utc.strip()[:26]  # trim to avoid timezone suffix mismatch
+    try:
+        from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
+        store = get_evaluation_store_v2()
+        artifact = store.get_latest()
+        if artifact and artifact.metadata:
+            pt = (artifact.metadata.get("pipeline_timestamp") or artifact.metadata.get("evaluation_timestamp_utc") or "")
+            if pt and pt.strip()[:26] == ts:
+                return artifact.metadata.get("run_id")
+    except Exception:
+        pass
+    try:
+        from app.core.eval.run_artifacts import _latest_manifest_path
+        p = _latest_manifest_path()
+        if p.exists():
+            import json
+            with open(p, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            completed = (data.get("completed_at") or "")[:26]
+            if completed and completed == ts:
+                return data.get("run_id")
+    except Exception:
+        pass
+    return None
+
+
 def add_paper_position(data: Dict[str, Any]) -> Tuple[Optional[Position], List[str], int]:
     """Create a paper position from a candidate.
     Phase 11.0: Requires contract identity (underlying, option_type, strike, expiry, contracts).
@@ -295,6 +328,12 @@ def add_paper_position(data: Dict[str, Any]) -> Tuple[Optional[Position], List[s
     decision_ref = data.get("decision_ref")
     if decision_ref is not None and not isinstance(decision_ref, dict):
         decision_ref = None
+    # Phase 11.1: Resolve run_id if decision_ref has evaluation_timestamp_utc but no run_id
+    if decision_ref and not decision_ref.get("run_id") and decision_ref.get("evaluation_timestamp_utc"):
+        resolved = _resolve_run_id_from_timestamp(decision_ref.get("evaluation_timestamp_utc"))
+        if resolved:
+            decision_ref = dict(decision_ref)
+            decision_ref["run_id"] = resolved
 
     position = Position(
         position_id=position_id,

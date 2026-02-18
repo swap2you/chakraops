@@ -120,4 +120,41 @@ describe("PortfolioPage", () => {
     const deleteBtn = screen.getByRole("button", { name: /delete/i });
     expect(deleteBtn).toBeInTheDocument();
   });
+
+  it("shows View decision link with run_id when position has decision_ref.run_id", () => {
+    usePortfolio.mockReturnValue({
+      data: {
+        positions: [
+          {
+            ...mockPortfolioOpen.positions[0],
+            decision_ref: { run_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890" },
+          },
+        ],
+        capital_deployed: 45000,
+        open_positions_count: 1,
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<PortfolioPage />);
+    const link = screen.getByRole("link", { name: /decision \(run a1b2c3d4/i });
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute(
+      "href",
+      "/symbol-diagnostics?symbol=SPY&run_id=a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+    );
+  });
+
+  it("shows Decision (latest) with no run badge when position has no run_id", () => {
+    usePortfolio.mockReturnValue({
+      data: mockPortfolioOpen,
+      isLoading: false,
+      isError: false,
+    });
+    render(<PortfolioPage />);
+    const link = screen.getByRole("link", { name: /decision \(latest\)/i });
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute("href", "/symbol-diagnostics?symbol=SPY");
+    expect(screen.getByText("no run")).toBeInTheDocument();
+  });
 });

@@ -45,6 +45,11 @@ class Account:
         max_symbol_collateral: Max $ collateral per symbol (None = no cap).
         max_deployed_pct: Max fraction of buying power deployed, e.g. 0.30 = 30% (None = no cap).
         max_near_expiry_positions: Max positions with DTE <= 7 (None = no cap).
+        Phase 19.0 wheel policy (optional):
+        wheel_one_position_per_symbol: At most one open position per symbol (default True).
+        wheel_min_dte: Min DTE for new/roll expiration (default 21).
+        wheel_max_dte: Max DTE for new/roll expiration (default 60).
+        wheel_min_iv_rank: Min IV rank (0-100) to open; None = no check.
     """
     account_id: str
     provider: str
@@ -66,6 +71,11 @@ class Account:
     max_symbol_collateral: Optional[float] = None
     max_deployed_pct: Optional[float] = None  # e.g. 0.30 = 30%
     max_near_expiry_positions: Optional[int] = None
+    # Phase 19.0: Wheel policy (optional)
+    wheel_one_position_per_symbol: bool = True
+    wheel_min_dte: int = 21
+    wheel_max_dte: int = 60
+    wheel_min_iv_rank: Optional[float] = None  # 0-100; None = no check
 
     def __post_init__(self) -> None:
         now = datetime.now(timezone.utc).isoformat()
@@ -89,9 +99,10 @@ class Account:
             "active": self.active,
         }
         for key in ("max_collateral_per_trade", "max_total_collateral", "max_positions_open", "min_credit_per_contract",
-                    "max_symbol_collateral", "max_deployed_pct", "max_near_expiry_positions"):
+                    "max_symbol_collateral", "max_deployed_pct", "max_near_expiry_positions",
+                    "wheel_one_position_per_symbol", "wheel_min_dte", "wheel_max_dte", "wheel_min_iv_rank"):
             v = getattr(self, key, None)
-            if v is not None:
+            if v is not None or key in ("wheel_one_position_per_symbol", "wheel_min_dte", "wheel_max_dte"):
                 d[key] = v
         return d
 
@@ -104,6 +115,10 @@ class Account:
         msc = d.get("max_symbol_collateral")
         mdp = d.get("max_deployed_pct")
         mne = d.get("max_near_expiry_positions")
+        w1 = d.get("wheel_one_position_per_symbol", True)
+        wmin = d.get("wheel_min_dte", 21)
+        wmax = d.get("wheel_max_dte", 60)
+        wiv = d.get("wheel_min_iv_rank")
         return cls(
             account_id=d["account_id"],
             provider=d.get("provider", "Manual"),
@@ -123,6 +138,10 @@ class Account:
             max_symbol_collateral=float(msc) if msc is not None else None,
             max_deployed_pct=float(mdp) if mdp is not None else None,
             max_near_expiry_positions=int(mne) if mne is not None else None,
+            wheel_one_position_per_symbol=bool(w1) if w1 is not None else True,
+            wheel_min_dte=int(wmin) if wmin is not None else 21,
+            wheel_max_dte=int(wmax) if wmax is not None else 60,
+            wheel_min_iv_rank=float(wiv) if wiv is not None else None,
         )
 
 

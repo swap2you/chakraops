@@ -409,13 +409,12 @@ def _load_eod_freeze_state() -> Dict[str, Any]:
 
 
 def _save_eod_freeze_state(state: Dict[str, Any]) -> None:
-    """Persist EOD freeze state to disk."""
+    """Persist EOD freeze state to disk. Phase 17.0: atomic write."""
     path = _eod_freeze_state_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        import json
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(state, f, indent=2)
+        from app.core.io.atomic import atomic_write_json
+        atomic_write_json(path, state, indent=2)
     except Exception as e:
         logger.warning("[EOD_FREEZE] Failed to persist state: %s", e)
 

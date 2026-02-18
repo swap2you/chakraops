@@ -26,6 +26,7 @@ export function TradeTicketDrawer({ symbol, candidate, onClose, decisionRef }: T
   const [qty, setQty] = useState(1);
   const [entryCredit, setEntryCredit] = useState(defaultCredit(candidate, 1));
   const [copied, setCopied] = useState(false);
+  const [policyError, setPolicyError] = useState<string | null>(null);
   const { data: accountData } = useDefaultAccount();
   const { data: positionsData } = useUiTrackedPositions();
   const manualExecute = useManualExecute();
@@ -89,6 +90,7 @@ export function TradeTicketDrawer({ symbol, candidate, onClose, decisionRef }: T
   const canSaveOptions = !isOptionsStrategy || hasContractIdentity;
 
   const handleSavePosition = () => {
+    setPolicyError(null);
     const fillCredit = Number.isFinite(credit) ? credit : defaultCredit(candidate, qty);
     const exp = candidate.expiry ?? undefined;
     const stk = candidate.strike ?? undefined;
@@ -108,7 +110,13 @@ export function TradeTicketDrawer({ symbol, candidate, onClose, decisionRef }: T
       },
       {
         onSuccess: () => onClose(),
-        onError: () => {},
+        onError: (err: unknown) => {
+          const body = err && typeof err === "object" && "body" in err ? (err as { body?: { detail?: { errors?: string[] } } }).body : undefined;
+          const errors = body?.detail?.errors;
+          if (Array.isArray(errors) && errors.length > 0) {
+            setPolicyError(errors.join(" "));
+          }
+        },
       }
     );
   };
@@ -138,6 +146,11 @@ export function TradeTicketDrawer({ symbol, candidate, onClose, decisionRef }: T
         </div>
         <div className="flex-1 overflow-auto p-5">
           <div className="space-y-4">
+            {policyError && (
+              <div className="rounded border border-amber-500/50 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
+                {policyError}
+              </div>
+            )}
             <div>
               <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-500">Contract</span>
               <p className="font-mono text-sm font-semibold text-zinc-900 dark:text-zinc-100">

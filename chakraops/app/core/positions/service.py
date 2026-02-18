@@ -130,6 +130,13 @@ def close_position(
         append_event(position_id, "CLOSE", {"close_price": close_price, "close_debit": close_debit, "realized_pnl": realized_pnl, "close_fees": close_fees}, at_utc=close_ts)
     except Exception as ex:
         logger.warning("[POSITIONS] Failed to append CLOSE event: %s", ex)
+    try:
+        from app.core.wheel.state_machine import update_state_from_position_event
+        sym = (position.symbol or "").strip().upper()
+        if sym:
+            update_state_from_position_event(sym, "CLOSE", position_id)
+    except Exception as ex:
+        logger.warning("[POSITIONS] Failed to update wheel state: %s", ex)
     return updated, []
 
 
@@ -158,6 +165,38 @@ def roll_position(
         return None, ["Roll only supported for CSP/CC"]
     if not new_contract_key and not new_option_symbol:
         return None, ["contract_key or option_symbol required for new position"]
+    # Phase 19.0: Wheel policy — DTE/IV for new expiration (open_positions exclude current, so one_per_symbol ok)
+    account = account_store.get_account(position.account_id) if getattr(position, "account_id", None) else None
+    if account is None:
+        account = account_store.get_default_account()
+    if account and new_expiration:
+        open_all = store.list_positions(status=None, symbol=None, exclude_test=False)
+        open_excluding_this = [p for p in open_all if (p.status or "").upper() in ("OPEN", "PARTIAL_EXIT") and getattr(p, "position_id", None) != position_id]
+        wheel_state_data = {}
+        try:
+            from app.core.wheel.state_store import load_state
+            wheel_state_data = load_state().get("symbols") or {}
+        except Exception:
+            pass
+        sym = (position.symbol or "").strip().upper()
+        ws = wheel_state_data.get(sym) or {"state": "OPEN"}
+        latest_decision = None
+        try:
+            from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
+            store_v2 = get_evaluation_store_v2()
+            store_v2.reload_from_disk()
+            latest_decision = store_v2.get_latest()
+        except Exception:
+            pass
+        from app.core.wheel.policy import evaluate_wheel_policy
+        policy_result = evaluate_wheel_policy(
+            account, sym, ws, latest_decision, open_excluding_this,
+            expiration=new_expiration, contract_key=new_contract_key or None,
+        )
+        if not policy_result.get("allowed"):
+            block_reasons = policy_result.get("blocked_by") or []
+            return None, [f"Wheel policy: {'; '.join(block_reasons)}"]
+
     contracts = int(position.contracts) if position.contracts else 1
     close_price = close_debit / (100 * contracts) if contracts else 0.0
     pos_closed, close_errs = close_position(position_id, close_price, None, None)
@@ -199,6 +238,13 @@ def roll_position(
             "strike": created.strike, "expiration": created.expiration, "open_credit": open_credit,
             "parent_position_id": position_id,
         })
+        try:
+            from app.core.wheel.state_machine import update_state_from_position_event
+            sym = (created.symbol or "").strip().upper()
+            if sym:
+                update_state_from_position_event(sym, "OPEN", created.position_id)
+        except Exception as ex:
+            logger.warning("[POSITIONS] Failed to update wheel state: %s", ex)
         return created, []
     except Exception as e:
         logger.exception("[POSITIONS] Roll: failed to create new position: %s", e)
@@ -272,6 +318,13 @@ def manual_execute(data: Dict[str, Any]) -> Tuple[Optional[Position], List[str]]
             append_event(position.position_id, "OPEN", {"symbol": position.symbol, "strategy": position.strategy, "contracts": position.contracts})
         except Exception as ex:
             logger.warning("[POSITIONS] Failed to append OPEN event: %s", ex)
+        try:
+            from app.core.wheel.state_machine import update_state_from_position_event
+            sym = (position.symbol or "").strip().upper()
+            if sym:
+                update_state_from_position_event(sym, "OPEN", position.position_id)
+        except Exception as ex:
+            logger.warning("[POSITIONS] Failed to update wheel state: %s", ex)
         try:
             from app.core.audit import audit_manual_execution_intent
             audit_manual_execution_intent(
@@ -413,6 +466,39 @@ def add_paper_position(data: Dict[str, Any]) -> Tuple[Optional[Position], List[s
                 if per_contract < float(mcc):
                     return None, [f"Credit per contract ${per_contract:.2f} below minimum ${mcc:.2f}"], 409
 
+    # Phase 19.0: Wheel policy — one position per symbol, DTE range, min IV rank
+    if default_account and strategy in ("CSP", "CC"):
+        open_positions = store.list_positions(status=None, symbol=None, exclude_test=False)
+        open_positions = [p for p in open_positions if (p.account_id or "").strip() == PAPER_ACCOUNT_ID and (p.status or "").upper() in ("OPEN", "PARTIAL_EXIT")]
+        wheel_state_data = {}
+        try:
+            from app.core.wheel.state_store import load_state
+            wheel_state_data = load_state().get("symbols") or {}
+        except Exception:
+            pass
+        ws = wheel_state_data.get((data.get("symbol") or "").strip().upper()) or {"state": "EMPTY"}
+        latest_decision = None
+        try:
+            from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
+            store_v2 = get_evaluation_store_v2()
+            store_v2.reload_from_disk()
+            latest_decision = store_v2.get_latest()
+        except Exception:
+            pass
+        from app.core.wheel.policy import evaluate_wheel_policy
+        policy_result = evaluate_wheel_policy(
+            default_account,
+            (data.get("symbol") or "").strip().upper(),
+            ws,
+            latest_decision,
+            open_positions,
+            expiration=exp_val,
+            contract_key=contract_key,
+        )
+        if not policy_result.get("allowed"):
+            block_reasons = policy_result.get("blocked_by") or []
+            return None, [f"Wheel policy: {'; '.join(block_reasons)}"], 409
+
     now = datetime.now(timezone.utc).isoformat()
     position_id = data.get("position_id") or generate_position_id()
     decision_ref = data.get("decision_ref")
@@ -455,6 +541,13 @@ def add_paper_position(data: Dict[str, Any]) -> Tuple[Optional[Position], List[s
             append_event(position_id, "OPEN", {"symbol": position.symbol, "strategy": position.strategy, "contracts": position.contracts, "strike": position.strike, "expiration": position.expiration, "open_credit": getattr(position, "open_credit", None)})
         except Exception as ex:
             logger.warning("[POSITIONS] Failed to append OPEN event: %s", ex)
+        try:
+            from app.core.wheel.state_machine import update_state_from_position_event
+            sym = (position.symbol or "").strip().upper()
+            if sym:
+                update_state_from_position_event(sym, "OPEN", position_id)
+        except Exception as ex:
+            logger.warning("[POSITIONS] Failed to update wheel state: %s", ex)
         logger.info("[POSITIONS] Paper position created: %s %s %s", position.symbol, position.strategy, position_id)
         return created, [], 200
     except ValueError as e:

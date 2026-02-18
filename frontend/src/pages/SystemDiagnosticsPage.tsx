@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useUiSystemHealth, useDiagnosticsHistory, useRunDiagnostics, useRunEval, useLatestSnapshot, useRunFreezeSnapshot } from "@/api/queries";
+import { useUiSystemHealth, useDiagnosticsHistory, useRunDiagnostics, useRunEval, useLatestSnapshot, useRunFreezeSnapshot, useStoresIntegrity, useRepairStore } from "@/api/queries";
 import { formatTimestampEt, formatTimestampEtFull } from "@/utils/formatTimestamp";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardHeader, StatusBadge, Button, Tooltip } from "@/components/ui";
 
-const DIAGNOSTIC_CHECKS = ["orats", "decision_store", "universe", "positions", "portfolio_risk", "scheduler"] as const;
+const DIAGNOSTIC_CHECKS = ["orats", "decision_store", "universe", "positions", "portfolio_risk", "scheduler", "store_integrity"] as const;
 
 export function SystemDiagnosticsPage() {
   const { data, isLoading, isError } = useUiSystemHealth();
@@ -14,6 +14,8 @@ export function SystemDiagnosticsPage() {
   const runDiagnostics = useRunDiagnostics();
   const runEval = useRunEval();
   const runFreeze = useRunFreezeSnapshot();
+  const { data: integrityData } = useStoresIntegrity();
+  const repairStore = useRepairStore();
   const [selectedChecks, setSelectedChecks] = useState<Set<string>>(new Set(DIAGNOSTIC_CHECKS));
   const [latestResult, setLatestResult] = useState<typeof runDiagnostics.data | null>(null);
 
@@ -58,6 +60,7 @@ export function SystemDiagnosticsPage() {
   const market = data?.market;
   const scheduler = data?.scheduler;
   const eodFreeze = data?.eod_freeze;
+  const markRefresh = data?.mark_refresh;
   const marketClosed = market?.phase ? market.phase !== "OPEN" && market.phase !== "UNKNOWN" : false;
 
   if (isLoading) {
@@ -305,7 +308,87 @@ export function SystemDiagnosticsPage() {
             </p>
           )}
         </Card>
+        {/* Phase 16.0: Mark refresh state */}
+        <Card>
+          <CardHeader title="Mark Refresh" />
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">last_run_at (ET)</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{formatTimestampEt(markRefresh?.last_run_at_utc)}</p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">last_result</span>
+              <p className="mt-1">
+                <StatusBadge status={markRefresh?.last_result ?? "—"} />
+              </p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">updated / skipped / errors</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">
+                {markRefresh?.updated_count ?? 0} / {markRefresh?.skipped_count ?? 0} / {markRefresh?.error_count ?? 0}
+              </p>
+            </div>
+            {markRefresh?.errors_sample && markRefresh.errors_sample.length > 0 && (
+              <div className="col-span-2">
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">errors_sample</span>
+                <ul className="mt-1 list-inside list-disc text-xs text-zinc-600 dark:text-zinc-400">
+                  {markRefresh.errors_sample.slice(0, 5).map((e, i) => (
+                    <li key={i} className="truncate">{e}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </Card>
       </div>
+
+      {/* Store Integrity (Phase 17.0) */}
+      <Card>
+        <CardHeader title="Store Integrity" />
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-zinc-200 text-left text-zinc-600 dark:border-zinc-700 dark:text-zinc-500">
+                <th className="py-2 pr-2">Store</th>
+                <th className="py-2 pr-2">Total lines</th>
+                <th className="py-2 pr-2">Invalid</th>
+                <th className="py-2">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {integrityData?.stores
+                ? Object.entries(integrityData.stores).map(([name, s]) => (
+                    <tr key={name} className="border-b border-zinc-100 dark:border-zinc-800/50">
+                      <td className="py-2 pr-2 font-mono text-zinc-700 dark:text-zinc-300">{name}</td>
+                      <td className="py-2 pr-2 font-mono">{s.exists ? s.total_lines : "—"}</td>
+                      <td className="py-2 pr-2">
+                        <span className={s.invalid_lines > 0 ? "text-red-600 dark:text-red-400 font-medium" : ""}>
+                          {s.exists ? s.invalid_lines : "—"}
+                        </span>
+                      </td>
+                      <td className="py-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => repairStore.mutate(name)}
+                          disabled={repairStore.isPending || !s.exists || s.invalid_lines === 0}
+                        >
+                          {repairStore.isPending ? "Repairing…" : "Repair"}
+                        </Button>
+                      </td>
+                    </tr>
+                  ))
+                : (
+                    <tr>
+                      <td colSpan={4} className="py-4 text-center text-zinc-500 dark:text-zinc-500">
+                        Loading integrity scan…
+                      </td>
+                    </tr>
+                  )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
       {/* Sanity Checks (Phase 8.2) */}
       <Card>
@@ -370,6 +453,7 @@ export function SystemDiagnosticsPage() {
                     <th className="py-2 pr-2">Check</th>
                     <th className="py-2 pr-2">Status</th>
                     <th className="py-2">Details</th>
+                    <th className="py-2">Recommended action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -383,6 +467,9 @@ export function SystemDiagnosticsPage() {
                         {typeof ch.details === "object" && ch.details
                           ? JSON.stringify(ch.details)
                           : String(ch.details ?? "—")}
+                      </td>
+                      <td className="py-2 text-zinc-600 dark:text-zinc-300">
+                        {ch.recommended_action ?? "—"}
                       </td>
                     </tr>
                   ))}

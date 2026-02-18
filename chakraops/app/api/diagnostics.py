@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
-ALL_CHECKS = {"orats", "decision_store", "universe", "positions", "scheduler", "portfolio_risk"}
+ALL_CHECKS = {"orats", "decision_store", "universe", "positions", "scheduler", "portfolio_risk", "store_integrity", "wheel_state_integrity", "wheel_policy"}
 _RETENTION_LINES = 5000  # Phase 8.6
 _APPEND_LOCK = threading.Lock()
 
@@ -58,13 +58,15 @@ def _prune_diagnostics_if_needed(path: Path) -> None:
 
 
 def _append_run(result: Dict[str, Any]) -> None:
-    """Append one run result as a JSON line. Phase 8.6: prune to last N lines."""
+    """Append one run result as a JSON line. Phase 8.6: prune to last N lines. Phase 17.0: file lock."""
     path = _diagnostics_history_path()
     line = json.dumps(result, default=str) + "\n"
     with _APPEND_LOCK:
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(line)
-        _prune_diagnostics_if_needed(path)
+        from app.core.io.locks import with_file_lock
+        with with_file_lock(path, timeout_ms=2000):
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(line)
+            _prune_diagnostics_if_needed(path)
 
 
 def _load_history(limit: int = 10) -> List[Dict[str, Any]]:
@@ -101,6 +103,11 @@ def _run_orats_check() -> Dict[str, Any]:
             status = "WARN"
         else:
             status = "FAIL"
+        act = None
+        if status == "FAIL":
+            act = "Check ORATS API key and connectivity; verify EVALUATION_QUOTE_WINDOW_MINUTES."
+        elif status == "WARN":
+            act = "ORATS data may be stale; consider re-running evaluation."
         return {
             "check": "orats",
             "status": status,
@@ -110,12 +117,14 @@ def _run_orats_check() -> Dict[str, Any]:
                 "last_success_at": dh.get("last_success_at") or dh.get("effective_last_success_at"),
                 "last_error_reason": dh.get("last_error_reason"),
             },
+            "recommended_action": act,
         }
     except Exception as e:
         return {
             "check": "orats",
             "status": "FAIL",
             "details": {"error": str(e)},
+            "recommended_action": "Check ORATS API key and connectivity.",
         }
 
 
@@ -139,6 +148,7 @@ def _run_decision_store_check() -> Dict[str, Any]:
                 "check": "decision_store",
                 "status": "FAIL",
                 "details": {"reason": "No artifact or active path missing", "active_path": str(active_path)},
+                "recommended_action": "Run evaluation or restore decision artifact to active path.",
             }
         meta = artifact.metadata or {}
         pipeline_ts = meta.get("pipeline_timestamp")
@@ -151,12 +161,14 @@ def _run_decision_store_check() -> Dict[str, Any]:
                 "canonical_path": str(store_path),
                 "symbol_count": len(artifact.symbols) if artifact.symbols else 0,
             },
+            "recommended_action": None,
         }
     except Exception as e:
         return {
             "check": "decision_store",
             "status": "FAIL",
             "details": {"error": str(e)},
+            "recommended_action": "Run evaluation or restore decision artifact.",
         }
 
 
@@ -172,6 +184,7 @@ def _run_universe_check() -> Dict[str, Any]:
                 "check": "universe",
                 "status": "WARN",
                 "details": {"count": 0, "reason": "No symbols in artifact"},
+                "recommended_action": "Run evaluation to populate universe.",
             }
         count = len(artifact.symbols)
         sample = artifact.symbols[0] if artifact.symbols else None
@@ -186,12 +199,14 @@ def _run_universe_check() -> Dict[str, Any]:
             "check": "universe",
             "status": "PASS" if count > 0 else "WARN",
             "details": {"count": count, "sample": sample_fields},
+            "recommended_action": None,
         }
     except Exception as e:
         return {
             "check": "universe",
             "status": "FAIL",
             "details": {"error": str(e)},
+            "recommended_action": "Run evaluation to populate universe.",
         }
 
 
@@ -221,6 +236,7 @@ def _run_positions_check() -> Dict[str, Any]:
                 "check": "positions",
                 "status": "FAIL",
                 "details": {"error": "; ".join(errs) if errs else "Failed to create paper position"},
+                "recommended_action": "Check positions store and API; verify paper account.",
             }
         created_position_id = pos.position_id
         after = list_positions(status=None, symbol=None)
@@ -230,17 +246,20 @@ def _run_positions_check() -> Dict[str, Any]:
                 "check": "positions",
                 "status": "PASS",
                 "details": {"get_post_roundtrip": "OK", "created_id": pos.position_id},
+                "recommended_action": None,
             }
         return {
             "check": "positions",
             "status": "FAIL",
             "details": {"reason": "POST succeeded but GET did not return created position"},
+            "recommended_action": "Check positions store consistency.",
         }
     except Exception as e:
         return {
             "check": "positions",
             "status": "FAIL",
             "details": {"error": str(e)},
+            "recommended_action": "Check positions store and API.",
         }
     finally:
         # Guaranteed cleanup: always close/remove DIAG_TEST positions we created
@@ -284,6 +303,7 @@ def _run_portfolio_risk_check() -> Dict[str, Any]:
                 "check": "portfolio_risk",
                 "status": "PASS",
                 "details": {"reason": "No default account; skip"},
+                "recommended_action": None,
             }
         positions = list_positions(status=None, symbol=None, exclude_test=True)
         open_pos = [p for p in positions if (p.status or "").upper() in ("OPEN", "PARTIAL_EXIT")]
@@ -297,24 +317,30 @@ def _run_portfolio_risk_check() -> Dict[str, Any]:
             "breach_count": len(breaches),
             "breaches": breaches[:10],  # Limit in details
         }
-        check_result = {"check": "portfolio_risk", "status": status, "details": details}
+        act = None
         if status in ("FAIL", "WARN") and breaches:
-            severity = "ERROR" if status == "FAIL" else "WARN"
-            summary = "; ".join(b.get("message", "") for b in breaches[:5])
-            append_notification(
-                severity=severity,
-                ntype="PORTFOLIO_RISK",
-                message=summary[:500] or "Portfolio risk limit breach",
-                symbol=None,
-                details={"breaches": breaches, "metrics": result.get("metrics", {})},
-                subtype="RISK_LIMIT_BREACH",
-            )
+            act = "Reduce exposure per account limits (max_symbol_collateral, max_deployed_pct)." if status == "FAIL" else "Review portfolio risk limits."
+        check_result = {"check": "portfolio_risk", "status": status, "details": details, "recommended_action": act}
+        if status in ("FAIL", "WARN") and breaches:
+            from app.core.portfolio.risk_notify_state import should_emit_portfolio_risk_notification
+            if should_emit_portfolio_risk_notification(status, breaches):
+                severity = "ERROR" if status == "FAIL" else "WARN"
+                summary = "; ".join(b.get("message", "") for b in breaches[:5])
+                append_notification(
+                    severity=severity,
+                    ntype="PORTFOLIO_RISK",
+                    message=summary[:500] or "Portfolio risk limit breach",
+                    symbol=None,
+                    details={"breaches": breaches, "metrics": result.get("metrics", {})},
+                    subtype="RISK_LIMIT_BREACH",
+                )
         return check_result
     except Exception as e:
         return {
             "check": "portfolio_risk",
             "status": "FAIL",
             "details": {"error": str(e)},
+            "recommended_action": "Check account limits and positions store.",
         }
 
 
@@ -350,18 +376,21 @@ def _run_scheduler_check(app_start_time_utc: Optional[float] = None) -> Dict[str
                     "phase": phase,
                     "note": "market closed" if not market_open else "restart grace window",
                 },
+                "recommended_action": None,
             }
         if next_run_at is None and last_run_at is None:
             return {
                 "check": "scheduler",
                 "status": "WARN",
                 "details": {"reason": "No last_run_at or next_run_at yet", "market_open": market_open},
+                "recommended_action": "Ensure scheduler is running; check market hours.",
             }
         if next_run_at is None:
             return {
                 "check": "scheduler",
                 "status": "WARN",
                 "details": {"reason": "next_run_at missing", "last_run_at": last_run_at},
+                "recommended_action": "Ensure scheduler is running.",
             }
         window_ok = True
         if last_run_at:
@@ -373,6 +402,7 @@ def _run_scheduler_check(app_start_time_utc: Optional[float] = None) -> Dict[str
             except (ValueError, TypeError):
                 window_ok = False
         status = "PASS" if window_ok else "WARN"
+        act = None if window_ok else "Ensure scheduler is running; check market hours."
         return {
             "check": "scheduler",
             "status": status,
@@ -383,12 +413,148 @@ def _run_scheduler_check(app_start_time_utc: Optional[float] = None) -> Dict[str
                 "phase": phase,
                 "within_window": window_ok,
             },
+            "recommended_action": act,
         }
     except Exception as e:
         return {
             "check": "scheduler",
             "status": "FAIL",
             "details": {"error": str(e)},
+            "recommended_action": "Ensure scheduler is running; check server logs.",
+        }
+
+
+def _run_wheel_policy_check() -> Dict[str, Any]:
+    """Phase 19.0: Wheel policy — report which symbols would be blocked and which limit (one_per_symbol, DTE, iv_rank)."""
+    try:
+        from app.core.accounts.store import get_default_account
+        from app.core.wheel.state_store import load_state
+        from app.core.wheel.policy import evaluate_wheel_policy
+        from app.core.positions.service import list_positions
+
+        account = get_default_account()
+        if account is None:
+            return {
+                "check": "wheel_policy",
+                "status": "PASS",
+                "details": {"note": "No default account; wheel policy not applied."},
+                "recommended_action": None,
+            }
+        wheel_data = load_state()
+        symbols_map = wheel_data.get("symbols") or {}
+        open_positions = list_positions(status=None, symbol=None, exclude_test=True)
+        open_pos = [p for p in open_positions if (p.status or "").upper() in ("OPEN", "PARTIAL_EXIT")]
+        latest_decision = None
+        try:
+            from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
+            store = get_evaluation_store_v2()
+            store.reload_from_disk()
+            latest_decision = store.get_latest()
+        except Exception:
+            pass
+        blocked: List[Dict[str, Any]] = []
+        for sym in sorted(symbols_map.keys()):
+            ws = symbols_map.get(sym) or {"state": "EMPTY"}
+            state = (ws.get("state") or "EMPTY").upper()
+            if state not in ("EMPTY", "ASSIGNED", "CLOSED"):
+                continue
+            policy_result = evaluate_wheel_policy(account, sym, ws, latest_decision, open_pos)
+            if not policy_result.get("allowed"):
+                blocked.append({"symbol": sym, "blocked_by": policy_result.get("blocked_by") or []})
+        status = "FAIL" if blocked else "PASS"
+        limits_breached = []
+        for b in blocked:
+            limits_breached.extend(b.get("blocked_by") or [])
+        limits_breached = list(dict.fromkeys(limits_breached))
+        act = None
+        if limits_breached:
+            act = "Adjust account wheel policy (wheel_one_position_per_symbol, wheel_min_dte, wheel_max_dte, wheel_min_iv_rank) or close positions to satisfy limits."
+        return {
+            "check": "wheel_policy",
+            "status": status,
+            "details": {"blocked_symbols": blocked, "limits_breached": limits_breached},
+            "recommended_action": act,
+        }
+    except Exception as e:
+        return {
+            "check": "wheel_policy",
+            "status": "FAIL",
+            "details": {"error": str(e)},
+            "recommended_action": "Check wheel policy and account settings.",
+        }
+
+
+def _run_wheel_state_integrity_check() -> Dict[str, Any]:
+    """Phase 18.0: Wheel state matches open positions (linked_position_ids vs actual OPEN positions)."""
+    try:
+        from app.core.wheel.state_store import load_state
+        from app.core.positions.service import list_positions
+
+        wheel_data = load_state()
+        symbols_map = wheel_data.get("symbols") or {}
+        open_positions = list_positions(status="OPEN", symbol=None, exclude_test=True)
+        open_by_symbol: Dict[str, List[str]] = {}
+        for p in open_positions:
+            sym = (getattr(p, "symbol", "") or "").strip().upper()
+            if sym:
+                open_by_symbol.setdefault(sym, []).append(getattr(p, "position_id", "") or "")
+
+        mismatches: List[Dict[str, Any]] = []
+        for sym, entry in symbols_map.items():
+            linked = set(entry.get("linked_position_ids") or [])
+            actual = set(open_by_symbol.get(sym) or [])
+            if linked != actual:
+                mismatches.append({
+                    "symbol": sym,
+                    "wheel_linked": sorted(linked),
+                    "actual_open_ids": sorted(actual),
+                    "state": entry.get("state", "EMPTY"),
+                })
+        status = "FAIL" if mismatches else "PASS"
+        act = "Review wheel state vs positions; consider manual ASSIGNED/UNASSIGNED override." if mismatches else None
+        return {
+            "check": "wheel_state_integrity",
+            "status": status,
+            "details": {"mismatches": mismatches, "symbols_checked": len(symbols_map)},
+            "recommended_action": act,
+        }
+    except Exception as e:
+        return {
+            "check": "wheel_state_integrity",
+            "status": "FAIL",
+            "details": {"error": str(e)},
+            "recommended_action": "Check wheel state store and positions service.",
+        }
+
+
+def _run_store_integrity_check() -> Dict[str, Any]:
+    """Phase 17.0: Scan key JSONL stores for invalid lines. FAIL if any; recommended_action: run repair."""
+    try:
+        from app.core.io.jsonl_integrity import get_store_paths, scan_jsonl
+        store_paths = get_store_paths()
+        details: Dict[str, Any] = {}
+        total_invalid = 0
+        for name, path in store_paths.items():
+            result = scan_jsonl(path)
+            details[name] = {
+                "total_lines": result.get("total_lines", 0),
+                "invalid_lines": result.get("invalid_lines", 0),
+            }
+            total_invalid += result.get("invalid_lines", 0)
+        status = "FAIL" if total_invalid > 0 else "PASS"
+        act = "Run repair for affected store(s) via POST /api/ui/stores/repair?store=<name>." if total_invalid > 0 else None
+        return {
+            "check": "store_integrity",
+            "status": status,
+            "details": details,
+            "recommended_action": act,
+        }
+    except Exception as e:
+        return {
+            "check": "store_integrity",
+            "status": "FAIL",
+            "details": {"error": str(e)},
+            "recommended_action": "Check app.core.io.jsonl_integrity.",
         }
 
 
@@ -399,6 +565,9 @@ CHECK_FNS = {
     "positions": _run_positions_check,
     "portfolio_risk": _run_portfolio_risk_check,
     "scheduler": _run_scheduler_check,
+    "store_integrity": _run_store_integrity_check,
+    "wheel_state_integrity": _run_wheel_state_integrity_check,
+    "wheel_policy": _run_wheel_policy_check,
 }
 
 
@@ -419,7 +588,7 @@ def run_diagnostics(checks: Optional[Set[str]] = None) -> Dict[str, Any]:
             try:
                 results.append(fn())
             except Exception as e:
-                results.append({"check": name, "status": "FAIL", "details": {"error": str(e)}})
+                results.append({"check": name, "status": "FAIL", "details": {"error": str(e)}, "recommended_action": None})
     fails = sum(1 for r in results if r.get("status") == "FAIL")
     warns = sum(1 for r in results if r.get("status") == "WARN")
     if fails > 0:

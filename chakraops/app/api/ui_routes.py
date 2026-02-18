@@ -101,6 +101,25 @@ def _get_eod_freeze_health() -> Dict[str, Any]:
         return {"enabled": False, "last_run_at_utc": None, "last_result": None, "last_snapshot_dir": None}
 
 
+def _get_mark_refresh_health() -> Dict[str, Any]:
+    """Phase 16.0: Mark refresh state for system health."""
+    try:
+        from app.core.portfolio.mark_refresh_state import load_mark_refresh_state
+        state = load_mark_refresh_state()
+        if state is None:
+            return {"last_run_at_utc": None, "last_result": None, "updated_count": None, "skipped_count": None, "error_count": None, "errors_sample": []}
+        return {
+            "last_run_at_utc": state.get("last_run_at_utc"),
+            "last_result": state.get("last_result"),
+            "updated_count": state.get("updated_count"),
+            "skipped_count": state.get("skipped_count"),
+            "error_count": state.get("error_count"),
+            "errors_sample": state.get("errors_sample") or [],
+        }
+    except Exception:
+        return {"last_run_at_utc": None, "last_result": None, "updated_count": None, "skipped_count": None, "error_count": None, "errors_sample": []}
+
+
 def _get_decision_store_mtime_utc() -> Optional[str]:
     """Return active decision store file mtime as ISO UTC string, or None."""
     try:
@@ -620,6 +639,7 @@ def ui_system_health(
             "last_result": scheduler_last_result,
         },
         "eod_freeze": _get_eod_freeze_health(),
+        "mark_refresh": _get_mark_refresh_health(),
     }
 
 
@@ -661,6 +681,54 @@ def ui_diagnostics_history(
         import logging
         logging.getLogger(__name__).exception("Error loading diagnostics history: %s", e)
         return {"runs": []}
+
+
+@router.get("/stores/integrity")
+def ui_stores_integrity(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Phase 17.0: Scan key JSONL stores for integrity. Returns scan results per store."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.io.jsonl_integrity import get_store_paths, scan_jsonl
+        store_paths = get_store_paths()
+        results: Dict[str, Any] = {}
+        for name, path in store_paths.items():
+            results[name] = scan_jsonl(path)
+        return {"stores": results}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error scanning stores: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/stores/repair")
+def ui_stores_repair(
+    store: str = Query(..., description="Store name: notifications, diagnostics_history, positions_events"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Phase 17.0: Repair a JSONL store — remove invalid lines, save backup. Returns before/after counts."""
+    _require_ui_key(x_ui_key)
+    from app.core.io.jsonl_integrity import get_store_paths
+    store_paths = get_store_paths()
+    if store not in store_paths:
+        raise HTTPException(status_code=400, detail=f"Unknown store: {store}. Use: {list(store_paths.keys())}")
+    try:
+        from app.core.io.jsonl_integrity import scan_jsonl, repair_jsonl
+        path = store_paths[store]
+        before = scan_jsonl(path)
+        repair_result = repair_jsonl(path)
+        after = scan_jsonl(path)
+        return {
+            "store": store,
+            "before": {"total_lines": before["total_lines"], "invalid_lines": before["invalid_lines"]},
+            "after": {"valid_count": repair_result["valid_count"], "removed_count": repair_result["removed_count"]},
+            "backup_path": repair_result.get("backup_path"),
+        }
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error repairing store %s: %s", store, e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/snapshots/freeze")
@@ -1101,6 +1169,140 @@ def ui_portfolio_risk(
         return {"status": "FAIL", "metrics": {}, "breaches": [], "error": str(e)}
 
 
+@router.get("/wheel/overview")
+def ui_wheel_overview(
+    account_id: str | None = Query(default=None, description="Account ID; omit for default"),
+    exclude_test: bool = Query(default=True),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    Phase 18.0: Wheel lifecycle overview.
+    Returns per-symbol: wheel_state, next_action, risk_status, last_decision_score, links (run_id), open_position.
+    """
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.accounts.store import get_account, get_default_account
+        from app.core.positions.service import list_positions
+        from app.core.portfolio.risk import evaluate_portfolio_risk
+        from app.core.wheel.state_store import load_state
+        from app.core.wheel.next_action import compute_next_action
+
+        account = get_account(account_id.strip()) if account_id else None
+        if account is None:
+            account = get_default_account()
+        if account is None:
+            return {"symbols": {}, "risk_status": "FAIL", "error": "No account found"}
+
+        positions = list_positions(status=None, symbol=None, exclude_test=exclude_test)
+        if account_id:
+            positions = [p for p in positions if (p.account_id or "").strip() == account_id.strip()]
+        open_pos = [p for p in positions if (p.status or "").upper() in ("OPEN", "PARTIAL_EXIT")]
+        portfolio_risk = evaluate_portfolio_risk(account, open_pos)
+        risk_status = (portfolio_risk.get("status") or "PASS").upper()
+
+        wheel_state_data = load_state()
+        symbols_map = wheel_state_data.get("symbols") or {}
+
+        artifact = None
+        run_id = None
+        try:
+            from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
+            store = get_evaluation_store_v2()
+            store.reload_from_disk()
+            artifact = store.get_latest()
+            if artifact and artifact.metadata:
+                run_id = artifact.metadata.get("run_id")
+        except Exception:
+            pass
+
+        open_by_symbol: Dict[str, Any] = {}
+        for p in open_pos:
+            sym = (getattr(p, "symbol", "") or "").strip().upper()
+            if sym:
+                open_by_symbol.setdefault(sym, []).append(p)
+
+        symbol_scores: Dict[str, Any] = {}
+        if artifact and artifact.symbols:
+            for s in artifact.symbols:
+                sym = (getattr(s, "symbol", "") or "").strip().upper()
+                if sym:
+                    symbol_scores[sym] = {
+                        "score": getattr(s, "score", None) or getattr(s, "final_score", None),
+                        "band": getattr(s, "band", None),
+                        "verdict": getattr(s, "verdict", None),
+                    }
+
+        def _candidate_to_dict(c: Any) -> Dict[str, Any]:
+            if c is None:
+                return {}
+            if isinstance(c, dict):
+                return {k: c.get(k) for k in ("strategy", "expiry", "strike", "delta", "credit_estimate", "max_loss", "contract_key", "option_symbol", "why_this_trade") if c.get(k) is not None}
+            return {
+                "strategy": getattr(c, "strategy", None),
+                "expiry": getattr(c, "expiry", None) or getattr(c, "expiration", None),
+                "strike": getattr(c, "strike", None),
+                "delta": getattr(c, "delta", None),
+                "credit_estimate": getattr(c, "credit_estimate", None),
+                "max_loss": getattr(c, "max_loss", None),
+                "contract_key": getattr(c, "contract_key", None),
+                "option_symbol": getattr(c, "option_symbol", None),
+                "why_this_trade": getattr(c, "why_this_trade", None),
+            }
+
+        all_symbols = set(symbols_map.keys()) | set(open_by_symbol.keys()) | set(symbol_scores.keys())
+        rows: Dict[str, Dict[str, Any]] = {}
+        for sym in sorted(all_symbols):
+            ws = symbols_map.get(sym) or {"state": "EMPTY", "last_updated_utc": None, "linked_position_ids": []}
+            next_action = compute_next_action(
+                sym, ws, artifact, portfolio_risk,
+                account=account, open_positions=open_pos,
+            )
+            suggested_candidate = None
+            ck = next_action.get("suggested_contract_key")
+            if ck and artifact and hasattr(artifact, "candidates_by_symbol"):
+                cands = artifact.candidates_by_symbol.get(sym) or []
+                for c in cands:
+                    if (getattr(c, "contract_key", None) or (c.get("contract_key") if isinstance(c, dict) else None)) == ck:
+                        suggested_candidate = _candidate_to_dict(c)
+                        break
+                if not suggested_candidate and cands:
+                    suggested_candidate = _candidate_to_dict(cands[0])
+            open_plist = open_by_symbol.get(sym) or []
+            pos_info = None
+            if open_plist:
+                p0 = open_plist[0]
+                pos_info = {
+                    "position_id": getattr(p0, "position_id", None),
+                    "contract_key": getattr(p0, "contract_key", None),
+                    "strategy": getattr(p0, "strategy", None),
+                    "contracts": getattr(p0, "contracts", None),
+                }
+            score_info = symbol_scores.get(sym) or {}
+            rows[sym] = {
+                "symbol": sym,
+                "wheel_state": ws.get("state", "EMPTY"),
+                "last_updated_utc": ws.get("last_updated_utc"),
+                "linked_position_ids": ws.get("linked_position_ids") or [],
+                "next_action": next_action,
+                "suggested_candidate": suggested_candidate,
+                "risk_status": risk_status,
+                "last_decision_score": score_info.get("score"),
+                "last_decision_band": score_info.get("band"),
+                "last_decision_verdict": score_info.get("verdict"),
+                "links": {"run_id": run_id},
+                "open_position": pos_info,
+            }
+        return {
+            "symbols": rows,
+            "risk_status": risk_status,
+            "run_id": run_id,
+        }
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error loading wheel overview: %s", e)
+        return {"symbols": {}, "risk_status": "FAIL", "error": str(e)}
+
+
 @router.post("/positions/marks/refresh")
 def ui_positions_marks_refresh(
     account_id: str | None = Query(default=None, description="Account ID; omit for all"),
@@ -1109,20 +1311,26 @@ def ui_positions_marks_refresh(
 ) -> Dict[str, Any]:
     """
     Phase 15.0: Refresh marks for OPEN positions from provider. Returns {updated_count, skipped_count, errors}.
+    Phase 16.0: Writes out/mark_refresh_state.json; on FAIL appends MARK_REFRESH_FAILED notification (1/hr).
     """
     _require_ui_key(x_ui_key)
     try:
         from app.core.positions.service import list_positions
         from app.core.portfolio.marking import refresh_marks
+        from app.core.portfolio.mark_refresh_state import write_mark_refresh_state, maybe_append_mark_refresh_failed_notification
         positions = list_positions(status=None, symbol=None, exclude_test=exclude_test)
         if account_id:
             positions = [p for p in positions if (p.account_id or "").strip() == account_id.strip()]
         open_pos = [p for p in positions if (p.status or "").upper() in ("OPEN", "PARTIAL_EXIT")]
         updated, skipped, errors = refresh_marks(open_pos, account_id=account_id)
+        write_mark_refresh_state(updated, skipped, errors)
+        maybe_append_mark_refresh_failed_notification(updated, errors)
         return {"updated_count": updated, "skipped_count": skipped, "errors": errors}
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Error refreshing marks: %s", e)
+        write_mark_refresh_state(0, 0, [str(e)])
+        maybe_append_mark_refresh_failed_notification(0, [str(e)])
         return {"updated_count": 0, "skipped_count": 0, "errors": [str(e)]}
 
 
@@ -1423,7 +1631,8 @@ async def ui_positions_roll(
             open_credit=open_credit,
         )
         if errors:
-            raise HTTPException(status_code=400, detail={"errors": errors})
+            status = 409 if any("Wheel policy" in (e or "") for e in errors) else 400
+            raise HTTPException(status_code=status, detail={"errors": errors})
         if new_pos is None:
             raise HTTPException(status_code=404, detail="Position not found")
         return {"closed_position_id": position_id, "new_position": new_pos.to_dict()}

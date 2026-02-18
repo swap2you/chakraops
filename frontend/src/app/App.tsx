@@ -8,6 +8,7 @@ import { SymbolDiagnosticsPage } from "@/pages/SymbolDiagnosticsPage";
 import { SystemDiagnosticsPage } from "@/pages/SystemDiagnosticsPage";
 import { NotificationsPage } from "@/pages/NotificationsPage";
 import { PortfolioPage } from "@/pages/PortfolioPage";
+import { WheelPage } from "@/pages/WheelPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -31,6 +32,7 @@ export function App() {
               <Route path="/system" element={<SystemDiagnosticsPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/portfolio" element={<PortfolioPage />} />
+              <Route path="/wheel" element={<WheelPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

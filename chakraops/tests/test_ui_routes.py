@@ -1361,3 +1361,147 @@ def test_ui_scheduler_run_once_success_when_market_open():
     assert data["started"] is True
     assert "last_run_at" in data
     assert data["last_result"] == "OK"
+
+
+def test_phase16_mark_refresh_writes_state_and_system_health_includes_it(tmp_path):
+    """Phase 16.0: Mark refresh writes state; system health includes mark_refresh."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    store_path = out_dir / "decision_latest.json"
+    store_path.write_text('{"metadata":{}}', encoding="utf-8")
+    positions_dir = out_dir / "positions"
+    positions_dir.mkdir(parents=True, exist_ok=True)
+    (positions_dir / "positions.json").write_text(
+        '[{"position_id":"pos_1","account_id":"paper","symbol":"AAPL","strategy":"CSP",'
+        '"contracts":1,"strike":150.0,"expiration":"2026-12-20","status":"OPEN",'
+        '"opened_at":"2026-01-01T12:00:00Z","credit_expected":100.0}]',
+        encoding="utf-8",
+    )
+
+    app = _get_app()
+    with patch("app.core.eval.evaluation_store_v2.get_decision_store_path", return_value=store_path):
+        with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+            client = TestClient(app)
+            r = client.post("/api/ui/positions/marks/refresh")
+    assert r.status_code == 200
+    state_path = out_dir / "mark_refresh_state.json"
+    assert state_path.exists()
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert "last_run_at_utc" in state
+    assert "last_result" in state
+    assert "updated_count" in state
+
+    with patch("app.core.eval.evaluation_store_v2.get_decision_store_path", return_value=store_path):
+        client = TestClient(app)
+        h = client.get("/api/ui/system-health")
+    assert h.status_code == 200
+    health = h.json()
+    assert "mark_refresh" in health
+    mr = health["mark_refresh"]
+    assert "last_run_at_utc" in mr
+    assert "last_result" in mr
+
+
+def test_phase16_portfolio_risk_notification_throttled(tmp_path):
+    """Phase 16.0: Repeated identical FAIL within hour does not append multiple notifications."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    store_path = out_dir / "decision_latest.json"
+    store_path.write_text('{"metadata":{}}', encoding="utf-8")
+    notif_path = out_dir / "notifications.jsonl"
+    accounts_path = out_dir / "accounts"
+    accounts_path.mkdir(parents=True, exist_ok=True)
+    (accounts_path / "accounts.json").write_text(
+        '[{"account_id":"paper","total_capital":1000,"max_deployed_pct":0.1,"is_default":true,"active":true}]',
+        encoding="utf-8",
+    )
+    positions_dir = out_dir / "positions"
+    positions_dir.mkdir(parents=True, exist_ok=True)
+    (positions_dir / "positions.json").write_text(
+        '[{"position_id":"pos_1","account_id":"paper","symbol":"AAPL","strategy":"CSP",'
+        '"contracts":5,"strike":200.0,"expiration":"2026-12-20","status":"OPEN",'
+        '"opened_at":"2026-01-01T12:00:00Z","credit_expected":500.0}]',
+        encoding="utf-8",
+    )
+
+    app = _get_app()
+    with patch("app.core.eval.evaluation_store_v2.get_decision_store_path", return_value=store_path):
+        with patch("app.api.notifications_store._notifications_path", return_value=notif_path):
+            with patch("app.core.accounts.store._get_accounts_dir", return_value=accounts_path):
+                with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+                    client = TestClient(app)
+                    r1 = client.post("/api/ui/diagnostics/run?checks=portfolio_risk")
+                    r2 = client.post("/api/ui/diagnostics/run?checks=portfolio_risk")
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    lines = [ln.strip() for ln in notif_path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    risk_lines = [ln for ln in lines if "PORTFOLIO_RISK" in ln]
+    assert len(risk_lines) == 1, f"Expected 1 PORTFOLIO_RISK notification, got {len(risk_lines)}"
+
+
+def test_phase16_diagnostics_includes_recommended_action(tmp_path):
+    """Phase 16.0: Diagnostic check responses include recommended_action."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    store_path = out_dir / "decision_latest.json"
+    store_path.write_text('{"metadata":{"artifact_version":"v2"},"symbols":[{"symbol":"SPY"}]}', encoding="utf-8")
+
+    app = _get_app()
+    with patch("app.core.eval.evaluation_store_v2.get_decision_store_path", return_value=store_path):
+        client = TestClient(app)
+        r = client.post("/api/ui/diagnostics/run?checks=orats,decision_store")
+    assert r.status_code == 200
+    data = r.json()
+    for ch in data.get("checks", []):
+        assert "recommended_action" in ch
+
+
+def test_phase17_stores_integrity_and_repair(tmp_path):
+    """Phase 17.0: GET stores/integrity returns scan results; POST stores/repair removes invalid lines."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    store_path = out_dir / "decision_latest.json"
+    store_path.write_text("{}", encoding="utf-8")
+    notif_path = out_dir / "notifications.jsonl"
+    notif_path.write_text('{"id":"1","type":"A"}\nbad line\n{"id":"2","type":"B"}\n', encoding="utf-8")
+
+    store_paths = {
+        "notifications": notif_path,
+        "diagnostics_history": out_dir / "diagnostics_history.jsonl",
+        "positions_events": out_dir / "positions" / "positions_events.jsonl",
+    }
+
+    app = _get_app()
+    with patch("app.core.eval.evaluation_store_v2.get_decision_store_path", return_value=store_path):
+        with patch("app.core.io.jsonl_integrity.get_store_paths", return_value=store_paths):
+            client = TestClient(app)
+            r = client.get("/api/ui/stores/integrity")
+    assert r.status_code == 200
+    data = r.json()
+    assert "stores" in data
+    assert "notifications" in data["stores"]
+    n = data["stores"]["notifications"]
+    assert n["total_lines"] == 3
+    assert n["invalid_lines"] == 1
+
+    with patch("app.core.eval.evaluation_store_v2.get_decision_store_path", return_value=store_path):
+        with patch("app.core.io.jsonl_integrity.get_store_paths", return_value=store_paths):
+            r2 = client.post("/api/ui/stores/repair?store=notifications")
+    assert r2.status_code == 200
+    repair = r2.json()
+    assert repair["store"] == "notifications"
+    assert repair["after"]["removed_count"] == 1
+    assert repair["after"]["valid_count"] == 2
+    assert repair["backup_path"] is not None

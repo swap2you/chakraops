@@ -100,9 +100,11 @@ def append_notification(
     path = _notifications_path()
     line = json.dumps(record, default=str)
     with _LOCK:
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(line + "\n")
-        _prune_if_needed(path)
+        from app.core.io.locks import with_file_lock
+        with with_file_lock(path, timeout_ms=2000):
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+            _prune_if_needed(path)
     logger.info("[NOTIFICATIONS] Appended %s %s: %s", ntype, severity, message[:80])
 
 
@@ -116,9 +118,11 @@ def append_ack(ref_id: str, ack_by: str = "ui") -> None:
     path = _notifications_path()
     line = json.dumps(record, default=str)
     with _LOCK:
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(line + "\n")
-        _prune_if_needed(path)
+        from app.core.io.locks import with_file_lock
+        with with_file_lock(path, timeout_ms=2000):
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+            _prune_if_needed(path)
     logger.info("[NOTIFICATIONS] Ack %s by %s", ref_id[:20], ack_by)
 
 

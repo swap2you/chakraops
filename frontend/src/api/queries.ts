@@ -138,6 +138,14 @@ function uiDiagnosticsRunPath(checks?: string): string {
   return checks ? `${base}?checks=${encodeURIComponent(checks)}` : base;
 }
 
+function uiStoresIntegrityPath(): string {
+  return `/api/ui/stores/integrity`;
+}
+
+function uiStoresRepairPath(store: string): string {
+  return `/api/ui/stores/repair?store=${encodeURIComponent(store)}`;
+}
+
 function uiDiagnosticsHistoryPath(limit?: number): string {
   const base = `/api/ui/diagnostics/history`;
   return limit != null ? `${base}?limit=${limit}` : base;
@@ -154,6 +162,11 @@ function uiSnapshotsFreezePath(skipEval?: boolean): string {
 
 function uiSnapshotsLatestPath(): string {
   return `/api/ui/snapshots/latest`;
+}
+
+function uiWheelOverviewPath(accountId?: string | null): string {
+  const base = `/api/ui/wheel/overview`;
+  return accountId ? `${base}?account_id=${encodeURIComponent(accountId)}` : base;
 }
 
 function uiNotificationsPath(limit?: number): string {
@@ -193,7 +206,9 @@ export const queryKeys = {
     ["ui", "positionEvents", positionId] as const,
   uiAlerts: () => ["ui", "alerts"] as const,
   uiDiagnosticsHistory: (limit?: number) => ["ui", "diagnostics", "history", limit ?? 10] as const,
+  uiStoresIntegrity: () => ["ui", "stores", "integrity"] as const,
   uiNotifications: (limit?: number) => ["ui", "notifications", limit ?? 100] as const,
+  uiWheelOverview: (accountId?: string | null) => ["ui", "wheel", "overview", accountId ?? ""] as const,
   uiMarketStatus: () => ["ui", "marketStatus"] as const,
   uiSnapshotsLatest: () => ["ui", "snapshots", "latest"] as const,
 };
@@ -410,6 +425,7 @@ export function useClosePosition() {
       qc.invalidateQueries({ queryKey: ["ui", "portfolio", "metrics"] });
       qc.invalidateQueries({ queryKey: queryKeys.uiPortfolioRisk() });
       qc.invalidateQueries({ queryKey: queryKeys.uiAlerts() });
+      qc.invalidateQueries({ queryKey: ["ui", "wheel"] });
     },
   });
 }
@@ -426,6 +442,7 @@ export function useDeletePosition() {
       qc.invalidateQueries({ queryKey: ["ui", "portfolio", "metrics"] });
       qc.invalidateQueries({ queryKey: queryKeys.uiPortfolioRisk() });
       qc.invalidateQueries({ queryKey: queryKeys.uiAlerts() });
+      qc.invalidateQueries({ queryKey: ["ui", "wheel"] });
     },
   });
 }
@@ -453,12 +470,14 @@ export function useManualExecute() {
       qc.invalidateQueries({ queryKey: ["ui", "portfolio", "metrics"] });
       qc.invalidateQueries({ queryKey: queryKeys.uiPortfolioRisk() });
       qc.invalidateQueries({ queryKey: queryKeys.uiAlerts() });
+      qc.invalidateQueries({ queryKey: ["ui", "wheel"] });
     },
   });
 }
 
 export interface DecisionRef {
-  evaluation_timestamp_utc: string;
+  run_id?: string;
+  evaluation_timestamp_utc?: string;
   artifact_source?: string;
   selected_contract_key?: string;
 }
@@ -492,6 +511,7 @@ export function useSavePaperPosition() {
       qc.invalidateQueries({ queryKey: ["ui", "portfolio", "metrics"] });
       qc.invalidateQueries({ queryKey: queryKeys.uiPortfolioRisk() });
       qc.invalidateQueries({ queryKey: queryKeys.uiAlerts() });
+      qc.invalidateQueries({ queryKey: ["ui", "wheel"] });
     },
   });
 }
@@ -542,6 +562,59 @@ export function usePortfolioRisk(accountId?: string | null, enabled = true) {
   return useQuery({
     queryKey: queryKeys.uiPortfolioRisk(accountId),
     queryFn: () => apiGet<PortfolioRiskResponse>(uiPortfolioRiskPath(accountId)),
+    enabled,
+  });
+}
+
+/** Phase 18.0: GET /api/ui/wheel/overview */
+export interface WheelOverviewNextAction {
+  action_type: string;
+  suggested_contract_key?: string | null;
+  reasons?: string[];
+  blocked_by?: string[];
+}
+
+export interface WheelOverviewSuggestedCandidate {
+  strategy?: string;
+  expiry?: string;
+  strike?: number;
+  delta?: number;
+  credit_estimate?: number;
+  max_loss?: number;
+  contract_key?: string;
+  option_symbol?: string;
+}
+
+export interface WheelOverviewRow {
+  symbol: string;
+  wheel_state: string;
+  last_updated_utc?: string | null;
+  next_action: WheelOverviewNextAction;
+  suggested_candidate?: WheelOverviewSuggestedCandidate | null;
+  risk_status: string;
+  last_decision_score?: number | null;
+  last_decision_band?: string | null;
+  last_decision_verdict?: string | null;
+  links: { run_id?: string | null };
+  open_position?: {
+    position_id?: string;
+    contract_key?: string;
+    strategy?: string;
+    contracts?: number;
+  } | null;
+}
+
+export interface WheelOverviewResponse {
+  symbols: Record<string, WheelOverviewRow>;
+  risk_status: string;
+  run_id?: string | null;
+  error?: string;
+}
+
+export function useWheelOverview(accountId?: string | null, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.uiWheelOverview(accountId),
+    queryFn: () => apiGet<WheelOverviewResponse>(uiWheelOverviewPath(accountId)),
     enabled,
   });
 }
@@ -739,6 +812,49 @@ export function useRunDiagnostics() {
     mutationFn: (checks?: string) =>
       apiPost<DiagnosticsRunResponse>(uiDiagnosticsRunPath(checks), {}),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiDiagnosticsHistory() });
+    },
+  });
+}
+
+/** Phase 17.0: Store integrity scan */
+export interface StoresIntegrityResponse {
+  stores: Record<
+    string,
+    {
+      path: string;
+      exists: boolean;
+      total_lines: number;
+      invalid_lines: number;
+      invalid_line_numbers?: number[];
+      last_valid_line: number;
+      last_valid_offset: number;
+    }
+  >;
+}
+
+export function useStoresIntegrity() {
+  return useQuery({
+    queryKey: queryKeys.uiStoresIntegrity(),
+    queryFn: () => apiGet<StoresIntegrityResponse>(uiStoresIntegrityPath()),
+  });
+}
+
+/** Phase 17.0: Repair store */
+export interface StoresRepairResponse {
+  store: string;
+  before: { total_lines: number; invalid_lines: number };
+  after: { valid_count: number; removed_count: number };
+  backup_path?: string | null;
+}
+
+export function useRepairStore() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (store: string) =>
+      apiPost<StoresRepairResponse>(uiStoresRepairPath(store), {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiStoresIntegrity() });
       qc.invalidateQueries({ queryKey: queryKeys.uiDiagnosticsHistory() });
     },
   });

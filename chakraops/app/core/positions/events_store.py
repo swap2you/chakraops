@@ -76,9 +76,11 @@ def append_event(
     path = _events_path()
     line = json.dumps(record, default=str)
     with _LOCK:
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(line + "\n")
-        _prune_if_needed(path)
+        from app.core.io.locks import with_file_lock
+        with with_file_lock(path, timeout_ms=2000):
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+            _prune_if_needed(path)
     logger.debug("[POSITIONS_EVENTS] Appended %s for %s", event_type, position_id)
     return event_id
 

@@ -293,6 +293,15 @@ export interface UiSystemHealthDecisionStore {
   decision_store_mtime_utc?: string | null;
 }
 
+/** Phase 16.0: Mark refresh state from out/mark_refresh_state.json */
+export interface UiSystemHealthMarkRefresh {
+  last_run_at_utc?: string | null;
+  last_result?: "PASS" | "WARN" | "FAIL" | null;
+  updated_count?: number | null;
+  skipped_count?: number | null;
+  error_count?: number | null;
+  errors_sample?: string[];
+}
 
 export interface UiSystemHealthResponse {
   api: UiSystemHealthApi;
@@ -301,6 +310,8 @@ export interface UiSystemHealthResponse {
   market: UiSystemHealthMarket;
   scheduler: UiSystemHealthScheduler;
   eod_freeze?: UiSystemHealthEodFreeze;
+  /** Phase 16.0 */
+  mark_refresh?: UiSystemHealthMarkRefresh;
 }
 
 // =============================================================================

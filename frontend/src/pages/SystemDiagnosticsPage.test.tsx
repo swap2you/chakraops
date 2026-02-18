@@ -9,6 +9,7 @@ const mockHealth = {
   market: { phase: "OPEN", is_open: true },
   scheduler: { interval_minutes: 15, last_run_at: null, next_run_at: null },
   eod_freeze: { enabled: true, scheduled_time_et: "15:58", last_run_at_utc: null, last_snapshot_dir: null },
+  mark_refresh: { last_run_at_utc: null, last_result: null, updated_count: null, skipped_count: null, error_count: null, errors_sample: [] },
 };
 
 const mockHistory = {
@@ -16,13 +17,21 @@ const mockHistory = {
     {
       timestamp_utc: "2026-01-01T12:00:00Z",
       overall_status: "PASS",
-      checks: [{ check: "orats", status: "PASS", details: {} }],
+      checks: [{ check: "orats", status: "PASS", details: {}, recommended_action: null }],
     },
   ],
 };
 
 const mockUseLatestSnapshot = vi.fn(() => ({ data: null, isError: true }));
 const mockUseUiSystemHealth = vi.fn(() => ({ data: mockHealth, isLoading: false, isError: false }));
+const mockIntegrityData = {
+  stores: {
+    notifications: { path: "/out/notifications.jsonl", exists: true, total_lines: 10, invalid_lines: 0, last_valid_line: 10, last_valid_offset: 0 },
+    diagnostics_history: { path: "/out/diagnostics_history.jsonl", exists: true, total_lines: 5, invalid_lines: 0, last_valid_line: 5, last_valid_offset: 0 },
+    positions_events: { path: "/out/positions/positions_events.jsonl", exists: true, total_lines: 0, invalid_lines: 0, last_valid_line: 0, last_valid_offset: 0 },
+  },
+};
+
 vi.mock("@/api/queries", () => ({
   useUiSystemHealth: (...args: unknown[]) => mockUseUiSystemHealth(...args),
   useDiagnosticsHistory: () => ({ data: mockHistory }),
@@ -43,6 +52,8 @@ vi.mock("@/api/queries", () => ({
     isPending: false,
     data: null,
   }),
+  useStoresIntegrity: () => ({ data: mockIntegrityData }),
+  useRepairStore: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 describe("SystemDiagnosticsPage", () => {
@@ -96,6 +107,26 @@ describe("SystemDiagnosticsPage", () => {
     render(<SystemDiagnosticsPage />);
     const btn = screen.getByRole("button", { name: /Run EOD Freeze \(eval \+ archive\)/i });
     expect(btn).toBeDisabled();
+  });
+
+  it("shows Mark Refresh card (Phase 16.0)", () => {
+    mockUseUiSystemHealth.mockReturnValueOnce({
+      data: {
+        ...mockHealth,
+        mark_refresh: {
+          last_run_at_utc: "2026-01-01T14:00:00Z",
+          last_result: "PASS",
+          updated_count: 2,
+          skipped_count: 0,
+          error_count: 0,
+          errors_sample: [],
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<SystemDiagnosticsPage />);
+    expect(screen.getByText(/Mark Refresh/i)).toBeInTheDocument();
   });
 
   it("shows eod_freeze last_error when present (Phase 11.3)", () => {

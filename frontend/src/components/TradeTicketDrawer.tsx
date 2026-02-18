@@ -83,14 +83,15 @@ export function TradeTicketDrawer({ symbol, candidate, onClose, decisionRef }: T
     );
   };
 
+  const strategy = (candidate.strategy ?? "CSP").toUpperCase();
+  const isOptionsStrategy = strategy === "CSP" || strategy === "CC";
+  const hasContractIdentity = !!(candidate.contract_key ?? candidate.option_symbol);
+  const canSaveOptions = !isOptionsStrategy || hasContractIdentity;
+
   const handleSavePosition = () => {
-    const strategy = (candidate.strategy ?? "CSP").toUpperCase();
     const fillCredit = Number.isFinite(credit) ? credit : defaultCredit(candidate, qty);
     const exp = candidate.expiry ?? undefined;
     const stk = candidate.strike ?? undefined;
-    const contractKey =
-      candidate.contract_key ??
-      (stk && exp && strategy ? `${stk}-${String(exp).slice(0, 10)}-${strategy === "CSP" ? "PUT" : "CALL"}` : undefined);
     savePaperPosition.mutate(
       {
         symbol: symbol.toUpperCase(),
@@ -101,7 +102,8 @@ export function TradeTicketDrawer({ symbol, candidate, onClose, decisionRef }: T
         credit_expected: fillCredit,
         open_credit: fillCredit,
         max_loss: candidate.max_loss != null ? candidate.max_loss * qty : undefined,
-        contract_key: contractKey,
+        contract_key: candidate.contract_key ?? undefined,
+        option_symbol: candidate.option_symbol ?? undefined,
         decision_ref: decisionRef ?? undefined,
       },
       {
@@ -190,7 +192,7 @@ export function TradeTicketDrawer({ symbol, candidate, onClose, decisionRef }: T
               />
             </div>
             <div>
-              <label className="block text-xs text-zinc-500 dark:text-zinc-500">Entry credit (actual fill)</label>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-500">Entry credit (total for all contracts)</label>
               <input
                 type="number"
                 step={0.01}
@@ -255,11 +257,16 @@ export function TradeTicketDrawer({ symbol, candidate, onClose, decisionRef }: T
               </>
             )}
           </Button>
+          {!canSaveOptions && (
+            <p className="text-sm text-amber-600 dark:text-amber-400">
+              Contract identity (contract_key or option_symbol) is required for options strategies.
+            </p>
+          )}
           <Button
             variant="primary"
             className="w-full"
             onClick={handleSavePosition}
-            disabled={savePaperPosition.isPending}
+            disabled={savePaperPosition.isPending || !canSaveOptions}
           >
             <Bookmark className="mr-2 h-4 w-4" />
             {savePaperPosition.isPending ? "Saving…" : "Save Position"}

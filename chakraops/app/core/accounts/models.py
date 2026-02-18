@@ -41,6 +41,10 @@ class Account:
         max_total_collateral: Max $ total open collateral (None = no limit).
         max_positions_open: Max number of open positions (None = no limit).
         min_credit_per_contract: Min $ credit per contract (None = no limit).
+        Phase 14.0 risk caps (optional):
+        max_symbol_collateral: Max $ collateral per symbol (None = no cap).
+        max_deployed_pct: Max fraction of buying power deployed, e.g. 0.30 = 30% (None = no cap).
+        max_near_expiry_positions: Max positions with DTE <= 7 (None = no cap).
     """
     account_id: str
     provider: str
@@ -58,6 +62,10 @@ class Account:
     max_total_collateral: Optional[float] = None
     max_positions_open: Optional[int] = None
     min_credit_per_contract: Optional[float] = None
+    # Phase 14.0: Risk caps (optional)
+    max_symbol_collateral: Optional[float] = None
+    max_deployed_pct: Optional[float] = None  # e.g. 0.30 = 30%
+    max_near_expiry_positions: Optional[int] = None
 
     def __post_init__(self) -> None:
         now = datetime.now(timezone.utc).isoformat()
@@ -80,7 +88,8 @@ class Account:
             "updated_at": self.updated_at,
             "active": self.active,
         }
-        for key in ("max_collateral_per_trade", "max_total_collateral", "max_positions_open", "min_credit_per_contract"):
+        for key in ("max_collateral_per_trade", "max_total_collateral", "max_positions_open", "min_credit_per_contract",
+                    "max_symbol_collateral", "max_deployed_pct", "max_near_expiry_positions"):
             v = getattr(self, key, None)
             if v is not None:
                 d[key] = v
@@ -92,6 +101,9 @@ class Account:
         mtc = d.get("max_total_collateral")
         mpo = d.get("max_positions_open")
         mcc = d.get("min_credit_per_contract")
+        msc = d.get("max_symbol_collateral")
+        mdp = d.get("max_deployed_pct")
+        mne = d.get("max_near_expiry_positions")
         return cls(
             account_id=d["account_id"],
             provider=d.get("provider", "Manual"),
@@ -108,6 +120,9 @@ class Account:
             max_total_collateral=float(mtc) if mtc is not None else None,
             max_positions_open=int(mpo) if mpo is not None else None,
             min_credit_per_contract=float(mcc) if mcc is not None else None,
+            max_symbol_collateral=float(msc) if msc is not None else None,
+            max_deployed_pct=float(mdp) if mdp is not None else None,
+            max_near_expiry_positions=int(mne) if mne is not None else None,
         )
 
 

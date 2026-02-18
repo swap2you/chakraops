@@ -19,12 +19,15 @@ const mockFiles = { files: [{ name: "decision_latest.json" }] };
 const mockPositions = { positions: [] };
 
 const mockUseUiSystemHealth = vi.fn(() => ({ data: mockHealth }));
+const mockUsePortfolioMtm = vi.fn(() => ({ data: null }));
 vi.mock("@/api/queries", () => ({
   useArtifactList: () => ({ data: mockFiles }),
   useDecision: () => ({ data: mockDecision }),
   useUniverse: () => ({ data: mockUniverse }),
   useUiSystemHealth: (...args: unknown[]) => mockUseUiSystemHealth(...args),
   useUiTrackedPositions: () => ({ data: mockPositions }),
+  useDefaultAccount: () => ({ data: { account: { account_id: "acct_1" } } }),
+  usePortfolioMtm: (...args: unknown[]) => mockUsePortfolioMtm(...args),
   useRunEval: () => ({
     mutate: vi.fn(),
     mutateAsync: vi.fn(),
@@ -67,6 +70,18 @@ describe("DashboardPage", () => {
     const links = screen.getAllByRole("link", { name: /Manage positions/i });
     expect(links.length).toBeGreaterThanOrEqual(1);
     expect(links[0]).toHaveAttribute("href", "/portfolio");
+  });
+
+  it("shows Net PnL card when MTM data available (Phase 15.0)", async () => {
+    mockUsePortfolioMtm.mockReturnValue({
+      data: { realized_total: 100, unrealized_total: -50, positions: [] },
+    });
+    render(<DashboardPage />);
+    expect(await screen.findByRole("region", { name: /trade plan/i })).toBeInTheDocument();
+    expect(screen.getByText(/Net PnL/i)).toBeInTheDocument();
+    expect(screen.getByText("Realized")).toBeInTheDocument();
+    expect(screen.getByText("Unrealized")).toBeInTheDocument();
+    mockUsePortfolioMtm.mockReturnValue({ data: null });
   });
 
   it("Run Evaluation button disabled when market closed (Phase 9)", async () => {

@@ -14,6 +14,7 @@ import type {
   UiSystemHealthResponse,
   UiTrackedPositionsResponse,
   PortfolioResponse,
+  PortfolioMetricsResponse,
   UiAlertsResponse,
 } from "./types";
 import type { DecisionMode } from "./types";
@@ -87,8 +88,36 @@ function uiPositionDecisionPath(positionId: string): string {
   return `/api/ui/positions/${encodeURIComponent(positionId)}/decision`;
 }
 
+function uiPositionEventsPath(positionId: string): string {
+  return `/api/ui/positions/${encodeURIComponent(positionId)}/events`;
+}
+
+function uiPositionRollPath(positionId: string): string {
+  return `/api/ui/positions/${encodeURIComponent(positionId)}/roll`;
+}
+
 function uiPortfolioPath(): string {
   return `/api/ui/portfolio`;
+}
+
+function uiPortfolioMetricsPath(accountId?: string | null): string {
+  const base = `/api/ui/portfolio/metrics`;
+  return accountId ? `${base}?account_id=${encodeURIComponent(accountId)}` : base;
+}
+
+function uiPortfolioRiskPath(accountId?: string | null): string {
+  const base = `/api/ui/portfolio/risk`;
+  return accountId ? `${base}?account_id=${encodeURIComponent(accountId)}` : base;
+}
+
+function uiPortfolioMtmPath(accountId?: string | null): string {
+  const base = `/api/ui/portfolio/mtm`;
+  return accountId ? `${base}?account_id=${encodeURIComponent(accountId)}` : base;
+}
+
+function uiPositionsMarksRefreshPath(accountId?: string | null): string {
+  const base = `/api/ui/positions/marks/refresh`;
+  return accountId ? `${base}?account_id=${encodeURIComponent(accountId)}` : base;
 }
 
 function uiAlertsPath(): string {
@@ -155,8 +184,13 @@ export const queryKeys = {
   uiAccountsDefault: () => ["ui", "accounts", "default"] as const,
   uiAccounts: () => ["ui", "accounts"] as const,
   uiPortfolio: () => ["ui", "portfolio"] as const,
+  uiPortfolioMetrics: (accountId?: string | null) => ["ui", "portfolio", "metrics", accountId ?? ""] as const,
+  uiPortfolioRisk: (accountId?: string | null) => ["ui", "portfolio", "risk", accountId ?? ""] as const,
+  uiPortfolioMtm: (accountId?: string | null) => ["ui", "portfolio", "mtm", accountId ?? ""] as const,
   uiPositionDecision: (positionId: string) =>
     ["ui", "positionDecision", positionId] as const,
+  uiPositionEvents: (positionId: string) =>
+    ["ui", "positionEvents", positionId] as const,
   uiAlerts: () => ["ui", "alerts"] as const,
   uiDiagnosticsHistory: (limit?: number) => ["ui", "diagnostics", "history", limit ?? 10] as const,
   uiNotifications: (limit?: number) => ["ui", "notifications", limit ?? 100] as const,
@@ -373,6 +407,8 @@ export function useClosePosition() {
       qc.invalidateQueries({ queryKey: queryKeys.uiTrackedPositions() });
       qc.invalidateQueries({ queryKey: queryKeys.uiPositions() });
       qc.invalidateQueries({ queryKey: queryKeys.uiPortfolio() });
+      qc.invalidateQueries({ queryKey: ["ui", "portfolio", "metrics"] });
+      qc.invalidateQueries({ queryKey: queryKeys.uiPortfolioRisk() });
       qc.invalidateQueries({ queryKey: queryKeys.uiAlerts() });
     },
   });
@@ -387,6 +423,8 @@ export function useDeletePosition() {
       qc.invalidateQueries({ queryKey: queryKeys.uiTrackedPositions() });
       qc.invalidateQueries({ queryKey: queryKeys.uiPositions() });
       qc.invalidateQueries({ queryKey: queryKeys.uiPortfolio() });
+      qc.invalidateQueries({ queryKey: ["ui", "portfolio", "metrics"] });
+      qc.invalidateQueries({ queryKey: queryKeys.uiPortfolioRisk() });
       qc.invalidateQueries({ queryKey: queryKeys.uiAlerts() });
     },
   });
@@ -412,6 +450,8 @@ export function useManualExecute() {
       qc.invalidateQueries({ queryKey: queryKeys.uiTrackedPositions() });
       qc.invalidateQueries({ queryKey: queryKeys.uiPositions() });
       qc.invalidateQueries({ queryKey: queryKeys.uiPortfolio() });
+      qc.invalidateQueries({ queryKey: ["ui", "portfolio", "metrics"] });
+      qc.invalidateQueries({ queryKey: queryKeys.uiPortfolioRisk() });
       qc.invalidateQueries({ queryKey: queryKeys.uiAlerts() });
     },
   });
@@ -449,6 +489,8 @@ export function useSavePaperPosition() {
       qc.invalidateQueries({ queryKey: queryKeys.uiTrackedPositions() });
       qc.invalidateQueries({ queryKey: queryKeys.uiPositions() });
       qc.invalidateQueries({ queryKey: queryKeys.uiPortfolio() });
+      qc.invalidateQueries({ queryKey: ["ui", "portfolio", "metrics"] });
+      qc.invalidateQueries({ queryKey: queryKeys.uiPortfolioRisk() });
       qc.invalidateQueries({ queryKey: queryKeys.uiAlerts() });
     },
   });
@@ -458,6 +500,92 @@ export function usePortfolio() {
   return useQuery({
     queryKey: queryKeys.uiPortfolio(),
     queryFn: () => apiGet<PortfolioResponse>(uiPortfolioPath()),
+  });
+}
+
+/** Phase 12.0: GET /api/ui/portfolio/metrics */
+export function usePortfolioMetrics(accountId?: string | null) {
+  return useQuery({
+    queryKey: queryKeys.uiPortfolioMetrics(accountId),
+    queryFn: () => apiGet<PortfolioMetricsResponse>(uiPortfolioMetricsPath(accountId)),
+  });
+}
+
+/** Phase 14.0: GET /api/ui/portfolio/risk */
+export interface PortfolioRiskBreach {
+  type: string;
+  subtype: string;
+  current: number;
+  limit: number;
+  message: string;
+  affected_symbols?: string[];
+}
+
+export interface PortfolioRiskResponse {
+  status: "PASS" | "WARN" | "FAIL";
+  account_id?: string;
+  metrics: {
+    capital_deployed?: number;
+    total_capital?: number;
+    buying_power?: number;
+    deployed_pct?: number;
+    top_symbol?: string;
+    top_symbol_collateral?: number;
+    near_expiry_count?: number;
+    open_positions_count?: number;
+  };
+  breaches: PortfolioRiskBreach[];
+  error?: string;
+}
+
+export function usePortfolioRisk(accountId?: string | null, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.uiPortfolioRisk(accountId),
+    queryFn: () => apiGet<PortfolioRiskResponse>(uiPortfolioRiskPath(accountId)),
+    enabled,
+  });
+}
+
+/** Phase 15.0: GET /api/ui/portfolio/mtm */
+export interface PortfolioMtmResponse {
+  realized_total: number;
+  unrealized_total: number;
+  positions: Array<{
+    position_id: string;
+    symbol: string;
+    status?: string;
+    mark?: number;
+    unrealized_pnl?: number;
+    realized_pnl?: number;
+  }>;
+}
+
+export function usePortfolioMtm(accountId?: string | null, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.uiPortfolioMtm(accountId),
+    queryFn: () => apiGet<PortfolioMtmResponse>(uiPortfolioMtmPath(accountId)),
+    enabled,
+  });
+}
+
+/** Phase 15.0: POST /api/ui/positions/marks/refresh */
+export interface MarksRefreshResponse {
+  updated_count: number;
+  skipped_count: number;
+  errors: string[];
+}
+
+export function useRefreshMarks(accountId?: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<MarksRefreshResponse>(uiPositionsMarksRefreshPath(accountId), {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiPortfolio() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiPortfolioMetrics(accountId ?? undefined) });
+      qc.invalidateQueries({ queryKey: queryKeys.uiPortfolioMtm(accountId ?? undefined) });
+      qc.invalidateQueries({ queryKey: queryKeys.uiPortfolioRisk(accountId ?? undefined) });
+      qc.invalidateQueries({ queryKey: queryKeys.uiTrackedPositions() });
+    },
   });
 }
 
@@ -477,6 +605,64 @@ export function usePositionDecision(positionId: string | null, enabled = true) {
     queryFn: () =>
       apiGet<PositionDecisionResponse>(uiPositionDecisionPath(positionId!)),
     enabled: enabled && !!positionId,
+  });
+}
+
+/** Phase 13.0: GET /api/ui/positions/{id}/events */
+export interface PositionEvent {
+  event_id: string;
+  position_id: string;
+  type: string;
+  at_utc: string;
+  payload?: Record<string, unknown>;
+}
+
+export interface PositionEventsResponse {
+  position_id: string;
+  events: PositionEvent[];
+}
+
+export function usePositionEvents(positionId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.uiPositionEvents(positionId ?? ""),
+    queryFn: () =>
+      apiGet<PositionEventsResponse>(uiPositionEventsPath(positionId!)),
+    enabled: enabled && !!positionId,
+  });
+}
+
+export interface RollPositionPayload {
+  contract_key?: string;
+  option_symbol?: string;
+  strike?: number;
+  expiration?: string;
+  expiry?: string;
+  contracts?: number;
+  close_debit: number;
+  open_credit: number;
+}
+
+export interface RollPositionResponse {
+  closed_position_id: string;
+  new_position: Record<string, unknown>;
+}
+
+export function useRollPosition(positionId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: RollPositionPayload) =>
+      apiPost<RollPositionResponse>(uiPositionRollPath(positionId!), payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiPositions() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiTrackedPositions() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiPortfolio() });
+      qc.invalidateQueries({ queryKey: ["ui", "portfolio", "metrics"] });
+      qc.invalidateQueries({ queryKey: queryKeys.uiPortfolioRisk() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiAlerts() });
+      if (positionId) {
+        qc.invalidateQueries({ queryKey: queryKeys.uiPositionEvents(positionId) });
+      }
+    },
   });
 }
 

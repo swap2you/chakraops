@@ -59,12 +59,15 @@ def enrich_position_for_portfolio(
     mark_by_position_id: Optional[Dict[str, float]] = None,
     underlying_by_symbol: Optional[Dict[str, float]] = None,
 ) -> Dict[str, Any]:
-    """Enrich a position with lifecycle fields for portfolio UI."""
+    """Enrich a position with lifecycle fields for portfolio UI.
+    Phase 15.0: Mark from position.mark_price_per_contract or mark_by_position_id.
+    Unrealized PnL: open_credit - mark_debit_total - open_fees (premium convention).
+    """
     d = p.to_dict()
     position_id = p.position_id
     symbol = (p.symbol or "").strip().upper()
-    entry_credit = p.credit_expected
-    mark = (mark_by_position_id or {}).get(position_id)
+    entry_credit = p.credit_expected or p.open_credit
+    mark = getattr(p, "mark_price_per_contract", None) or (mark_by_position_id or {}).get(position_id)
     underlying = (underlying_by_symbol or {}).get(symbol) if symbol else None
     expiry = p.expiration
     dte = compute_dte(expiry)
@@ -74,7 +77,11 @@ def enrich_position_for_portfolio(
     d["mark"] = mark
     d["premium_captured_pct"] = premium_pct
     d["alert_flags"] = alert_flags
-    d["unrealized_pnl"] = None  # (mark - entry) * contracts * 100 when mark present
-    if mark is not None and entry_credit is not None and p.contracts:
-        d["unrealized_pnl"] = round((mark - entry_credit) * p.contracts * 100, 2)
+    d["unrealized_pnl"] = None
+    if mark is not None and p.contracts:
+        open_credit = p.open_credit or (entry_credit and float(entry_credit) * int(p.contracts))
+        if open_credit is not None:
+            mark_debit_total = mark * 100 * int(p.contracts)
+            open_fees = getattr(p, "open_fees", None) or 0
+            d["unrealized_pnl"] = round(open_credit - mark_debit_total - open_fees, 2)
     return d

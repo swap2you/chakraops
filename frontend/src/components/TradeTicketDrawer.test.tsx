@@ -9,6 +9,7 @@ const mockCandidate = {
   delta: 0.25,
   credit_estimate: 2.5,
   max_loss: 1000,
+  contract_key: "450-2026-03-21-PUT",
 };
 
 const mockAccount = {
@@ -59,6 +60,16 @@ describe("TradeTicketDrawer", () => {
     expect(screen.getByText(/Max per trade/)).toBeInTheDocument();
     expect(screen.getByText(/Remaining capacity/)).toBeInTheDocument();
     expect(screen.getByText(/Open positions/)).toBeInTheDocument();
+  });
+
+  it("Save disabled when options strategy missing contract identity (Phase 12.0)", () => {
+    const candidateNoContract = { ...mockCandidate, contract_key: undefined, option_symbol: undefined };
+    render(
+      <TradeTicketDrawer symbol="SPY" candidate={candidateNoContract} onClose={onClose} />
+    );
+    const saveBtn = screen.getByRole("button", { name: /Save Position/i });
+    expect(saveBtn).toBeDisabled();
+    expect(screen.getByText(/contract_key or option_symbol.*required/)).toBeInTheDocument();
   });
 
   it("save payload includes decision_ref and contract_key (Phase 11)", () => {

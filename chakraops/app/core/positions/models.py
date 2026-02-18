@@ -92,6 +92,11 @@ class Position:
     is_test: bool = False  # DIAG_TEST or user-created test data
     created_at_utc: Optional[str] = None
     updated_at_utc: Optional[str] = None
+    # Phase 13.0: Roll — link to position that was rolled from
+    parent_position_id: Optional[str] = None
+    # Phase 15.0: Mark/MTM from provider refresh
+    mark_price_per_contract: Optional[float] = None
+    mark_time_utc: Optional[str] = None
 
     def __post_init__(self) -> None:
         now = datetime.now(timezone.utc).isoformat()
@@ -148,7 +153,8 @@ class Position:
         for key in ("id", "underlying", "option_type", "open_credit", "open_price", "open_fees",
                     "open_time_utc", "close_debit", "close_price", "close_fees", "close_time_utc",
                     "collateral", "realized_pnl", "is_test", "created_at_utc", "updated_at_utc",
-                    "option_symbol", "contract_key", "decision_ref"):
+                    "option_symbol", "contract_key", "decision_ref", "parent_position_id",
+                    "mark_price_per_contract", "mark_time_utc"):
             v = getattr(self, key, None)
             if v is not None or key == "is_test":
                 d[key] = v
@@ -205,6 +211,9 @@ class Position:
             is_test=bool(d.get("is_test", False)),
             created_at_utc=d.get("created_at_utc") or d.get("opened_at"),
             updated_at_utc=d.get("updated_at_utc") or d.get("opened_at"),
+            parent_position_id=d.get("parent_position_id"),
+            mark_price_per_contract=d.get("mark_price_per_contract"),
+            mark_time_utc=d.get("mark_time_utc"),
         )
 
 

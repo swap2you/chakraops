@@ -100,20 +100,20 @@ def close_position(
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
     close_ts = close_time_utc or now
-    # Compute close_debit and realized_pnl for options
+    # Compute close_debit and realized_pnl (Phase 12.0: standardized formula)
+    # open_credit, close_debit = total dollars. pnl = open_credit - close_debit - open_fees - close_fees
     strategy = (position.strategy or "").upper()
     close_debit: Optional[float] = None
     realized_pnl: Optional[float] = None
+    open_fees = getattr(position, "open_fees", None) or 0.0
     if strategy in ("CSP", "CC") and position.contracts:
         close_debit = float(close_price) * 100 * int(position.contracts)
-        open_credit = position.open_credit or position.credit_expected
-        if open_credit is not None:
-            # credit_expected is typically total premium; if < 10 assume per-share
-            cred = float(open_credit)
-            open_total = cred * 100 * int(position.contracts) if cred < 10 else cred
-            realized_pnl = open_total - close_debit - (close_fees or 0)
+        open_credit_total = position.open_credit or position.credit_expected
+        if open_credit_total is not None:
+            open_credit_total = float(open_credit_total)
+            realized_pnl = open_credit_total - close_debit - float(open_fees or 0) - float(close_fees or 0)
         else:
-            realized_pnl = -close_debit - (close_fees or 0)
+            realized_pnl = -close_debit - float(open_fees or 0) - float(close_fees or 0)
     updates = {
         "status": "CLOSED",
         "closed_at": close_ts,
@@ -125,7 +125,84 @@ def close_position(
         "updated_at_utc": now,
     }
     updated = store.update_position(position_id, updates)
+    try:
+        from app.core.positions.events_store import append_event
+        append_event(position_id, "CLOSE", {"close_price": close_price, "close_debit": close_debit, "realized_pnl": realized_pnl, "close_fees": close_fees}, at_utc=close_ts)
+    except Exception as ex:
+        logger.warning("[POSITIONS] Failed to append CLOSE event: %s", ex)
     return updated, []
+
+
+def roll_position(
+    position_id: str,
+    new_contract_key: str,
+    new_option_symbol: Optional[str] = None,
+    new_strike: float = 0.0,
+    new_expiration: str = "",
+    new_contracts: int = 1,
+    close_debit: float = 0.0,
+    open_credit: float = 0.0,
+) -> Tuple[Optional[Position], List[str]]:
+    """
+    Phase 13.0: Roll — close old position and open new with parent_position_id link.
+    close_debit: total to buy back old. open_credit: total credit for new.
+    Returns (new_position, errors).
+    """
+    position = store.get_position(position_id)
+    if position is None:
+        return None, [f"Position {position_id} not found"]
+    if (position.status or "").upper() not in ("OPEN", "PARTIAL_EXIT"):
+        return None, [f"Position is {position.status}; cannot roll"]
+    strategy = (position.strategy or "CSP").upper()
+    if strategy not in ("CSP", "CC"):
+        return None, ["Roll only supported for CSP/CC"]
+    if not new_contract_key and not new_option_symbol:
+        return None, ["contract_key or option_symbol required for new position"]
+    contracts = int(position.contracts) if position.contracts else 1
+    close_price = close_debit / (100 * contracts) if contracts else 0.0
+    pos_closed, close_errs = close_position(position_id, close_price, None, None)
+    if close_errs or pos_closed is None:
+        return None, close_errs or ["Failed to close"]
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        from app.core.positions.events_store import append_event
+        append_event(position_id, "NOTE", {"action": "rolled_to", "close_debit": close_debit, "open_credit": open_credit})
+    except Exception as ex:
+        logger.warning("[POSITIONS] Failed to append roll NOTE: %s", ex)
+    new_id = generate_position_id()
+    new_position = Position(
+        position_id=new_id,
+        account_id=position.account_id,
+        symbol=position.symbol,
+        strategy=strategy,
+        contracts=new_contracts,
+        strike=new_strike or position.strike,
+        expiration=new_expiration or position.expiration,
+        credit_expected=open_credit,
+        quantity=None,
+        status="OPEN",
+        opened_at=now,
+        closed_at=None,
+        notes=f"Rolled from {position_id}",
+        underlying=position.symbol,
+        option_type="PUT" if strategy == "CSP" else "CALL",
+        option_symbol=new_option_symbol,
+        contract_key=new_contract_key or None,
+        open_credit=open_credit,
+        open_time_utc=now,
+        parent_position_id=position_id,
+    )
+    try:
+        created = store.create_position(new_position)
+        append_event(created.position_id, "OPEN", {
+            "symbol": created.symbol, "strategy": created.strategy, "contracts": created.contracts,
+            "strike": created.strike, "expiration": created.expiration, "open_credit": open_credit,
+            "parent_position_id": position_id,
+        })
+        return created, []
+    except Exception as e:
+        logger.exception("[POSITIONS] Roll: failed to create new position: %s", e)
+        return None, [str(e)]
 
 
 def delete_position(position_id: str) -> Tuple[bool, Optional[str]]:
@@ -138,6 +215,11 @@ def delete_position(position_id: str) -> Tuple[bool, Optional[str]]:
         return False, f"Position {position_id} not found"
     if not position.is_test and (position.status or "").upper() not in ("CLOSED", "ABORTED"):
         return False, "Delete allowed only for CLOSED/ABORTED positions or test (is_test=true) positions"
+    try:
+        from app.core.positions.events_store import append_event
+        append_event(position_id, "NOTE", {"action": "deleted"})
+    except Exception as ex:
+        logger.warning("[POSITIONS] Failed to append NOTE event: %s", ex)
     ok = store.delete_position(position_id)
     return ok, None
 
@@ -186,6 +268,11 @@ def manual_execute(data: Dict[str, Any]) -> Tuple[Optional[Position], List[str]]
     try:
         created = store.create_position(position)
         try:
+            from app.core.positions.events_store import append_event
+            append_event(position.position_id, "OPEN", {"symbol": position.symbol, "strategy": position.strategy, "contracts": position.contracts})
+        except Exception as ex:
+            logger.warning("[POSITIONS] Failed to append OPEN event: %s", ex)
+        try:
             from app.core.audit import audit_manual_execution_intent
             audit_manual_execution_intent(
                 position.position_id, position.symbol, position.strategy,
@@ -217,7 +304,7 @@ def _compute_collateral(strategy: str, strike: float, contracts: int) -> float:
 
 
 def _derive_contract_key(strategy: str, strike: float, expiration: str) -> str:
-    """Derive contract_key from strike-expiry-type."""
+    """Phase 12.0: Deprecated. Do not use for options - require provider-backed contract_key/option_symbol."""
     opt = "PUT" if (strategy or "").upper() == "CSP" else "CALL"
     exp = (expiration or "")[:10] if expiration else ""
     return f"{strike}-{exp}-{opt}"
@@ -287,8 +374,11 @@ def add_paper_position(data: Dict[str, Any]) -> Tuple[Optional[Position], List[s
     contracts_val = int(data.get("contracts", 1))
     collateral = _compute_collateral(strategy, float(strike_val or 0), contracts_val)
     option_type = "PUT" if strategy == "CSP" else "CALL"
-    contract_key = data.get("contract_key") or (_derive_contract_key(strategy, float(strike_val or 0), exp_val or "") if strategy in ("CSP", "CC") else None)
+    contract_key = data.get("contract_key")
     option_symbol = data.get("option_symbol")
+    # Phase 12.0: Options strategies require provider-backed contract identity; no server-side derivation
+    if strategy in ("CSP", "CC") and not contract_key and not option_symbol:
+        return None, ["contract_key or option_symbol is required for options strategies (CSP, CC)"], 409
 
     # Phase 11.0: Sizing validation against default account
     default_account = account_store.get_default_account()
@@ -360,6 +450,11 @@ def add_paper_position(data: Dict[str, Any]) -> Tuple[Optional[Position], List[s
     )
     try:
         created = store.create_position(position)
+        try:
+            from app.core.positions.events_store import append_event
+            append_event(position_id, "OPEN", {"symbol": position.symbol, "strategy": position.strategy, "contracts": position.contracts, "strike": position.strike, "expiration": position.expiration, "open_credit": getattr(position, "open_credit", None)})
+        except Exception as ex:
+            logger.warning("[POSITIONS] Failed to append OPEN event: %s", ex)
         logger.info("[POSITIONS] Paper position created: %s %s %s", position.symbol, position.strategy, position_id)
         return created, [], 200
     except ValueError as e:

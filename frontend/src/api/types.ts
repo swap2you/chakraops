@@ -361,12 +361,25 @@ export interface PortfolioPosition {
   dte?: number | null;
   alert_flags?: string[];
   unrealized_pnl?: number | null;
+  /** Phase 12.0: Realized PnL when CLOSED */
+  realized_pnl?: number | null;
 }
 
 export interface PortfolioResponse {
   positions: PortfolioPosition[];
   capital_deployed?: number;
   open_positions_count?: number;
+}
+
+/** Phase 12.0: GET /api/ui/portfolio/metrics */
+export interface PortfolioMetricsResponse {
+  open_positions_count: number;
+  capital_deployed: number;
+  realized_pnl_total: number;
+  win_rate: number | null;
+  avg_pnl: number | null;
+  avg_credit: number | null;
+  avg_dte_at_entry: number | null;
 }
 
 // =============================================================================

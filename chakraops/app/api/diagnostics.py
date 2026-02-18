@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
-ALL_CHECKS = {"orats", "decision_store", "universe", "positions", "scheduler"}
+ALL_CHECKS = {"orats", "decision_store", "universe", "positions", "scheduler", "portfolio_risk"}
 _RETENTION_LINES = 5000  # Phase 8.6
 _APPEND_LOCK = threading.Lock()
 
@@ -206,13 +206,14 @@ def _run_positions_check() -> Dict[str, Any]:
         from app.core.positions.service import list_positions, add_paper_position
         before = list_positions(status=None, symbol=None)
         before_ids = {p.position_id for p in before}
-        pos, errs = add_paper_position({
+        pos, errs, _ = add_paper_position({
             "symbol": test_symbol,
             "strategy": "CSP",
             "contracts": 1,
             "strike": 100.0,
             "expiration": "2026-12-20",
             "credit_expected": 1.0,
+            "contract_key": "100-2026-12-20-PUT",
             "notes": run_id,
         })
         if errs or pos is None:
@@ -267,6 +268,54 @@ def _run_positions_check() -> Dict[str, Any]:
                         pass
         except Exception:
             pass
+
+
+def _run_portfolio_risk_check() -> Dict[str, Any]:
+    """Phase 14.0: Evaluate portfolio risk against account limits. Emit notification on FAIL/WARN."""
+    try:
+        from app.core.accounts.store import get_default_account
+        from app.core.positions.service import list_positions
+        from app.core.portfolio.risk import evaluate_portfolio_risk
+        from app.api.notifications_store import append_notification
+
+        account = get_default_account()
+        if account is None:
+            return {
+                "check": "portfolio_risk",
+                "status": "PASS",
+                "details": {"reason": "No default account; skip"},
+            }
+        positions = list_positions(status=None, symbol=None, exclude_test=True)
+        open_pos = [p for p in positions if (p.status or "").upper() in ("OPEN", "PARTIAL_EXIT")]
+        result = evaluate_portfolio_risk(account, open_pos)
+        status = result.get("status", "PASS")
+        breaches = result.get("breaches") or []
+        details = {
+            "account_id": account.account_id,
+            "status": status,
+            "metrics": result.get("metrics", {}),
+            "breach_count": len(breaches),
+            "breaches": breaches[:10],  # Limit in details
+        }
+        check_result = {"check": "portfolio_risk", "status": status, "details": details}
+        if status in ("FAIL", "WARN") and breaches:
+            severity = "ERROR" if status == "FAIL" else "WARN"
+            summary = "; ".join(b.get("message", "") for b in breaches[:5])
+            append_notification(
+                severity=severity,
+                ntype="PORTFOLIO_RISK",
+                message=summary[:500] or "Portfolio risk limit breach",
+                symbol=None,
+                details={"breaches": breaches, "metrics": result.get("metrics", {})},
+                subtype="RISK_LIMIT_BREACH",
+            )
+        return check_result
+    except Exception as e:
+        return {
+            "check": "portfolio_risk",
+            "status": "FAIL",
+            "details": {"error": str(e)},
+        }
 
 
 def _run_scheduler_check(app_start_time_utc: Optional[float] = None) -> Dict[str, Any]:
@@ -348,6 +397,7 @@ CHECK_FNS = {
     "decision_store": _run_decision_store_check,
     "universe": _run_universe_check,
     "positions": _run_positions_check,
+    "portfolio_risk": _run_portfolio_risk_check,
     "scheduler": _run_scheduler_check,
 }
 

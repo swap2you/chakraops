@@ -5,7 +5,7 @@ import { formatTimestampEt, formatTimestampEtFull } from "@/utils/formatTimestam
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardHeader, StatusBadge, Button, Tooltip } from "@/components/ui";
 
-const DIAGNOSTIC_CHECKS = ["orats", "decision_store", "universe", "positions", "scheduler"] as const;
+const DIAGNOSTIC_CHECKS = ["orats", "decision_store", "universe", "positions", "portfolio_risk", "scheduler"] as const;
 
 export function SystemDiagnosticsPage() {
   const { data, isLoading, isError } = useUiSystemHealth();

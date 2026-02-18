@@ -131,15 +131,16 @@ def update_position(position_id: str, updates: dict) -> Optional[Position]:
     if target is None:
         return None
 
-    # Phase 1 keys + Phase 4/5 entry snapshot keys + Phase 10.0 close keys
+    # Phase 1 keys + Phase 4/5 entry snapshot keys + Phase 10.0 close keys + Phase 13.0
     allowed_keys = frozenset({
-        "status", "closed_at", "notes",
+        "status", "closed_at", "notes", "parent_position_id",
         "band", "risk_flags_at_entry", "portfolio_utilization_pct", "sector_exposure_pct",
         "thesis_strength", "data_sufficiency", "risk_amount_at_entry",
         "data_sufficiency_override", "data_sufficiency_override_source",
         "stop_price", "t1", "t2", "t3", "credit_expected",
         "close_debit", "close_price", "close_fees", "close_time_utc", "realized_pnl",
         "updated_at_utc",
+        "mark_price_per_contract", "mark_time_utc",
     })
     for key, value in updates.items():
         if key in allowed_keys and hasattr(target, key):

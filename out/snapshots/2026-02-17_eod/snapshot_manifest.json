@@ -1,13 +1,9 @@
 {
-  "created_at_utc": "2026-02-17T21:10:55.262221+00:00",
-  "created_at_et": "2026-02-17T16:10:55.262221-05:00",
-  "git_commit": "8f649b82e81b",
+  "created_at_utc": "2026-02-18T02:27:00.456431+00:00",
+  "created_at_et": "2026-02-17T21:27:00.456431-05:00",
+  "git_commit": "cc901f7a26e0",
+  "mode": "archive_only",
   "files": [
-    {
-      "name": "notifications.jsonl",
-      "size_bytes": 1783,
-      "last_modified_utc": "2026-02-17T21:03:41.214456+00:00"
-    },
     {
       "name": "decision_latest.json",
       "size_bytes": 115223,
@@ -17,6 +13,21 @@
       "name": "decision_frozen.json",
       "size_bytes": 103005,
       "last_modified_utc": "2026-02-17T16:32:11.855173+00:00"
+    },
+    {
+      "name": "notifications.jsonl",
+      "size_bytes": 4740,
+      "last_modified_utc": "2026-02-18T02:23:20.964619+00:00"
+    }
+  ],
+  "skipped": [
+    {
+      "name": "diagnostics_history.jsonl",
+      "reason": "not found"
+    },
+    {
+      "name": "positions.json",
+      "reason": "not found"
     }
   ]
 }

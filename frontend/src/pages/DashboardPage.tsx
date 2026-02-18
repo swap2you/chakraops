@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { formatTimestampEt } from "@/utils/formatTimestamp";
 import { Link } from "react-router-dom";
 import { ExternalLink, Activity, Droplets, Zap, Info, Settings } from "lucide-react";
-import { useArtifactList, useDecision, useUniverse, useUiSystemHealth, useUiTrackedPositions, useRunEval } from "@/api/queries";
+import { useArtifactList, useDecision, useUniverse, useUiSystemHealth, useUiTrackedPositions, usePortfolioMtm, useDefaultAccount, useRunEval } from "@/api/queries";
 import type { DecisionMode, SymbolEvalSummary, UniverseSymbol } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import {
@@ -90,6 +90,9 @@ export function DashboardPage() {
   const { data: universe } = useUniverse();
   const { data: health } = useUiSystemHealth();
   const { data: positionsRes } = useUiTrackedPositions();
+  const { data: defaultAccount } = useDefaultAccount();
+  const accountId = (defaultAccount?.account as { account_id?: string })?.account_id ?? null;
+  const { data: mtmData } = usePortfolioMtm(accountId);
   const runEval = useRunEval();
 
   const { universeSymbols, selectedSignals } = useMemo(() => {
@@ -243,6 +246,25 @@ export function DashboardPage() {
             badge={positions.length > 0 ? <span className="text-xs text-zinc-500 dark:text-zinc-500">{positions.length} total</span> : undefined}
           />
           <StatCard label="Capital deployed" value={`$${capitalDeployed.toLocaleString()}`} />
+          {mtmData && (
+            <Card>
+              <CardHeader title="Net PnL (Phase 15.0)" />
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">Realized</span>
+                  <span className={`font-mono font-medium ${(mtmData.realized_total ?? 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                    ${(mtmData.realized_total ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">Unrealized</span>
+                  <span className={`font-mono font-medium ${(mtmData.unrealized_total ?? 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                    ${(mtmData.unrealized_total ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+            </Card>
+          )}
           <Card>
             <CardHeader
               title="Positions"

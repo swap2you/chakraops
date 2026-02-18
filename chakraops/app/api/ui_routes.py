@@ -982,6 +982,196 @@ def ui_portfolio(
         return {"positions": [], "capital_deployed": 0, "open_positions_count": 0}
 
 
+@router.get("/portfolio/metrics")
+def ui_portfolio_metrics(
+    account_id: str | None = Query(default=None, description="Filter by account_id; omit for all"),
+    exclude_test: bool = Query(default=True),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    Phase 12.0: Portfolio metrics.
+    Returns: open_positions_count, capital_deployed, realized_pnl_total, win_rate, avg_pnl, avg_credit, avg_dte_at_entry.
+    """
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.positions.service import list_positions
+        from app.core.positions.lifecycle import enrich_position_for_portfolio
+        positions = list_positions(status=None, symbol=None, exclude_test=exclude_test)
+        if account_id:
+            positions = [p for p in positions if (p.account_id or "").strip() == account_id.strip()]
+        capital_deployed = 0.0
+        open_count = 0
+        closed = [p for p in positions if (p.status or "").upper() in ("CLOSED", "ABORTED")]
+        realized_total = 0.0
+        wins = 0
+        pnls: List[float] = []
+        credits: List[float] = []
+        dtes: List[int] = []
+        for p in positions:
+            s = (p.status or "").upper()
+            if s in ("OPEN", "PARTIAL_EXIT"):
+                open_count += 1
+                c = getattr(p, "collateral", None)
+                if c is not None:
+                    capital_deployed += float(c)
+                elif p.strike and p.contracts:
+                    capital_deployed += float(p.strike) * 100 * int(p.contracts)
+        for p in closed:
+            rp = getattr(p, "realized_pnl", None)
+            if rp is not None:
+                rv = float(rp)
+                realized_total += rv
+                pnls.append(rv)
+                if rv > 0:
+                    wins += 1
+            oc = p.open_credit or p.credit_expected
+            if oc is not None:
+                credits.append(float(oc))
+            # DTE at entry: days from opened_at to expiration (for closed, use expiration - open date)
+            dte_at_entry: int | None = None
+            if p.expiration and p.opened_at:
+                try:
+                    from datetime import datetime
+                    exp = datetime.strptime(str(p.expiration).strip()[:10], "%Y-%m-%d").date()
+                    opened = datetime.fromisoformat(str(p.opened_at).replace("Z", "+00:00")).date()
+                    dte_at_entry = (exp - opened).days
+                except (ValueError, TypeError):
+                    pass
+            if dte_at_entry is not None:
+                dtes.append(dte_at_entry)
+        win_rate = (wins / len(closed)) if closed else None
+        avg_pnl = (sum(pnls) / len(pnls)) if pnls else None
+        avg_credit = (sum(credits) / len(credits)) if credits else None
+        avg_dte_at_entry = (sum(dtes) / len(dtes)) if dtes else None
+        return {
+            "open_positions_count": open_count,
+            "capital_deployed": round(capital_deployed, 2),
+            "realized_pnl_total": round(realized_total, 2),
+            "win_rate": round(win_rate, 4) if win_rate is not None else None,
+            "avg_pnl": round(avg_pnl, 2) if avg_pnl is not None else None,
+            "avg_credit": round(avg_credit, 2) if avg_credit is not None else None,
+            "avg_dte_at_entry": round(avg_dte_at_entry, 1) if avg_dte_at_entry is not None else None,
+        }
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error loading portfolio metrics: %s", e)
+        return {
+            "open_positions_count": 0,
+            "capital_deployed": 0,
+            "realized_pnl_total": 0,
+            "win_rate": None,
+            "avg_pnl": None,
+            "avg_credit": None,
+            "avg_dte_at_entry": None,
+        }
+
+
+@router.get("/portfolio/risk")
+def ui_portfolio_risk(
+    account_id: str | None = Query(default=None, description="Account ID; omit for default"),
+    exclude_test: bool = Query(default=True),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    Phase 14.0: Portfolio risk evaluation against account limits.
+    Returns: {status: PASS|WARN|FAIL, metrics: {...}, breaches: [...]}.
+    """
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.accounts.store import get_account, get_default_account
+        from app.core.positions.service import list_positions
+        from app.core.portfolio.risk import evaluate_portfolio_risk
+        account = None
+        if account_id:
+            account = get_account(account_id.strip())
+        if account is None:
+            account = get_default_account()
+        if account is None:
+            return {"status": "FAIL", "metrics": {}, "breaches": [], "error": "No account found"}
+        positions = list_positions(status=None, symbol=None, exclude_test=exclude_test)
+        if account_id:
+            positions = [p for p in positions if (p.account_id or "").strip() == account_id.strip()]
+        open_pos = [p for p in positions if (p.status or "").upper() in ("OPEN", "PARTIAL_EXIT")]
+        result = evaluate_portfolio_risk(account, open_pos)
+        result["account_id"] = account.account_id
+        return result
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error evaluating portfolio risk: %s", e)
+        return {"status": "FAIL", "metrics": {}, "breaches": [], "error": str(e)}
+
+
+@router.post("/positions/marks/refresh")
+def ui_positions_marks_refresh(
+    account_id: str | None = Query(default=None, description="Account ID; omit for all"),
+    exclude_test: bool = Query(default=True),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    Phase 15.0: Refresh marks for OPEN positions from provider. Returns {updated_count, skipped_count, errors}.
+    """
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.positions.service import list_positions
+        from app.core.portfolio.marking import refresh_marks
+        positions = list_positions(status=None, symbol=None, exclude_test=exclude_test)
+        if account_id:
+            positions = [p for p in positions if (p.account_id or "").strip() == account_id.strip()]
+        open_pos = [p for p in positions if (p.status or "").upper() in ("OPEN", "PARTIAL_EXIT")]
+        updated, skipped, errors = refresh_marks(open_pos, account_id=account_id)
+        return {"updated_count": updated, "skipped_count": skipped, "errors": errors}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error refreshing marks: %s", e)
+        return {"updated_count": 0, "skipped_count": 0, "errors": [str(e)]}
+
+
+@router.get("/portfolio/mtm")
+def ui_portfolio_mtm(
+    account_id: str | None = Query(default=None, description="Account ID; omit for all"),
+    exclude_test: bool = Query(default=True),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    Phase 15.0: Portfolio MTM — totals + per-position unrealized_pnl.
+    unrealized_pnl = open_credit - mark_debit_total - open_fees.
+    """
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.positions.service import list_positions
+        from app.core.positions.lifecycle import enrich_position_for_portfolio
+        positions = list_positions(status=None, symbol=None, exclude_test=exclude_test)
+        if account_id:
+            positions = [p for p in positions if (p.account_id or "").strip() == account_id.strip()]
+        realized_total = 0.0
+        unrealized_total = 0.0
+        per_position: List[Dict[str, Any]] = []
+        for p in positions:
+            enriched = enrich_position_for_portfolio(p, None, None)
+            d = {
+                "position_id": p.position_id,
+                "symbol": p.symbol,
+                "status": p.status,
+                "mark": enriched.get("mark"),
+                "unrealized_pnl": enriched.get("unrealized_pnl"),
+                "realized_pnl": getattr(p, "realized_pnl", None),
+            }
+            per_position.append(d)
+            if (p.status or "").upper() in ("CLOSED", "ABORTED") and getattr(p, "realized_pnl", None) is not None:
+                realized_total += float(p.realized_pnl)
+            if (p.status or "").upper() in ("OPEN", "PARTIAL_EXIT") and enriched.get("unrealized_pnl") is not None:
+                unrealized_total += float(enriched["unrealized_pnl"])
+        return {
+            "realized_total": round(realized_total, 2),
+            "unrealized_total": round(unrealized_total, 2),
+            "positions": per_position,
+        }
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error loading portfolio MTM: %s", e)
+        return {"realized_total": 0, "unrealized_total": 0, "positions": []}
+
+
 @router.get("/alerts")
 def ui_alerts(
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
@@ -1173,6 +1363,76 @@ def ui_position_decision(
         import logging
         logging.getLogger(__name__).exception("Error loading position decision: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/positions/{position_id}/events")
+def ui_position_events(
+    position_id: str,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Phase 13.0: Get lifecycle events for a position (OPEN, FILL, ADJUST, CLOSE, ABORT, NOTE)."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.positions.service import get_position
+        from app.core.positions.events_store import load_events_for_position
+        position = get_position(position_id)
+        if position is None:
+            raise HTTPException(status_code=404, detail="Position not found")
+        events = load_events_for_position(position_id)
+        return {"position_id": position_id, "events": events}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error loading position events: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/positions/{position_id}/roll")
+async def ui_positions_roll(
+    position_id: str,
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Phase 13.0: Roll — close old position and open new with parent_position_id. Body: new contract_key/option_symbol, strike, expiration, contracts, close_debit, open_credit."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.positions.service import roll_position
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        body = body or {}
+        contract_key = body.get("contract_key")
+        option_symbol = body.get("option_symbol")
+        strike = body.get("strike")
+        expiration = body.get("expiration") or body.get("expiry")
+        contracts = int(body.get("contracts", 1))
+        close_debit = float(body.get("close_debit", 0))
+        open_credit = float(body.get("open_credit", 0))
+        if not contract_key and not option_symbol:
+            raise HTTPException(status_code=400, detail="contract_key or option_symbol required")
+        new_pos, errors = roll_position(
+            position_id,
+            new_contract_key=contract_key or "",
+            new_option_symbol=option_symbol,
+            new_strike=float(strike or 0),
+            new_expiration=expiration or "",
+            new_contracts=contracts,
+            close_debit=close_debit,
+            open_credit=open_credit,
+        )
+        if errors:
+            raise HTTPException(status_code=400, detail={"errors": errors})
+        if new_pos is None:
+            raise HTTPException(status_code=404, detail="Position not found")
+        return {"closed_position_id": position_id, "new_position": new_pos.to_dict()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error rolling position: %s", e)
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete("/positions/{position_id}")

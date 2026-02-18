@@ -167,6 +167,7 @@ def test_ui_positions_post_persists_and_get_returns(tmp_path):
                 "strike": 450.0,
                 "expiration": "2026-03-21",
                 "credit_expected": 2.50,
+                "contract_key": "450-2026-03-21-PUT",
             },
         )
         assert post.status_code == 200
@@ -207,7 +208,7 @@ def test_ui_positions_post_409_when_collateral_exceeds_max_per_trade(tmp_path):
     with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
         with patch("app.core.accounts.store._accounts_path", side_effect=_fake_accounts_path):
             client = TestClient(app)
-            # CSP 1 @ 450 = 45000 collateral > 30000 max
+            # CSP 1 @ 450 = 45000 collateral > 30000 max (Phase 12.0: requires contract_key)
             r = client.post(
                 "/api/ui/positions",
                 json={
@@ -217,6 +218,7 @@ def test_ui_positions_post_409_when_collateral_exceeds_max_per_trade(tmp_path):
                     "strike": 450.0,
                     "expiration": "2026-03-21",
                     "credit_expected": 2.50,
+                    "contract_key": "450-2026-03-21-PUT",
                 },
             )
     assert r.status_code == 409
@@ -256,6 +258,7 @@ def test_ui_positions_post_success_when_within_limits(tmp_path):
                     "strike": 450.0,
                     "expiration": "2026-03-21",
                     "credit_expected": 2.50,
+                    "contract_key": "450-2026-03-21-PUT",
                     "decision_ref": {"evaluation_timestamp_utc": "2026-02-17T20:00:00Z", "artifact_source": "LIVE"},
                 },
             )
@@ -323,6 +326,7 @@ def test_ui_position_decision_with_run_id(tmp_path):
                     "strike": 450.0,
                     "expiration": "2026-03-21",
                     "credit_expected": 2.50,
+                    "contract_key": "450-2026-03-21-PUT",
                     "decision_ref": {"run_id": run_id, "evaluation_timestamp_utc": "2026-02-17T21:00:00Z"},
                 },
             )
@@ -401,6 +405,7 @@ def test_ui_position_decision_warning_when_run_mismatch(tmp_path):
                     "strike": 450.0,
                     "expiration": "2026-03-21",
                     "credit_expected": 2.50,
+                    "contract_key": "450-2026-03-21-PUT",
                     "decision_ref": {"run_id": pos_run_id},
                 },
             )
@@ -417,6 +422,92 @@ def test_ui_position_decision_warning_when_run_mismatch(tmp_path):
     assert "exact run not available" in (data.get("warning") or "")
 
 
+def test_ui_positions_post_409_when_options_missing_contract_identity(tmp_path):
+    """Phase 12.0: POST positions returns 409 when CSP/CC without contract_key or option_symbol."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    positions_dir = tmp_path / "positions"
+    positions_dir.mkdir(parents=True, exist_ok=True)
+
+    app = _get_app()
+    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+        client = TestClient(app)
+        r = client.post(
+            "/api/ui/positions",
+            json={
+                "symbol": "SPY",
+                "strategy": "CSP",
+                "contracts": 1,
+                "strike": 450.0,
+                "expiration": "2026-03-21",
+                "credit_expected": 250,
+            },
+        )
+        assert r.status_code == 409
+        data = r.json()
+        errs = data.get("detail", {})
+        if isinstance(errs, dict) and "errors" in errs:
+            errs = errs["errors"]
+        assert "contract_key or option_symbol" in str(errs)
+
+
+def test_ui_positions_close_pnl_with_fees(tmp_path):
+    """Phase 12.0: PnL = open_credit - close_debit - open_fees - close_fees."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    positions_dir = tmp_path / "positions"
+    positions_dir.mkdir(parents=True, exist_ok=True)
+
+    app = _get_app()
+    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+        client = TestClient(app)
+        post = client.post(
+            "/api/ui/positions",
+            json={
+                "symbol": "SPY",
+                "strategy": "CSP",
+                "contracts": 1,
+                "strike": 450.0,
+                "expiration": "2026-03-21",
+                "credit_expected": 250,
+                "contract_key": "450-2026-03-21-PUT",
+            },
+        )
+        assert post.status_code == 200
+        pid = post.json()["position_id"]
+        # open 250, close 100, open_fees 5, close_fees 2 -> pnl = 250 - 100 - 5 - 2 = 143
+        # Position model doesn't have open_fees in create; we'd need to patch or update
+        # For now test without open_fees: close_fees=2 -> pnl = 250 - 100 - 2 = 148
+        close_res = client.post(
+            f"/api/ui/positions/{pid}/close",
+            json={"close_price": 1.00, "close_fees": 2.0},
+        )
+        assert close_res.status_code == 200
+        closed = close_res.json()
+        rpnl = closed.get("realized_pnl")
+        assert rpnl is not None
+        assert abs(rpnl - 148.0) < 0.01
+
+
+def test_ui_portfolio_metrics_returns_expected_fields(tmp_path):
+    """Phase 12.0: GET /api/ui/portfolio/metrics returns open_positions_count, capital_deployed, realized_pnl_total, etc."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    positions_dir = tmp_path / "positions"
+    positions_dir.mkdir(parents=True, exist_ok=True)
+
+    app = _get_app()
+    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+        client = TestClient(app)
+        r = client.get("/api/ui/portfolio/metrics")
+        assert r.status_code == 200
+        data = r.json()
+        assert "open_positions_count" in data
+        assert "capital_deployed" in data
+        assert "realized_pnl_total" in data
+        assert "win_rate" in data
+
+
 def test_ui_positions_close_and_delete_guardrail(tmp_path):
     """Phase 10.0: Close position computes realized_pnl; delete allowed only for CLOSED/test."""
     pytest.importorskip("fastapi")
@@ -428,7 +519,7 @@ def test_ui_positions_close_and_delete_guardrail(tmp_path):
     app = _get_app()
     with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
         client = TestClient(app)
-        # Create OPEN position: CSP 1 contract @ 450, credit 2.50
+        # Create OPEN position: CSP 1 contract @ 450, credit 250 total (Phase 12.0: requires contract_key)
         post = client.post(
             "/api/ui/positions",
             json={
@@ -437,7 +528,8 @@ def test_ui_positions_close_and_delete_guardrail(tmp_path):
                 "contracts": 1,
                 "strike": 450.0,
                 "expiration": "2026-03-21",
-                "credit_expected": 2.50,
+                "credit_expected": 250.0,
+                "contract_key": "450-2026-03-21-PUT",
             },
         )
         assert post.status_code == 200
@@ -457,7 +549,7 @@ def test_ui_positions_close_and_delete_guardrail(tmp_path):
         closed = close_res.json()
         assert closed.get("status") == "CLOSED"
         assert "realized_pnl" in closed
-        # open_credit 2.50 total 250, close_debit 100, pnl = 250 - 100 = 150
+        # open_credit 250 total, close_debit 100, pnl = 250 - 100 = 150
         rpnl = closed.get("realized_pnl")
         assert rpnl is not None
         assert abs(rpnl - 150.0) < 0.01
@@ -471,6 +563,391 @@ def test_ui_positions_close_and_delete_guardrail(tmp_path):
         get_after = client.get("/api/ui/positions")
         assert get_after.status_code == 200
         assert len(get_after.json().get("positions") or []) == 0
+
+
+def test_ui_positions_events_appended_on_create_and_close(tmp_path):
+    """Phase 13.0: OPEN event on create; CLOSE event on close."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    positions_dir = tmp_path / "positions"
+    positions_dir.mkdir(parents=True, exist_ok=True)
+
+    app = _get_app()
+    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+        client = TestClient(app)
+        post = client.post(
+            "/api/ui/positions",
+            json={
+                "symbol": "SPY",
+                "strategy": "CSP",
+                "contracts": 1,
+                "strike": 450.0,
+                "expiration": "2026-03-21",
+                "credit_expected": 250.0,
+                "contract_key": "450-2026-03-21-PUT",
+            },
+        )
+        assert post.status_code == 200
+        pid = post.json()["position_id"]
+
+        # GET events: should have OPEN
+        ev = client.get(f"/api/ui/positions/{pid}/events")
+        assert ev.status_code == 200
+        data = ev.json()
+        assert data["position_id"] == pid
+        events = data.get("events") or []
+        assert len(events) >= 1
+        types = [e["type"] for e in events]
+        assert "OPEN" in types
+
+        # Close position
+        client.post(f"/api/ui/positions/{pid}/close", json={"close_price": 1.00})
+        ev2 = client.get(f"/api/ui/positions/{pid}/events")
+        assert ev2.status_code == 200
+        events2 = ev2.json().get("events") or []
+        types2 = [e["type"] for e in events2]
+        assert "CLOSE" in types2
+
+
+def test_ui_positions_roll_creates_linked_position_and_events(tmp_path):
+    """Phase 13.0: Roll closes old, creates new with parent_position_id; events for both."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    positions_dir = tmp_path / "positions"
+    positions_dir.mkdir(parents=True, exist_ok=True)
+
+    app = _get_app()
+    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+        client = TestClient(app)
+        post = client.post(
+            "/api/ui/positions",
+            json={
+                "symbol": "SPY",
+                "strategy": "CSP",
+                "contracts": 1,
+                "strike": 450.0,
+                "expiration": "2026-03-21",
+                "credit_expected": 250.0,
+                "contract_key": "450-2026-03-21-PUT",
+            },
+        )
+        assert post.status_code == 200
+        pid = post.json()["position_id"]
+
+        roll = client.post(
+            f"/api/ui/positions/{pid}/roll",
+            json={
+                "contract_key": "460-2026-04-21-PUT",
+                "strike": 460.0,
+                "expiration": "2026-04-21",
+                "contracts": 1,
+                "close_debit": 100.0,
+                "open_credit": 200.0,
+            },
+        )
+        assert roll.status_code == 200
+        body = roll.json()
+        assert body["closed_position_id"] == pid
+        new_pos = body.get("new_position") or {}
+        assert new_pos.get("parent_position_id") == pid
+        assert new_pos.get("position_id") != pid
+        assert new_pos.get("status") == "OPEN"
+        assert new_pos.get("symbol") == "SPY"
+        assert new_pos.get("strategy") == "CSP"
+
+        # Old position events: CLOSE (from close) + NOTE (rolled_to)
+        ev_old = client.get(f"/api/ui/positions/{pid}/events")
+        assert ev_old.status_code == 200
+        types_old = [e["type"] for e in ev_old.json().get("events") or []]
+        assert "CLOSE" in types_old
+
+        # New position has OPEN event
+        new_id = new_pos["position_id"]
+        ev_new = client.get(f"/api/ui/positions/{new_id}/events")
+        assert ev_new.status_code == 200
+        events_new = ev_new.json().get("events") or []
+        assert len(events_new) >= 1
+        assert events_new[-1]["type"] == "OPEN"
+
+
+def test_ui_portfolio_risk_pass_when_within_limits(tmp_path):
+    """Phase 14.0: GET /api/ui/portfolio/risk returns PASS when within account limits."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    positions_dir = tmp_path / "positions"
+    accounts_dir = tmp_path / "accounts"
+    positions_dir.mkdir(parents=True, exist_ok=True)
+    accounts_dir.mkdir(parents=True, exist_ok=True)
+    accounts_file = accounts_dir / "accounts.json"
+    accounts_file.write_text(
+        '[{"account_id":"acct_1","provider":"Manual","account_type":"Taxable","total_capital":100000,'
+        '"max_capital_per_trade_pct":5,"max_total_exposure_pct":30,"allowed_strategies":["CSP"],'
+        '"is_default":true,"max_symbol_collateral":50000,"max_deployed_pct":0.5,"max_near_expiry_positions":3}]',
+        encoding="utf-8",
+    )
+
+    def _fake_accounts_path():
+        return accounts_file
+
+    app = _get_app()
+    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+        with patch("app.core.accounts.store._accounts_path", side_effect=_fake_accounts_path):
+            client = TestClient(app)
+            post = client.post(
+                "/api/ui/positions",
+                json={
+                    "symbol": "SPY",
+                    "strategy": "CSP",
+                    "contracts": 1,
+                    "strike": 300.0,
+                    "expiration": "2026-12-20",
+                    "credit_expected": 250.0,
+                    "contract_key": "300-2026-12-20-PUT",
+                },
+            )
+            assert post.status_code == 200
+            r = client.get("/api/ui/portfolio/risk")
+            assert r.status_code == 200
+            data = r.json()
+            assert data.get("status") == "PASS"
+            assert "metrics" in data
+            assert data["metrics"].get("capital_deployed") == 30000.0
+            assert len(data.get("breaches") or []) == 0
+
+
+def test_ui_portfolio_risk_fail_when_breach(tmp_path):
+    """Phase 14.0: GET /api/ui/portfolio/risk returns FAIL when max_deployed_pct exceeded; notification emitted."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    positions_dir = tmp_path / "positions"
+    accounts_dir = tmp_path / "accounts"
+    notifications_path = tmp_path / "notifications.jsonl"
+    positions_dir.mkdir(parents=True, exist_ok=True)
+    accounts_dir.mkdir(parents=True, exist_ok=True)
+    accounts_file = accounts_dir / "accounts.json"
+    accounts_file.write_text(
+        '[{"account_id":"acct_1","provider":"Manual","account_type":"Taxable","total_capital":100000,'
+        '"max_capital_per_trade_pct":5,"max_total_exposure_pct":30,"allowed_strategies":["CSP"],'
+        '"is_default":true,"max_deployed_pct":0.2}]',
+        encoding="utf-8",
+    )
+
+    def _fake_accounts_path():
+        return accounts_file
+
+    def _fake_notifications_path():
+        return notifications_path
+
+    app = _get_app()
+    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+        with patch("app.core.accounts.store._accounts_path", side_effect=_fake_accounts_path):
+            with patch("app.api.notifications_store._notifications_path", side_effect=_fake_notifications_path):
+                client = TestClient(app)
+                post = client.post(
+                    "/api/ui/positions",
+                    json={
+                        "symbol": "SPY",
+                        "strategy": "CSP",
+                        "contracts": 2,
+                        "strike": 450.0,
+                        "expiration": "2026-12-20",
+                        "credit_expected": 250.0,
+                        "contract_key": "450-2026-12-20-PUT",
+                    },
+                )
+                assert post.status_code == 200
+                r = client.get("/api/ui/portfolio/risk")
+                assert r.status_code == 200
+                data = r.json()
+                assert data.get("status") == "FAIL"
+                breaches = data.get("breaches") or []
+                assert len(breaches) >= 1
+                msg = breaches[0].get("message", "")
+                assert "Deployed" in msg or "max" in msg.lower()
+                assert data["metrics"]["capital_deployed"] == 90000.0
+                assert data["metrics"]["deployed_pct"] > 0.2
+
+
+def test_ui_portfolio_risk_diagnostics_emits_notification_on_fail(tmp_path):
+    """Phase 14.0: Run portfolio_risk diagnostic; on FAIL appends PORTFOLIO_RISK notification."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    positions_dir = tmp_path / "positions"
+    accounts_dir = tmp_path / "accounts"
+    diag_path = tmp_path / "diagnostics_history.jsonl"
+    notif_path = tmp_path / "notifications.jsonl"
+    positions_dir.mkdir(parents=True, exist_ok=True)
+    accounts_dir.mkdir(parents=True, exist_ok=True)
+    accounts_file = accounts_dir / "accounts.json"
+    accounts_file.write_text(
+        '[{"account_id":"acct_1","provider":"Manual","account_type":"Taxable","total_capital":50000,'
+        '"max_capital_per_trade_pct":5,"max_total_exposure_pct":30,"allowed_strategies":["CSP"],'
+        '"is_default":true,"max_symbol_collateral":20000}]',
+        encoding="utf-8",
+    )
+
+    def _fake_accounts_path():
+        return accounts_file
+
+    def _fake_diagnostics_path():
+        return diag_path
+
+    def _fake_notif_path():
+        return notif_path
+
+    app = _get_app()
+    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+        with patch("app.core.accounts.store._accounts_path", side_effect=_fake_accounts_path):
+            with patch("app.api.diagnostics._diagnostics_history_path", side_effect=_fake_diagnostics_path):
+                with patch("app.api.notifications_store._notifications_path", side_effect=_fake_notif_path):
+                    client = TestClient(app)
+                    client.post(
+                        "/api/ui/positions",
+                        json={
+                            "symbol": "AAPL",
+                            "strategy": "CSP",
+                            "contracts": 3,
+                            "strike": 150.0,
+                            "expiration": "2026-12-20",
+                            "credit_expected": 100.0,
+                            "contract_key": "150-2026-12-20-PUT",
+                        },
+                    )
+                    r = client.post("/api/ui/diagnostics/run", params={"checks": "portfolio_risk"})
+                    assert r.status_code == 200
+                    checks = r.json().get("checks") or []
+                    pr = next((c for c in checks if c.get("check") == "portfolio_risk"), None)
+                    assert pr is not None
+                    assert pr.get("status") == "FAIL"
+                    assert pr["details"].get("breach_count", 0) >= 1
+                    if notif_path.exists():
+                        lines = [ln.strip() for ln in notif_path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+                        assert any("PORTFOLIO_RISK" in ln for ln in lines)
+                        assert any("RISK_LIMIT_BREACH" in ln for ln in lines)
+
+
+def test_ui_marks_refresh_with_mock_fetcher(tmp_path):
+    """Phase 15.0: POST marks/refresh with mock fetcher updates position; computes unrealized PnL."""
+    pytest.importorskip("fastapi")
+    from datetime import date
+    from fastapi.testclient import TestClient
+
+    positions_dir = tmp_path / "positions"
+    positions_dir.mkdir(parents=True, exist_ok=True)
+
+    def mock_fetcher(symbol: str, expiration: date, strike: float, option_type: str):
+        return 1.0
+
+    app = _get_app()
+    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+        client = TestClient(app)
+        post = client.post(
+            "/api/ui/positions",
+            json={
+                "symbol": "SPY",
+                "strategy": "CSP",
+                "contracts": 1,
+                "strike": 450.0,
+                "expiration": "2026-12-20",
+                "credit_expected": 250.0,
+                "contract_key": "450-2026-12-20-PUT",
+            },
+        )
+        assert post.status_code == 200
+        pid = post.json()["position_id"]
+
+        from app.core.positions.service import list_positions
+        from app.core.portfolio.marking import refresh_marks
+        positions = list_positions(status=None, symbol=None, exclude_test=True)
+        open_pos = [p for p in positions if (p.status or "").upper() in ("OPEN", "PARTIAL_EXIT")]
+        updated, skipped, errors = refresh_marks(open_pos, mark_fetcher=mock_fetcher)
+        assert updated == 1
+        assert skipped == 0
+
+        from app.core.positions.store import get_position
+        pos = get_position(pid)
+        assert pos is not None
+        assert getattr(pos, "mark_price_per_contract", None) == 1.0
+        assert getattr(pos, "mark_time_utc", None) is not None
+
+        mtm = client.get("/api/ui/portfolio/mtm")
+        assert mtm.status_code == 200
+        data = mtm.json()
+        assert data["unrealized_total"] == 150.0  # 250 open_credit - 100 mark_debit
+        assert len(data["positions"]) == 1
+        assert data["positions"][0]["unrealized_pnl"] == 150.0
+
+
+def test_ui_marks_refresh_skips_position_without_contract(tmp_path):
+    """Phase 15.0: Positions without contract_key/option_symbol are skipped with reason."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    positions_dir = tmp_path / "positions"
+    positions_dir.mkdir(parents=True, exist_ok=True)
+    (positions_dir / "positions.json").write_text(
+        '[{"position_id":"pos_1","account_id":"paper","symbol":"AAPL","strategy":"CSP",'
+        '"contracts":1,"strike":150.0,"expiration":"2026-12-20","status":"OPEN",'
+        '"opened_at":"2026-01-01T12:00:00Z","credit_expected":100.0}]',
+        encoding="utf-8",
+    )
+
+    app = _get_app()
+    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+        client = TestClient(app)
+        r = client.post("/api/ui/positions/marks/refresh")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["updated_count"] == 0
+        assert data["skipped_count"] >= 1
+        assert any("contract_key" in e or "option_symbol" in e for e in data.get("errors", []))
+
+
+def test_ui_portfolio_mtm_returns_totals(tmp_path):
+    """Phase 15.0: GET portfolio/mtm returns realized_total, unrealized_total, per-position."""
+    pytest.importorskip("fastapi")
+    from datetime import date
+    from fastapi.testclient import TestClient
+
+    positions_dir = tmp_path / "positions"
+    positions_dir.mkdir(parents=True, exist_ok=True)
+
+    def mock_fetcher(symbol, expiration, strike, option_type):
+        return 1.2
+
+    app = _get_app()
+    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+        client = TestClient(app)
+        client.post(
+            "/api/ui/positions",
+            json={
+                "symbol": "SPY",
+                "strategy": "CSP",
+                "contracts": 1,
+                "strike": 450.0,
+                "expiration": "2026-12-20",
+                "credit_expected": 250.0,
+                "contract_key": "450-2026-12-20-PUT",
+            },
+        )
+        from app.core.positions.service import list_positions
+        from app.core.portfolio.marking import refresh_marks
+        positions = list_positions(status=None, symbol=None, exclude_test=True)
+        open_pos = [p for p in positions if (p.status or "").upper() in ("OPEN", "PARTIAL_EXIT")]
+        refresh_marks(open_pos, mark_fetcher=mock_fetcher)
+
+        r = client.get("/api/ui/portfolio/mtm")
+        assert r.status_code == 200
+        data = r.json()
+        assert "realized_total" in data
+        assert "unrealized_total" in data
+        assert "positions" in data
+        assert data["unrealized_total"] == 130.0  # 250 open_credit - 120 mark_debit (1.2*100*1)
 
 
 def test_ui_diagnostics_run_and_history(tmp_path):

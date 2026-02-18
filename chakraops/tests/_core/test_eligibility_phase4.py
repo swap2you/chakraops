@@ -213,6 +213,16 @@ def test_cc_rejected_when_rsi_out_of_band(mock_get_candles):
         assert any("FAIL_RSI" in r or "FAIL_REGIME" in r or "FAIL_NOT_NEAR" in r for r in rej) or True
 
 
+@patch("app.core.eligibility.candles.get_candles")
+def test_cc_holdings_gate_passes_with_100_shares(mock_get_candles):
+    """With holdings >= 100 for symbol, CC path does not fail with FAIL_NO_HOLDINGS / FAIL_NOT_HELD_FOR_CC."""
+    mock_get_candles.return_value = [{"ts": "2024-01-01", "open": 100, "high": 101, "low": 99, "close": 100, "volume": 1_000_000}] * 260
+    mode, trace = run_eligibility("T", holdings={"T": 100}, lookback=255)
+    rej = trace.get("rejection_reason_codes") or []
+    assert "FAIL_NO_HOLDINGS" not in rej
+    assert "FAIL_NOT_HELD_FOR_CC" not in rej
+
+
 def test_support_proximity_threshold_edge():
     """distance_to_support_pct <= SUPPORT_NEAR_PCT passes near_support."""
     d = distance_to_support_pct(100.0, 98.0, 97.5)

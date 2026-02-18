@@ -51,6 +51,9 @@ logger = logging.getLogger(__name__)
 FAIL_NO_CANDLES = "FAIL_NO_CANDLES"
 FAIL_NOT_HELD_FOR_CC = "FAIL_NOT_HELD_FOR_CC"
 FAIL_NO_HOLDINGS = "FAIL_NO_HOLDINGS"
+
+# Phase 21.1: CC requires at least one standard lot (100 shares) to be eligible
+CC_MIN_SHARES = 100
 FAIL_RSI_CSP = "FAIL_RSI_CSP"
 FAIL_RSI_CC = "FAIL_RSI_CC"
 FAIL_RSI_RANGE = "FAIL_RSI_RANGE"
@@ -102,6 +105,8 @@ def run(
     sym = (symbol or "").strip().upper()
     holdings = holdings or {}
     shares = int(holdings.get(sym, 0) or 0)
+    # CC eligible only if shares >= CC_MIN_SHARES (one standard lot)
+    held_ok_cc = shares >= CC_MIN_SHARES
     as_of = datetime.now(timezone.utc).isoformat()
 
     cands = candles_mod.get_candles(sym, "daily", lookback)
@@ -219,8 +224,8 @@ def run(
     rule_checks.append(rule_check("REGIME_OK_CSP", regime_up, regime, "UP", reason_code=FAIL_REGIME_CSP))
     rule_checks.append(rule_check("REGIME_OK_CC", regime_down, regime, "DOWN", reason_code=FAIL_REGIME_CC))
 
-    held_ok = shares > 0
-    rule_checks.append(rule_check("HOLDINGS_OK", held_ok, shares, 1, reason_code=FAIL_NO_HOLDINGS))
+    held_ok = held_ok_cc  # HOLDINGS_OK for CC: need >= CC_MIN_SHARES
+    rule_checks.append(rule_check("HOLDINGS_OK", held_ok, shares, CC_MIN_SHARES, reason_code=FAIL_NO_HOLDINGS))
 
     support_found = support_level is not None
     resistance_found = resistance_level is not None
@@ -262,10 +267,10 @@ def run(
     csp_eligible = regime_up and near_support and rsi_csp_ok and atr_ok
     if not regime_up and (near_support and rsi_csp_ok and atr_ok):
         rejections.append(FAIL_REGIME_CSP)
-    if not held_ok:
+    if not held_ok_cc:
         rejections.append(FAIL_NOT_HELD_FOR_CC)
         rejections.append(FAIL_NO_HOLDINGS)
-    cc_eligible = regime_down and held_ok and near_resist and rsi_cc_ok and atr_ok
+    cc_eligible = regime_down and held_ok_cc and near_resist and rsi_cc_ok and atr_ok
     if held_ok and not regime_down and (near_resist and rsi_cc_ok and atr_ok):
         rejections.append(FAIL_REGIME_CC)
 

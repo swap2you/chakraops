@@ -15,6 +15,9 @@ import type {
   UiTrackedPositionsResponse,
   PortfolioResponse,
   PortfolioMetricsResponse,
+  AccountSummary,
+  AccountHolding,
+  AccountHoldingsResponse,
   UiAlertsResponse,
 } from "./types";
 import type { DecisionMode, DecisionRef } from "./types";
@@ -99,6 +102,20 @@ function uiPositionRollPath(positionId: string): string {
 
 function uiPortfolioPath(): string {
   return `/api/ui/portfolio`;
+}
+
+/** Phase 21.1: Account (SQLite) */
+function uiAccountSummaryPath(): string {
+  return `/api/ui/account/summary`;
+}
+function uiAccountHoldingsPath(): string {
+  return `/api/ui/account/holdings`;
+}
+function uiAccountHoldingsDeletePath(symbol: string): string {
+  return `/api/ui/account/holdings/${encodeURIComponent(symbol)}`;
+}
+function uiAccountBalancesPath(): string {
+  return `/api/ui/account/balances`;
 }
 
 function uiPortfolioMetricsPath(accountId?: string | null): string {
@@ -212,6 +229,8 @@ export const queryKeys = {
   uiAccountsDefault: () => ["ui", "accounts", "default"] as const,
   uiAccounts: () => ["ui", "accounts"] as const,
   uiPortfolio: () => ["ui", "portfolio"] as const,
+  uiAccountSummary: () => ["ui", "account", "summary"] as const,
+  uiAccountHoldings: () => ["ui", "account", "holdings"] as const,
   uiPortfolioMetrics: (accountId?: string | null) => ["ui", "portfolio", "metrics", accountId ?? ""] as const,
   uiPortfolioRisk: (accountId?: string | null) => ["ui", "portfolio", "risk", accountId ?? ""] as const,
   uiPortfolioMtm: (accountId?: string | null) => ["ui", "portfolio", "mtm", accountId ?? ""] as const,
@@ -528,6 +547,61 @@ export function usePortfolio() {
   return useQuery({
     queryKey: queryKeys.uiPortfolio(),
     queryFn: () => apiGet<PortfolioResponse>(uiPortfolioPath()),
+  });
+}
+
+/** Phase 21.1: GET /api/ui/account/summary */
+export function useAccountSummary() {
+  return useQuery({
+    queryKey: queryKeys.uiAccountSummary(),
+    queryFn: () => apiGet<AccountSummary>(uiAccountSummaryPath()),
+  });
+}
+
+/** Phase 21.1: GET /api/ui/account/holdings */
+export function useAccountHoldings() {
+  return useQuery({
+    queryKey: queryKeys.uiAccountHoldings(),
+    queryFn: () => apiGet<AccountHoldingsResponse>(uiAccountHoldingsPath()),
+  });
+}
+
+/** Phase 21.1: POST /api/ui/account/balances */
+export function useSetBalances() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { cash: number; buying_power: number }) =>
+      apiPost<{ summary: AccountSummary }>(uiAccountBalancesPath(), payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiAccountSummary() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiAccountHoldings() });
+    },
+  });
+}
+
+/** Phase 21.1: POST /api/ui/account/holdings */
+export function useUpsertHolding() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { symbol: string; shares: number; avg_cost?: number | null }) =>
+      apiPost<{ holding: AccountHolding }>(uiAccountHoldingsPath(), payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiAccountSummary() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiAccountHoldings() });
+    },
+  });
+}
+
+/** Phase 21.1: DELETE /api/ui/account/holdings/{symbol} */
+export function useDeleteHolding() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (symbol: string) =>
+      apiDelete<{ deleted: boolean; symbol: string }>(uiAccountHoldingsDeletePath(symbol)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiAccountSummary() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiAccountHoldings() });
+    },
   });
 }
 

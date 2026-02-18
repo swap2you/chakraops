@@ -1,7 +1,20 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { usePortfolio, usePortfolioMetrics, usePortfolioRisk, useRefreshMarks, useAccounts, useDefaultAccount, useDeletePosition } from "@/api/queries";
-import type { PortfolioPosition } from "@/api/types";
+import {
+  usePortfolio,
+  usePortfolioMetrics,
+  usePortfolioRisk,
+  useRefreshMarks,
+  useAccounts,
+  useDefaultAccount,
+  useDeletePosition,
+  useAccountSummary,
+  useAccountHoldings,
+  useSetBalances,
+  useUpsertHolding,
+  useDeleteHolding,
+} from "@/api/queries";
+import type { PortfolioPosition, AccountHolding } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { ClosePositionDrawer } from "@/components/ClosePositionDrawer";
 import { PortfolioPositionDetailDrawer } from "@/components/PortfolioPositionDetailDrawer";
@@ -48,9 +61,16 @@ export function PortfolioPage() {
   const { data: metrics } = usePortfolioMetrics();
   const { data: accountsData } = useAccounts();
   const { data: defaultAccountData } = useDefaultAccount();
+  const { data: accountSummary } = useAccountSummary();
+  const { data: accountHoldingsData } = useAccountHoldings();
+  const setBalances = useSetBalances();
+  const upsertHolding = useUpsertHolding();
+  const deleteHolding = useDeleteHolding();
   const deletePosition = useDeletePosition();
   const [closeDrawerPosition, setCloseDrawerPosition] = useState<PortfolioPosition | null>(null);
   const [detailDrawerPosition, setDetailDrawerPosition] = useState<PortfolioPosition | null>(null);
+  const [balancesEdit, setBalancesEdit] = useState<{ cash: string; buying_power: string } | null>(null);
+  const [holdingForm, setHoldingForm] = useState<{ symbol: string; shares: string; avg_cost: string } | null>(null);
 
   const positions = data?.positions ?? [];
   const capitalDeployed = data?.capital_deployed ?? 0;
@@ -77,7 +97,7 @@ export function PortfolioPage() {
   if (isLoading) {
     return (
       <div>
-        <PageHeader title="Portfolio" subtext="Tracked positions" />
+        <PageHeader title="Account & Portfolio" subtext="Tracked positions" />
         <Card>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading…</p>
         </Card>
@@ -88,15 +108,18 @@ export function PortfolioPage() {
   if (isError) {
     return (
       <div>
-        <PageHeader title="Portfolio" />
+        <PageHeader title="Account & Portfolio" />
         <p className="text-red-500 dark:text-red-400">Failed to load portfolio.</p>
       </div>
     );
   }
 
+  const holdings = accountHoldingsData?.holdings ?? [];
+  const summary = accountSummary;
+
   return (
     <div className="space-y-8">
-      <PageHeader title="Portfolio" subtext={`${positions.length} position(s) · ${fmtCurrency(capitalDeployed)} deployed`} />
+      <PageHeader title="Account & Portfolio" subtext={`${positions.length} position(s) · ${fmtCurrency(capitalDeployed)} deployed`} />
 
       {metrics && (
         <Card>
@@ -137,6 +160,173 @@ export function PortfolioPage() {
           </div>
         </Card>
       )}
+
+      <Card>
+        <CardHeader title="Balances (manual)" description="Cash and buying power used for CC eligibility and display." />
+        {summary ? (
+          balancesEdit ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 max-w-md">
+              <div>
+                <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Cash</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800"
+                  value={balancesEdit.cash}
+                  onChange={(e) => setBalancesEdit((p) => (p ? { ...p, cash: e.target.value } : null))}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Buying power</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800"
+                  value={balancesEdit.buying_power}
+                  onChange={(e) => setBalancesEdit((p) => (p ? { ...p, buying_power: e.target.value } : null))}
+                />
+              </div>
+              <div className="sm:col-span-2 flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    const cash = parseFloat(balancesEdit.cash);
+                    const bp = parseFloat(balancesEdit.buying_power);
+                    if (!Number.isNaN(cash) && !Number.isNaN(bp)) {
+                      setBalances.mutate({ cash, buying_power: bp });
+                      setBalancesEdit(null);
+                    }
+                  }}
+                  disabled={setBalances.isPending}
+                >
+                  {setBalances.isPending ? "Saving…" : "Save"}
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setBalancesEdit(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-400">Cash</span>
+                <span className="font-mono text-zinc-700 dark:text-zinc-300">{fmtCurrency(summary.cash)}</span>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-400">Buying power</span>
+                <span className="font-mono text-zinc-700 dark:text-zinc-300">{fmtCurrency(summary.buying_power)}</span>
+              </div>
+              <div>
+                <Button size="sm" variant="secondary" onClick={() => setBalancesEdit({ cash: String(summary.cash), buying_power: String(summary.buying_power) })}>
+                  Edit
+                </Button>
+              </div>
+            </div>
+          )
+        ) : (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading balances…</p>
+        )}
+      </Card>
+
+      <Card>
+        <CardHeader title="Holdings" description="Manual equity holdings (used for CC eligibility: ≥100 shares)." />
+        {holdingForm ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4 max-w-2xl mb-4">
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Symbol</label>
+              <input
+                type="text"
+                placeholder="e.g. AAPL"
+                className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800"
+                value={holdingForm.symbol}
+                onChange={(e) => setHoldingForm((p) => (p ? { ...p, symbol: e.target.value.toUpperCase() } : null))}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Shares</label>
+              <input
+                type="number"
+                min="1"
+                className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800"
+                value={holdingForm.shares}
+                onChange={(e) => setHoldingForm((p) => (p ? { ...p, shares: e.target.value } : null))}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Avg cost (optional)</label>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="—"
+                className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800"
+                value={holdingForm.avg_cost}
+                onChange={(e) => setHoldingForm((p) => (p ? { ...p, avg_cost: e.target.value } : null))}
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <Button
+                size="sm"
+                onClick={() => {
+                  const symbol = holdingForm.symbol.trim();
+                  const shares = parseInt(holdingForm.shares, 10);
+                  if (symbol && !Number.isNaN(shares) && shares >= 1) {
+                    const avgCost = holdingForm.avg_cost.trim() ? parseFloat(holdingForm.avg_cost) : undefined;
+                    upsertHolding.mutate({ symbol, shares, avg_cost: avgCost ?? undefined });
+                    setHoldingForm(null);
+                  }
+                }}
+                disabled={upsertHolding.isPending}
+              >
+                {upsertHolding.isPending ? "Saving…" : "Add"}
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setHoldingForm(null)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="mb-4">
+            <Button size="sm" variant="secondary" onClick={() => setHoldingForm({ symbol: "", shares: "", avg_cost: "" })}>
+              Add holding
+            </Button>
+          </div>
+        )}
+        {holdings.length === 0 ? (
+          <EmptyState title="No holdings" message="Add equity holdings for covered-call eligibility (≥100 shares)." />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableHead>Symbol</TableHead>
+              <TableHead>Shares</TableHead>
+              <TableHead>Avg cost</TableHead>
+              <TableHead>Updated</TableHead>
+              <TableHead>Actions</TableHead>
+            </TableHeader>
+            <TableBody>
+              {holdings.map((h: AccountHolding) => (
+                <TableRow key={h.symbol}>
+                  <TableCell className="font-mono font-medium">{h.symbol}</TableCell>
+                  <TableCell numeric className="font-mono">{h.shares}</TableCell>
+                  <TableCell numeric className="font-mono">{h.avg_cost != null ? fmtNum(h.avg_cost) : "—"}</TableCell>
+                  <TableCell className="text-zinc-500 dark:text-zinc-400 text-sm">{h.updated_at ? new Date(h.updated_at).toLocaleString() : "—"}</TableCell>
+                  <TableCell>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={deleteHolding.isPending}
+                      onClick={() => {
+                        if (window.confirm(`Remove holding ${h.symbol}?`)) deleteHolding.mutate(h.symbol);
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Card>
 
       {accounts.length > 0 && (
         <Card>

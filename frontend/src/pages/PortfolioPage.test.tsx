@@ -11,6 +11,11 @@ const useDeletePosition = vi.fn();
 const usePositionEvents = vi.fn();
 const usePortfolioRisk = vi.fn();
 const useRefreshMarks = vi.fn();
+const useAccountSummary = vi.fn();
+const useAccountHoldings = vi.fn();
+const useSetBalances = vi.fn();
+const useUpsertHolding = vi.fn();
+const useDeleteHolding = vi.fn();
 
 vi.mock("@/api/queries", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/api/queries")>();
@@ -25,6 +30,11 @@ vi.mock("@/api/queries", async (importOriginal) => {
     usePositionEvents: (...args: unknown[]) => usePositionEvents(...args),
     usePortfolioRisk: (...args: unknown[]) => usePortfolioRisk(...args),
     useRefreshMarks: (...args: unknown[]) => useRefreshMarks(...args),
+    useAccountSummary: (...args: unknown[]) => useAccountSummary(...args),
+    useAccountHoldings: (...args: unknown[]) => useAccountHoldings(...args),
+    useSetBalances: (...args: unknown[]) => useSetBalances(...args),
+    useUpsertHolding: (...args: unknown[]) => useUpsertHolding(...args),
+    useDeleteHolding: (...args: unknown[]) => useDeleteHolding(...args),
   };
 });
 
@@ -109,6 +119,13 @@ describe("PortfolioPage", () => {
     usePositionEvents.mockReturnValue({ data: { position_id: "pos_1", events: [] }, isLoading: false });
     usePortfolioRisk.mockReturnValue({ data: { status: "PASS", metrics: {}, breaches: [] } });
     useRefreshMarks.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false });
+    useAccountSummary.mockReturnValue({
+      data: { account_id: "default", name: "Default", cash: 0, buying_power: 0, holdings_count: 0, base_currency: "USD" },
+    });
+    useAccountHoldings.mockReturnValue({ data: { holdings: [] } });
+    useSetBalances.mockReturnValue({ mutate: vi.fn(), isPending: false });
+    useUpsertHolding.mockReturnValue({ mutate: vi.fn(), isPending: false });
+    useDeleteHolding.mockReturnValue({ mutate: vi.fn(), isPending: false });
   });
 
   it("renders without throwing", () => {
@@ -128,8 +145,9 @@ describe("PortfolioPage", () => {
     expect(screen.getByText(/\$120\.00/)).toBeInTheDocument();
   });
 
-  it("shows capital deployed in header", async () => {
+  it("shows Account & Portfolio title and capital deployed in header", async () => {
     render(<PortfolioPage />);
+    expect(screen.getByText(/Account & Portfolio/i)).toBeInTheDocument();
     expect(screen.getByText(/\$45,000\.00 deployed/i)).toBeInTheDocument();
   });
 
@@ -192,6 +210,13 @@ describe("PortfolioPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /view/i }));
     const rollBtn = screen.getByRole("button", { name: /roll position/i });
     expect(rollBtn).toBeInTheDocument();
+  });
+
+  it("shows Balances (manual) and Holdings sections (Phase 21.1)", () => {
+    render(<PortfolioPage />);
+    expect(screen.getByText(/Balances \(manual\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Holdings/)).toBeInTheDocument();
+    expect(screen.getByText(/Add holding/)).toBeInTheDocument();
   });
 
   it("shows Decision (latest) with no run badge when position has no run_id", () => {

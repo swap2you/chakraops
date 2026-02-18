@@ -1004,6 +1004,119 @@ async def ui_accounts_create(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+# ---------------------------------------------------------------------------
+# Phase 21.1: Account summary, balances, holdings (manual entry, SQLite)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/account/summary")
+def ui_account_summary(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Get account summary: balances, holdings count, timestamps (default account from SQLite)."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.accounts.holdings_db import get_account_summary
+        return get_account_summary()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error getting account summary: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/account/holdings")
+def ui_account_holdings(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """List holdings for default account (symbol, shares, avg_cost, updated_at)."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.accounts.holdings_db import list_holdings
+        return {"holdings": list_holdings()}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error listing holdings: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/account/holdings")
+async def ui_account_holdings_upsert(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Add or update a holding. Body: symbol (required), shares (required), avg_cost (optional)."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.accounts.holdings_db import upsert_holding
+        body = await request.json()
+        symbol = (body.get("symbol") or "").strip()
+        shares = body.get("shares")
+        avg_cost = body.get("avg_cost")
+        if not symbol:
+            raise HTTPException(status_code=400, detail="symbol is required")
+        if shares is None:
+            raise HTTPException(status_code=400, detail="shares is required")
+        try:
+            shares = int(shares)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="shares must be an integer")
+        holding = upsert_holding(symbol=symbol, shares=shares, avg_cost=avg_cost)
+        return {"holding": holding}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error upserting holding: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/account/holdings/{symbol}")
+def ui_account_holdings_delete(
+    symbol: str,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Remove holding for symbol."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.accounts.holdings_db import delete_holding
+        deleted = delete_holding(symbol)
+        if not deleted:
+            raise HTTPException(status_code=404, detail=f"Holding for {symbol} not found")
+        return {"deleted": True, "symbol": symbol.strip().upper()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error deleting holding: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/account/balances")
+async def ui_account_balances_set(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Set cash and buying_power for default account (manual). Body: cash, buying_power."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.accounts.holdings_db import set_balances
+        body = await request.json()
+        cash = body.get("cash")
+        buying_power = body.get("buying_power")
+        if cash is None and buying_power is None:
+            raise HTTPException(status_code=400, detail="At least one of cash or buying_power is required")
+        cash = float(cash) if cash is not None else 0.0
+        buying_power = float(buying_power) if buying_power is not None else 0.0
+        summary = set_balances(cash=cash, buying_power=buying_power)
+        return {"summary": summary}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error setting balances: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/positions/manual-execute")
 async def ui_positions_manual_execute(
     request: Request,

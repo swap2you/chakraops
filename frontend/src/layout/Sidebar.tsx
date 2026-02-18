@@ -6,7 +6,7 @@ const nav = [
   { path: "/universe", label: "Universe", icon: Globe },
   { path: "/symbol-diagnostics", label: "Symbol", icon: Search },
   { path: "/wheel", label: "Wheel", icon: RotateCcw },
-  { path: "/portfolio", label: "Portfolio", icon: PieChart },
+  { path: "/portfolio", label: "Account & Portfolio", icon: PieChart },
   { path: "/notifications", label: "Notifications", icon: Bell },
   { path: "/system", label: "System", icon: Activity },
 ];

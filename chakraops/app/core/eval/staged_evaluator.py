@@ -1931,6 +1931,16 @@ def evaluate_universe_staged(
     logger.info("[STAGED_EVAL] Starting 2-stage evaluation for %d symbols", len(symbols))
     start_time = time.time()
     
+    # Phase 21.1: Holdings for CC eligibility (manual entry from SQLite)
+    try:
+        from app.core.accounts.holdings_db import get_holdings_for_evaluation
+        holdings = get_holdings_for_evaluation()
+        if holdings:
+            logger.info("[STAGED_EVAL] Holdings loaded for %d symbols (CC gating)", len(holdings))
+    except Exception as e:
+        logger.warning("[STAGED_EVAL] Holdings load failed (CC ineligible): %s", e)
+        holdings = {}
+
     # Phase 8D: Per-run ORATS cache — pre-fetch equity + ivrank for all symbols so stage1 uses cache
     try:
         from app.core.data.orats_client import reset_run_cache, fetch_full_equity_snapshots
@@ -2034,13 +2044,13 @@ def evaluate_universe_staged(
             result.symbol_eligibility, result.contract_data, result.contract_eligibility = se, cd, ce
             results[symbol] = result
 
-    # Stage 2: Evaluate top candidates with bounded concurrency
+    # Stage 2: Evaluate top candidates with bounded concurrency (holdings passed for CC eligibility)
     with ThreadPoolExecutor(max_workers=max_stage2_concurrent) as executor:
         future_to_symbol = {}
         for symbol, stage1 in top_candidates:
             future = executor.submit(
                 _run_full_evaluation_for_qualified,
-                symbol, stage1, provider
+                symbol, stage1, provider, holdings
             )
             future_to_symbol[future] = symbol
         
@@ -2275,9 +2285,12 @@ def _run_full_evaluation_for_qualified(
     symbol: str,
     stage1: Stage1Result,
     provider: OratsChainProvider,
+    holdings: Optional[Dict[str, int]] = None,
 ) -> FullEvaluationResult:
-    """Run full evaluation for a qualified symbol."""
-    result = evaluate_symbol_full(symbol, chain_provider=provider, skip_stage2=False)
+    """Run full evaluation for a qualified symbol. holdings used for CC eligibility (Phase 21.1)."""
+    result = evaluate_symbol_full(
+        symbol, chain_provider=provider, skip_stage2=False, holdings=holdings or {}
+    )
     # Ensure stage1 is preserved
     result.stage1 = stage1
     return result

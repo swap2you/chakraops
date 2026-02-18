@@ -396,6 +396,34 @@ export interface PortfolioMetricsResponse {
 }
 
 // =============================================================================
+// Phase 21.1: Account (SQLite) — GET /api/ui/account/summary, holdings, balances
+// =============================================================================
+
+export interface AccountSummary {
+  account_id: string;
+  name: string;
+  broker: string | null;
+  base_currency: string;
+  cash: number;
+  buying_power: number;
+  holdings_count: number;
+  profile_updated_at?: string | null;
+  balances_updated_at?: string | null;
+}
+
+export interface AccountHolding {
+  symbol: string;
+  shares: number;
+  avg_cost: number | null;
+  source?: string | null;
+  updated_at: string;
+}
+
+export interface AccountHoldingsResponse {
+  holdings: AccountHolding[];
+}
+
+// =============================================================================
 // Alerts — GET /api/ui/alerts
 // =============================================================================
 

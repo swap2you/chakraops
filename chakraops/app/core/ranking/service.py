@@ -45,10 +45,13 @@ def _get_band(sym: Dict[str, Any]) -> str:
 
 
 def _get_composite_score(sym: Dict[str, Any]) -> int:
-    """Extract composite score."""
+    """Extract final (post-cap) score. Phase 10.1: use score/final_score only, not pre-cap composite."""
+    s = sym.get("final_score") or sym.get("score")
+    if s is not None:
+        return int(s)
     bd = sym.get("score_breakdown")
     if bd and isinstance(bd, dict):
-        return int(bd.get("composite_score", sym.get("score", 0)))
+        return int(bd.get("final_score", bd.get("composite_score", 0)))
     return int(sym.get("score", 0))
 
 

@@ -94,9 +94,11 @@ class SymbolEvalSummary:
     expiration: Optional[str]  # ISO or YYYY-MM-DD
     has_candidates: bool
     candidate_count: int
-    # Phase 7.7: Trust + sorting
-    score_breakdown: Optional[Dict[str, Any]] = None  # stage1_score, stage2_score, raw_score, final_score, score_caps
-    raw_score: Optional[int | float] = None  # uncapped composite 0-100
+    # Phase 7.7 / 10.1: Trust + score clarity
+    score_breakdown: Optional[Dict[str, Any]] = None  # stage1_score, stage2_score, raw_score, final_score, score_caps, regime_score
+    raw_score: Optional[int | float] = None  # composite before any cap (0-100)
+    pre_cap_score: Optional[int | float] = None  # same as raw_score; alias for display
+    final_score: Optional[int | float] = None  # after caps; band is derived from this only
     score_caps: Optional[Dict[str, Any]] = None  # { regime_cap, applied_caps: [{type, cap_value, before, after, reason}] }
     band_reason: Optional[str] = None  # "Band A because score >= TIER_A_MIN"
     max_loss: Optional[float] = None  # capital required for selected candidate
@@ -222,9 +224,9 @@ class DecisionArtifactV2:
         for s in data.get("symbols") or []:
             row = s if isinstance(s, dict) else asdict(s)
             d = {k: v for k, v in row.items() if k in sym_fields}
-            # Band never null: coerce None/missing to D
+            # Band never null: derive from final_score only (Phase 10.1)
             if d.get("band") not in ("A", "B", "C", "D"):
-                d["band"] = assign_band(d.get("score"))
+                d["band"] = assign_band(d.get("final_score") or d.get("score"))
             symbols.append(SymbolEvalSummary(**d))
         cand_fields = {f.name for f in CandidateRow.__dataclass_fields__.values()}
         selected = [

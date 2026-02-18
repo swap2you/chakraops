@@ -20,14 +20,20 @@ import {
   Tooltip,
 } from "@/components/ui";
 
-/** Format score_breakdown for tooltip. Phase 7.7 trust feature. */
-function formatScoreCapTooltip(row: { score?: number | null; raw_score?: number | null; score_caps?: { regime_cap?: number | null; applied_caps?: Array<{ type: string; cap_value: number; before: number; after: number; reason: string }> } | null }): string | null {
+/** Phase 10.1: Raw → Pre-cap → Final and cap reason for Universe row tooltip. */
+function formatScoreCapTooltip(row: {
+  score?: number | null;
+  raw_score?: number | null;
+  final_score?: number | null;
+  pre_cap_score?: number | null;
+  score_caps?: { regime_cap?: number | null; applied_caps?: Array<{ type: string; cap_value: number; before: number; after: number; reason: string }> } | null;
+}): string | null {
   const caps = row.score_caps?.applied_caps;
   if (!caps || caps.length === 0) return null;
   const cap = caps[0];
-  const raw = row.raw_score ?? cap.before;
-  const final = row.score ?? cap.after;
-  return `Raw: ${raw} → Final: ${final} (capped by ${cap.reason})`;
+  const raw = row.raw_score ?? row.pre_cap_score ?? cap.before;
+  const final = row.final_score ?? row.score ?? cap.after;
+  return `Raw: ${raw} → Final: ${final} (${cap.reason})`;
 }
 
 function formatScoreBreakdown(bd: unknown): string {

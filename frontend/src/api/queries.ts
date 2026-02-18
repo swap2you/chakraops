@@ -92,6 +92,10 @@ function uiEvalRunPath(force?: boolean): string {
   return force ? `${base}?force=true` : base;
 }
 
+function uiSchedulerRunOncePath(): string {
+  return `/api/ui/scheduler/run_once`;
+}
+
 function uiDiagnosticsRunPath(checks?: string): string {
   const base = `/api/ui/diagnostics/run`;
   return checks ? `${base}?checks=${encodeURIComponent(checks)}` : base;
@@ -118,6 +122,10 @@ function uiSnapshotsLatestPath(): string {
 function uiNotificationsPath(limit?: number): string {
   const base = `/api/ui/notifications`;
   return limit != null ? `${base}?limit=${limit}` : base;
+}
+
+function uiNotificationAckPath(notificationId: string): string {
+  return `/api/ui/notifications/${encodeURIComponent(notificationId)}/ack`;
 }
 
 // =============================================================================
@@ -461,6 +469,20 @@ export function useRunEval() {
       qc.invalidateQueries({ queryKey: ["ui", "decision"] });
       qc.invalidateQueries({ queryKey: queryKeys.universe() });
       qc.invalidateQueries({ queryKey: queryKeys.uiAlerts() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiSystemHealth() });
+    },
+  });
+}
+
+/** Phase 10.2: Trigger one scheduler tick. Skips when market closed (no 409). */
+export function useRunSchedulerOnce() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<{ started: boolean; last_run_at?: string; last_result?: string }>(uiSchedulerRunOncePath(), {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiSystemHealth() });
+      qc.invalidateQueries({ queryKey: ["ui", "decision"] });
+      qc.invalidateQueries({ queryKey: queryKeys.universe() });
     },
   });
 }
@@ -494,8 +516,9 @@ export function useRunDiagnostics() {
   });
 }
 
-// Notifications (Phase 8.3, 8.6)
+// Notifications (Phase 8.3, 8.6, 10.3)
 export interface UiNotification {
+  id?: string;
   timestamp_utc: string;
   severity: string;
   type: string;
@@ -504,6 +527,9 @@ export interface UiNotification {
   symbol?: string | null;
   message: string;
   details?: Record<string, unknown>;
+  /** Phase 10.3: Acknowledgment fields */
+  ack_at_utc?: string | null;
+  ack_by?: string | null;
 }
 
 export interface UiNotificationsResponse {
@@ -514,5 +540,20 @@ export function useNotifications(limit = 100) {
   return useQuery({
     queryKey: queryKeys.uiNotifications(limit),
     queryFn: () => apiGet<UiNotificationsResponse>(uiNotificationsPath(limit)),
+  });
+}
+
+/** Phase 10.3: Ack a notification. Invalidates notifications query. */
+export function useAckNotification(limit = 100) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (notificationId: string) =>
+      apiPost<{ status: string; ack_at_utc?: string }>(
+        uiNotificationAckPath(notificationId),
+        {}
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiNotifications(limit) });
+    },
   });
 }

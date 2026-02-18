@@ -475,3 +475,64 @@ def test_ui_snapshots_latest_404_when_none(tmp_path):
         client = TestClient(app)
         r = client.get("/api/ui/snapshots/latest")
     assert r.status_code == 404
+
+
+def test_ui_notification_ack_append_event(tmp_path):
+    """Phase 10.3: POST notifications/{id}/ack appends ack event; load merges ack_at_utc/ack_by."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    notif_path = tmp_path / "notifications.jsonl"
+    notif_path.parent.mkdir(parents=True, exist_ok=True)
+    app = _get_app()
+    with patch("app.api.notifications_store._notifications_path", return_value=notif_path):
+        from app.api.notifications_store import append_notification, load_notifications
+        append_notification("WARN", "TEST", "msg", details={})
+        items = load_notifications(10)
+        assert len(items) == 1
+        nid = items[0]["id"]
+        client = TestClient(app)
+        r = client.post(f"/api/ui/notifications/{nid}/ack")
+    assert r.status_code == 200
+    assert r.json().get("status") == "OK"
+    assert "ack_at_utc" in r.json()
+    with patch("app.api.notifications_store._notifications_path", return_value=notif_path):
+        items2 = load_notifications(10)
+    assert len(items2) == 1
+    assert items2[0].get("ack_at_utc")
+    assert items2[0].get("ack_by") == "ui"
+
+
+def test_ui_scheduler_run_once_skipped_when_market_closed():
+    """Phase 10.2: POST scheduler/run_once returns 200 with started=False when market closed."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    app = _get_app()
+    with patch("app.api.server.get_market_phase", return_value="POST"):
+        client = TestClient(app)
+        r = client.post("/api/ui/scheduler/run_once")
+    assert r.status_code == 200
+    data = r.json()
+    assert "started" in data
+    assert data["started"] is False
+    assert "last_run_at" in data
+    assert "last_result" in data
+
+
+def test_ui_scheduler_run_once_success_when_market_open():
+    """Phase 10.2: POST scheduler/run_once triggers eval and returns started=True when market open."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    app = _get_app()
+    # Patch where server looks up get_market_phase (imported in server namespace)
+    with patch("app.api.server.get_market_phase", return_value="OPEN"):
+        with patch("app.api.data_health.UNIVERSE_SYMBOLS", ["SPY"]):
+            with patch("app.core.eval.universe_evaluator.trigger_evaluation") as mock_trigger:
+                mock_trigger.return_value = {"started": True, "reason": "ok"}
+                with patch("app.core.eval.universe_evaluator.get_evaluation_state", return_value={"evaluation_state": "IDLE"}):
+                    client = TestClient(app)
+                    r = client.post("/api/ui/scheduler/run_once")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["started"] is True
+    assert "last_run_at" in data
+    assert data["last_result"] == "OK"

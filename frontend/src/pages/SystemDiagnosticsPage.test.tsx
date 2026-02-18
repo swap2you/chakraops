@@ -31,6 +31,11 @@ vi.mock("@/api/queries", () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
+  useRunEval: () => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
   useLatestSnapshot: (...args: unknown[]) => mockUseLatestSnapshot(...args),
   useRunFreezeSnapshot: () => ({
     mutate: vi.fn(),
@@ -69,6 +74,17 @@ describe("SystemDiagnosticsPage", () => {
     render(<SystemDiagnosticsPage />);
     expect(screen.getByText(/Freeze Snapshot/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Archive Now \(no eval\)/i })).toBeInTheDocument();
+  });
+
+  it("shows Run Scheduler now button in Scheduler card", () => {
+    render(<SystemDiagnosticsPage />);
+    expect(screen.getByRole("button", { name: /Run Scheduler now/i })).toBeInTheDocument();
+  });
+
+  it("shows Select All and Clear buttons in Sanity Checks", () => {
+    render(<SystemDiagnosticsPage />);
+    expect(screen.getByRole("button", { name: /Select All/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Clear/i })).toBeInTheDocument();
   });
 
   it("Run EOD Freeze button disabled when market closed (PR2)", () => {

@@ -227,6 +227,8 @@ def ui_universe(
                     "final_verdict": s.final_verdict,
                     "score": s.score,
                     "raw_score": raw_score,
+                    "final_score": getattr(s, "final_score", None) or s.score,
+                    "pre_cap_score": getattr(s, "pre_cap_score", None) or raw_score,
                     "score_caps": score_caps,
                     "band": s.band,
                     "primary_reason": s.primary_reason or "",
@@ -365,6 +367,25 @@ def ui_eval_run(
             },
         }
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/scheduler/run_once")
+def ui_scheduler_run_once(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    Trigger one scheduler tick. Same logic as background scheduler.
+    Does NOT overwrite decision when market closed (returns started=False).
+    Phase 10.2.
+    """
+    _require_ui_key(x_ui_key)
+    try:
+        from app.api.server import run_scheduler_once
+        return run_scheduler_once()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error running scheduler once: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -754,6 +775,33 @@ async def ui_notifications_append(
         import logging
         logging.getLogger(__name__).exception("Error appending notification: %s", e)
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/notifications/{notification_id}/ack")
+async def ui_notification_ack(
+    notification_id: str,
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Phase 10.3: Acknowledge a notification (append-only ack event)."""
+    _require_ui_key(x_ui_key)
+    if not notification_id or not notification_id.strip():
+        raise HTTPException(status_code=400, detail="notification_id required")
+    ack_by = "ui"
+    try:
+        body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    except Exception:
+        body = {}
+    if isinstance(body, dict) and body.get("ack_by"):
+        ack_by = str(body["ack_by"])[:64]
+    try:
+        from app.api.notifications_store import append_ack
+        append_ack(ref_id=notification_id.strip(), ack_by=ack_by)
+        return {"status": "OK", "ack_at_utc": datetime.now(timezone.utc).isoformat()}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error acking notification: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/accounts/default")
@@ -1167,6 +1215,8 @@ def _build_symbol_diagnostics_from_v2_store(
         "regime": diag.get("regime") or getattr(summary, "regime", None),
         "composite_score": getattr(summary, "score", None),
         "raw_score": getattr(summary, "raw_score", None),
+        "final_score": getattr(summary, "final_score", None) or getattr(summary, "score", None),
+        "pre_cap_score": getattr(summary, "pre_cap_score", None) or getattr(summary, "raw_score", None),
         "score_caps": getattr(summary, "score_caps", None),
         "confidence_band": getattr(summary, "band", "D"),
         "suggested_capital_pct": diag.get("suggested_capital_pct"),

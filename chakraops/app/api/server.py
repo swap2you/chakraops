@@ -638,6 +638,20 @@ def stop_evaluation_scheduler() -> None:
     _scheduler_thread = None
 
 
+def run_scheduler_once() -> Dict[str, Any]:
+    """
+    Trigger one scheduler tick (same logic as background scheduler).
+    Does NOT overwrite decision when market closed — returns started=False.
+    Phase 10.2.
+    """
+    started = _run_scheduled_evaluation()
+    return {
+        "started": started,
+        "last_run_at": _last_scheduled_eval_at,
+        "last_result": _last_scheduled_eval_result,
+    }
+
+
 def get_scheduler_status() -> Dict[str, Any]:
     """Get current scheduler status. last_run_at/next_run_at in UTC ISO."""
     next_run_at = None

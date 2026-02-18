@@ -62,6 +62,13 @@ describe("DashboardPage", () => {
     expect(region).toBeInTheDocument();
   });
 
+  it("shows Manage positions CTA linking to Portfolio", async () => {
+    render(<DashboardPage />);
+    const links = screen.getAllByRole("link", { name: /Manage positions/i });
+    expect(links.length).toBeGreaterThanOrEqual(1);
+    expect(links[0]).toHaveAttribute("href", "/portfolio");
+  });
+
   it("Run Evaluation button disabled when market closed (Phase 9)", async () => {
     mockUseUiSystemHealth.mockReturnValue({
       data: { ...mockHealth, market: { ...mockHealth.market, phase: "POST" } },

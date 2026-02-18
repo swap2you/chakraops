@@ -47,6 +47,8 @@ export interface SymbolEvalSummary {
   band_reason: string | null;
   score_breakdown?: unknown;
   raw_score?: number | null;
+  final_score?: number | null;
+  pre_cap_score?: number | null;
   score_caps?: { regime_cap?: number | null; applied_caps?: Array<{ type: string; cap_value: number; before: number; after: number; reason: string }> } | null;
   rank_score?: number | null;
   capital_required?: number | null;
@@ -461,8 +463,12 @@ export interface SymbolDiagnosticsResponseExtended extends SymbolDiagnosticsResp
   score_breakdown?: SymbolDiagnosticsScoreBreakdown | null;
   /** Rank reasons. */
   rank_reasons?: SymbolDiagnosticsRankReasons | null;
-  /** Raw score (uncapped composite 0–100). */
+  /** Raw score (composite before cap). */
   raw_score?: number | null;
+  /** Final score (after caps); band derived from this. Phase 10.1 */
+  final_score?: number | null;
+  /** Pre-cap score (same as raw_score). Phase 10.1 */
+  pre_cap_score?: number | null;
   /** Score caps (regime_cap, applied_caps). */
   score_caps?: { regime_cap?: number | null; applied_caps?: Array<{ type: string; cap_value: number; before: number; after: number; reason: string }> } | null;
   /** Regime (UP | DOWN | SIDEWAYS from eligibility). */

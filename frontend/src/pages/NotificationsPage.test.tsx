@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@/test/test-utils";
+import { render, screen, fireEvent } from "@/test/test-utils";
 import { NotificationsPage } from "./NotificationsPage";
 
 const mockNotifications = {
   notifications: [
     {
+      id: "n-abc123",
       timestamp_utc: "2026-01-01T12:00:00Z",
       severity: "WARN",
       type: "ORATS_WARN",
@@ -22,6 +23,11 @@ vi.mock("@/api/queries", () => ({
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
+  }),
+  useAckNotification: () => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn(),
+    isPending: false,
   }),
 }));
 
@@ -54,5 +60,16 @@ describe("NotificationsPage", () => {
     render(<NotificationsPage />);
     expect(screen.getByText(/ORATS_STALE/i)).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/Filter by type, subtype/i)).toBeInTheDocument();
+  });
+
+  it("shows Unacknowledged only toggle (Phase 10.3)", () => {
+    render(<NotificationsPage />);
+    expect(screen.getByLabelText(/Unacknowledged only/i)).toBeInTheDocument();
+  });
+
+  it("shows Ack button in detail when notification not acked (Phase 10.3)", () => {
+    render(<NotificationsPage />);
+    fireEvent.click(screen.getByText(/ORATS status WARN/i));
+    expect(screen.getByRole("button", { name: /Ack/i })).toBeInTheDocument();
   });
 });

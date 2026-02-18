@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 # Valid status values
 VALID_STATUSES = {"OPEN", "PARTIAL_EXIT", "CLOSED", "ABORTED"}
 VALID_STRATEGIES = {"CSP", "CC", "STOCK"}
+VALID_OPTION_TYPES = {"PUT", "CALL"}
 
 
 @dataclass
@@ -70,9 +71,46 @@ class Position:
     t2: Optional[float] = None
     t3: Optional[float] = None
 
+    # Phase 10.0: Portfolio completion fields
+    id: Optional[str] = None  # Alias for position_id (uuid); set from position_id if missing
+    underlying: Optional[str] = None  # Same as symbol
+    option_type: Optional[str] = None  # PUT | CALL
+    open_credit: Optional[float] = None  # Credit received at open
+    open_price: Optional[float] = None
+    open_fees: Optional[float] = None
+    open_time_utc: Optional[str] = None
+    close_debit: Optional[float] = None  # Debit paid at close
+    close_price: Optional[float] = None
+    close_fees: Optional[float] = None
+    close_time_utc: Optional[str] = None
+    collateral: Optional[float] = None  # For CSP: strike*100*contracts
+    realized_pnl: Optional[float] = None
+    is_test: bool = False  # DIAG_TEST or user-created test data
+    created_at_utc: Optional[str] = None
+    updated_at_utc: Optional[str] = None
+
     def __post_init__(self) -> None:
+        now = datetime.now(timezone.utc).isoformat()
         if not self.opened_at:
-            self.opened_at = datetime.now(timezone.utc).isoformat()
+            self.opened_at = now
+        if self.id is None:
+            self.id = self.position_id
+        if self.underlying is None and self.symbol:
+            self.underlying = self.symbol
+        if self.open_time_utc is None and self.opened_at:
+            self.open_time_utc = self.opened_at
+        if self.open_credit is None and self.credit_expected is not None:
+            self.open_credit = self.credit_expected
+        if self.created_at_utc is None:
+            self.created_at_utc = self.opened_at or now
+        if self.updated_at_utc is None:
+            self.updated_at_utc = self.opened_at or now
+        # Phase 10.0: Compute collateral for CSP/CC if not set
+        if self.collateral is None and (self.strategy or "").upper() in ("CSP", "CC") and self.strike and self.contracts:
+            self.collateral = float(self.strike) * 100 * int(self.contracts)
+        # Mark DIAG_TEST positions as test
+        if not self.is_test and (self.symbol or "").strip().upper().startswith("DIAG_TEST"):
+            self.is_test = True
 
     def to_dict(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {
@@ -101,6 +139,13 @@ class Position:
         for key in ("stop_price", "t1", "t2", "t3"):
             v = getattr(self, key, None)
             if v is not None:
+                d[key] = v
+        # Phase 10.0
+        for key in ("id", "underlying", "option_type", "open_credit", "open_price", "open_fees",
+                    "open_time_utc", "close_debit", "close_price", "close_fees", "close_time_utc",
+                    "collateral", "realized_pnl", "is_test", "created_at_utc", "updated_at_utc"):
+            v = getattr(self, key, None)
+            if v is not None or key == "is_test":
                 d[key] = v
         d["entry_credit"] = self.credit_expected
         d["entry_date"] = self.opened_at
@@ -136,6 +181,22 @@ class Position:
             t1=d.get("t1"),
             t2=d.get("t2"),
             t3=d.get("t3"),
+            id=d.get("id") or d.get("position_id"),
+            underlying=d.get("underlying") or d.get("symbol"),
+            option_type=d.get("option_type"),
+            open_credit=d.get("open_credit") or d.get("credit_expected") or d.get("entry_credit"),
+            open_price=d.get("open_price"),
+            open_fees=d.get("open_fees"),
+            open_time_utc=d.get("open_time_utc") or d.get("opened_at"),
+            close_debit=d.get("close_debit"),
+            close_price=d.get("close_price"),
+            close_fees=d.get("close_fees"),
+            close_time_utc=d.get("close_time_utc") or d.get("closed_at"),
+            collateral=d.get("collateral"),
+            realized_pnl=d.get("realized_pnl"),
+            is_test=bool(d.get("is_test", False)),
+            created_at_utc=d.get("created_at_utc") or d.get("opened_at"),
+            updated_at_utc=d.get("updated_at_utc") or d.get("opened_at"),
         )
 
 

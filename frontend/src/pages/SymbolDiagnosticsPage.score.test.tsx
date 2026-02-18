@@ -13,6 +13,8 @@ const mockDiagnosticsWithCap = {
   primary_reason: "test",
   composite_score: 65,
   raw_score: 89,
+  final_score: 65,
+  pre_cap_score: 89,
   score_caps: {
     regime_cap: 65,
     applied_caps: [

@@ -245,14 +245,14 @@ function ExecutionConsole({
           <span
             title={
               data.score_caps?.applied_caps?.length
-                ? `Raw: ${data.score_caps.applied_caps[0].before} → Final: ${data.score_caps.applied_caps[0].after} (${data.score_caps.applied_caps[0].reason})`
+                ? `Raw: ${data.raw_score ?? data.score_caps.applied_caps[0].before} → Final: ${data.final_score ?? data.composite_score ?? data.score_caps.applied_caps[0].after} (${data.score_caps.applied_caps[0].reason})`
                 : undefined
             }
           >
             <Badge variant="default">
               <span className="font-mono">
                 {data.score_caps?.applied_caps?.length ? "Final score " : "Score "}
-                {fmt(data.composite_score)}
+                {fmt(data.final_score ?? data.composite_score)}
                 {data.score_caps?.applied_caps?.length ? (
                   <span className="ml-1 text-xs opacity-80">
                     (capped from {data.raw_score ?? data.score_caps.applied_caps[0].before})

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useUiSystemHealth, useDiagnosticsHistory, useRunDiagnostics, useLatestSnapshot, useRunFreezeSnapshot } from "@/api/queries";
+import { Link } from "react-router-dom";
+import { useUiSystemHealth, useDiagnosticsHistory, useRunDiagnostics, useRunEval, useLatestSnapshot, useRunFreezeSnapshot } from "@/api/queries";
 import { formatTimestampEt, formatTimestampEtFull } from "@/utils/formatTimestamp";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardHeader, StatusBadge, Button, Tooltip } from "@/components/ui";
@@ -11,6 +12,7 @@ export function SystemDiagnosticsPage() {
   const { data: historyData } = useDiagnosticsHistory(10);
   const { data: latestSnapshot, isError: snapshotError } = useLatestSnapshot();
   const runDiagnostics = useRunDiagnostics();
+  const runEval = useRunEval();
   const runFreeze = useRunFreezeSnapshot();
   const [selectedChecks, setSelectedChecks] = useState<Set<string>>(new Set(DIAGNOSTIC_CHECKS));
   const [latestResult, setLatestResult] = useState<typeof runDiagnostics.data | null>(null);
@@ -36,6 +38,15 @@ export function SystemDiagnosticsPage() {
       if (next.has(c)) next.delete(c);
       else next.add(c);
       return next;
+    });
+  };
+
+  const selectAllChecks = () => setSelectedChecks(new Set(DIAGNOSTIC_CHECKS));
+  const clearChecks = () => setSelectedChecks(new Set());
+
+  const runSingleCheck = (check: string) => {
+    runDiagnostics.mutate(check, {
+      onSuccess: (res) => setLatestResult(res),
     });
   };
 
@@ -211,6 +222,23 @@ export function SystemDiagnosticsPage() {
               <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{scheduler?.eod_next_at ?? "—"}</p>
             </div>
           </div>
+          <div className="mt-4">
+            <Tooltip content={marketClosed ? "Market closed. Scheduler skips evaluation. Use force=true to override." : undefined}>
+              <span className="inline-block">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => runEval.mutate({ mode: "LIVE" })}
+                  disabled={runEval.isPending || marketClosed}
+                >
+                  {runEval.isPending ? "Running…" : "Run Scheduler now"}
+                </Button>
+              </span>
+            </Tooltip>
+            <Link to="/" className="ml-2 text-sm text-zinc-600 hover:underline dark:text-zinc-400">
+              Dashboard
+            </Link>
+          </div>
         </Card>
         <Card>
           <CardHeader
@@ -280,17 +308,33 @@ export function SystemDiagnosticsPage() {
             >
               {runDiagnostics.isPending ? "Running…" : "Run All"}
             </Button>
-            <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" size="sm" onClick={selectAllChecks}>
+              Select All
+            </Button>
+            <Button variant="secondary" size="sm" onClick={clearChecks}>
+              Clear
+            </Button>
+            <div className="flex flex-wrap gap-3">
               {DIAGNOSTIC_CHECKS.map((c) => (
-                <label key={c} className="flex items-center gap-1 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={selectedChecks.has(c)}
-                    onChange={() => toggleCheck(c)}
-                    className="rounded border-zinc-300 dark:border-zinc-600"
-                  />
-                  <span className="text-zinc-700 dark:text-zinc-300">{c}</span>
-                </label>
+                <span key={c} className="flex items-center gap-1.5">
+                  <label className="flex cursor-pointer items-center gap-1 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={selectedChecks.has(c)}
+                      onChange={() => toggleCheck(c)}
+                      className="rounded border-zinc-300 dark:border-zinc-600"
+                    />
+                    <span className="text-zinc-700 dark:text-zinc-300">{c}</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => runSingleCheck(c)}
+                    disabled={runDiagnostics.isPending}
+                    className="rounded px-1.5 py-0.5 text-xs text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-50 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                  >
+                    Run
+                  </button>
+                </span>
               ))}
             </div>
             <Button

@@ -1,4 +1,8 @@
-# Phase 10.0 — Portfolio Completion
+# Phase 10 — Portfolio & Score Clarity
+
+## Phase 10 — Portfolio & Score Clarity
+
+## Phase 10.0 — Portfolio Completion
 
 Close/delete positions, account config, correct capital (collateral).
 
@@ -35,3 +39,25 @@ Close/delete positions, account config, correct capital (collateral).
 - **Portfolio page**: Close button for OPEN positions → drawer with close price/time; Delete button for CLOSED or test positions
 - **Account panel**: Select account; show buying_power, risk_per_trade, open_positions_count
 - **Dashboard**: Use `collateral` (not notional) for capital deployed and position amounts
+
+---
+
+## Phase 10.1 — Score Clarity Overhaul
+
+Plumbing and display only; no scoring algorithm changes.
+
+### Backend
+
+- Decision/universe and symbol-diagnostics responses include:
+  - `raw_score` — composite before any cap
+  - `pre_cap_score` — same as raw_score (alias)
+  - `final_score` — after caps; **band is derived from this only**
+  - `score_caps` — `{ regime_cap?, applied_caps: [{ type, cap_value, before, after, reason }] }`
+- Band is computed only from final score: `assign_band(final_score or score)` in artifact `from_dict`; evaluation service uses `assign_band(score)` where score is the final (capped) value.
+- Ranking service `_get_composite_score` uses `final_score` or `score` (post-cap) for ordering.
+
+### Frontend
+
+- **Universe row** tooltip: "Raw: X → Final: Y (reason)" when caps exist.
+- **Symbol diagnostics header**: "Final score X (capped from Y)" when caps exist; uses `final_score` and `raw_score`.
+- Types: `SymbolEvalSummary` and symbol diagnostics include `final_score`, `pre_cap_score`.

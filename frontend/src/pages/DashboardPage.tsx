@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { formatTimestampEt } from "@/utils/formatTimestamp";
 import { Link } from "react-router-dom";
-import { ExternalLink, Activity, Droplets, Zap, Info } from "lucide-react";
+import { ExternalLink, Activity, Droplets, Zap, Info, Settings } from "lucide-react";
 import { useArtifactList, useDecision, useUniverse, useUiSystemHealth, useUiTrackedPositions, useRunEval } from "@/api/queries";
 import type { DecisionMode, SymbolEvalSummary, UniverseSymbol } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
@@ -244,14 +244,17 @@ export function DashboardPage() {
           />
           <StatCard label="Capital deployed" value={`$${capitalDeployed.toLocaleString()}`} />
           <Card>
-            <CardHeader title="Data freshness" />
-            <p className="font-mono text-sm text-zinc-700 dark:text-zinc-300">{health?.orats?.status ?? "n/a"}</p>
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">
-              {health?.orats?.last_success_at ? formatTimestampEt(health.orats.last_success_at) : "n/a"}
-            </p>
-          </Card>
-          <Card>
-            <CardHeader title="Positions" />
+            <CardHeader
+              title="Positions"
+              actions={
+                <Link to="/portfolio">
+                  <Button size="sm" variant="secondary">
+                    Manage positions
+                    <ExternalLink className="ml-1 h-3 w-3" />
+                  </Button>
+                </Link>
+              }
+            />
             {positions.length === 0 ? (
               <EmptyState title="No positions" message="Tracked positions will appear here." />
             ) : (
@@ -275,41 +278,35 @@ export function DashboardPage() {
                 )}
               </div>
             )}
+            {positions.length === 0 && (
+              <Link to="/portfolio" className="mt-2 block text-sm text-emerald-600 hover:underline dark:text-emerald-400">
+                Manage positions →
+              </Link>
+            )}
           </Card>
         </section>
       </div>
 
-      <Card>
-        <CardHeader title="System health" />
-        <div className="flex flex-wrap gap-6 text-sm">
-          <div className="flex items-center gap-2">
-            <Activity className={health?.api?.status === "OK" ? "h-4 w-4 text-emerald-500 dark:text-emerald-400" : "h-4 w-4 text-red-500 dark:text-red-400"} />
-            <span className="text-zinc-500 dark:text-zinc-500">API</span>
+      <div className="flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900/50">
+        <div className="flex flex-wrap gap-6">
+          <span className="flex items-center gap-2">
+            <Activity className={health?.api?.status === "OK" ? "h-4 w-4 text-emerald-500" : "h-4 w-4 text-red-500"} />
             <StatusBadge status={health?.api?.status ?? "n/a"} />
-            {health?.api?.latency_ms != null && (
-              <span className="text-zinc-500 dark:text-zinc-500">{health.api.latency_ms}ms</span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <Droplets
-              className={
-                health?.orats?.status === "OK"
-                  ? "h-4 w-4 text-emerald-500 dark:text-emerald-400"
-                  : health?.orats?.status === "WARN"
-                    ? "h-4 w-4 text-amber-500 dark:text-amber-400"
-                    : "h-4 w-4 text-zinc-500 dark:text-zinc-500"
-              }
-            />
-            <span className="text-zinc-500 dark:text-zinc-500">ORATS</span>
+          </span>
+          <span className="flex items-center gap-2">
+            <Droplets className={health?.orats?.status === "OK" ? "h-4 w-4 text-emerald-500" : "h-4 w-4 text-amber-500"} />
             <StatusBadge status={health?.orats?.status ?? "n/a"} />
-          </div>
-          <div className="flex items-center gap-2">
-            <Zap className={health?.market?.is_open ? "h-4 w-4 text-emerald-500 dark:text-emerald-400" : "h-4 w-4 text-zinc-500 dark:text-zinc-500"} />
-            <span className="text-zinc-500 dark:text-zinc-500">Market</span>
-            <span className="text-zinc-700 dark:text-zinc-400">{health?.market?.phase ?? "n/a"}</span>
-          </div>
+          </span>
+          <span className="flex items-center gap-2">
+            <Zap className={health?.market?.is_open ? "h-4 w-4 text-emerald-500" : "h-4 w-4 text-zinc-500"} />
+            {health?.market?.phase ?? "n/a"}
+          </span>
         </div>
-      </Card>
+        <Link to="/system" className="flex items-center gap-1 text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
+          <Settings className="h-4 w-4" />
+          System
+        </Link>
+      </div>
         </>
       )}
     </div>

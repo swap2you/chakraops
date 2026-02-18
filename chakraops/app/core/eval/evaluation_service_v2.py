@@ -110,8 +110,8 @@ def evaluate_universe(
         verdict = str(getattr(sr, "verdict", "HOLD") or "HOLD").upper()
         if verdict not in ("ELIGIBLE", "HOLD", "BLOCKED", "NOT_EVALUATED"):
             verdict = "HOLD"
-        score = getattr(sr, "score", None)
-        band = assign_band(score)
+        score = getattr(sr, "score", None)  # final score (after caps)
+        band = assign_band(score)  # Phase 10.1: band from final_score only
         stage_reached = getattr(sr, "stage_reached", None)
         stage_reached_val = getattr(stage_reached, "value", str(stage_reached) or "STAGE1_ONLY")
         stage2_ran = stage_reached_val == "STAGE2_CHAIN"
@@ -235,6 +235,8 @@ def evaluate_universe(
             final_verdict=verdict,
             score=score,
             band=band,
+            final_score=score,
+            pre_cap_score=raw_s,
             primary_reason=getattr(sr, "primary_reason", None) or "",
             stage_status="RUN",
             stage1_status=stage1_status,

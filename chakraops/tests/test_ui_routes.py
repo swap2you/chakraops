@@ -554,6 +554,44 @@ def test_ui_positions_close_and_delete_guardrail(tmp_path):
         assert rpnl is not None
         assert abs(rpnl - 150.0) < 0.01
 
+
+def test_ui_positions_close_csp_per_share_realized_pnl_positive(tmp_path):
+    """Phase 21.2: CSP with per-share entry 9.40, close 4.50 → realized +490 (SHORT option formula)."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    positions_dir = tmp_path / "positions"
+    positions_dir.mkdir(parents=True, exist_ok=True)
+
+    app = _get_app()
+    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+        client = TestClient(app)
+        post = client.post(
+            "/api/ui/positions",
+            json={
+                "symbol": "NVDA",
+                "strategy": "CSP",
+                "contracts": 1,
+                "strike": 140.0,
+                "expiration": "2026-03-21",
+                "credit_expected": 9.40,
+                "contract_key": "140-2026-03-21-PUT",
+            },
+        )
+        assert post.status_code == 200
+        pid = post.json()["position_id"]
+
+        close_res = client.post(
+            f"/api/ui/positions/{pid}/close",
+            json={"close_price": 4.50},
+        )
+        assert close_res.status_code == 200
+        closed = close_res.json()
+        assert closed.get("status") == "CLOSED"
+        rpnl = closed.get("realized_pnl")
+        assert rpnl is not None
+        assert abs(rpnl - 490.0) < 0.01, f"Expected +490, got {rpnl}"
+
         # Delete CLOSED position -> 200
         del_closed = client.delete(f"/api/ui/positions/{pid}")
         assert del_closed.status_code == 200
@@ -563,6 +601,55 @@ def test_ui_positions_close_and_delete_guardrail(tmp_path):
         get_after = client.get("/api/ui/positions")
         assert get_after.status_code == 200
         assert len(get_after.json().get("positions") or []) == 0
+
+
+def test_ui_portfolio_realized_total_equals_sum_of_closed_positions(tmp_path):
+    """Phase 21.2: Regression — realized_pnl_total = sum of per-position realized_pnl."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    positions_dir = tmp_path / "positions"
+    positions_dir.mkdir(parents=True, exist_ok=True)
+
+    app = _get_app()
+    with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
+        client = TestClient(app)
+        p1 = client.post(
+            "/api/ui/positions",
+            json={
+                "symbol": "SPY",
+                "strategy": "CSP",
+                "contracts": 1,
+                "strike": 450.0,
+                "expiration": "2026-03-21",
+                "credit_expected": 250.0,
+                "contract_key": "450-2026-03-21-PUT",
+            },
+        )
+        assert p1.status_code == 200
+        client.post(f"/api/ui/positions/{p1.json()['position_id']}/close", json={"close_price": 1.00})
+
+        p2 = client.post(
+            "/api/ui/positions",
+            json={
+                "symbol": "NVDA",
+                "strategy": "CSP",
+                "contracts": 1,
+                "strike": 140.0,
+                "expiration": "2026-03-21",
+                "credit_expected": 9.40,
+                "contract_key": "140-2026-03-21-PUT",
+            },
+        )
+        assert p2.status_code == 200
+        client.post(f"/api/ui/positions/{p2.json()['position_id']}/close", json={"close_price": 4.50})
+
+        r = client.get("/api/ui/portfolio/metrics")
+        assert r.status_code == 200
+        data = r.json()
+        total = data.get("realized_pnl_total")
+        assert total is not None
+        assert abs(total - (150.0 + 490.0)) < 0.02, f"Expected 640, got {total}"
 
 
 def test_ui_positions_events_appended_on_create_and_close(tmp_path):

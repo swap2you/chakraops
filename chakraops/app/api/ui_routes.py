@@ -359,6 +359,107 @@ def ui_universe(
         }
 
 
+# ---------------------------------------------------------------------------
+# Phase 21.3: Universe overlay — add/remove symbols (GET/POST/DELETE /api/ui/universe/symbols)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/universe/symbols")
+def ui_universe_symbols(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    Effective universe list and overlay counts: base_count, overlay_added_count, overlay_removed_count, symbols.
+    Single source of truth for evaluation and Universe Manager UI.
+    """
+    _require_ui_key(x_ui_key)
+    try:
+        from app.api.data_health import get_base_universe_symbols
+        from app.core.universe.universe_overrides import get_effective_symbols, get_overlay_counts
+        base = get_base_universe_symbols()
+        symbols = get_effective_symbols(base)
+        added_count, removed_count = get_overlay_counts()
+        return {
+            "base_count": len(base),
+            "overlay_added_count": added_count,
+            "overlay_removed_count": removed_count,
+            "symbols": symbols,
+        }
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error loading universe symbols: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/universe/symbols")
+async def ui_universe_symbols_add(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Add symbol to overlay (add to added, remove from removed if present). Body: { symbol }."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.universe.universe_overrides import add_symbol, get_effective_symbols
+        from app.api.data_health import get_base_universe_symbols
+        body = await request.json()
+        symbol = (body.get("symbol") or "").strip()
+        ok, err = add_symbol(symbol)
+        if not ok:
+            raise HTTPException(status_code=400, detail=err or "Invalid symbol")
+        base = get_base_universe_symbols()
+        effective = get_effective_symbols(base)
+        return {"symbol": symbol.upper(), "symbols": effective}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error adding universe symbol: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/universe/symbols/{symbol}")
+def ui_universe_symbols_remove(
+    symbol: str,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Remove symbol (add to overlay.removed, remove from overlay.added if present)."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.universe.universe_overrides import remove_symbol, get_effective_symbols
+        from app.api.data_health import get_base_universe_symbols
+        ok, err = remove_symbol(symbol)
+        if not ok:
+            raise HTTPException(status_code=400, detail=err or "Invalid symbol")
+        base = get_base_universe_symbols()
+        effective = get_effective_symbols(base)
+        return {"removed": symbol.strip().upper(), "symbols": effective}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error removing universe symbol: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/universe/reset")
+def ui_universe_reset(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Clear overlay (added and removed). Admin / Universe Manager."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.universe.universe_overrides import reset_overlay, get_effective_symbols
+        from app.api.data_health import get_base_universe_symbols
+        reset_overlay()
+        base = get_base_universe_symbols()
+        effective = get_effective_symbols(base)
+        return {"reset": True, "symbols": effective}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error resetting universe overlay: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/market/status")
 def ui_market_status(
     x_ui_key: str | None = Header(None, alias="x-ui-key"),

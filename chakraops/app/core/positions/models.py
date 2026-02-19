@@ -74,7 +74,8 @@ class Position:
     # Phase 10.0: Portfolio completion fields
     id: Optional[str] = None  # Alias for position_id (uuid); set from position_id if missing
     underlying: Optional[str] = None  # Same as symbol
-    option_type: Optional[str] = None  # PUT | CALL
+    option_type: Optional[str] = None  # PUT | CALL (option_side)
+    position_side: Optional[str] = None  # Phase 21.2: SHORT | LONG (for options)
     open_credit: Optional[float] = None  # Credit received at open
     # Phase 11.0: Contract identity and decision reference
     option_symbol: Optional[str] = None  # OCC option symbol
@@ -110,6 +111,13 @@ class Position:
             self.open_time_utc = self.opened_at
         if self.open_credit is None and self.credit_expected is not None:
             self.open_credit = self.credit_expected
+        # Phase 21.2: Default position_side/option_type from strategy
+        if (self.strategy or "").upper() in ("CSP", "CC") and self.position_side is None:
+            self.position_side = "SHORT"
+        if (self.strategy or "").upper() == "CSP" and self.option_type is None:
+            self.option_type = "PUT"
+        if (self.strategy or "").upper() == "CC" and self.option_type is None:
+            self.option_type = "CALL"
         if self.created_at_utc is None:
             self.created_at_utc = self.opened_at or now
         if self.updated_at_utc is None:
@@ -150,7 +158,7 @@ class Position:
             if v is not None:
                 d[key] = v
         # Phase 10.0
-        for key in ("id", "underlying", "option_type", "open_credit", "open_price", "open_fees",
+        for key in ("id", "underlying", "option_type", "position_side", "open_credit", "open_price", "open_fees",
                     "open_time_utc", "close_debit", "close_price", "close_fees", "close_time_utc",
                     "collateral", "realized_pnl", "is_test", "created_at_utc", "updated_at_utc",
                     "option_symbol", "contract_key", "decision_ref", "parent_position_id",
@@ -198,6 +206,7 @@ class Position:
             option_symbol=d.get("option_symbol"),
             contract_key=d.get("contract_key"),
             decision_ref=d.get("decision_ref"),
+            position_side=d.get("position_side"),
             open_credit=d.get("open_credit") or d.get("credit_expected") or d.get("entry_credit"),
             open_price=d.get("open_price"),
             open_fees=d.get("open_fees"),

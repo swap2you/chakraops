@@ -121,6 +121,8 @@ CSP closed trade shows negative realized PnL when it should be positive (e.g. cr
 
 ## Phase 21.3 — Universe page: add/remove symbols via UI [Medium]
 
+**R21.3 req v1.1** (implemented)
+
 ### Problem
 Universe is static CSV; user wants quick add/remove without editing files by hand.
 
@@ -152,8 +154,8 @@ Universe is static CSV; user wants quick add/remove without editing files by han
 
 ### Acceptance criteria
 
-- [ ] User adds a ticker in UI; it appears in Universe list and is included in next evaluation.
-- [ ] User removes a ticker; it disappears and is not evaluated next run.
+- [x] User adds a ticker in UI; it appears in Universe list and is included in next evaluation.
+- [x] User removes a ticker; it disappears and is not evaluated next run.
 - [ ] CSV remains source of truth for “base” list; overlay is additive and subtractive only (or doc clearly states if CSV is mutated).
 
 ---

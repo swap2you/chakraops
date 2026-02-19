@@ -100,20 +100,36 @@ def close_position(
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
     close_ts = close_time_utc or now
-    # Compute close_debit and realized_pnl (Phase 12.0: standardized formula)
-    # open_credit, close_debit = total dollars. pnl = open_credit - close_debit - open_fees - close_fees
+    # Phase 21.2: close_debit and realized_pnl using position_side (SHORT/LONG) and explicit formulas
     strategy = (position.strategy or "").upper()
     close_debit: Optional[float] = None
     realized_pnl: Optional[float] = None
     open_fees = getattr(position, "open_fees", None) or 0.0
+    position_side = getattr(position, "position_side", None) or ("SHORT" if strategy in ("CSP", "CC") else None)
     if strategy in ("CSP", "CC") and position.contracts:
-        close_debit = float(close_price) * 100 * int(position.contracts)
-        open_credit_total = position.open_credit or position.credit_expected
-        if open_credit_total is not None:
-            open_credit_total = float(open_credit_total)
-            realized_pnl = open_credit_total - close_debit - float(open_fees or 0) - float(close_fees or 0)
-        else:
-            realized_pnl = -close_debit - float(open_fees or 0) - float(close_fees or 0)
+        contracts = int(position.contracts)
+        close_debit_total = float(close_price) * 100 * contracts
+        close_debit = close_debit_total
+        raw_open = position.open_credit or position.credit_expected
+        from app.core.positions.realized_pnl import (
+            compute_realized_pnl,
+            normalize_open_credit_to_total,
+        )
+        entry_credit_total = normalize_open_credit_to_total(
+            float(raw_open) if raw_open is not None else None,
+            contracts,
+        )
+        realized_pnl = compute_realized_pnl(
+            position_side or "SHORT",
+            entry_credit_total=entry_credit_total,
+            close_debit_total=close_debit_total,
+            entry_debit_total=None,
+            close_credit_total=None,
+            open_fees=float(open_fees or 0),
+            close_fees=float(close_fees or 0),
+        )
+        if realized_pnl is None:
+            realized_pnl = -close_debit_total - float(open_fees or 0) - float(close_fees or 0)
     updates = {
         "status": "CLOSED",
         "closed_at": close_ts,

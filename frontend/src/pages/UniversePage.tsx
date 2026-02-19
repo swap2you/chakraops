@@ -1,12 +1,19 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useUniverse, useRunEval, useUiSystemHealth } from "@/api/queries";
+import {
+  useUniverse,
+  useUniverseSymbols,
+  useUniverseAddSymbol,
+  useUniverseRemoveSymbol,
+  useRunEval,
+  useUiSystemHealth,
+} from "@/api/queries";
 import { formatTimestampEt } from "@/utils/formatTimestamp";
 import type { SymbolEvalSummary } from "@/api/types";
 import type { SymbolDiagnosticsCandidate } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { TradeTicketDrawer } from "@/components/TradeTicketDrawer";
-import { Info, FileEdit } from "lucide-react";
+import { Info, FileEdit, Trash2 } from "lucide-react";
 import {
   Card,
   CardHeader,
@@ -116,14 +123,33 @@ export function UniversePage() {
   const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("rank");
   const [tradeTicket, setTradeTicket] = useState<{ symbol: string; candidate: SymbolDiagnosticsCandidate } | null>(null);
+  const [addSymbolInput, setAddSymbolInput] = useState("");
+  const [addSymbolError, setAddSymbolError] = useState<string | null>(null);
+
+  const { data: universeSymbolsData } = useUniverseSymbols();
+  const addSymbol = useUniverseAddSymbol();
+  const removeSymbol = useUniverseRemoveSymbol();
+
+  const effectiveSymbols: string[] = universeSymbolsData?.symbols ?? [];
+  const baseCount = universeSymbolsData?.base_count ?? 0;
+  const overlayAddedCount = universeSymbolsData?.overlay_added_count ?? 0;
+  const overlayRemovedCount = universeSymbolsData?.overlay_removed_count ?? 0;
 
   const symbols: SymbolEvalSummary[] = universeData?.symbols ?? [];
+  const symbolBySym: Record<string, SymbolEvalSummary> = {};
+  symbols.forEach((s) => {
+    const k = (s.symbol ?? "").trim().toUpperCase();
+    if (k) symbolBySym[k] = s;
+  });
+  const mergedRows: SymbolEvalSummary[] = effectiveSymbols.length > 0
+    ? effectiveSymbols.map((sym) => symbolBySym[sym] ?? ({ symbol: sym, verdict: "NOT_EVALUATED", final_verdict: "NOT_EVALUATED", band: "D", stage_status: "n/a", provider_status: "n/a", data_freshness: null } as SymbolEvalSummary))
+    : symbols;
   const source = universeData?.source ?? "n/a";
   const evalTs = (universeData as { evaluation_timestamp_utc?: string } | undefined)?.evaluation_timestamp_utc ?? universeData?.updated_at ?? "n/a";
   const runId = (universeData as { run_id?: string } | undefined)?.run_id ?? undefined;
 
   const filtered = useMemo(() => {
-    let list = symbols;
+    let list = mergedRows;
     if (verdictFilter !== "all") {
       list = list.filter((s) => (s.final_verdict ?? s.verdict ?? "").toUpperCase() === verdictFilter);
     }
@@ -131,12 +157,33 @@ export function UniversePage() {
     if (q) {
       list = list.filter(
         (s) =>
-          s.symbol.toUpperCase().includes(q) ||
+          (s.symbol ?? "").toUpperCase().includes(q) ||
           (s.primary_reason ?? "").toUpperCase().includes(q)
       );
     }
     return sortSymbols(list, sortBy);
-  }, [symbols, verdictFilter, search, sortBy]);
+  }, [mergedRows, verdictFilter, search, sortBy]);
+
+  const addSymbolValidation = (val: string): string | null => {
+    const s = val.trim().toUpperCase();
+    if (!s) return "Symbol is required";
+    if (s.length > 10) return "Max 10 characters";
+    if (!/^[A-Z0-9.\-]+$/.test(s)) return "Only letters, numbers, dot, or hyphen";
+    return null;
+  };
+
+  const handleAddSymbol = () => {
+    const err = addSymbolValidation(addSymbolInput);
+    setAddSymbolError(err);
+    if (err) return;
+    addSymbol.mutate(
+      { symbol: addSymbolInput.trim().toUpperCase() },
+      {
+        onSuccess: () => setAddSymbolInput(""),
+        onError: (e: Error) => setAddSymbolError(e.message || "Failed to add"),
+      }
+    );
+  };
 
   const isLoading = universeLoading;
   if (isLoading) {
@@ -162,6 +209,42 @@ export function UniversePage() {
   return (
     <div className="space-y-8">
       <PageHeader title="Universe" subtext={`Source: ${source} · Updated ${formatTimestampEt(evalTs)}`} />
+
+      <Card>
+        <CardHeader title="Universe Manager (Phase 21.3)" description="Add or remove symbols from the evaluation universe. Base list from CSV; overlay adds/removes." />
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+            <span>Base: {baseCount}</span>
+            <span>+ Added: {overlayAddedCount}</span>
+            <span>− Removed: {overlayRemovedCount}</span>
+            <span className="font-medium text-zinc-900 dark:text-zinc-200">Total: {effectiveSymbols.length}</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              placeholder="Add symbol (e.g. NVDA)"
+              value={addSymbolInput}
+              onChange={(e) => {
+                setAddSymbolInput(e.target.value.toUpperCase());
+                setAddSymbolError(null);
+              }}
+              onKeyDown={(e) => e.key === "Enter" && handleAddSymbol()}
+              className="w-32 rounded border border-zinc-200 bg-white px-2 py-1.5 text-sm font-mono placeholder-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:placeholder-zinc-500"
+              maxLength={10}
+            />
+            <button
+              type="button"
+              onClick={handleAddSymbol}
+              disabled={addSymbol.isPending}
+              className="rounded border border-emerald-600 bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+            >
+              {addSymbol.isPending ? "Adding…" : "Add"}
+            </button>
+            {addSymbolError && <span className="text-sm text-red-600 dark:text-red-400">{addSymbolError}</span>}
+          </div>
+        </div>
+      </Card>
+
       <Card>
         <CardHeader title="Filters" />
         <div className="flex flex-wrap items-center gap-3">
@@ -205,7 +288,7 @@ export function UniversePage() {
       <Card>
         <CardHeader
           title="Symbols"
-          description={`${filtered.length} of ${symbols.length} · Updated ${formatTimestampEt(evalTs)}`}
+          description={`${filtered.length} of ${mergedRows.length} · Updated ${formatTimestampEt(evalTs)}`}
           actions={
             <div className="flex items-center gap-2">
               <span className="text-xs text-zinc-500 dark:text-zinc-400">Sort by</span>
@@ -231,7 +314,7 @@ export function UniversePage() {
         {filtered.length === 0 ? (
           <EmptyState
             title="No symbols"
-            message={symbols.length === 0 ? "Universe is empty." : "No symbols match the current filters."}
+            message={mergedRows.length === 0 ? "Universe is empty. Add symbols above." : "No symbols match the current filters."}
           />
         ) : (
           <Table>
@@ -248,6 +331,7 @@ export function UniversePage() {
               <TableHead>Price</TableHead>
               <TableHead>Expiration</TableHead>
               <TableHead>Actions</TableHead>
+              <TableHead className="w-20">Remove</TableHead>
             </TableHeader>
             <TableBody>
               {filtered.map((row) => (
@@ -354,6 +438,22 @@ export function UniversePage() {
                         Open Ticket
                       </button>
                     ) : null}
+                  </TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm(`Remove ${row.symbol} from universe?`)) {
+                          removeSymbol.mutate(row.symbol);
+                        }
+                      }}
+                      disabled={removeSymbol.isPending}
+                      className="inline-flex items-center gap-1 rounded border border-zinc-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:border-zinc-600 dark:text-red-400 dark:hover:bg-red-950"
+                      title="Remove from universe"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Remove
+                    </button>
                   </TableCell>
                 </TableRow>
               ))}

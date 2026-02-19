@@ -306,9 +306,19 @@ def _extract_last_price(row: Dict[str, Any]) -> Optional[float]:
     return None
 
 
-def get_universe_symbols() -> List[str]:
-    """Return universe symbols at request time (supports patching in tests; preserves list order)."""
+def get_base_universe_symbols() -> List[str]:
+    """Return base universe from CSV only (no overlay). For API counts."""
     return list(UNIVERSE_SYMBOLS)
+
+
+def get_universe_symbols() -> List[str]:
+    """Return effective universe at request time: (CSV base ∪ overlay.added) − overlay.removed. Single source for evaluation."""
+    try:
+        from app.core.universe.universe_overrides import get_effective_symbols
+        return get_effective_symbols(list(UNIVERSE_SYMBOLS))
+    except Exception as e:
+        logger.debug("[UNIVERSE] Overlay not applied, using base: %s", e)
+        return list(UNIVERSE_SYMBOLS)
 
 
 def fetch_universe_from_canonical_snapshot() -> Dict[str, Any]:

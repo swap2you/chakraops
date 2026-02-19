@@ -18,12 +18,12 @@ Use this checklist for each R21.x sub-phase. Update after each release.
 
 ---
 
-## R21.2 — CSP realized PnL sign
+## R21.2 — CSP realized PnL sign ✅
 
-- [ ] Backend: position_side/option_side, realized PnL formulas
-- [ ] Unit tests with fixed numbers
-- [ ] UI: corrected realized PnL
-- [ ] Release notes + verification
+- [x] Backend: position_side/option_side, realized PnL formulas
+- [x] Unit tests with fixed numbers
+- [x] UI: corrected realized PnL (backend only; UI already displays API values)
+- [x] Release notes + verification
 
 ---
 
@@ -36,10 +36,10 @@ Use this checklist for each R21.x sub-phase. Update after each release.
 
 ---
 
-## R21.3 — Universe add/remove via UI
+## R21.3 — Universe add/remove via UI ✅
 
-- [ ] Overlay file + API + frontend
-- [ ] Tests + release notes + verification
+- [x] Overlay file + API + frontend
+- [x] Tests + release notes + verification
 
 ---
 

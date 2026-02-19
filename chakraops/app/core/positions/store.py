@@ -141,6 +141,7 @@ def update_position(position_id: str, updates: dict) -> Optional[Position]:
         "close_debit", "close_price", "close_fees", "close_time_utc", "realized_pnl",
         "updated_at_utc",
         "mark_price_per_contract", "mark_time_utc",
+        "position_side", "option_type",
     })
     for key, value in updates.items():
         if key in allowed_keys and hasattr(target, key):

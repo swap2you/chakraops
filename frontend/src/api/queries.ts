@@ -18,6 +18,7 @@ import type {
   AccountSummary,
   AccountHolding,
   AccountHoldingsResponse,
+  UniverseSymbolsResponse,
   UiAlertsResponse,
 } from "./types";
 import type { DecisionMode, DecisionRef } from "./types";
@@ -41,6 +42,17 @@ function decisionFilePath(filename: string, mode: DecisionMode): string {
 
 function universePath(): string {
   return `/api/ui/universe`;
+}
+
+/** Phase 21.3: Universe overlay */
+function uiUniverseSymbolsPath(): string {
+  return `/api/ui/universe/symbols`;
+}
+function uiUniverseSymbolRemovePath(symbol: string): string {
+  return `/api/ui/universe/symbols/${encodeURIComponent(symbol)}`;
+}
+function uiUniverseResetPath(): string {
+  return `/api/ui/universe/reset`;
 }
 
 function symbolDiagnosticsPath(symbol: string, recompute = false, runId?: string | null): string {
@@ -221,6 +233,7 @@ export const queryKeys = {
       ? (["ui", "decision", mode, filename] as const)
       : (["ui", "decision", mode, "latest"] as const),
   universe: () => ["ui", "universe"] as const,
+  uiUniverseSymbols: () => ["ui", "universe", "symbols"] as const,
   symbolDiagnostics: (symbol: string, runId?: string | null) =>
     (["ui", "symbolDiagnostics", symbol, runId ?? ""] as const),
   uiSystemHealth: () => ["ui", "systemHealth"] as const,
@@ -273,6 +286,53 @@ export function useUniverse() {
   return useQuery({
     queryKey: queryKeys.universe(),
     queryFn: () => apiGet<UniverseResponse>(universePath()),
+  });
+}
+
+/** Phase 21.3: GET /api/ui/universe/symbols — effective list + overlay counts */
+export function useUniverseSymbols() {
+  return useQuery({
+    queryKey: queryKeys.uiUniverseSymbols(),
+    queryFn: () => apiGet<UniverseSymbolsResponse>(uiUniverseSymbolsPath()),
+  });
+}
+
+/** Phase 21.3: POST /api/ui/universe/symbols — add symbol to overlay */
+export function useUniverseAddSymbol() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { symbol: string }) =>
+      apiPost<{ symbol: string; symbols: string[] }>(uiUniverseSymbolsPath(), payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiUniverseSymbols() });
+      qc.invalidateQueries({ queryKey: queryKeys.universe() });
+    },
+  });
+}
+
+/** Phase 21.3: DELETE /api/ui/universe/symbols/{symbol} — remove symbol (overlay) */
+export function useUniverseRemoveSymbol() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (symbol: string) =>
+      apiDelete<{ removed: string; symbols: string[] }>(uiUniverseSymbolRemovePath(symbol)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiUniverseSymbols() });
+      qc.invalidateQueries({ queryKey: queryKeys.universe() });
+    },
+  });
+}
+
+/** Phase 21.3: POST /api/ui/universe/reset — clear overlay */
+export function useUniverseReset() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiPost<{ reset: boolean; symbols: string[] }>(uiUniverseResetPath(), {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiUniverseSymbols() });
+      qc.invalidateQueries({ queryKey: queryKeys.universe() });
+    },
   });
 }
 

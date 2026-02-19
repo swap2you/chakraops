@@ -194,6 +194,14 @@ export interface UniverseResponse {
   error?: string;
 }
 
+/** Phase 21.3: GET /api/ui/universe/symbols — effective list + overlay counts */
+export interface UniverseSymbolsResponse {
+  base_count: number;
+  overlay_added_count: number;
+  overlay_removed_count: number;
+  symbols: string[];
+}
+
 // =============================================================================
 // SymbolDiagnosticsResponse — GET /api/ui/symbol-diagnostics?symbol=
 // =============================================================================

@@ -101,6 +101,15 @@ def _get_eod_freeze_health() -> Dict[str, Any]:
         return {"enabled": False, "last_run_at_utc": None, "last_result": None, "last_snapshot_dir": None}
 
 
+def _get_slack_status_health() -> Dict[str, Any]:
+    """Phase 21.5: Slack sender status for system health."""
+    try:
+        from app.core.alerts.slack_status import get_slack_status
+        return get_slack_status()
+    except Exception:
+        return {"last_send_at": None, "last_send_ok": None, "last_error": None, "last_channel": None, "last_payload_type": None}
+
+
 def _get_mark_refresh_health() -> Dict[str, Any]:
     """Phase 16.0: Mark refresh state for system health."""
     try:
@@ -570,6 +579,93 @@ def ui_scheduler_run_once(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/admin/slack/test")
+def ui_admin_slack_test(
+    channel: str = Query(default="signals", description="Channel: signals | daily | data_health | critical"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    Phase 21.5 / R21.5.1: Send a test Slack message to the given channel and update that channel's status.
+    Guarded by UI key. Response includes channel, ok, message, updated_status (full slack status).
+    """
+    _require_ui_key(x_ui_key)
+    import logging
+    log = logging.getLogger(__name__)
+    from app.core.alerts.slack_status import SLACK_CHANNELS, get_slack_status, update_slack_status
+    ch = (channel or "signals").strip().lower()
+    if ch not in SLACK_CHANNELS:
+        ch = "signals"
+    try:
+        from app.core.alerts.slack_dispatcher import get_webhook_for_channel, send_slack_message
+        webhook = get_webhook_for_channel(ch)
+        if not webhook:
+            update_slack_status(ch, ok=False, error="no_webhook", payload_type="test")
+            return {
+                "status": "error",
+                "channel": ch,
+                "message": "Slack not configured for channel",
+                "ok": False,
+                "updated_status": get_slack_status(),
+            }
+        text = f"ChakraOps R21.5.1 test — {ch} channel"
+        ok = send_slack_message(webhook, text)
+        update_slack_status(ch, ok=ok, error=None if ok else "send_failed", payload_type="test")
+        return {
+            "status": "OK",
+            "channel": ch,
+            "message": "Test message sent" if ok else "Send failed",
+            "ok": ok,
+            "updated_status": get_slack_status(),
+        }
+    except Exception as e:
+        log.exception("Slack test failed: %s", e)
+        try:
+            update_slack_status(ch, ok=False, error=str(e), payload_type="test")
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/admin/evaluation/force")
+def ui_admin_evaluation_force(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    Phase 21.5: Run one evaluation cycle immediately (force). Bypasses scheduler market check.
+    Safe: runs same trigger_evaluation as scheduler; logs that it was forced.
+    """
+    _require_ui_key(x_ui_key)
+    import logging
+    log = logging.getLogger(__name__)
+    try:
+        from app.api.data_health import get_universe_symbols
+        from app.core.eval.universe_evaluator import trigger_evaluation
+        from app.market.market_hours import get_market_phase
+        symbols = list(get_universe_symbols())
+        if not symbols:
+            return {
+                "status": "OK",
+                "started": False,
+                "reason": "no_symbols",
+                "forced": True,
+                "message": "Universe empty; nothing to run",
+            }
+        phase = get_market_phase() or "UNKNOWN"
+        log.info("[ADMIN] Force evaluation requested (market_phase=%s)", phase)
+        result = trigger_evaluation(symbols, market_phase=phase)
+        started = result.get("started", False)
+        return {
+            "status": "OK",
+            "started": started,
+            "run_id": result.get("run_id"),
+            "reason": result.get("reason"),
+            "forced": True,
+        }
+    except Exception as e:
+        log.exception("Force evaluation failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/system-health")
 def ui_system_health(
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
@@ -638,13 +734,18 @@ def ui_system_health(
 
     api_latency_ms = round((time.monotonic() - t0) * 1000, 1)
 
-    # Scheduler: interval, heartbeat (last_run_at, next_run_at, last_result)
+    # Scheduler: interval, heartbeat (last_run_at, next_run_at, last_result, last_skip_reason; R21.5.1: duration, run_ok, error, run_count_today)
     scheduler_interval: int | None = None
     scheduler_nightly_next: str | None = None
     scheduler_eod_next: str | None = None
     scheduler_last_run_at: str | None = None
     scheduler_next_run_at: str | None = None
     scheduler_last_result: str | None = None
+    scheduler_last_skip_reason: str | None = None
+    scheduler_last_duration_ms: float | None = None
+    scheduler_last_run_ok: bool | None = None
+    scheduler_last_run_error: str | None = None
+    scheduler_run_count_today: int | None = None
     try:
         from app.api.server import get_scheduler_status, get_nightly_scheduler_status
         sched = get_scheduler_status()
@@ -652,6 +753,11 @@ def ui_system_health(
         scheduler_last_run_at = sched.get("last_run_at")
         scheduler_next_run_at = sched.get("next_run_at")
         scheduler_last_result = sched.get("last_result")
+        scheduler_last_skip_reason = sched.get("last_skip_reason")
+        scheduler_last_duration_ms = sched.get("last_duration_ms")
+        scheduler_last_run_ok = sched.get("last_run_ok")
+        scheduler_last_run_error = sched.get("last_run_error")
+        scheduler_run_count_today = sched.get("run_count_today")
         scheduler_eod_next = sched.get("next_run_at")
         nightly = get_nightly_scheduler_status()
         scheduler_nightly_next = nightly.get("next_scheduled_at")
@@ -740,7 +846,13 @@ def ui_system_health(
             "last_run_at": scheduler_last_run_at,
             "next_run_at": scheduler_next_run_at,
             "last_result": scheduler_last_result,
+            "last_skip_reason": scheduler_last_skip_reason,
+            "last_duration_ms": scheduler_last_duration_ms,
+            "last_run_ok": scheduler_last_run_ok,
+            "last_run_error": scheduler_last_run_error,
+            "run_count_today": scheduler_run_count_today,
         },
+        "slack": _get_slack_status_health(),
         "eod_freeze": _get_eod_freeze_health(),
         "mark_refresh": _get_mark_refresh_health(),
     }
@@ -984,13 +1096,17 @@ def ui_snapshots_latest(
 @router.get("/notifications")
 def ui_notifications(
     limit: int = Query(default=100, ge=1, le=500),
+    state: str | None = Query(default=None, description="Filter by state: NEW, ACKED, ARCHIVED"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """Return last N notifications (newest first)."""
+    """Return last N notifications (newest first). Phase 21.5: optional state filter; each item has state, updated_at."""
     _require_ui_key(x_ui_key)
     try:
         from app.api.notifications_store import load_notifications
-        items = load_notifications(limit=limit)
+        state_filter = state.strip() if state and state.strip() else None
+        if state_filter and state_filter not in ("NEW", "ACKED", "ARCHIVED"):
+            state_filter = None
+        items = load_notifications(limit=limit, state_filter=state_filter)
         return {"notifications": items}
     except Exception as e:
         import logging
@@ -1022,6 +1138,22 @@ async def ui_notifications_append(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post("/notifications/archive_all")
+def ui_notifications_archive_all(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Phase 21.5: Archive all NEW/ACKED notifications. Returns count archived."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.api.notifications_store import archive_all
+        count = archive_all()
+        return {"status": "OK", "archived_count": count}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error archiving all notifications: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/notifications/{notification_id}/ack")
 async def ui_notification_ack(
     notification_id: str,
@@ -1046,6 +1178,44 @@ async def ui_notification_ack(
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Error acking notification: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/notifications/{notification_id}/archive")
+def ui_notification_archive(
+    notification_id: str,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Phase 21.5: Archive a notification (append state event)."""
+    _require_ui_key(x_ui_key)
+    if not notification_id or not notification_id.strip():
+        raise HTTPException(status_code=400, detail="notification_id required")
+    try:
+        from app.api.notifications_store import append_archive
+        append_archive(notification_id.strip())
+        return {"status": "OK", "updated_at": datetime.now(timezone.utc).isoformat()}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error archiving notification: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/notifications/{notification_id}")
+def ui_notification_delete(
+    notification_id: str,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Phase 21.5: Soft-delete a notification (append DELETED state event). Removed from default list."""
+    _require_ui_key(x_ui_key)
+    if not notification_id or not notification_id.strip():
+        raise HTTPException(status_code=400, detail="notification_id required")
+    try:
+        from app.api.notifications_store import append_delete
+        append_delete(notification_id.strip())
+        return {"status": "OK", "updated_at": datetime.now(timezone.utc).isoformat()}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error deleting notification: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -2113,6 +2283,36 @@ def _compute_reasons_explained(
         return []
 
 
+def _build_computed_values_at_request_time(
+    technicals: Dict[str, Any],
+    regime: Any,
+    sample_rejected_due_to_delta: List[Any],
+) -> Dict[str, Any]:
+    """Build computed_values at request time for R21.4 Technical details panel. Not persisted."""
+    try:
+        from app.core.config.trade_rules import CSP_TARGET_DELTA_LOW, CSP_TARGET_DELTA_HIGH
+        delta_lo, delta_hi = float(CSP_TARGET_DELTA_LOW), float(CSP_TARGET_DELTA_HIGH)
+    except Exception:
+        delta_lo, delta_hi = 0.25, 0.35
+    try:
+        from app.core.eligibility.config import CSP_RSI_MIN, CSP_RSI_MAX
+        rsi_lo, rsi_hi = float(CSP_RSI_MIN), float(CSP_RSI_MAX)
+    except Exception:
+        rsi_lo, rsi_hi = 45.0, 60.0
+    rejected_sample = list(sample_rejected_due_to_delta) if sample_rejected_due_to_delta else []
+    return {
+        "rsi": technicals.get("rsi"),
+        "rsi_range": [rsi_lo, rsi_hi],
+        "atr": technicals.get("atr"),
+        "atr_pct": technicals.get("atr_pct"),
+        "support_level": technicals.get("support_level"),
+        "resistance_level": technicals.get("resistance_level"),
+        "regime": regime,
+        "delta_band": [delta_lo, delta_hi],
+        "rejected_count": len(rejected_sample),
+    }
+
+
 def _build_symbol_diagnostics_from_v2_store(
     summary: Any,
     candidates: List[Any],
@@ -2153,6 +2353,9 @@ def _build_symbol_diagnostics_from_v2_store(
             "earnings_block": getattr(earnings, "earnings_block", None),
             "note": getattr(earnings, "note", None) or "Not evaluated",
         }
+    regime = diag.get("regime") or getattr(summary, "regime", None)
+    sample_rej = diag.get("sample_rejected_due_to_delta") or []
+    computed_values = _build_computed_values_at_request_time(technicals, regime, sample_rej)
     return {
         "symbol": symbol,
         "provider_status": getattr(summary, "provider_status", "OK") or "OK",
@@ -2187,7 +2390,8 @@ def _build_symbol_diagnostics_from_v2_store(
             "support_level": technicals.get("support_level"),
             "resistance_level": technicals.get("resistance_level"),
         },
-        "regime": diag.get("regime") or getattr(summary, "regime", None),
+        "computed_values": computed_values,
+        "regime": regime,
         "composite_score": getattr(summary, "score", None),
         "raw_score": getattr(summary, "raw_score", None),
         "final_score": getattr(summary, "final_score", None) or getattr(summary, "score", None),

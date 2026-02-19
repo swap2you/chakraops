@@ -34,3 +34,58 @@
 {"id": "70d81c63-7e09-4d40-bda6-e62b63a924e2", "timestamp_utc": "2026-02-18T21:14:24.926764+00:00", "severity": "WARN", "type": "ORATS_WARN", "subtype": "ORATS_STALE", "symbol": null, "message": "ORATS status WARN; data may be stale", "details": {"status": "WARN", "last_success_at": "2026-02-15T05:32:29.751858+00:00", "last_error_reason": null}}
 {"id": "fad7062c-80d1-4a40-a745-0da6b1a11c2e", "timestamp_utc": "2026-02-18T21:18:41.761196+00:00", "severity": "WARN", "type": "ORATS_WARN", "subtype": "ORATS_STALE", "symbol": null, "message": "ORATS status WARN; data may be stale", "details": {"status": "WARN", "last_success_at": "2026-02-15T05:32:29.751858+00:00", "last_error_reason": null}}
 {"id": "75005d24-3bcf-46e3-ad4b-0fb32014c36a", "timestamp_utc": "2026-02-18T23:15:55.109964+00:00", "severity": "WARN", "type": "ORATS_WARN", "subtype": "ORATS_STALE", "symbol": null, "message": "ORATS status WARN; data may be stale", "details": {"status": "WARN", "last_success_at": "2026-02-15T05:32:29.751858+00:00", "last_error_reason": null}}
+{"id": "f5ecbbf5-47d5-479d-b44d-56912c1ca5fc", "timestamp_utc": "2026-02-19T14:16:18.303596+00:00", "severity": "WARN", "type": "ORATS_WARN", "subtype": "ORATS_STALE", "symbol": null, "message": "ORATS status WARN; data may be stale", "details": {"status": "WARN", "last_success_at": "2026-02-15T05:32:29.751858+00:00", "last_error_reason": null}}
+{"id": "ddede843-7a93-4934-915a-17bc30d6b434", "timestamp_utc": "2026-02-19T15:41:16.557007+00:00", "severity": "WARN", "type": "ORATS_WARN", "subtype": "ORATS_STALE", "symbol": null, "message": "ORATS status WARN; data may be stale", "details": {"status": "WARN", "last_success_at": "2026-02-15T05:32:29.751858+00:00", "last_error_reason": null}}
+{"event": "ack", "ref_id": "bcc9db25-c72b-4eb3-8f11-a9020d21177e", "ack_at_utc": "2026-02-19T15:42:04.267103+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "9f493552-f345-4f75-91ac-645e7d37e8e0", "ack_at_utc": "2026-02-19T15:42:05.778391+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "c8bdf582-e25a-426d-9c26-3daf67c0ea28", "ack_at_utc": "2026-02-19T15:42:06.321082+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "n_52d4276f5a43d1e7", "ack_at_utc": "2026-02-19T15:42:06.605158+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "n_138281df671291b1", "ack_at_utc": "2026-02-19T15:42:06.830121+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "n_cd58ccee9a5de293", "ack_at_utc": "2026-02-19T15:42:07.029939+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "n_a0f00cdb57f384ab", "ack_at_utc": "2026-02-19T15:42:07.253621+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "n_5bd7f54764c8caa5", "ack_at_utc": "2026-02-19T15:42:07.462462+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "n_26ad7ea4d37b472c", "ack_at_utc": "2026-02-19T15:42:07.669005+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "n_2dc0dadd7535d83a", "ack_at_utc": "2026-02-19T15:42:07.894165+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "n_08ec7189e80689b6", "ack_at_utc": "2026-02-19T15:42:08.119519+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "ba366ab7-8ced-4522-80bf-381c7e74d3ba", "ack_at_utc": "2026-02-19T15:42:08.436990+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "3636bcd2-f833-415f-a8ac-bb8f7aab6d0d", "ack_at_utc": "2026-02-19T15:42:08.693400+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "bf7ce697-021d-4223-a168-9d1d44d2bbe5", "ack_at_utc": "2026-02-19T15:42:08.902629+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "1a89474e-29c0-40f9-9241-58ff0402385b", "ack_at_utc": "2026-02-19T15:42:09.094283+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "abc7b760-4072-491c-ac59-ae27fbef7de0", "ack_at_utc": "2026-02-19T15:42:09.321437+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "bb2f5e57-8216-4210-984a-f302bc763b8d", "ack_at_utc": "2026-02-19T15:42:09.525474+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "3cdba79f-7838-4bd2-bd38-0e630e3efc7c", "ack_at_utc": "2026-02-19T15:42:09.737435+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "68b9583b-38c9-4300-b7c9-6af32cca5448", "ack_at_utc": "2026-02-19T15:42:09.961613+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "e73539a3-c572-45b4-b106-82de5ac53651", "ack_at_utc": "2026-02-19T15:42:10.169351+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "d54877bb-42ad-40a3-912d-0c8c63ad287e", "ack_at_utc": "2026-02-19T15:42:10.362301+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "7b56335f-b50a-4157-a42b-0dba6d056b73", "ack_at_utc": "2026-02-19T15:42:10.569411+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "d37b0ede-5b1c-4915-82a6-2196e9c0f15a", "ack_at_utc": "2026-02-19T15:42:10.793420+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "da8e7f94-e1b2-41cf-98b6-b0daf5f923dd", "ack_at_utc": "2026-02-19T15:42:11.017695+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "47fcd5ad-2716-40a8-9df3-10b2f70fe795", "ack_at_utc": "2026-02-19T15:42:11.225494+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "70d81c63-7e09-4d40-bda6-e62b63a924e2", "ack_at_utc": "2026-02-19T15:42:11.417549+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "fad7062c-80d1-4a40-a745-0da6b1a11c2e", "ack_at_utc": "2026-02-19T15:42:11.657673+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "f5ecbbf5-47d5-479d-b44d-56912c1ca5fc", "ack_at_utc": "2026-02-19T15:42:13.701438+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "75005d24-3bcf-46e3-ad4b-0fb32014c36a", "ack_at_utc": "2026-02-19T15:42:14.229337+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "ddede843-7a93-4934-915a-17bc30d6b434", "ack_at_utc": "2026-02-19T15:42:22.282264+00:00", "ack_by": "ui"}
+{"id": "84705057-7df8-40f0-bc77-4c9cde18626a", "timestamp_utc": "2026-02-19T17:27:46.932075+00:00", "severity": "WARN", "type": "ORATS_WARN", "subtype": "ORATS_STALE", "symbol": null, "message": "ORATS status WARN; data may be stale", "details": {"status": "WARN", "last_success_at": "2026-02-15T05:32:29.751858+00:00", "last_error_reason": null}}
+{"id": "4ef058a5-1962-438d-ba5b-dbc63286e4b8", "timestamp_utc": "2026-02-19T18:31:01.774319+00:00", "severity": "WARN", "type": "ORATS_WARN", "subtype": "ORATS_STALE", "symbol": null, "message": "ORATS status WARN; data may be stale", "details": {"status": "WARN", "last_success_at": "2026-02-15T05:32:29.751858+00:00", "last_error_reason": null}}
+{"id": "8090398c-3e29-4bf3-bc60-edcfdf817dcf", "timestamp_utc": "2026-02-19T18:38:13.547579+00:00", "severity": "WARN", "type": "ORATS_WARN", "subtype": "ORATS_STALE", "symbol": null, "message": "ORATS status WARN; data may be stale", "details": {"status": "WARN", "last_success_at": "2026-02-15T05:32:29.751858+00:00", "last_error_reason": null}}
+{"id": "6c0c31af-0065-4b55-84a0-4b8962f34950", "timestamp_utc": "2026-02-19T18:40:01.431582+00:00", "severity": "WARN", "type": "ORATS_WARN", "subtype": "ORATS_STALE", "symbol": null, "message": "ORATS status WARN; data may be stale", "details": {"status": "WARN", "last_success_at": "2026-02-15T05:32:29.751858+00:00", "last_error_reason": null}}
+{"id": "9e7ac990-37fe-43dc-b068-ff44ef3820db", "timestamp_utc": "2026-02-19T18:41:10.200763+00:00", "severity": "WARN", "type": "ORATS_WARN", "subtype": "ORATS_STALE", "symbol": null, "message": "ORATS status WARN; data may be stale", "details": {"status": "WARN", "last_success_at": "2026-02-15T05:32:29.751858+00:00", "last_error_reason": null}}
+{"id": "88e907c5-fee3-485e-b8a3-dd5835f2714e", "timestamp_utc": "2026-02-19T18:41:58.645673+00:00", "severity": "WARN", "type": "ORATS_WARN", "subtype": "ORATS_STALE", "symbol": null, "message": "ORATS status WARN; data may be stale", "details": {"status": "WARN", "last_success_at": "2026-02-15T05:32:29.751858+00:00", "last_error_reason": null}}
+{"id": "c59f5561-9bb9-4ab6-a866-5c60112f93e9", "timestamp_utc": "2026-02-19T18:42:00.432793+00:00", "severity": "WARN", "type": "ORATS_WARN", "subtype": "ORATS_STALE", "symbol": null, "message": "ORATS status WARN; data may be stale", "details": {"status": "WARN", "last_success_at": "2026-02-15T05:32:29.751858+00:00", "last_error_reason": null}}
+{"id": "f15eb288-7b23-4c59-b404-61c3606c5b60", "timestamp_utc": "2026-02-19T19:15:54.322679+00:00", "severity": "WARN", "type": "ORATS_WARN", "subtype": "ORATS_STALE", "symbol": null, "message": "ORATS status WARN; data may be stale", "details": {"status": "WARN", "last_success_at": "2026-02-15T05:32:29.751858+00:00", "last_error_reason": null}}
+{"event": "ack", "ref_id": "84705057-7df8-40f0-bc77-4c9cde18626a", "ack_at_utc": "2026-02-19T19:17:04.581578+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "4ef058a5-1962-438d-ba5b-dbc63286e4b8", "ack_at_utc": "2026-02-19T19:17:05.510915+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "8090398c-3e29-4bf3-bc60-edcfdf817dcf", "ack_at_utc": "2026-02-19T19:17:06.390488+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "6c0c31af-0065-4b55-84a0-4b8962f34950", "ack_at_utc": "2026-02-19T19:17:07.285336+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "9e7ac990-37fe-43dc-b068-ff44ef3820db", "ack_at_utc": "2026-02-19T19:17:08.181461+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "88e907c5-fee3-485e-b8a3-dd5835f2714e", "ack_at_utc": "2026-02-19T19:17:19.134593+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "c59f5561-9bb9-4ab6-a866-5c60112f93e9", "ack_at_utc": "2026-02-19T19:17:20.803996+00:00", "ack_by": "ui"}
+{"id": "0c52f48e-5473-4c65-add5-dbfc00b60936", "timestamp_utc": "2026-02-19T19:33:25.680141+00:00", "severity": "WARN", "type": "ORATS_WARN", "subtype": "ORATS_STALE", "symbol": null, "message": "ORATS status WARN; data may be stale", "details": {"status": "WARN", "last_success_at": "2026-02-15T05:32:29.751858+00:00", "last_error_reason": null}}
+{"id": "d93e87bd-f7f6-4c71-86df-b1af9a080db9", "timestamp_utc": "2026-02-19T20:35:23.334938+00:00", "severity": "WARN", "type": "ORATS_WARN", "subtype": "ORATS_STALE", "symbol": null, "message": "ORATS status WARN; data may be stale", "details": {"status": "WARN", "last_success_at": "2026-02-15T05:32:29.751858+00:00", "last_error_reason": null}}
+{"id": "105e1507-8f3b-46df-8cca-31202db3c880", "timestamp_utc": "2026-02-19T20:46:43.030904+00:00", "severity": "WARN", "type": "ORATS_WARN", "subtype": "ORATS_STALE", "symbol": null, "message": "ORATS status WARN; data may be stale", "details": {"status": "WARN", "last_success_at": "2026-02-15T05:32:29.751858+00:00", "last_error_reason": null}}
+{"event": "ack", "ref_id": "f15eb288-7b23-4c59-b404-61c3606c5b60", "ack_at_utc": "2026-02-19T21:03:39.960836+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "0c52f48e-5473-4c65-add5-dbfc00b60936", "ack_at_utc": "2026-02-19T21:03:40.874881+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "d93e87bd-f7f6-4c71-86df-b1af9a080db9", "ack_at_utc": "2026-02-19T21:03:41.731852+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "105e1507-8f3b-46df-8cca-31202db3c880", "ack_at_utc": "2026-02-19T21:03:42.591475+00:00", "ack_by": "ui"}
+{"id": "df856b7d-98bd-4611-a44c-47ce1e06dda9", "timestamp_utc": "2026-02-19T21:05:54.769545+00:00", "severity": "WARN", "type": "ORATS_WARN", "subtype": "ORATS_STALE", "symbol": null, "message": "ORATS status WARN; data may be stale", "details": {"status": "WARN", "last_success_at": "2026-02-15T05:32:29.751858+00:00", "last_error_reason": null}}

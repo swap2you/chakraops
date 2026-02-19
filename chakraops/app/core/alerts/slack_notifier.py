@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class SlackNotifier:
-    """Send alerts to Slack with formatted blocks. One webhook per channel/type."""
+    """Send alerts to Slack with formatted blocks. R21.5.1: Routes by channel (signals, daily, data_health, critical)."""
 
     def __init__(self, config: Dict[str, Any]):
         self._config = config or {}
@@ -27,15 +27,47 @@ class SlackNotifier:
             if isinstance(v, str) and v.strip().startswith("http"):
                 self._webhooks[k] = v.strip()
 
-    def _webhook_for_alert(self, alert: Alert) -> Optional[str]:
+    def _channel_for_alert(self, alert: Alert) -> str:
+        """R21.5.1: Map alert type to channel: signals | daily | data_health | critical."""
         at = alert.alert_type.value
-        return self._webhooks.get(at) or self._default_webhook or None
+        # critical: PANIC/urgent failures
+        if at == "POSITION_ABORT":
+            return "critical"
+        if at == "PORTFOLIO_RISK_BLOCK":
+            return "critical"
+        if at == "POSITION_EXIT" and (alert.reason_code == "STOP_LOSS" or alert.severity.value == "CRITICAL"):
+            return "critical"
+        # data_health: ORATS/data-sufficiency/sanity warnings
+        if at == "DATA_HEALTH":
+            return "data_health"
+        if at == "PORTFOLIO_RISK_WARN":
+            return "data_health"
+        if at == "SYSTEM":
+            return "data_health"
+        if at == "REGIME_CHANGE":
+            return "data_health"
+        # signals: eligibility/entry/exit signals
+        if at in ("SIGNAL", "POSITION_ENTRY", "POSITION_SCALE_OUT", "POSITION_EXIT", "POSITION_HOLD"):
+            return "signals"
+        # default
+        return "signals"
+
+    def _webhook_for_alert(self, alert: Alert) -> Optional[str]:
+        from app.core.alerts.slack_dispatcher import get_webhook_for_channel
+        channel = self._channel_for_alert(alert)
+        url = get_webhook_for_channel(channel)
+        if url:
+            return url
+        return self._webhooks.get(alert.alert_type.value) or self._default_webhook or None
 
     def send(self, alert: Alert) -> bool:
-        """Send one alert to Slack. Returns True if sent, False if skipped (no webhook) or failed."""
+        """Send one alert to Slack. Returns True if sent, False if skipped (no webhook) or failed. R21.5.1: updates per-channel status."""
+        from app.core.alerts.slack_status import update_slack_status
+        channel = self._channel_for_alert(alert)
         webhook = self._webhook_for_alert(alert)
         if not webhook:
-            logger.debug("[ALERTS] Slack not configured; alert logged only: %s", alert.summary[:50])
+            logger.debug("[ALERTS] Slack not configured for %s; alert logged only: %s", channel, alert.summary[:50])
+            update_slack_status(channel, ok=False, error="no_webhook", payload_type=alert.alert_type.value)
             return False
         blocks = self._build_blocks(alert)
         try:
@@ -46,10 +78,12 @@ class SlackNotifier:
                 timeout=10,
             )
             resp.raise_for_status()
-            logger.info("[ALERTS] Sent to Slack: %s %s", alert.alert_type.value, alert.reason_code)
+            logger.info("[ALERTS] Sent to Slack %s: %s %s", channel, alert.alert_type.value, alert.reason_code)
+            update_slack_status(channel, ok=True, payload_type=alert.alert_type.value)
             return True
         except requests.RequestException as e:
-            logger.warning("[ALERTS] Slack send failed: %s", e)
+            logger.warning("[ALERTS] Slack send failed (%s): %s", channel, e)
+            update_slack_status(channel, ok=False, error=str(e), payload_type=alert.alert_type.value)
             return False
 
     def _build_blocks(self, alert: Alert) -> list:
@@ -160,3 +194,55 @@ class SlackNotifier:
             {"type": "section", "text": {"type": "mrkdwn", "text": text}},
             {"type": "context", "elements": [{"type": "mrkdwn", "text": alert.created_at}]},
         ]
+
+    def send_eval_summary(self, channel: str, payload: Dict[str, Any]) -> bool:
+        """R21.5.2: Send EVAL_SUMMARY to channel (daily). Updates slack_status with payload_type EVAL_SUMMARY."""
+        from app.core.alerts.slack_dispatcher import get_webhook_for_channel
+        from app.core.alerts.slack_status import update_slack_status
+
+        webhook = get_webhook_for_channel(channel)
+        if not webhook:
+            logger.debug("[ALERTS] Slack not configured for %s; eval summary skipped", channel)
+            update_slack_status(channel, ok=False, error="Slack not configured", payload_type="EVAL_SUMMARY")
+            return False
+        text = self._format_eval_summary(payload)
+        try:
+            resp = requests.post(
+                webhook,
+                json={"text": text},
+                headers={"Content-Type": "application/json"},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            logger.info("[ALERTS] Sent EVAL_SUMMARY to %s run_id=%s", channel, payload.get("run_id", "?"))
+            update_slack_status(channel, ok=True, payload_type="EVAL_SUMMARY")
+            return True
+        except requests.RequestException as e:
+            logger.warning("[ALERTS] EVAL_SUMMARY send failed (%s): %s", channel, e)
+            update_slack_status(channel, ok=False, error=str(e), payload_type="EVAL_SUMMARY")
+            return False
+
+    def _format_eval_summary(self, p: Dict[str, Any]) -> str:
+        """Concise one-message format for EVAL_SUMMARY."""
+        lines = [
+            "📊 *ChakraOps Eval Summary*",
+            f"Mode: {p.get('mode', '?')} | Run: `{p.get('run_id', '?')}` | {p.get('timestamp', '')}",
+            "",
+            f"*Counts:* total={p.get('total', 0)} eligible={p.get('eligible', 0)} A={p.get('a_tier', 0)} B={p.get('b_tier', 0)} blocked={p.get('blocked', 0)}",
+        ]
+        top = p.get("top_eligibles") or []
+        if top:
+            lines.append("*Top eligibles:*")
+            for e in top[:3]:
+                sym = e.get("symbol", "?")
+                strat = e.get("strategy", "CSP")
+                score = e.get("score")
+                band = e.get("band", "?")
+                lines.append(f"  • {sym} {strat} score={score} band={band}")
+        alerts_sent = p.get("alerts_sent")
+        if alerts_sent:
+            lines.append(f"*Alerts this run:* signals={alerts_sent.get('signals', 0)} data_health={alerts_sent.get('data_health', 0)} critical={alerts_sent.get('critical', 0)}")
+        dur = p.get("duration_ms")
+        if dur is not None:
+            lines.append(f"Duration: {dur:.0f}ms | last_run_ok: {p.get('last_run_ok', '?')}")
+        return "\n".join(lines)

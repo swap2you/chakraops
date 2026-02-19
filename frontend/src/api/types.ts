@@ -278,6 +278,35 @@ export interface UiSystemHealthScheduler {
   last_run_at?: string | null;
   next_run_at?: string | null;
   last_result?: string | null;
+  /** Phase 21.5: Why last run was skipped (market_closed, evaluation_running, no_symbols, etc.) */
+  last_skip_reason?: string | null;
+  /** R21.5.1: Scheduler heartbeat */
+  last_duration_ms?: number | null;
+  last_run_ok?: boolean | null;
+  last_run_error?: string | null;
+  run_count_today?: number | null;
+}
+
+/** Per-channel Slack status (R21.5.1) */
+export interface UiSystemHealthSlackChannel {
+  last_send_at?: string | null;
+  last_send_ok?: boolean | null;
+  last_error?: string | null;
+  last_payload_type?: string | null;
+}
+
+/** Phase 21.5 / R21.5.1: Slack sender status (flat + channels map) */
+export interface UiSystemHealthSlack {
+  last_send_at?: string | null;
+  last_send_ok?: boolean | null;
+  last_error?: string | null;
+  last_channel?: string | null;
+  last_payload_type?: string | null;
+  /** R21.5.1: Per-channel status */
+  channels?: Record<string, UiSystemHealthSlackChannel> | null;
+  last_any_send_at?: string | null;
+  last_any_send_ok?: boolean | null;
+  last_any_send_error?: string | null;
 }
 
 /** PR2: EOD freeze snapshot scheduler status. Phase 11.3: last_error, next_scheduled_et. */
@@ -319,6 +348,8 @@ export interface UiSystemHealthResponse {
   orats: UiSystemHealthOrats;
   market: UiSystemHealthMarket;
   scheduler: UiSystemHealthScheduler;
+  /** Phase 21.5 */
+  slack?: UiSystemHealthSlack;
   eod_freeze?: UiSystemHealthEodFreeze;
   /** Phase 16.0 */
   mark_refresh?: UiSystemHealthMarkRefresh;
@@ -475,6 +506,19 @@ export interface SymbolDiagnosticsComputed {
   resistance_level?: number | null;
 }
 
+/** R21.4: Request-time computed values for Technical details panel (not persisted). */
+export interface SymbolDiagnosticsComputedValues {
+  rsi?: number | null;
+  rsi_range?: [number, number];
+  atr?: number | null;
+  atr_pct?: number | null;
+  support_level?: number | null;
+  resistance_level?: number | null;
+  regime?: string | null;
+  delta_band?: [number, number];
+  rejected_count?: number;
+}
+
 /** Exit plan structure (T1, T2, T3, stop hint). */
 export interface SymbolDiagnosticsExitPlan {
   t1?: number | null;
@@ -547,6 +591,8 @@ export interface SymbolDiagnosticsResponseExtended extends SymbolDiagnosticsResp
   explanation?: SymbolDiagnosticsExplanation | null;
   /** Eligibility trace computed: RSI, ATR, support/resistance levels. */
   computed?: SymbolDiagnosticsComputed;
+  /** R21.4: Request-time technicals + thresholds (rsi_range, delta_band, rejected_count). Not persisted. */
+  computed_values?: SymbolDiagnosticsComputedValues;
   /** Composite score (0-100). */
   composite_score?: number | null;
   /** Confidence band (A | B | C). */

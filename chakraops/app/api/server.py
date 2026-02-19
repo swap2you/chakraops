@@ -74,6 +74,12 @@ _scheduler_stop_event: Optional[threading.Event] = None
 _scheduler_thread: Optional[threading.Thread] = None
 _last_scheduled_eval_at: Optional[str] = None
 _last_scheduled_eval_result: Optional[str] = None  # OK | SKIPPED | FAILED
+_last_scheduled_skip_reason: Optional[str] = None  # Phase 21.5: why skipped (market_closed, evaluation_running, no_symbols, etc.)
+# R21.5.1: Scheduler heartbeat / observability
+_last_scheduled_duration_ms: Optional[float] = None
+_last_scheduled_run_error: Optional[str] = None
+_scheduler_run_count_today: int = 0
+_scheduler_run_count_date: Optional[str] = None  # YYYY-MM-DD UTC
 
 # ============================================================================
 # NIGHTLY SCHEDULER
@@ -548,49 +554,87 @@ def _run_scheduled_evaluation() -> bool:
     """
     Attempt to run a scheduled evaluation.
     Returns True if evaluation was triggered, False otherwise.
+    Phase 21.5: sets _last_scheduled_skip_reason when skipped.
+    R21.5.1: records duration_ms, last_run_ok, last_run_error, run_count_today; logs one line per tick.
     """
-    global _last_scheduled_eval_at, _last_scheduled_eval_result
+    import time as _time
+    global _last_scheduled_eval_at, _last_scheduled_eval_result, _last_scheduled_skip_reason
+    global _last_scheduled_duration_ms, _last_scheduled_run_error, _scheduler_run_count_today, _scheduler_run_count_date
 
+    t0 = _time.perf_counter()
     _last_scheduled_eval_result = "SKIPPED"
+    _last_scheduled_skip_reason = None
+    _last_scheduled_run_error = None
 
     # Check if market is open
     phase = get_market_phase()
     if phase != "OPEN":
-        logger.debug("[SCHEDULER] Market phase is %s, skipping evaluation", phase)
+        _last_scheduled_skip_reason = "market_closed"
+        _last_scheduled_duration_ms = round((_time.perf_counter() - t0) * 1000, 1)
+        logger.info("[SCHEDULER] tick skipped run_id=skipped skip_reason=%s duration_ms=%.0f", _last_scheduled_skip_reason, _last_scheduled_duration_ms)
         return False
-    
+
     # Try to trigger evaluation
     try:
         from app.api.data_health import UNIVERSE_SYMBOLS
         from app.core.eval.universe_evaluator import trigger_evaluation, get_evaluation_state
-        
+
         # Check if already running
         state = get_evaluation_state()
         if state.get("evaluation_state") == "RUNNING":
-            logger.debug("[SCHEDULER] Evaluation already running, skipping")
+            _last_scheduled_skip_reason = "evaluation_running"
+            _last_scheduled_duration_ms = round((_time.perf_counter() - t0) * 1000, 1)
+            logger.info("[SCHEDULER] tick skipped run_id=skipped skip_reason=%s duration_ms=%.0f", _last_scheduled_skip_reason, _last_scheduled_duration_ms)
             return False
-        
+
         if not UNIVERSE_SYMBOLS:
+            _last_scheduled_skip_reason = "no_symbols"
+            _last_scheduled_duration_ms = round((_time.perf_counter() - t0) * 1000, 1)
             logger.warning("[SCHEDULER] Universe is empty, skipping evaluation")
+            logger.info("[SCHEDULER] tick skipped run_id=skipped skip_reason=%s duration_ms=%.0f", _last_scheduled_skip_reason, _last_scheduled_duration_ms)
             return False
-        
+
         result = trigger_evaluation(list(UNIVERSE_SYMBOLS))
+        _last_scheduled_duration_ms = round((_time.perf_counter() - t0) * 1000, 1)
         if result.get("started"):
+            run_id = result.get("run_id") or "unknown"
             _last_scheduled_eval_at = datetime.now(timezone.utc).isoformat()
             _last_scheduled_eval_result = "OK"
-            logger.info("[SCHEDULER] Triggered scheduled evaluation at %s", _last_scheduled_eval_at)
-            print(f"[SCHEDULER] Triggered scheduled evaluation at {_last_scheduled_eval_at}")
+            _last_scheduled_skip_reason = None
+            # R21.5.1: run_count_today
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            if _scheduler_run_count_date != today:
+                _scheduler_run_count_date = today
+                _scheduler_run_count_today = 0
+            _scheduler_run_count_today += 1
+            # R21.5.2: register tick for eval summary throttle (EVAL_SUMMARY_EVERY_N_TICKS)
+            try:
+                from app.core.alerts.eval_summary import set_scheduler_tick_for_run
+                set_scheduler_tick_for_run(run_id, _scheduler_run_count_today)
+            except Exception:
+                pass
+            logger.info("[SCHEDULER] tick run_id=%s skip_reason=— duration_ms=%.0f", run_id, _last_scheduled_duration_ms)
+            print(f"[SCHEDULER] Triggered scheduled evaluation at {_last_scheduled_eval_at} run_id={run_id}")
             return True
         else:
-            logger.debug("[SCHEDULER] Evaluation not started: %s", result.get("reason"))
+            _last_scheduled_skip_reason = result.get("reason") or "unknown"
+            logger.info("[SCHEDULER] tick skipped run_id=skipped skip_reason=%s duration_ms=%.0f", _last_scheduled_skip_reason, _last_scheduled_duration_ms)
             return False
     except ImportError as e:
-        logger.warning("[SCHEDULER] Cannot import evaluation modules: %s", e)
+        _last_scheduled_skip_reason = "import_error"
+        _last_scheduled_run_error = str(e)
         _last_scheduled_eval_result = "FAILED"
+        _last_scheduled_duration_ms = round((_time.perf_counter() - t0) * 1000, 1)
+        logger.warning("[SCHEDULER] Cannot import evaluation modules: %s", e)
+        logger.info("[SCHEDULER] tick failed run_id=skipped skip_reason=%s duration_ms=%.0f", _last_scheduled_skip_reason, _last_scheduled_duration_ms)
         return False
     except Exception as e:
-        logger.exception("[SCHEDULER] Error triggering evaluation: %s", e)
+        _last_scheduled_skip_reason = "error"
+        _last_scheduled_run_error = str(e)
         _last_scheduled_eval_result = "FAILED"
+        _last_scheduled_duration_ms = round((_time.perf_counter() - t0) * 1000, 1)
+        logger.exception("[SCHEDULER] Error triggering evaluation: %s", e)
+        logger.info("[SCHEDULER] tick failed run_id=skipped skip_reason=%s duration_ms=%.0f", _last_scheduled_skip_reason, _last_scheduled_duration_ms)
         return False
     # EOD freeze (PR2): on every tick, if in window [15:58, 15:58+window] ET and market OPEN, run eval+archive
     if EOD_FREEZE_ENABLED and phase == "OPEN":
@@ -695,7 +739,7 @@ def run_scheduler_once() -> Dict[str, Any]:
 
 
 def get_scheduler_status() -> Dict[str, Any]:
-    """Get current scheduler status. last_run_at/next_run_at in UTC ISO."""
+    """Get current scheduler status. last_run_at/next_run_at in UTC ISO. R21.5.1: last_duration_ms, last_run_ok, last_run_error, run_count_today."""
     next_run_at = None
     if _last_scheduled_eval_at and UNIVERSE_EVAL_MINUTES:
         try:
@@ -704,6 +748,11 @@ def get_scheduler_status() -> Dict[str, Any]:
             next_run_at = (last_dt + timedelta(minutes=UNIVERSE_EVAL_MINUTES)).isoformat()
         except (ValueError, TypeError):
             pass
+    last_run_ok = None
+    if _last_scheduled_eval_result == "OK":
+        last_run_ok = True
+    elif _last_scheduled_eval_result == "FAILED":
+        last_run_ok = False
     return {
         "running": _scheduler_thread is not None and _scheduler_thread.is_alive(),
         "interval_minutes": UNIVERSE_EVAL_MINUTES,
@@ -711,6 +760,11 @@ def get_scheduler_status() -> Dict[str, Any]:
         "last_run_at": _last_scheduled_eval_at,
         "next_run_at": next_run_at,
         "last_result": _last_scheduled_eval_result,
+        "last_skip_reason": _last_scheduled_skip_reason,
+        "last_duration_ms": _last_scheduled_duration_ms,
+        "last_run_ok": last_run_ok,
+        "last_run_error": _last_scheduled_run_error,
+        "run_count_today": _scheduler_run_count_today,
         "market_open": is_market_open(),
     }
 

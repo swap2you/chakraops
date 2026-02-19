@@ -220,6 +220,7 @@ function ExecutionConsole({
 }) {
   const [infoDrawerKey, setInfoDrawerKey] = useState<string | null>(null);
   const comp = data.computed;
+  const cv = data.computed_values;
   const ep = data.exit_plan;
   const candidates = data.candidates ?? [];
   const liq = data.liquidity;
@@ -506,28 +507,47 @@ function ExecutionConsole({
           )}
         </Card>
 
-        <Card>
-          <CardHeader title="Technical" />
-          <div className="grid grid-cols-3 gap-x-6 gap-y-2 text-sm">
-            <LabelKv label="RSI" value={fmt(comp?.rsi)} onLabelClick={() => setInfoDrawerKey("RSI")} />
-            <LabelKv label="ATR" value={fmt(comp?.atr)} onLabelClick={() => setInfoDrawerKey("ATR")} />
-            <Kv label="ATR%" value={comp?.atr_pct != null ? fmtPct(comp.atr_pct) : "—"} />
-            <LabelKv label="support" value={fmt(comp?.support_level)} onLabelClick={() => setInfoDrawerKey("support")} />
-            <LabelKv label="resistance" value={fmt(comp?.resistance_level)} onLabelClick={() => setInfoDrawerKey("resistance")} />
+        <div data-testid="technical-details-panel">
+          <Card>
+            <CardHeader title="Technical details" />
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
+            <LabelKv label="RSI" value={fmt(cv?.rsi ?? comp?.rsi)} onLabelClick={() => setInfoDrawerKey("RSI")} />
+            <Kv
+              label="RSI range"
+              value={
+                cv?.rsi_range?.length === 2
+                  ? `${cv.rsi_range[0]} – ${cv.rsi_range[1]}`
+                  : "—"
+              }
+            />
+            <LabelKv label="ATR" value={fmt(cv?.atr ?? comp?.atr)} onLabelClick={() => setInfoDrawerKey("ATR")} />
+            <Kv label="ATR%" value={(cv?.atr_pct ?? comp?.atr_pct) != null ? fmtPct(cv?.atr_pct ?? comp?.atr_pct) : "—"} />
+            <LabelKv label="Support" value={fmt(cv?.support_level ?? comp?.support_level)} onLabelClick={() => setInfoDrawerKey("support")} />
+            <LabelKv label="Resistance" value={fmt(cv?.resistance_level ?? comp?.resistance_level)} onLabelClick={() => setInfoDrawerKey("resistance")} />
             <div>
               <button
                 type="button"
                 onClick={() => setInfoDrawerKey("regime")}
                 className="text-left hover:opacity-80"
               >
-                <span className="block text-zinc-500 dark:text-zinc-500">regime</span>
-                <span className={`inline-flex rounded border px-2 py-0.5 text-sm font-medium ${regimeColor(data.regime)}`}>
-                  {data.regime ?? "—"}
+                <span className="block text-zinc-500 dark:text-zinc-500">Regime</span>
+                <span className={`inline-flex rounded border px-2 py-0.5 text-sm font-medium ${regimeColor(cv?.regime ?? data.regime)}`}>
+                  {cv?.regime ?? data.regime ?? "—"}
                 </span>
               </button>
             </div>
+            <Kv
+              label="Delta band"
+              value={
+                cv?.delta_band?.length === 2
+                  ? `${cv.delta_band[0]} – ${cv.delta_band[1]}`
+                  : "—"
+              }
+            />
+            <Kv label="Rejected count" value={cv?.rejected_count != null ? String(cv.rejected_count) : "—"} />
           </div>
-        </Card>
+          </Card>
+        </div>
 
       </div>
 

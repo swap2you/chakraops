@@ -7,7 +7,29 @@ const mockHealth = {
   decision_store: { status: "OK" },
   orats: { status: "OK", last_success_at: "2026-01-01T12:00:00Z" },
   market: { phase: "OPEN", is_open: true },
-  scheduler: { interval_minutes: 15, last_run_at: null, next_run_at: null },
+  scheduler: {
+    interval_minutes: 15,
+    last_run_at: null,
+    next_run_at: null,
+    last_skip_reason: "market_closed",
+    last_duration_ms: 12.5,
+    last_run_ok: null,
+    last_run_error: null,
+    run_count_today: 0,
+  },
+  slack: {
+    last_send_at: null,
+    last_send_ok: null,
+    last_error: null,
+    last_channel: null,
+    last_payload_type: null,
+    channels: {
+      signals: { last_send_at: null, last_send_ok: null, last_error: null, last_payload_type: null },
+      daily: { last_send_at: null, last_send_ok: null, last_error: null, last_payload_type: null },
+      data_health: { last_send_at: null, last_send_ok: null, last_error: null, last_payload_type: null },
+      critical: { last_send_at: null, last_send_ok: null, last_error: null, last_payload_type: null },
+    },
+  },
   eod_freeze: { enabled: true, scheduled_time_et: "15:58", last_run_at_utc: null, last_snapshot_dir: null },
   mark_refresh: { last_run_at_utc: null, last_result: null, updated_count: null, skipped_count: null, error_count: null, errors_sample: [] },
 };
@@ -54,6 +76,8 @@ vi.mock("@/api/queries", () => ({
   }),
   useStoresIntegrity: () => ({ data: mockIntegrityData }),
   useRepairStore: () => ({ mutate: vi.fn(), isPending: false }),
+  useAdminSlackTest: () => ({ mutate: vi.fn(), isPending: false, data: null }),
+  useAdminEvaluationForce: () => ({ mutate: vi.fn(), isPending: false, data: null }),
 }));
 
 describe("SystemDiagnosticsPage", () => {
@@ -90,6 +114,25 @@ describe("SystemDiagnosticsPage", () => {
   it("shows Run Scheduler now button in Scheduler card", () => {
     render(<SystemDiagnosticsPage />);
     expect(screen.getByRole("button", { name: /Run Scheduler now/i })).toBeInTheDocument();
+  });
+
+  it("shows last_skip_reason in Scheduler card (Phase 21.5)", () => {
+    render(<SystemDiagnosticsPage />);
+    expect(screen.getByText(/market_closed/i)).toBeInTheDocument();
+  });
+
+  it("shows Slack card and 4 channel test buttons (R21.5.1)", () => {
+    render(<SystemDiagnosticsPage />);
+    expect(screen.getByText(/^Slack$/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Test signals/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Test daily/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Test data health/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Test critical/i })).toBeInTheDocument();
+  });
+
+  it("shows Force evaluation now button (Phase 21.5)", () => {
+    render(<SystemDiagnosticsPage />);
+    expect(screen.getByRole("button", { name: /Force evaluation now/i })).toBeInTheDocument();
   });
 
   it("shows Select All and Clear buttons in Sanity Checks", () => {

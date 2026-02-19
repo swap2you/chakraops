@@ -170,3 +170,53 @@ describe("SymbolDiagnosticsPage Gate Summary", () => {
     expect(screen.queryByText(/delta=5/)).not.toBeInTheDocument();
   });
 });
+
+describe("SymbolDiagnosticsPage R21.4 Technical details panel", () => {
+  const mockWithComputedValues = {
+    ...mockDiagnosticsWithCap,
+    computed_values: {
+      rsi: 54.1,
+      rsi_range: [40, 60] as [number, number],
+      atr: 2.5,
+      atr_pct: 0.02,
+      support_level: 100,
+      resistance_level: 110,
+      regime: "UP",
+      delta_band: [0.25, 0.35] as [number, number],
+      rejected_count: 3,
+    },
+  };
+
+  beforeEach(() => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: mockWithComputedValues,
+      isLoading: false,
+      isError: false,
+    });
+    window.history.pushState({}, "", "/symbol-diagnostics?symbol=NVDA");
+  });
+
+  it("renders Technical details panel with expected fields and safe labels", () => {
+    render(<SymbolDiagnosticsPage />);
+    const panel = screen.getByTestId("technical-details-panel");
+    expect(panel).toBeInTheDocument();
+    expect(panel).toHaveTextContent("Technical details");
+    // Safe labels (no FAIL_* codes)
+    expect(panel).toHaveTextContent("RSI");
+    expect(panel).toHaveTextContent("RSI range");
+    expect(panel).toHaveTextContent("Delta band");
+    expect(panel).toHaveTextContent("Rejected count");
+    expect(panel).toHaveTextContent("54.1");
+    expect(panel).toHaveTextContent("40 – 60");
+    expect(panel).toHaveTextContent("0.25 – 0.35");
+    expect(panel).toHaveTextContent("3");
+    expect(panel).toHaveTextContent("UP");
+  });
+
+  it("does not show raw FAIL_* codes in the technical details panel", () => {
+    render(<SymbolDiagnosticsPage />);
+    const panel = screen.getByTestId("technical-details-panel");
+    expect(panel).toBeInTheDocument();
+    expect(panel).not.toHaveTextContent("FAIL_");
+  });
+});

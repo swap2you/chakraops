@@ -108,6 +108,46 @@ def append_notification(
     logger.info("[NOTIFICATIONS] Appended %s %s: %s", ntype, severity, message[:80])
 
 
+def _append_state_event(ref_id: str, state: str, extra: Optional[Dict[str, Any]] = None) -> None:
+    """Append a state event (append-only). state: ACKED | ARCHIVED | DELETED."""
+    now = datetime.now(timezone.utc).isoformat()
+    record: Dict[str, Any] = {"event": "state", "ref_id": ref_id, "state": state, "updated_at": now, **(extra or {})}
+    path = _notifications_path()
+    line = json.dumps(record, default=str)
+    with _LOCK:
+        from app.core.io.locks import with_file_lock
+        with with_file_lock(path, timeout_ms=2000):
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+            _prune_if_needed(path)
+    logger.info("[NOTIFICATIONS] State %s for %s", state, ref_id[:20])
+
+
+def append_archive(ref_id: str) -> None:
+    """Phase 21.5: Archive a notification (append state event)."""
+    _append_state_event(ref_id, "ARCHIVED")
+
+
+def append_delete(ref_id: str) -> None:
+    """Phase 21.5: Delete (soft) a notification (append state event). Excluded from list."""
+    _append_state_event(ref_id, "DELETED")
+
+
+def archive_all(limit: int = 5000) -> int:
+    """
+    Phase 21.5: Append ARCHIVED state event for every notification that is NEW or ACKED.
+    Returns count of notifications archived. Optional limit caps how many we consider.
+    """
+    all_recs = load_notifications(limit=limit, state_filter=None)
+    count = 0
+    for rec in all_recs:
+        st = rec.get("state", "NEW")
+        if st in ("NEW", "ACKED"):
+            append_archive(rec["id"])
+            count += 1
+    return count
+
+
 def append_ack(ref_id: str, ack_by: str = "ui") -> None:
     """
     Append an ack event (append-only). Merged into notifications by load_notifications.
@@ -139,10 +179,15 @@ def append_orats_warn(message: str, details: Optional[Dict[str, Any]] = None) ->
     append_notification("WARN", "ORATS_WARN", message, symbol=None, details=details, subtype="ORATS_STALE")
 
 
-def load_notifications(limit: int = 100) -> List[Dict[str, Any]]:
+def load_notifications(
+    limit: int = 100,
+    state_filter: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     """
     Load last N notifications (newest first).
     Phase 10.3: Parses ack events, merges ack_at_utc/ack_by into notifications.
+    Phase 21.5: Parses state events (archive/delete), sets state and updated_at; filters by state_filter.
+    state_filter: NEW | ACKED | ARCHIVED | None (None = return all except DELETED).
     Records without id get a derived stable id for backwards compat.
     """
     path = _notifications_path()
@@ -155,33 +200,40 @@ def load_notifications(limit: int = 100) -> List[Dict[str, Any]]:
             if s:
                 lines.append(s)
 
-    # Collect notifications and ack events
+    # Collect notifications, ack events, and state events (latest per ref_id)
     notifications: List[Dict[str, Any]] = []
     acks: Dict[str, tuple[str, str]] = {}  # ref_id -> (ack_at_utc, ack_by)
+    state_events: Dict[str, tuple[str, str]] = {}  # ref_id -> (state, updated_at)
 
     for s in lines:
         try:
             obj = json.loads(s)
         except json.JSONDecodeError:
             continue
-        if obj.get("event") == "ack":
+        ev = obj.get("event")
+        if ev == "ack":
             ref_id = obj.get("ref_id")
             ack_at = obj.get("ack_at_utc")
             ack_by_val = obj.get("ack_by", "ui")
             if ref_id and ack_at:
                 acks[ref_id] = (ack_at, ack_by_val)
+        elif ev == "state":
+            ref_id = obj.get("ref_id")
+            st = obj.get("state")
+            updated = obj.get("updated_at")
+            if ref_id and st and updated:
+                state_events[ref_id] = (st, updated)
         else:
             notifications.append(obj)
 
-    # Ensure ids, merge acks, newest first
+    # Ensure ids, merge acks and state, newest first; exclude DELETED unless state_filter
     seen_ids: Set[str] = set()
     out: List[Dict[str, Any]] = []
-    for rec in reversed(notifications[-limit:]):
+    for rec in reversed(notifications[-limit * 3:]):  # read extra to allow filtering
         nid = rec.get("id")
         if not nid:
             nid = _stable_id_for_record(rec)
             rec["id"] = nid
-        # Dedupe by id (same logical notification may appear if file has duplicates)
         if nid in seen_ids:
             continue
         seen_ids.add(nid)
@@ -189,5 +241,24 @@ def load_notifications(limit: int = 100) -> List[Dict[str, Any]]:
         if ack_data:
             rec["ack_at_utc"] = ack_data[0]
             rec["ack_by"] = ack_data[1]
+        # Phase 21.5: state and updated_at from state events (DELETED > ARCHIVED > ACKED > NEW)
+        state = "NEW"
+        updated_at = rec.get("timestamp_utc")
+        if nid in state_events:
+            st, uat = state_events[nid]
+            state = st
+            updated_at = uat
+        elif ack_data:
+            state = "ACKED"
+            updated_at = ack_data[0]
+        rec["state"] = state
+        rec["updated_at"] = updated_at
+        if state == "DELETED":
+            if state_filter != "DELETED":
+                continue
+        elif state_filter and state != state_filter:
+            continue
         out.append(rec)
+        if len(out) >= limit:
+            break
     return out

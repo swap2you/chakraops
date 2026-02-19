@@ -437,6 +437,8 @@ def process_run_completed(run: Any) -> None:
     lifecycle_types = {"POSITION_ENTRY", "POSITION_SCALE_OUT", "POSITION_EXIT", "POSITION_ABORT", "POSITION_HOLD"}
     portfolio_types = {"PORTFOLIO_RISK_WARN", "PORTFOLIO_RISK_BLOCK"}
 
+    sent_by_channel: Dict[str, int] = {}
+
     for alert in candidates:
         if alert.alert_type.value not in enabled:
             _append_alert_record({
@@ -475,6 +477,9 @@ def process_run_completed(run: Any) -> None:
             logger.debug("[ALERTS] Suppressed (cooldown) fingerprint=%s", alert.fingerprint[:8])
             continue
         sent = notifier.send(alert)
+        if sent:
+            ch = notifier._channel_for_alert(alert)
+            sent_by_channel[ch] = sent_by_channel.get(ch, 0) + 1
         (recent_lifecycle_fps if alert.alert_type.value in lifecycle_types
          else recent_portfolio_fps if alert.alert_type.value in portfolio_types
          else recent_fps).add(alert.fingerprint)
@@ -492,6 +497,25 @@ def process_run_completed(run: Any) -> None:
             "sent_at": datetime.now(timezone.utc).isoformat() if sent else None,
             "suppressed_reason": None if sent else "slack_not_configured",
         })
+
+    # R21.5.2: One EVAL_SUMMARY to daily channel after every completed run (throttle for scheduler)
+    try:
+        from app.core.alerts.eval_summary import (
+            build_eval_summary_payload,
+            should_send_eval_summary_this_run,
+        )
+        if should_send_eval_summary_this_run(getattr(run, "run_id", "") or ""):
+            duration_sec = getattr(run, "duration_seconds", None)
+            duration_ms = (duration_sec * 1000) if duration_sec is not None else None
+            payload = build_eval_summary_payload(
+                run,
+                sent_by_channel=sent_by_channel or None,
+                duration_ms=duration_ms,
+                last_run_ok=(getattr(run, "status", None) == "COMPLETED"),
+            )
+            notifier.send_eval_summary("daily", payload)
+    except Exception as e:
+        logger.warning("[ALERTS] Eval summary send failed (non-fatal): %s", e)
 
 
 def list_recent_alert_records(limit: int = 100) -> List[Dict[str, Any]]:

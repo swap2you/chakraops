@@ -1,6 +1,17 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useUiSystemHealth, useDiagnosticsHistory, useRunDiagnostics, useRunEval, useLatestSnapshot, useRunFreezeSnapshot, useStoresIntegrity, useRepairStore } from "@/api/queries";
+import {
+  useUiSystemHealth,
+  useDiagnosticsHistory,
+  useRunDiagnostics,
+  useRunEval,
+  useLatestSnapshot,
+  useRunFreezeSnapshot,
+  useStoresIntegrity,
+  useRepairStore,
+  useAdminSlackTest,
+  useAdminEvaluationForce,
+} from "@/api/queries";
 import { formatTimestampEt, formatTimestampEtFull } from "@/utils/formatTimestamp";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardHeader, StatusBadge, Button, Tooltip } from "@/components/ui";
@@ -16,6 +27,8 @@ export function SystemDiagnosticsPage() {
   const runFreeze = useRunFreezeSnapshot();
   const { data: integrityData } = useStoresIntegrity();
   const repairStore = useRepairStore();
+  const adminSlackTest = useAdminSlackTest();
+  const adminForceEval = useAdminEvaluationForce();
   const [selectedChecks, setSelectedChecks] = useState<Set<string>>(new Set(DIAGNOSTIC_CHECKS));
   const [latestResult, setLatestResult] = useState<typeof runDiagnostics.data | null>(null);
 
@@ -59,6 +72,7 @@ export function SystemDiagnosticsPage() {
   const orats = data?.orats;
   const market = data?.market;
   const scheduler = data?.scheduler;
+  const slack = data?.slack;
   const eodFreeze = data?.eod_freeze;
   const markRefresh = data?.mark_refresh;
   const marketClosed = market?.phase ? market.phase !== "OPEN" && market.phase !== "UNKNOWN" : false;
@@ -216,6 +230,38 @@ export function SystemDiagnosticsPage() {
                 <StatusBadge status={scheduler?.last_result ?? "—"} />
               </p>
             </div>
+            {scheduler?.last_skip_reason && (
+              <div className="col-span-2">
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">last_skip_reason</span>
+                <p className="mt-1 text-zinc-600 dark:text-zinc-400">{scheduler.last_skip_reason}</p>
+              </div>
+            )}
+            {scheduler?.last_duration_ms != null && (
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">last_duration_ms</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{scheduler.last_duration_ms}</p>
+              </div>
+            )}
+            {scheduler?.last_run_ok != null && (
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">last_run_ok</span>
+                <p className="mt-1">
+                  <StatusBadge status={scheduler.last_run_ok ? "OK" : "FAIL"} />
+                </p>
+              </div>
+            )}
+            {scheduler?.run_count_today != null && (
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">run_count_today</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{scheduler.run_count_today}</p>
+              </div>
+            )}
+            {scheduler?.last_run_error && (
+              <div className="col-span-2">
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">last_run_error</span>
+                <p className="mt-1 text-red-600 dark:text-red-400">{scheduler.last_run_error}</p>
+              </div>
+            )}
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">nightly_next_at</span>
               <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{scheduler?.nightly_next_at ?? "—"}</p>
@@ -225,8 +271,8 @@ export function SystemDiagnosticsPage() {
               <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{scheduler?.eod_next_at ?? "—"}</p>
             </div>
           </div>
-          <div className="mt-4">
-            <Tooltip content={marketClosed ? "Market closed. Scheduler skips evaluation. Use force=true to override." : undefined}>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <Tooltip content={marketClosed ? "Market closed. Scheduler skips evaluation. Use Force evaluation to run anyway." : undefined}>
               <span className="inline-block">
                 <Button
                   variant="primary"
@@ -238,10 +284,85 @@ export function SystemDiagnosticsPage() {
                 </Button>
               </span>
             </Tooltip>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => adminForceEval.mutate()}
+              disabled={adminForceEval.isPending}
+            >
+              {adminForceEval.isPending ? "Running…" : "Force evaluation now"}
+            </Button>
             <Link to="/" className="ml-2 text-sm text-zinc-600 hover:underline dark:text-zinc-400">
               Dashboard
             </Link>
           </div>
+          {adminForceEval.data && (
+            <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+              Forced: {adminForceEval.data.started ? "started" : "not started"} — {adminForceEval.data.reason ?? ""}
+            </p>
+          )}
+        </Card>
+        {/* Phase 21.5 / R21.5.1: Slack per-channel status + 4 test buttons */}
+        <Card>
+          <CardHeader title="Slack" />
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">last_any_send_at (ET)</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{formatTimestampEt(slack?.last_any_send_at ?? slack?.last_send_at)}</p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">last_any_send_ok</span>
+              <p className="mt-1">
+                <StatusBadge status={slack?.last_any_send_ok === true ? "OK" : slack?.last_any_send_ok === false ? "FAIL" : "—"} />
+              </p>
+            </div>
+            {slack?.last_any_send_error && (
+              <div className="col-span-2">
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">last_any_send_error</span>
+                <p className="mt-1 text-red-600 dark:text-red-400">{slack.last_any_send_error}</p>
+              </div>
+            )}
+          </div>
+          {/* R21.5.1: Per-channel status */}
+          {slack?.channels && Object.keys(slack.channels).length > 0 && (
+            <div className="mt-4 space-y-2">
+              <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-500">Per channel</span>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {["signals", "daily", "data_health", "critical"].map((ch) => {
+                  const c = slack.channels?.[ch];
+                  if (!c) return null;
+                  return (
+                    <div key={ch} className="rounded border border-zinc-200 p-2 dark:border-zinc-700">
+                      <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{ch}</p>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">last_send: {formatTimestampEt(c.last_send_at) ?? "—"}</p>
+                      <p className="text-xs">
+                        <StatusBadge status={c.last_send_ok === true ? "OK" : c.last_send_ok === false ? "FAIL" : "—"} />
+                      </p>
+                      {c.last_error && <p className="mt-1 truncate text-xs text-red-600 dark:text-red-400" title={c.last_error}>{c.last_error}</p>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <div className="mt-4 flex flex-wrap gap-2">
+            {(["signals", "daily", "data_health", "critical"] as const).map((ch) => (
+              <Button
+                key={ch}
+                variant="secondary"
+                size="sm"
+                onClick={() => adminSlackTest.mutate(ch)}
+                disabled={adminSlackTest.isPending}
+              >
+                {adminSlackTest.isPending ? "Sending…" : `Test ${ch.replace("_", " ")}`}
+              </Button>
+            ))}
+          </div>
+          {adminSlackTest.data && (
+            <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+              {adminSlackTest.data.ok ? `Test sent to ${adminSlackTest.data.channel ?? "channel"}.` : adminSlackTest.data.message ?? "—"}
+            </p>
+          )}
         </Card>
         <Card>
           <CardHeader

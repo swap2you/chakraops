@@ -50,6 +50,24 @@ def get_test_webhook_url() -> Optional[str]:
         url = (os.getenv(key) or "").strip()
         if url:
             return url
+    return (os.getenv("SLACK_WEBHOOK_URL") or "").strip() or None
+
+
+# R21.5.1: Channel names for 4 webhooks (signals, daily, data_health, critical)
+def get_webhook_for_channel(channel: str) -> Optional[str]:
+    """
+    Return webhook URL for channel: signals | daily | data_health | critical.
+    Backwards compat: SLACK_WEBHOOK_URL is treated as signals default when channel=signals.
+    """
+    c = (channel or "").strip().lower()
+    if c == "signals":
+        return (os.getenv(ENV_WEBHOOK_SIGNALS) or "").strip() or (os.getenv("SLACK_WEBHOOK_URL") or "").strip() or None
+    if c == "daily":
+        return (os.getenv(ENV_WEBHOOK_DAILY) or "").strip() or None
+    if c == "data_health":
+        return (os.getenv(ENV_WEBHOOK_HEALTH) or "").strip() or None
+    if c == "critical":
+        return (os.getenv(ENV_WEBHOOK_CRITICAL) or "").strip() or None
     return None
 
 

@@ -27,12 +27,12 @@ Use this checklist for each R21.x sub-phase. Update after each release.
 
 ---
 
-## R21.5 — Notifications / Slack / Scheduler observability
+## R21.5 — Notifications / Slack / Scheduler observability ✅
 
-- [ ] Notification states (NEW/ACKED/ARCHIVED) + endpoints
-- [ ] Slack last send status + test message admin endpoint
-- [ ] Scheduler last run / skip reason in System Status
-- [ ] Tests + release notes + verification
+- [x] Notification states (NEW/ACKED/ARCHIVED) + endpoints
+- [x] Slack last send status + test message admin endpoint
+- [x] Scheduler last run / skip reason in System Status
+- [x] Tests + release notes + verification
 
 ---
 
@@ -43,11 +43,11 @@ Use this checklist for each R21.x sub-phase. Update after each release.
 
 ---
 
-## R21.4 — Symbol technical details panel
+## R21.4 — Symbol technical details panel ✅
 
-- [ ] computed_values in diagnostics API (not persisted)
-- [ ] Frontend technical details drawer/panel
-- [ ] Tests + release notes + verification
+- [x] computed_values in diagnostics API (not persisted)
+- [x] Frontend technical details panel (Symbol Diagnostics page)
+- [x] Tests + release notes + verification
 
 ---
 

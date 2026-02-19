@@ -213,13 +213,36 @@ function uiWheelRepairPath(): string {
   return `/api/ui/wheel/repair`;
 }
 
-function uiNotificationsPath(limit?: number): string {
+function uiNotificationsPath(limit?: number, state?: string | null): string {
   const base = `/api/ui/notifications`;
-  return limit != null ? `${base}?limit=${limit}` : base;
+  const params = new URLSearchParams();
+  if (limit != null) params.set("limit", String(limit));
+  if (state && state.trim()) params.set("state", state.trim());
+  const q = params.toString();
+  return q ? `${base}?${q}` : base;
 }
 
 function uiNotificationAckPath(notificationId: string): string {
   return `/api/ui/notifications/${encodeURIComponent(notificationId)}/ack`;
+}
+function uiNotificationArchivePath(notificationId: string): string {
+  return `/api/ui/notifications/${encodeURIComponent(notificationId)}/archive`;
+}
+function uiNotificationDeletePath(notificationId: string): string {
+  return `/api/ui/notifications/${encodeURIComponent(notificationId)}`;
+}
+function uiNotificationsArchiveAllPath(): string {
+  return `/api/ui/notifications/archive_all`;
+}
+function uiAdminSlackTestPath(channel?: string): string {
+  const base = `/api/ui/admin/slack/test`;
+  if (channel && channel.trim()) {
+    return `${base}?channel=${encodeURIComponent(channel.trim())}`;
+  }
+  return base;
+}
+function uiAdminEvaluationForcePath(): string {
+  return `/api/ui/admin/evaluation/force`;
 }
 
 // =============================================================================
@@ -254,7 +277,8 @@ export const queryKeys = {
   uiAlerts: () => ["ui", "alerts"] as const,
   uiDiagnosticsHistory: (limit?: number) => ["ui", "diagnostics", "history", limit ?? 10] as const,
   uiStoresIntegrity: () => ["ui", "stores", "integrity"] as const,
-  uiNotifications: (limit?: number) => ["ui", "notifications", limit ?? 100] as const,
+  uiNotifications: (limit?: number, state?: string | null) =>
+    (["ui", "notifications", limit ?? 100, state ?? ""] as const),
   uiWheelOverview: (accountId?: string | null) => ["ui", "wheel", "overview", accountId ?? ""] as const,
   uiMarketStatus: () => ["ui", "marketStatus"] as const,
   uiSnapshotsLatest: () => ["ui", "snapshots", "latest"] as const,
@@ -1082,21 +1106,24 @@ export interface UiNotification {
   /** Phase 10.3: Acknowledgment fields */
   ack_at_utc?: string | null;
   ack_by?: string | null;
+  /** Phase 21.5: Lifecycle state */
+  state?: "NEW" | "ACKED" | "ARCHIVED" | "DELETED";
+  updated_at?: string | null;
 }
 
 export interface UiNotificationsResponse {
   notifications: UiNotification[];
 }
 
-export function useNotifications(limit = 100) {
+export function useNotifications(limit = 100, state?: string | null) {
   return useQuery({
-    queryKey: queryKeys.uiNotifications(limit),
-    queryFn: () => apiGet<UiNotificationsResponse>(uiNotificationsPath(limit)),
+    queryKey: queryKeys.uiNotifications(limit, state),
+    queryFn: () => apiGet<UiNotificationsResponse>(uiNotificationsPath(limit, state)),
   });
 }
 
 /** Phase 10.3: Ack a notification. Invalidates notifications query. */
-export function useAckNotification(limit = 100) {
+export function useAckNotification(_limit = 100) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (notificationId: string) =>
@@ -1105,7 +1132,89 @@ export function useAckNotification(limit = 100) {
         {}
       ),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.uiNotifications(limit) });
+      qc.invalidateQueries({ queryKey: ["ui", "notifications"] });
+    },
+  });
+}
+
+/** Phase 21.5: Archive a notification. */
+export function useArchiveNotification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (notificationId: string) =>
+      apiPost<{ status: string; updated_at?: string }>(
+        uiNotificationArchivePath(notificationId),
+        {}
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "notifications"] });
+    },
+  });
+}
+
+/** Phase 21.5: Delete (soft) a notification. */
+export function useDeleteNotification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (notificationId: string) =>
+      apiDelete<{ status: string; updated_at?: string }>(
+        uiNotificationDeletePath(notificationId)
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "notifications"] });
+    },
+  });
+}
+
+/** Phase 21.5: Archive all NEW/ACKED notifications. */
+export function useArchiveAllNotifications() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiPost<{ status: string; archived_count: number }>(
+        uiNotificationsArchiveAllPath(),
+        {}
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "notifications"] });
+    },
+  });
+}
+
+/** Phase 21.5: Send test Slack message (admin). */
+/** R21.5.1: Send test Slack to a channel (signals | daily | data_health | critical). */
+export function useAdminSlackTest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (channel: string) =>
+      apiPost<{
+        status: string;
+        channel?: string;
+        message?: string;
+        ok?: boolean;
+        updated_status?: Record<string, unknown>;
+      }>(uiAdminSlackTestPath(channel), {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiSystemHealth() });
+    },
+  });
+}
+
+/** Phase 21.5: Force evaluation now (admin). */
+export function useAdminEvaluationForce() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiPost<{
+        status: string;
+        started?: boolean;
+        run_id?: string;
+        reason?: string;
+        forced?: boolean;
+      }>(uiAdminEvaluationForcePath(), {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiSystemHealth() });
+      qc.invalidateQueries({ queryKey: ["ui", "decision"] });
     },
   });
 }

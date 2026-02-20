@@ -28,6 +28,7 @@ vi.mock("@/api/queries", () => ({
   useUiTrackedPositions: () => ({ data: mockPositions }),
   useDefaultAccount: () => ({ data: { account: { account_id: "acct_1" } } }),
   usePortfolioMtm: (...args: unknown[]) => mockUsePortfolioMtm(...args),
+  useSharesCandidates: () => ({ data: null }),
   useRunEval: () => ({
     mutate: vi.fn(),
     mutateAsync: vi.fn(),

@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { formatTimestampEt } from "@/utils/formatTimestamp";
 import { Link } from "react-router-dom";
 import { ExternalLink, Activity, Droplets, Zap, Info, Settings } from "lucide-react";
-import { useArtifactList, useDecision, useUniverse, useUiSystemHealth, useUiTrackedPositions, usePortfolioMtm, useDefaultAccount, useRunEval } from "@/api/queries";
+import { useArtifactList, useDecision, useUniverse, useUiSystemHealth, useUiTrackedPositions, usePortfolioMtm, useDefaultAccount, useRunEval, useSharesCandidates } from "@/api/queries";
 import type { DecisionMode, SymbolEvalSummary, UniverseSymbol } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import {
@@ -94,6 +94,8 @@ export function DashboardPage() {
   const accountId = (defaultAccount?.account as { account_id?: string })?.account_id ?? null;
   const { data: mtmData } = usePortfolioMtm(accountId);
   const runEval = useRunEval();
+  const { data: sharesCandidatesData } = useSharesCandidates();
+  const sharesCandidates = sharesCandidatesData?.shares_candidates ?? [];
 
   const { universeSymbols, selectedSignals } = useMemo(() => {
     const artifact = decision?.artifact;
@@ -304,6 +306,29 @@ export function DashboardPage() {
               <Link to="/portfolio" className="mt-2 block text-sm text-emerald-600 hover:underline dark:text-emerald-400">
                 Manage positions →
               </Link>
+            )}
+          </Card>
+          {/* R22.5: Shares candidates (recommendation only; no orders) */}
+          <Card>
+            <CardHeader title="Shares candidates" description="BUY SHARES recommendation only; no order placement" />
+            {sharesCandidates.length === 0 ? (
+              <EmptyState title="No shares candidates" message="Symbols with support + regime UP may appear here." />
+            ) : (
+              <div className="space-y-1.5">
+                {sharesCandidates.slice(0, 10).map((plan) => (
+                  <Link
+                    key={plan.symbol}
+                    to={`/symbol-diagnostics?symbol=${encodeURIComponent(plan.symbol)}`}
+                    className="flex items-center justify-between text-xs block py-1"
+                  >
+                    <span className="font-mono text-zinc-700 hover:underline dark:text-zinc-300 dark:hover:text-zinc-100">{plan.symbol}</span>
+                    <span className="text-zinc-500 dark:text-zinc-500">Plan</span>
+                  </Link>
+                ))}
+                {sharesCandidates.length > 10 && (
+                  <p className="text-xs text-zinc-500 dark:text-zinc-500">+{sharesCandidates.length - 10} more</p>
+                )}
+              </div>
             )}
           </Card>
         </section>

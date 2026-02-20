@@ -116,9 +116,40 @@ describe("SystemDiagnosticsPage", () => {
     expect(screen.getByRole("button", { name: /Run Scheduler now/i })).toBeInTheDocument();
   });
 
-  it("shows last_skip_reason in Scheduler card (Phase 21.5)", () => {
+  it("shows last_skip_reason in Scheduler card (Phase 21.5); R22.2 uses friendly label", () => {
     render(<SystemDiagnosticsPage />);
-    expect(screen.getByText(/market_closed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Market closed/i)).toBeInTheDocument();
+  });
+
+  it("R22.2: shows friendly scheduler skip reason when market_closed (set-and-forget, not error)", () => {
+    render(<SystemDiagnosticsPage />);
+    expect(screen.getByText(/Market closed — scheduler skips until open/)).toBeInTheDocument();
+  });
+
+  it("R22.2: ORATS card shows Freshness and Threshold when present", () => {
+    mockUseUiSystemHealth.mockReturnValueOnce({
+      data: {
+        ...mockHealth,
+        orats: {
+          ...mockHealth.orats,
+          orats_freshness_state: "OK",
+          orats_freshness_state_label: "OK",
+          orats_as_of: "2026-01-01T12:00:00Z",
+          orats_threshold_triggered: "ok_minutes",
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<SystemDiagnosticsPage />);
+    expect(screen.getByText("ORATS")).toBeInTheDocument();
+    expect(screen.getByText("Threshold")).toBeInTheDocument();
+    expect(screen.getByText("Within OK window")).toBeInTheDocument();
+  });
+
+  it("R22.2: System Status has no raw FAIL_* reason codes in UI", () => {
+    render(<SystemDiagnosticsPage />);
+    expect(document.body.innerHTML).not.toMatch(/FAIL_[A-Z_0-9]+/);
   });
 
   it("shows Slack card and 4 channel test buttons (R21.5.1)", () => {

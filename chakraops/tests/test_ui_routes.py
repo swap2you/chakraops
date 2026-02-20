@@ -772,7 +772,8 @@ def test_ui_portfolio_risk_pass_when_within_limits(tmp_path):
     accounts_file.write_text(
         '[{"account_id":"acct_1","provider":"Manual","account_type":"Taxable","total_capital":100000,'
         '"max_capital_per_trade_pct":5,"max_total_exposure_pct":30,"allowed_strategies":["CSP"],'
-        '"is_default":true,"max_symbol_collateral":50000,"max_deployed_pct":0.5,"max_near_expiry_positions":3}]',
+        '"is_default":true,"max_symbol_collateral":50000,"max_deployed_pct":0.5,"max_near_expiry_positions":3,'
+        '"max_collateral_per_trade":50000,"max_total_collateral":100000}]',
         encoding="utf-8",
     )
 
@@ -790,9 +791,9 @@ def test_ui_portfolio_risk_pass_when_within_limits(tmp_path):
                     "strategy": "CSP",
                     "contracts": 1,
                     "strike": 300.0,
-                    "expiration": "2026-12-20",
+                    "expiration": "2026-04-01",  # within default wheel DTE 21–60
                     "credit_expected": 250.0,
-                    "contract_key": "300-2026-12-20-PUT",
+                    "contract_key": "300-2026-04-01-PUT",
                 },
             )
             assert post.status_code == 200
@@ -841,9 +842,9 @@ def test_ui_portfolio_risk_fail_when_breach(tmp_path):
                         "strategy": "CSP",
                         "contracts": 2,
                         "strike": 450.0,
-                        "expiration": "2026-12-20",
+                        "expiration": "2026-04-01",  # within default wheel DTE 21–60
                         "credit_expected": 250.0,
-                        "contract_key": "450-2026-12-20-PUT",
+                        "contract_key": "450-2026-04-01-PUT",
                     },
                 )
                 assert post.status_code == 200
@@ -874,7 +875,7 @@ def test_ui_portfolio_risk_diagnostics_emits_notification_on_fail(tmp_path):
     accounts_file.write_text(
         '[{"account_id":"acct_1","provider":"Manual","account_type":"Taxable","total_capital":50000,'
         '"max_capital_per_trade_pct":5,"max_total_exposure_pct":30,"allowed_strategies":["CSP"],'
-        '"is_default":true,"max_symbol_collateral":20000}]',
+        '"is_default":true,"max_symbol_collateral":50000,"max_deployed_pct":0.2}]',
         encoding="utf-8",
     )
 
@@ -900,9 +901,9 @@ def test_ui_portfolio_risk_diagnostics_emits_notification_on_fail(tmp_path):
                             "strategy": "CSP",
                             "contracts": 3,
                             "strike": 150.0,
-                            "expiration": "2026-12-20",
+                            "expiration": "2026-04-01",  # within default wheel DTE 21–60
                             "credit_expected": 100.0,
-                            "contract_key": "150-2026-12-20-PUT",
+                            "contract_key": "150-2026-04-01-PUT",
                         },
                     )
                     r = client.post("/api/ui/diagnostics/run", params={"checks": "portfolio_risk"})

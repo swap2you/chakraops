@@ -220,3 +220,42 @@ describe("SymbolDiagnosticsPage R21.4 Technical details panel", () => {
     expect(panel).not.toHaveTextContent("FAIL_");
   });
 });
+
+describe("SymbolDiagnosticsPage R22.4 MTF levels and hold-time", () => {
+  const mockWithMtf = {
+    ...mockDiagnosticsWithCap,
+    mtf_levels: {
+      monthly: { support: 100, resistance: 110, as_of: "2026-02-17T18:00:00Z", method: "pivot" },
+      weekly: { support: 100, resistance: 110, as_of: "2026-02-17T18:00:00Z", method: "pivot" },
+      daily: { support: 100, resistance: 110, as_of: "2026-02-17T18:00:00Z", method: "pivot" },
+      "4h": null,
+    },
+    methodology: { candles_source: "diagnostics", window: "20", clustering_tolerance_pct: 1.0, active_criteria: "nearest_to_spot" },
+    targets: { t1: 108, t2: 112, t3: 115 },
+    invalidation: 98,
+    hold_time_estimate: { sessions: 5, basis_key: "atr_sessions_to_target" },
+  };
+
+  beforeEach(() => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: mockWithMtf,
+      isLoading: false,
+      isError: false,
+    });
+    window.history.pushState({}, "", "/symbol-diagnostics?symbol=SPY");
+  });
+
+  it("renders Multi-timeframe levels section when mtf_levels present", async () => {
+    render(<SymbolDiagnosticsPage />);
+    const mtfHeading = await screen.findByText("Multi-timeframe levels");
+    expect(mtfHeading).toBeInTheDocument();
+    expect(screen.getByText("monthly")).toBeInTheDocument();
+    expect(screen.getByText("daily")).toBeInTheDocument();
+  });
+
+  it("does not show raw FAIL_* in MTF or hold-time user-facing text", async () => {
+    render(<SymbolDiagnosticsPage />);
+    await screen.findByText("Multi-timeframe levels");
+    expect(document.body.innerHTML).not.toMatch(/FAIL_[A-Z_0-9]+/);
+  });
+});

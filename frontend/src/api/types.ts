@@ -263,6 +263,12 @@ export interface UiSystemHealthOrats {
   last_success_at_utc?: string | null;
   age_minutes?: number | null;
   staleness_threshold_minutes?: number | null;
+  /** R22.2: OK / DELAYED / WARN / ERROR; DELAYED is not WARN */
+  orats_freshness_state?: "OK" | "DELAYED" | "WARN" | "ERROR" | string | null;
+  orats_freshness_state_label?: string | null;
+  /** R22.2: Effective data timestamp (ISO); which threshold triggered state */
+  orats_as_of?: string | null;
+  orats_threshold_triggered?: string | null;
 }
 
 export interface UiSystemHealthMarket {
@@ -629,4 +635,33 @@ export interface SymbolDiagnosticsResponseExtended extends SymbolDiagnosticsResp
   run_id?: string | null;
   /** Plain-English reasons with key numbers (top 3+ show more; raw codes in debug). */
   reasons_explained?: ReasonExplained[];
+  /** R22.4: Multi-timeframe levels (request-time only; not persisted). */
+  mtf_levels?: {
+    monthly?: { support?: number | null; resistance?: number | null; as_of?: string; method?: string } | null;
+    weekly?: { support?: number | null; resistance?: number | null; as_of?: string; method?: string } | null;
+    daily?: { support?: number | null; resistance?: number | null; as_of?: string; method?: string } | null;
+    "4h"?: { support?: number | null; resistance?: number | null; as_of?: string; method?: string } | null;
+  } | null;
+  /** R22.4: Methodology (candles_source, window, clustering_tolerance_pct, active_criteria). */
+  methodology?: { candles_source?: string; window?: string; clustering_tolerance_pct?: number; active_criteria?: string } | null;
+  /** R22.4: Targets t1/t2/t3. */
+  targets?: { t1?: number | null; t2?: number | null; t3?: number | null } | null;
+  /** R22.4: Invalidation level. */
+  invalidation?: number | null;
+  /** R22.4: Hold-time estimate (sessions + basis_key for display mapping). */
+  hold_time_estimate?: { sessions?: number; basis_key?: string } | null;
+  /** R22.5: Shares plan when symbol qualifies (recommendation only). */
+  shares_plan?: SharesPlan | null;
+}
+
+/** R22.5: Shares plan (recommendation only; no order placement). */
+export interface SharesPlan {
+  symbol: string;
+  entry_zone: { low: number; high: number };
+  stop: number;
+  targets: { t1?: number | null; t2?: number | null; t3?: number | null };
+  invalidation: number;
+  hold_time_estimate: { sessions?: number; basis_key?: string };
+  confidence_score?: number | null;
+  why_recommended?: string | null;
 }

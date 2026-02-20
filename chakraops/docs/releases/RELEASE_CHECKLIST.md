@@ -14,6 +14,29 @@ No release is marked DONE unless all of the following are satisfied:
 - [ ] **Manual UAT** executed and recorded under `out/verification/<Release>/`
 - [ ] **Release notes** written (see `docs/releases/RELEASE_NOTES_TEMPLATE.md`) and verification artifacts present
 
+**How to run the gate locally:**
+
+1. Backend: `cd chakraops && python -m pytest -v --tb=short` (or scope to release tests).
+2. Frontend tests: `cd frontend && npm run test -- --run`.
+3. Frontend build (Preflight Build Gate): `cd frontend && npm run build`.
+
+**Doc structure (standardized):**
+
+- Release notes: `docs/releases/<Release>_release_notes.md` (e.g. `R22.1_release_notes.md`). One flat convention; no subfolders per release.
+- Verification: `out/verification/<Release>/` with `notes.md`, optional `api_samples/`, optional `E2E_VALIDATION_REPORT.md`.
+
+**out/ allowed contents (canonical list):**
+
+- `decision_latest.json`, `slack_status.json`, `universe_overrides.json`
+- `verification/<Release>/` (notes.md, api_samples, E2E report if applicable)
+- `evaluations/`, `alerts/`, `lifecycle/` (or current equivalent)
+- Optional: `mtf_cache/` or similar with documented retention (when added in a release)
+- Any other file under `out/` must be documented in release notes and this checklist
+
+**Must never commit (repo-wide):**
+
+- `.env`, `*.env`, `*.key`, secrets, credentials, API keys, large binary blobs. Explicit list: see root `.gitignore`; keep `out/` and env/secrets ignored.
+
 ---
 
 ## R21.1 — Account + Holdings ✅
@@ -74,37 +97,39 @@ No release is marked DONE unless all of the following are satisfied:
 
 Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readiness.md`. Do not mark DONE until release gate above is satisfied. Out-of-scope premium backlog: `docs/enhancements/phase_23_premium_trading_backlog.md`.
 
-### R22.1 — Release engineering + Preflight build gate (placeholder)
+### R22.1 — Release engineering + Preflight build gate
 
-- [ ] Doc structure and cleanup policy documented
-- [ ] Release Checklist includes build-pass gate (this section)
-- [ ] Artifact retention and `out/` rules documented
-- [ ] Release notes template in place
-- [ ] Frontend build passes (fix type/build hygiene as needed)
-- [ ] Release notes + verification
+- [x] Doc structure and cleanup policy documented (this checklist: flat `docs/releases/<Release>_release_notes.md`, `out/verification/<Release>/`)
+- [x] Release Checklist includes build-pass gate (Release gate section above)
+- [x] Artifact retention and `out/` rules documented (canonical list + must never commit, this checklist)
+- [x] Release notes template in place (`RELEASE_NOTES_TEMPLATE.md`)
+- [x] Frontend build passes (Preflight Build Gate: `cd frontend && npm run build` — verified; no fixes required)
+- [x] Release notes + verification (`R22.1_release_notes.md`, `out/verification/R22.1/notes.md`)
 
-### R22.2 — Slack + Scheduler set-and-forget (placeholder)
+### R22.2 — Slack + Scheduler set-and-forget
 
-- [ ] EVAL_SUMMARY format and throttle documented
-- [ ] System Status shows per-channel Slack + full scheduler fields
-- [ ] ORATS DELAYED vs WARN semantics implemented
-- [ ] Release notes + verification
+- [x] EVAL_SUMMARY format and throttle documented (release notes; EVAL_SUMMARY_EVERY_N_TICKS)
+- [x] System Status shows per-channel Slack + full scheduler fields (API + UI)
+- [x] ORATS DELAYED vs WARN semantics implemented (get_orats_freshness_state; OK/15m, DELAYED 15–30m, WARN >30m, ERROR)
+- [x] ORATS as_of and threshold_triggered in API + UI; friendly scheduler skip labels; no raw FAIL_* in System Status
+- [x] Release notes + verification (`R22.2_release_notes.md`, `out/verification/R22.2/notes.md`); gate passed (backend + frontend tests + build)
 
-### R22.3 — Wheel page purpose and copy (placeholder)
+### R22.3 — Wheel page purpose and copy
 
-- [ ] Explanation panel and “Admin/Recovery: use Repair only if …” copy
-- [ ] PO option (Keep as Admin / Advanced toggle / Remove) implemented and documented
-- [ ] Release notes + verification
+- [x] Explanation panel and Admin/Recovery copy (Option 1: Keep as Admin)
+- [x] PO options (1/2/3) via `VITE_WHEEL_PAGE_MODE=admin|advanced|hidden`; Sidebar + route behavior; no raw codes in Wheel UI
+- [x] Frontend tests: WheelPage (friendly blocked_by labels), Sidebar (visibility per mode); build passes
+- [x] Release notes + verification (`R22.3_release_notes.md`, `out/verification/R22.3/notes.md`)
 
-### R22.4 — Multi-timeframe S/R + hold-time (placeholder)
+### R22.4 — Multi-timeframe S/R + hold-time
 
-- [ ] MTF levels (M/W/D, optional 4H) and methodology
-- [ ] Targets and hold-time estimate (request-time; no decision JSON prose)
-- [ ] Symbol page Multi-timeframe levels section + diagnostics
-- [ ] Release notes + verification
+- [x] MTF levels (M/W/D, optional 4H) and methodology (request-time; daily from technicals; methodology in API)
+- [x] Targets and hold-time estimate (request-time; no decision JSON prose)
+- [x] Symbol page Multi-timeframe levels section + Targets & hold-time + methodology
+- [x] Release notes + verification (`R22.4_release_notes.md`, `out/verification/R22.4/`)
 
-### R22.5 — Shares evaluation pipeline (placeholder)
+### R22.5 — Shares evaluation pipeline
 
-- [ ] Shares Candidates and Shares Plan (recommendation only; no orders)
-- [ ] Dashboard and Symbol page UI
-- [ ] Release notes + verification
+- [x] Shares Candidates and Shares Plan (recommendation only; no orders)
+- [x] Dashboard Shares candidates card + Symbol page Shares plan section
+- [x] Release notes + verification (`R22.5_release_notes.md`, `out/verification/R22.5/`)

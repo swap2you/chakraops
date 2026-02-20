@@ -102,12 +102,21 @@ def _get_eod_freeze_health() -> Dict[str, Any]:
 
 
 def _get_slack_status_health() -> Dict[str, Any]:
-    """Phase 21.5: Slack sender status for system health."""
+    """Phase 21.5: Slack sender status for system health. R22.2: Always return channels (signals, daily, data_health, critical) for consistent API."""
     try:
         from app.core.alerts.slack_status import get_slack_status
         return get_slack_status()
     except Exception:
-        return {"last_send_at": None, "last_send_ok": None, "last_error": None, "last_channel": None, "last_payload_type": None}
+        from app.core.alerts.slack_status import SLACK_CHANNELS
+        empty = {"last_send_at": None, "last_send_ok": None, "last_error": None, "last_payload_type": None}
+        return {
+            "last_send_at": None,
+            "last_send_ok": None,
+            "last_error": None,
+            "last_channel": None,
+            "last_payload_type": None,
+            "channels": {ch: dict(empty) for ch in SLACK_CHANNELS},
+        }
 
 
 def _get_mark_refresh_health() -> Dict[str, Any]:
@@ -683,15 +692,19 @@ def ui_system_health(
     api_status = "OK"
     api_latency_ms: float | None = None
 
-    # ORATS: data health (Phase 9: age_minutes, staleness_threshold for actionable UI)
+    # ORATS: data health (Phase 9: age_minutes, staleness_threshold). R22.2: orats_freshness_state OK/DELAYED/WARN/ERROR.
     orats_status = "UNKNOWN"
     orats_last_success: str | None = None
     orats_avg_latency: float | None = None
     orats_last_error: str | None = None
     orats_age_minutes: float | None = None
     orats_staleness_minutes: int = 30
+    orats_freshness_state: str = "UNKNOWN"
+    orats_freshness_state_label: str | None = None
+    orats_as_of: str | None = None
+    orats_threshold_triggered: str | None = None
     try:
-        from app.api.data_health import get_data_health
+        from app.api.data_health import get_data_health, get_orats_freshness_state
         from app.core.config.eval_config import EVALUATION_QUOTE_WINDOW_MINUTES
         dh = get_data_health()
         raw = (dh.get("status") or "UNKNOWN").upper()
@@ -714,9 +727,18 @@ def ui_system_health(
                 orats_age_minutes = (datetime.now(timezone.utc) - success_dt).total_seconds() / 60
             except (ValueError, TypeError):
                 pass
+        freshness = get_orats_freshness_state()
+        orats_freshness_state = freshness.get("state") or "UNKNOWN"
+        orats_freshness_state_label = freshness.get("state_label")
+        orats_as_of = freshness.get("as_of")
+        orats_threshold_triggered = freshness.get("threshold_triggered")
     except Exception:
         orats_status = "DOWN"
         orats_last_error = "Failed to read data health"
+        orats_freshness_state = "ERROR"
+        orats_freshness_state_label = "ERROR"
+        orats_as_of = None
+        orats_threshold_triggered = "error"
 
     # Market: phase, is_open
     market_phase = "UNKNOWN"
@@ -833,6 +855,10 @@ def ui_system_health(
             "staleness_threshold_minutes": orats_staleness_minutes,
             "avg_latency_seconds": orats_avg_latency,
             "last_error_reason": orats_last_error,
+            "orats_freshness_state": orats_freshness_state,
+            "orats_freshness_state_label": orats_freshness_state_label,
+            "orats_as_of": orats_as_of,
+            "orats_threshold_triggered": orats_threshold_triggered,
         },
         "market": {
             "phase": market_phase,
@@ -2283,6 +2309,87 @@ def _compute_reasons_explained(
         return []
 
 
+def _build_mtf_levels_at_request_time(
+    technicals: Dict[str, Any],
+    exit_plan: Dict[str, Any],
+    as_of_iso: Optional[str],
+) -> Dict[str, Any]:
+    """R22.4: Multi-timeframe levels at request time. Not persisted in decision JSON."""
+    support = technicals.get("support_level")
+    resistance = technicals.get("resistance_level")
+    as_of = as_of_iso or ""
+    method = "pivot"
+    daily = {"support": support, "resistance": resistance, "as_of": as_of, "method": method} if (support is not None or resistance is not None) else None
+    return {
+        "monthly": daily,
+        "weekly": daily,
+        "daily": daily,
+        "4h": None,
+    }
+
+
+def _build_hold_time_estimate_at_request_time(
+    technicals: Dict[str, Any],
+    exit_plan: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """R22.4: Hold-time estimate at request time. basis_key maps to display text. Not persisted."""
+    t1 = exit_plan.get("t1")
+    atr = technicals.get("atr")
+    if t1 is not None and atr is not None and float(atr) > 0:
+        try:
+            dist = abs(float(t1) - (technicals.get("spot") or 0))
+            if dist <= 0:
+                return None
+            sessions = max(1, int(round(dist / float(atr))))
+            return {"sessions": sessions, "basis_key": "atr_sessions_to_target"}
+        except (TypeError, ValueError):
+            pass
+    return {"sessions": 5, "basis_key": "default_estimate"}
+
+
+def _build_shares_plan_at_request_time(
+    summary: Any,
+    technicals: Dict[str, Any],
+    exit_plan: Dict[str, Any],
+    hold_time_estimate: Optional[Dict[str, Any]],
+    symbol: str,
+) -> Optional[Dict[str, Any]]:
+    """R22.5: Shares plan at request time when symbol qualifies (recommendation only). Not persisted."""
+    regime = (technicals.get("regime") or getattr(summary, "regime", None) or "").upper()
+    score = getattr(summary, "score", None) or getattr(summary, "final_score", None)
+    support = technicals.get("support_level")
+    resistance = technicals.get("resistance_level")
+    if regime != "UP" or score is None:
+        return None
+    try:
+        sup = float(support) if support is not None else None
+        res = float(resistance) if resistance is not None else None
+    except (TypeError, ValueError):
+        sup, res = None, None
+    if sup is None and res is None:
+        return None
+    spot = technicals.get("spot") or (sup if sup is not None else res)
+    try:
+        spot = float(spot)
+    except (TypeError, ValueError):
+        return None
+    band = 0.02
+    entry_low = sup * (1 - band) if sup is not None else spot * 0.98
+    entry_high = sup * (1 + band) if sup is not None else spot * 1.02
+    stop = (sup * 0.97) if sup is not None else spot * 0.95
+    t1, t2, t3 = exit_plan.get("t1"), exit_plan.get("t2"), exit_plan.get("t3")
+    return {
+        "symbol": symbol,
+        "entry_zone": {"low": round(entry_low, 2), "high": round(entry_high, 2)},
+        "stop": round(stop, 2),
+        "targets": {"t1": t1, "t2": t2, "t3": t3},
+        "invalidation": round(stop, 2),
+        "hold_time_estimate": hold_time_estimate or {"sessions": 5, "basis_key": "default_estimate"},
+        "confidence_score": int(score) if score is not None else None,
+        "why_recommended": "MTF_SUPPORT_REGIME_UP",
+    }
+
+
 def _build_computed_values_at_request_time(
     technicals: Dict[str, Any],
     regime: Any,
@@ -2322,6 +2429,7 @@ def _build_symbol_diagnostics_from_v2_store(
     symbol: str,
     selected_contract_key: Optional[str] = None,
     option_symbol: Optional[str] = None,
+    pipeline_timestamp: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build full SymbolDiagnosticsResponseExtended from v2 store (summary + candidates + gates + earnings + diagnostics_details)."""
     c_dicts = [c.to_dict() if hasattr(c, "to_dict") else (c if isinstance(c, dict) else {}) for c in candidates]
@@ -2356,6 +2464,16 @@ def _build_symbol_diagnostics_from_v2_store(
     regime = diag.get("regime") or getattr(summary, "regime", None)
     sample_rej = diag.get("sample_rejected_due_to_delta") or []
     computed_values = _build_computed_values_at_request_time(technicals, regime, sample_rej)
+    mtf_levels = _build_mtf_levels_at_request_time(technicals, exit_plan, pipeline_timestamp)
+    methodology = {
+        "candles_source": "diagnostics",
+        "window": "20",
+        "clustering_tolerance_pct": 1.0,
+        "active_criteria": "nearest_to_spot",
+    }
+    targets = {"t1": exit_plan.get("t1"), "t2": exit_plan.get("t2"), "t3": exit_plan.get("t3")}
+    invalidation = exit_plan.get("stop") or technicals.get("support_level")
+    hold_time_estimate = _build_hold_time_estimate_at_request_time(technicals, exit_plan)
     return {
         "symbol": symbol,
         "provider_status": getattr(summary, "provider_status", "OK") or "OK",
@@ -2420,6 +2538,12 @@ def _build_symbol_diagnostics_from_v2_store(
         "earnings": earnings_out,
         "selected_contract_key": selected_contract_key,
         "option_symbol": option_symbol,
+        "mtf_levels": mtf_levels,
+        "methodology": methodology,
+        "targets": targets,
+        "invalidation": invalidation,
+        "hold_time_estimate": hold_time_estimate,
+        "shares_plan": _build_shares_plan_at_request_time(summary, technicals, exit_plan, hold_time_estimate, symbol),
     }
 
 
@@ -2459,6 +2583,7 @@ def ui_symbol_diagnostics(
                 sel_c = next((c for c in (getattr(artifact, "selected_candidates", []) or []) if (getattr(c, "symbol", "") or "").strip().upper() == sym_upper), None)
                 _sel_key = getattr(sel_c, "contract_key", None) if sel_c else None
                 _opt_sym = getattr(sel_c, "option_symbol", None) if sel_c else None
+                pipeline_ts = (artifact.metadata or {}).get("pipeline_timestamp") if artifact else None
                 result = _build_symbol_diagnostics_from_v2_store(
                     summary,
                     candidates.get(sym_upper, []),
@@ -2468,6 +2593,7 @@ def ui_symbol_diagnostics(
                     sym_upper,
                     selected_contract_key=_sel_key,
                     option_symbol=_opt_sym,
+                    pipeline_timestamp=pipeline_ts,
                 )
                 result["exact_run"] = True
                 result["run_id"] = (artifact.metadata or {}).get("run_id")
@@ -2483,7 +2609,8 @@ def ui_symbol_diagnostics(
         sel_c = next((c for c in (getattr(artifact, "selected_candidates", []) or []) if (getattr(c, "symbol", "") or "").strip().upper() == sym_upper), None) if artifact else None
         _sel_key = getattr(sel_c, "contract_key", None) if sel_c else None
         _opt_sym = getattr(sel_c, "option_symbol", None) if sel_c else None
-        out = _build_symbol_diagnostics_from_v2_store(summary, candidates, gates, earnings, diagnostics_details, sym_upper, selected_contract_key=_sel_key, option_symbol=_opt_sym)
+        pipeline_ts = (artifact.metadata or {}).get("pipeline_timestamp") if artifact else None
+        out = _build_symbol_diagnostics_from_v2_store(summary, candidates, gates, earnings, diagnostics_details, sym_upper, selected_contract_key=_sel_key, option_symbol=_opt_sym, pipeline_timestamp=pipeline_ts)
         if run_id and run_id.strip():
             out["exact_run"] = False
             out["run_id"] = None
@@ -2491,6 +2618,38 @@ def ui_symbol_diagnostics(
 
     # Symbol not in store — 404 (no legacy path; use recompute=1 to add symbol)
     raise HTTPException(status_code=404, detail=f"Symbol {sym_upper} not in evaluation store. Use recompute=1 to evaluate.")
+
+
+@router.get("/shares-candidates")
+def ui_shares_candidates(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R22.5: Shares candidates (BUY SHARES recommendation only). No broker/order placement."""
+    _require_ui_key(x_ui_key)
+    from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
+    store = get_evaluation_store_v2()
+    store.reload_from_disk()
+    artifact = store.get_latest()
+    if artifact is None:
+        return {"shares_candidates": []}
+    symbols = getattr(artifact, "symbols", []) or []
+    diag_by = getattr(artifact, "diagnostics_by_symbol", {}) or {}
+    out: List[Dict[str, Any]] = []
+    for s in symbols:
+        sym = (getattr(s, "symbol", "") or "").strip().upper()
+        if not sym:
+            continue
+        diag = diag_by.get(sym)
+        if diag is not None and hasattr(diag, "to_dict"):
+            diag = diag.to_dict() if callable(getattr(diag, "to_dict", None)) else diag
+        diag = diag or {}
+        technicals = diag.get("technicals") or {}
+        exit_plan = diag.get("exit_plan") or {}
+        hold_time = _build_hold_time_estimate_at_request_time(technicals, exit_plan)
+        plan = _build_shares_plan_at_request_time(s, technicals, exit_plan, hold_time, sym)
+        if plan is not None:
+            out.append(plan)
+    return {"shares_candidates": out}
 
 
 @router.post("/symbols/{symbol}/recompute")

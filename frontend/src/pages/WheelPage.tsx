@@ -35,6 +35,16 @@ function fmt(n: number | null | undefined): string {
   return n.toFixed(2);
 }
 
+/** R22.3: Map wheel policy blocked_by codes to safe display labels (no raw codes). */
+function wheelBlockedByLabel(code: string): string {
+  const c = (code ?? "").toLowerCase();
+  if (c === "wheel_one_position_per_symbol") return "One position per symbol (already open)";
+  if (c.startsWith("wheel_min_dte")) return "DTE below minimum";
+  if (c.startsWith("wheel_max_dte")) return "DTE above maximum";
+  if (c.startsWith("wheel_min_iv_rank")) return "IV rank below minimum";
+  return code || "—";
+}
+
 function suggestedToCandidate(sc: WheelOverviewSuggestedCandidate | null | undefined): SymbolDiagnosticsCandidate | null {
   if (!sc) return null;
   return {
@@ -102,6 +112,23 @@ export function WheelPage() {
         title="Wheel"
         subtext={`${rows.length} symbol(s) · Risk: ${riskStatus}`}
       />
+
+      {/* R22.3: Admin/Recovery explanation panel — no raw reason codes */}
+      <Card>
+        <CardHeader
+          title="Admin / Recovery"
+          description="Wheel state and when to use Repair"
+        />
+        <div className="space-y-2 text-sm text-zinc-600 dark:text-zinc-400">
+          <p><strong className="text-zinc-800 dark:text-zinc-200">Wheel state per symbol:</strong> EMPTY (no position), OPEN (position open), CLOSED (assigned or closed).</p>
+          <p><strong className="text-zinc-800 dark:text-zinc-200">Use Repair only when:</strong></p>
+          <ul className="list-disc list-inside ml-2 space-y-1">
+            <li>Wheel state is out of sync with open positions (e.g. after manual edits or restore)</li>
+            <li>You see &quot;No wheel symbols&quot; but you have open positions</li>
+          </ul>
+          <p>Do not use Repair as part of normal trading flow.</p>
+        </div>
+      </Card>
 
       {/* Phase 20.0: Repair wheel state — enabled when integrity FAIL or user confirms */}
       <Card>
@@ -222,14 +249,16 @@ export function WheelPage() {
                           <span className="text-sm">{actionType}</span>
                           {row.next_action.reasons?.length ? (
                             <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                              {row.next_action.reasons[0]}
+                              {row.next_action.reasons[0] === "Wheel policy"
+                                ? "Blocked by wheel policy"
+                                : row.next_action.reasons[0]}
                             </span>
                           ) : null}
                           {row.next_action.blocked_by?.length ? (
                             <div className="flex flex-wrap gap-1 mt-0.5">
                               {row.next_action.blocked_by.map((b) => (
                                 <Badge key={b} variant="danger" className="text-xs">
-                                  {b}
+                                  {wheelBlockedByLabel(b)}
                                 </Badge>
                               ))}
                             </div>

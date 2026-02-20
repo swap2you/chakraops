@@ -109,8 +109,8 @@ describe("WheelPage", () => {
       isError: false,
     });
     render(<WheelPage />);
-    expect(screen.getByText("wheel_one_position_per_symbol")).toBeInTheDocument();
-    expect(screen.getByText("wheel_min_dte(14<21)")).toBeInTheDocument();
+    expect(screen.getByText("One position per symbol (already open)")).toBeInTheDocument();
+    expect(screen.getByText("DTE below minimum")).toBeInTheDocument();
   });
 
   it("Open ticket uses provided contract_key and opens TradeTicketDrawer", () => {
@@ -166,5 +166,14 @@ describe("WheelPage", () => {
     });
     render(<WheelPage />);
     expect(screen.getByTitle(/manual override/i)).toBeInTheDocument();
+  });
+
+  it("R22.3: renders Admin/Recovery explanation panel and no raw FAIL_* in panel text", () => {
+    render(<WheelPage />);
+    expect(screen.getByText("Admin / Recovery")).toBeInTheDocument();
+    expect(screen.getByText(/Use Repair only when/)).toBeInTheDocument();
+    const body = document.body.innerHTML;
+    const adminSection = body;
+    expect(adminSection).not.toMatch(/FAIL_[A-Z_0-9]+/);
   });
 });

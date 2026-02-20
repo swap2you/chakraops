@@ -18,6 +18,24 @@ import { Card, CardHeader, StatusBadge, Button, Tooltip } from "@/components/ui"
 
 const DIAGNOSTIC_CHECKS = ["orats", "decision_store", "universe", "positions", "portfolio_risk", "scheduler", "store_integrity"] as const;
 
+/** R22.2: Map ORATS threshold_triggered to safe display label (no raw codes). */
+function oratsThresholdLabel(triggered: string | null | undefined): string {
+  const t = (triggered ?? "").toLowerCase();
+  if (t === "ok_minutes") return "Within OK window";
+  if (t === "warn_minutes") return "Staleness threshold";
+  if (t === "error") return "Error (no data or failure)";
+  return triggered ? String(triggered) : "—";
+}
+
+/** R22.2: Friendly skip reason for scheduler (market closed = set-and-forget, not error). */
+function schedulerSkipReasonLabel(reason: string | null | undefined): string {
+  const r = (reason ?? "").toLowerCase();
+  if (r === "market_closed") return "Market closed — scheduler skips until open";
+  if (r === "evaluation_running") return "Evaluation already running";
+  if (r === "no_symbols") return "No symbols in universe";
+  return reason ?? "—";
+}
+
 export function SystemDiagnosticsPage() {
   const { data, isLoading, isError } = useUiSystemHealth();
   const { data: historyData } = useDiagnosticsHistory(10);
@@ -158,13 +176,27 @@ export function SystemDiagnosticsPage() {
           </div>
         </Card>
         <Card>
-          <CardHeader title="ORATS" />
+          <CardHeader title="ORATS" description="R22.2: Freshness OK / DELAYED (within window) / WARN / ERROR" />
           <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Freshness</span>
+              <p className="mt-1 font-medium text-zinc-700 dark:text-zinc-200">
+                {orats?.orats_freshness_state_label ?? orats?.status ?? "—"}
+              </p>
+            </div>
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">status</span>
               <p className="mt-1">
                 <StatusBadge status={orats?.status ?? "—"} />
               </p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">as_of (ET)</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{formatTimestampEt(orats?.orats_as_of ?? orats?.last_success_at)}</p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Threshold</span>
+              <p className="mt-1 text-zinc-600 dark:text-zinc-400">{oratsThresholdLabel(orats?.orats_threshold_triggered)}</p>
             </div>
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">Age / threshold</span>
@@ -233,7 +265,9 @@ export function SystemDiagnosticsPage() {
             {scheduler?.last_skip_reason && (
               <div className="col-span-2">
                 <span className="block text-xs text-zinc-500 dark:text-zinc-500">last_skip_reason</span>
-                <p className="mt-1 text-zinc-600 dark:text-zinc-400">{scheduler.last_skip_reason}</p>
+                <p className={`mt-1 ${(scheduler.last_skip_reason || "").toLowerCase() === "market_closed" ? "text-zinc-500 dark:text-zinc-400" : "text-zinc-600 dark:text-zinc-400"}`}>
+                  {schedulerSkipReasonLabel(scheduler.last_skip_reason)}
+                </p>
               </div>
             )}
             {scheduler?.last_duration_ms != null && (
@@ -323,7 +357,7 @@ export function SystemDiagnosticsPage() {
               </div>
             )}
           </div>
-          {/* R21.5.1: Per-channel status */}
+          {/* R21.5.1 / R22.2: Per-channel status (last_send_at, last_send_ok, last_error, last_payload_type) */}
           {slack?.channels && Object.keys(slack.channels).length > 0 && (
             <div className="mt-4 space-y-2">
               <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-500">Per channel</span>
@@ -338,7 +372,10 @@ export function SystemDiagnosticsPage() {
                       <p className="text-xs">
                         <StatusBadge status={c.last_send_ok === true ? "OK" : c.last_send_ok === false ? "FAIL" : "—"} />
                       </p>
-                      {c.last_error && <p className="mt-1 truncate text-xs text-red-600 dark:text-red-400" title={c.last_error}>{c.last_error}</p>}
+                      {c.last_payload_type != null && c.last_payload_type !== "" && (
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">last_payload_type: {String(c.last_payload_type)}</p>
+                      )}
+                      {c.last_error && <p className="mt-1 truncate text-xs text-red-600 dark:text-red-400" title={c.last_error}>{c.last_error === "no_webhook" ? "Not configured" : c.last_error}</p>}
                     </div>
                   );
                 })}

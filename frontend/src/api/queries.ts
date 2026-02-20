@@ -20,6 +20,7 @@ import type {
   AccountHoldingsResponse,
   UniverseSymbolsResponse,
   UiAlertsResponse,
+  SharesPlan,
 } from "./types";
 import type { DecisionMode, DecisionRef } from "./types";
 export type { DecisionRef };
@@ -70,6 +71,11 @@ function symbolRecomputePath(symbol: string, force?: boolean): string {
 
 function uiSystemHealthPath(): string {
   return `/api/ui/system-health`;
+}
+
+/** R22.5: Shares candidates (BUY SHARES recommendation only). */
+function sharesCandidatesPath(): string {
+  return `/api/ui/shares-candidates`;
 }
 
 function uiTrackedPositionsPath(): string {
@@ -260,6 +266,7 @@ export const queryKeys = {
   symbolDiagnostics: (symbol: string, runId?: string | null) =>
     (["ui", "symbolDiagnostics", symbol, runId ?? ""] as const),
   uiSystemHealth: () => ["ui", "systemHealth"] as const,
+  sharesCandidates: () => ["ui", "sharesCandidates"] as const,
   uiPositions: () => ["ui", "positions"] as const,
   uiTrackedPositions: () => ["ui", "positions", "tracked"] as const,
   uiAccountsDefault: () => ["ui", "accounts", "default"] as const,
@@ -407,6 +414,18 @@ export function useUiSystemHealth() {
   return useQuery({
     queryKey: queryKeys.uiSystemHealth(),
     queryFn: () => apiGet<UiSystemHealthResponse>(uiSystemHealthPath()),
+  });
+}
+
+/** R22.5: Shares candidates (BUY SHARES recommendation only; no order placement). */
+export interface SharesCandidatesResponse {
+  shares_candidates: SharesPlan[];
+}
+
+export function useSharesCandidates() {
+  return useQuery({
+    queryKey: queryKeys.sharesCandidates(),
+    queryFn: () => apiGet<SharesCandidatesResponse>(sharesCandidatesPath()),
   });
 }
 

@@ -212,7 +212,7 @@ class TestOneStoreGuardrails:
                 side_effect=fake_merge,
             ):
                 client = TestClient(app)
-                r = client.post("/api/ui/symbols/SPY/recompute")
+                r = client.post("/api/ui/symbols/SPY/recompute?force=true")
             assert r.status_code == 200, r.text
             body = r.json()
             assert body.get("updated") is True

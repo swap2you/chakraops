@@ -137,6 +137,94 @@ def _compute_sticky_status(effective_last_success_at: Optional[str] = None) -> s
         return "OK" if use_ts else "UNKNOWN"
 
 
+def _orats_ok_minutes() -> int:
+    """R22.2: Within this many minutes = OK. Default 15."""
+    try:
+        return int(os.getenv("ORATS_OK_MINUTES", "15").strip())
+    except (TypeError, ValueError):
+        return 15
+
+
+def _orats_warn_minutes() -> int:
+    """R22.2: Beyond this many minutes = WARN; between OK and WARN = DELAYED. Default 30."""
+    try:
+        return int(os.getenv("ORATS_WARN_MINUTES", "30").strip())
+    except (TypeError, ValueError):
+        return 30
+
+
+def get_orats_freshness_state() -> Dict[str, Any]:
+    """
+    R22.2: ORATS freshness state machine. OK / DELAYED / WARN / ERROR.
+    OK: age <= ORATS_OK_MINUTES (default 15). DELAYED: OK < age <= ORATS_WARN_MINUTES (30). WARN: age > 30. ERROR: API failure.
+    Returns: state, state_label, age_minutes, delay_minutes (warn threshold), as_of (effective timestamp ISO),
+    threshold_triggered ("ok_minutes"|"warn_minutes"|"error"), reason (when ERROR/WARN).
+    """
+    ok_min = _orats_ok_minutes()
+    warn_min = _orats_warn_minutes()
+    effective_ts, _, _ = _get_effective_orats_timestamp()
+    if _LAST_ERROR_AT is not None and effective_ts is None:
+        return {
+            "state": "ERROR",
+            "state_label": "ERROR",
+            "age_minutes": None,
+            "delay_minutes": warn_min,
+            "as_of": None,
+            "threshold_triggered": "error",
+            "reason": _LAST_ERROR_REASON or "No successful ORATS data",
+        }
+    if effective_ts is None:
+        return {
+            "state": "ERROR",
+            "state_label": "ERROR",
+            "age_minutes": None,
+            "delay_minutes": warn_min,
+            "as_of": None,
+            "threshold_triggered": "error",
+            "reason": "No ORATS timestamp",
+        }
+    try:
+        success_dt = datetime.fromisoformat(effective_ts.replace("Z", "+00:00"))
+        age_minutes = (datetime.now(timezone.utc) - success_dt).total_seconds() / 60
+    except (ValueError, TypeError):
+        return {
+            "state": "OK",
+            "state_label": "OK",
+            "age_minutes": None,
+            "delay_minutes": warn_min,
+            "as_of": effective_ts,
+            "threshold_triggered": "ok_minutes",
+        }
+    if age_minutes <= ok_min:
+        return {
+            "state": "OK",
+            "state_label": "OK",
+            "age_minutes": round(age_minutes, 1),
+            "delay_minutes": warn_min,
+            "as_of": effective_ts,
+            "threshold_triggered": "ok_minutes",
+        }
+    if age_minutes <= warn_min:
+        label = f"DELAYED ({int(age_minutes)}m)"
+        return {
+            "state": "DELAYED",
+            "state_label": label,
+            "age_minutes": round(age_minutes, 1),
+            "delay_minutes": warn_min,
+            "as_of": effective_ts,
+            "threshold_triggered": "warn_minutes",
+        }
+    return {
+        "state": "WARN",
+        "state_label": "WARN",
+        "age_minutes": round(age_minutes, 1),
+        "delay_minutes": warn_min,
+        "as_of": effective_ts,
+        "threshold_triggered": "warn_minutes",
+        "reason": f"Data older than {warn_min}m threshold",
+    }
+
+
 def _attempt_live_summary() -> None:
     """Call probe_orats_live(SPY) from unified ORATS Live client; set status OK or DOWN."""
     global _DATA_STATUS, _LAST_SUCCESS_AT, _LAST_ATTEMPT_AT, _LAST_ERROR_AT, _LAST_ERROR_REASON, _AVG_LATENCY_SECONDS, _LATENCY_SAMPLES, _ENTITLEMENT

@@ -83,6 +83,21 @@ function deltaCondition(delta: number | null | undefined, strategy: string): str
   return d.toFixed(3);
 }
 
+/** R22.4: Hold-time basis_key → user-facing label (no raw codes). */
+function holdTimeBasisLabel(basisKey: string | null | undefined): string {
+  const k = (basisKey ?? "").trim();
+  if (k === "atr_sessions_to_target") return "Sessions to travel ATR to target";
+  if (k === "default_estimate") return "Default estimate";
+  return k || "—";
+}
+
+/** R22.5: why_recommended code → user-facing label (no raw FAIL_* in UI). */
+function sharesWhyLabel(why: string | null | undefined): string {
+  const w = (why ?? "").trim();
+  if (w === "MTF_SUPPORT_REGIME_UP") return "Support level and regime UP";
+  return w || "—";
+}
+
 export function SymbolDiagnosticsPage() {
   const [searchParams] = useSearchParams();
   const symbolFromUrl = searchParams.get("symbol")?.trim().toUpperCase() ?? "";
@@ -548,6 +563,87 @@ function ExecutionConsole({
           </div>
           </Card>
         </div>
+
+        {/* R22.4: Multi-timeframe levels (request-time only) */}
+        {data.mtf_levels && (data.mtf_levels.monthly || data.mtf_levels.weekly || data.mtf_levels.daily || data.mtf_levels["4h"]) ? (
+          <Card data-testid="mtf-levels-panel">
+            <CardHeader title="Multi-timeframe levels" description="Support and resistance by timeframe (request-time; not persisted)" />
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-200 text-left text-zinc-600 dark:border-zinc-700 dark:text-zinc-500">
+                    <th className="py-2 pr-2">Timeframe</th>
+                    <th className="py-2 pr-2">Support</th>
+                    <th className="py-2 pr-2">Resistance</th>
+                    <th className="py-2 pr-2">as_of</th>
+                    <th className="py-2 pr-2">method</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(["monthly", "weekly", "daily", "4h"] as const).map((tf) => {
+                    const row = data.mtf_levels?.[tf];
+                    if (!row || (row.support == null && row.resistance == null)) return null;
+                    return (
+                      <tr key={tf} className="border-b border-zinc-100 dark:border-zinc-800/50">
+                        <td className="py-2 pr-2 font-medium text-zinc-700 dark:text-zinc-300">{tf}</td>
+                        <td className="py-2 pr-2 font-mono">{fmt(row.support)}</td>
+                        <td className="py-2 pr-2 font-mono">{fmt(row.resistance)}</td>
+                        <td className="py-2 pr-2 text-zinc-500 dark:text-zinc-400">{row.as_of ? new Date(row.as_of).toLocaleString() : "—"}</td>
+                        <td className="py-2 pr-2 text-zinc-500 dark:text-zinc-400">{row.method ?? "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {data.methodology && (
+              <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">
+                Methodology: {data.methodology.candles_source ?? "—"} · window {data.methodology.window ?? "—"} · tolerance {data.methodology.clustering_tolerance_pct ?? "—"}% · {data.methodology.active_criteria ?? "—"}
+              </p>
+            )}
+          </Card>
+        ) : null}
+
+        {/* R22.4: Targets, invalidation, hold-time estimate */}
+        {(data.targets || data.invalidation != null || data.hold_time_estimate) ? (
+          <Card>
+            <CardHeader title="Targets & hold-time" />
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              {data.targets && (
+                <>
+                  <Kv label="T1" value={fmt(data.targets.t1)} />
+                  <Kv label="T2" value={fmt(data.targets.t2)} />
+                  <Kv label="T3" value={fmt(data.targets.t3)} />
+                </>
+              )}
+              {data.invalidation != null && <Kv label="Invalidation" value={fmt(data.invalidation)} />}
+              {data.hold_time_estimate && (
+                <div className="col-span-2">
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">Hold-time estimate</span>
+                  <p className="mt-1 text-zinc-700 dark:text-zinc-300">
+                    {data.hold_time_estimate.sessions ?? "—"} sessions · {holdTimeBasisLabel(data.hold_time_estimate.basis_key)}
+                  </p>
+                </div>
+              )}
+            </div>
+          </Card>
+        ) : null}
+
+        {/* R22.5: Shares plan (recommendation only) */}
+        {data.shares_plan ? (
+          <Card>
+            <CardHeader title="Shares plan" description="BUY SHARES recommendation only; no order placement" />
+            <div className="space-y-2 text-sm">
+              <p><span className="text-zinc-500 dark:text-zinc-500">Entry zone:</span> {fmt(data.shares_plan.entry_zone?.low)} – {fmt(data.shares_plan.entry_zone?.high)}</p>
+              <p><span className="text-zinc-500 dark:text-zinc-500">Stop:</span> {fmt(data.shares_plan.stop)}</p>
+              <p><span className="text-zinc-500 dark:text-zinc-500">Targets:</span> T1 {fmt(data.shares_plan.targets?.t1)} · T2 {fmt(data.shares_plan.targets?.t2)} · T3 {fmt(data.shares_plan.targets?.t3)}</p>
+              <p><span className="text-zinc-500 dark:text-zinc-500">Invalidation:</span> {fmt(data.shares_plan.invalidation)}</p>
+              <p><span className="text-zinc-500 dark:text-zinc-500">Hold-time:</span> {data.shares_plan.hold_time_estimate?.sessions ?? "—"} sessions · {holdTimeBasisLabel(data.shares_plan.hold_time_estimate?.basis_key)}</p>
+              {data.shares_plan.confidence_score != null && <p><span className="text-zinc-500 dark:text-zinc-500">Confidence:</span> {data.shares_plan.confidence_score}</p>}
+              <p><span className="text-zinc-500 dark:text-zinc-500">Why:</span> {sharesWhyLabel(data.shares_plan.why_recommended)}</p>
+            </div>
+          </Card>
+        ) : null}
 
       </div>
 

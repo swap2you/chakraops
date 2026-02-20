@@ -307,6 +307,26 @@ function ExecutionConsole({
             </button>
           )}
         </div>
+        {/* R22.7: As-of / Inputs — verify Universe eval vs Recompute use same pipeline */}
+        {data.as_of_inputs && (data.as_of_inputs.pipeline_timestamp ?? data.as_of_inputs.evaluation_run_id) && (
+          <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700">
+            <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">As-of / Inputs</span>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs font-mono text-zinc-600 dark:text-zinc-300">
+              {data.as_of_inputs.evaluation_run_id != null && (
+                <div><span className="text-zinc-500 dark:text-zinc-500">run_id</span> {String(data.as_of_inputs.evaluation_run_id).slice(0, 8)}…</div>
+              )}
+              {data.as_of_inputs.pipeline_timestamp != null && (
+                <div><span className="text-zinc-500 dark:text-zinc-500">pipeline</span> {new Date(data.as_of_inputs.pipeline_timestamp).toLocaleString()}</div>
+              )}
+              {data.as_of_inputs.quote_as_of != null && (
+                <div><span className="text-zinc-500 dark:text-zinc-500">quote_as_of</span> {data.as_of_inputs.quote_as_of}</div>
+              )}
+              {data.as_of_inputs.config_hash != null && (
+                <div><span className="text-zinc-500 dark:text-zinc-500">config_hash</span> {data.as_of_inputs.config_hash}</div>
+              )}
+            </div>
+          </div>
+        )}
       </Card>
       {/* Gate Summary: reasons_explained from backend; fallback to primary_reason mapping (rejected_due_to_delta=N → rejected_count) */}
       <Card className="lg:col-span-2 w-full">
@@ -564,7 +584,7 @@ function ExecutionConsole({
           </Card>
         </div>
 
-        {/* R22.4: Multi-timeframe levels (request-time only) */}
+        {/* R22.7: Multi-timeframe levels from resampled OHLC (request-time only) */}
         {data.mtf_levels && (data.mtf_levels.monthly || data.mtf_levels.weekly || data.mtf_levels.daily || data.mtf_levels["4h"]) ? (
           <Card data-testid="mtf-levels-panel">
             <CardHeader title="Multi-timeframe levels" description="Support and resistance by timeframe (request-time; not persisted)" />
@@ -575,19 +595,30 @@ function ExecutionConsole({
                     <th className="py-2 pr-2">Timeframe</th>
                     <th className="py-2 pr-2">Support</th>
                     <th className="py-2 pr-2">Resistance</th>
+                    <th className="py-2 pr-2">bar_count</th>
                     <th className="py-2 pr-2">as_of</th>
                     <th className="py-2 pr-2">method</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(["monthly", "weekly", "daily", "4h"] as const).map((tf) => {
-                    const row = data.mtf_levels?.[tf];
-                    if (!row || (row.support == null && row.resistance == null)) return null;
+                    const row = data.mtf_levels?.[tf] as { support?: number | null; resistance?: number | null; as_of?: string; method?: string; bar_count?: number | null; status_code?: string } | undefined;
+                    if (!row) return null;
+                    if ((row as { status_code?: string }).status_code === "INSUFFICIENT_HISTORY") {
+                      return (
+                        <tr key={tf} className="border-b border-zinc-100 dark:border-zinc-800/50">
+                          <td className="py-2 pr-2 font-medium text-zinc-700 dark:text-zinc-300">{tf}</td>
+                          <td colSpan={5} className="py-2 pr-2 text-zinc-500 dark:text-zinc-400">INSUFFICIENT_HISTORY</td>
+                        </tr>
+                      );
+                    }
+                    if (row.support == null && row.resistance == null) return null;
                     return (
                       <tr key={tf} className="border-b border-zinc-100 dark:border-zinc-800/50">
                         <td className="py-2 pr-2 font-medium text-zinc-700 dark:text-zinc-300">{tf}</td>
                         <td className="py-2 pr-2 font-mono">{fmt(row.support)}</td>
                         <td className="py-2 pr-2 font-mono">{fmt(row.resistance)}</td>
+                        <td className="py-2 pr-2 text-zinc-500 dark:text-zinc-400">{row.bar_count != null ? String(row.bar_count) : "—"}</td>
                         <td className="py-2 pr-2 text-zinc-500 dark:text-zinc-400">{row.as_of ? new Date(row.as_of).toLocaleString() : "—"}</td>
                         <td className="py-2 pr-2 text-zinc-500 dark:text-zinc-400">{row.method ?? "—"}</td>
                       </tr>
@@ -596,6 +627,18 @@ function ExecutionConsole({
                 </tbody>
               </table>
             </div>
+            {(() => {
+              const m = data.mtf_levels?.monthly as { support?: number; resistance?: number; bar_count?: number } | undefined;
+              const w = data.mtf_levels?.weekly as { support?: number; resistance?: number; bar_count?: number } | undefined;
+              const d = data.mtf_levels?.daily as { support?: number; resistance?: number; bar_count?: number } | undefined;
+              const sameLevels = m && w && d
+                && m.support === w.support && w.support === d.support
+                && m.resistance === w.resistance && w.resistance === d.resistance;
+              const differentBars = sameLevels && (m.bar_count !== w.bar_count || w.bar_count !== d.bar_count);
+              return differentBars ? (
+                <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">Levels coincide across timeframes; bar_count differs by resolution.</p>
+              ) : null;
+            })()}
             {data.methodology && (
               <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">
                 Methodology: {data.methodology.candles_source ?? "—"} · window {data.methodology.window ?? "—"} · tolerance {data.methodology.clustering_tolerance_pct ?? "—"}% · {data.methodology.active_criteria ?? "—"}

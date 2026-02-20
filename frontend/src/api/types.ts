@@ -635,12 +635,12 @@ export interface SymbolDiagnosticsResponseExtended extends SymbolDiagnosticsResp
   run_id?: string | null;
   /** Plain-English reasons with key numbers (top 3+ show more; raw codes in debug). */
   reasons_explained?: ReasonExplained[];
-  /** R22.4: Multi-timeframe levels (request-time only; not persisted). */
+  /** R22.7: Multi-timeframe levels from resampled OHLC (request-time only; not persisted). */
   mtf_levels?: {
-    monthly?: { support?: number | null; resistance?: number | null; as_of?: string; method?: string } | null;
-    weekly?: { support?: number | null; resistance?: number | null; as_of?: string; method?: string } | null;
-    daily?: { support?: number | null; resistance?: number | null; as_of?: string; method?: string } | null;
-    "4h"?: { support?: number | null; resistance?: number | null; as_of?: string; method?: string } | null;
+    monthly?: { support?: number | null; resistance?: number | null; as_of?: string; method?: string; bar_count?: number | null; status_code?: string } | null;
+    weekly?: { support?: number | null; resistance?: number | null; as_of?: string; method?: string; bar_count?: number | null; status_code?: string } | null;
+    daily?: { support?: number | null; resistance?: number | null; as_of?: string; method?: string; bar_count?: number | null; status_code?: string } | null;
+    "4h"?: { support?: number | null; resistance?: number | null; as_of?: string; method?: string; bar_count?: number | null; status_code?: string } | null;
   } | null;
   /** R22.4: Methodology (candles_source, window, clustering_tolerance_pct, active_criteria). */
   methodology?: { candles_source?: string; window?: string; clustering_tolerance_pct?: number; active_criteria?: string } | null;
@@ -652,6 +652,15 @@ export interface SymbolDiagnosticsResponseExtended extends SymbolDiagnosticsResp
   hold_time_estimate?: { sessions?: number; basis_key?: string } | null;
   /** R22.5: Shares plan when symbol qualifies (recommendation only). */
   shares_plan?: SharesPlan | null;
+  /** R22.7: Request-time inputs fingerprint (Universe vs Recompute verification). Not persisted. */
+  as_of_inputs?: {
+    evaluation_run_id?: string | null;
+    pipeline_timestamp?: string | null;
+    quote_as_of?: string | null;
+    candles_as_of?: string | null;
+    orats_as_of?: string | null;
+    config_hash?: string | null;
+  } | null;
 }
 
 /** R22.5: Shares plan (recommendation only; no order placement). */

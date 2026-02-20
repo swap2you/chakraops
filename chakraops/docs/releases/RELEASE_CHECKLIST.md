@@ -133,3 +133,17 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] Shares Candidates and Shares Plan (recommendation only; no orders)
 - [x] Dashboard Shares candidates card + Symbol page Shares plan section
 - [x] Release notes + verification (`R22.5_release_notes.md`, `out/verification/R22.5/`)
+
+### R22.7 — Truth + Consistency + Premium Symbol UX
+
+- [x] Requirements doc (`R22.7_requirements.md`); project status bookmark (`project_status_bookmark_through_R22_7.md`)
+- [x] Part 1 / 1.1 — Decision artifact hygiene: code-only persistence (`primary_reason_codes`, strict regex, no prose, `rejected_due_to_delta_count`); candidate identity (`contract_key` derived); `test_decision_artifact_hygiene_r227.py` (strict codes, no prose, option identity)
+- [x] Part 2 — Run eval vs recompute determinism: same core pipeline; As-of/Inputs in diagnostics; `test_eval_determinism_r227.py`
+- [x] Part 3 — MTF S/R real resampling: weekly/monthly from daily OHLC; S/R per timeframe; bar_count, INSUFFICIENT_HISTORY; UI coincide message
+- [ ] Part 4 — Targets + hold-time clarity (anchoring, ATR tooltip)
+- [ ] Part 5 — Shares tab + holdings capture (Symbol Shares tab; Add position; Portfolio)
+- [ ] Part 6 — Technical details + score breakdown (request-time)
+- [ ] Part 7 — Notifications ORATS safe labels (no raw WARN)
+- [x] Part 8 — Trade ticket contract identity (contract_key/option_symbol derived when missing)
+- [ ] Part 9 — UX polish (full-width cards; info tooltips)
+- [x] Release notes + verification (`R22.7_release_notes.md`, `out/verification/R22.7/notes.md`); gate run and pasted in verification (see notes.md)

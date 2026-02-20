@@ -17,6 +17,8 @@ from app.core.eval.decision_artifact_v2 import (
     GateEvaluation,
     SymbolDiagnosticsDetails,
     SymbolEvalSummary,
+    _reason_string_to_codes,
+    _reason_string_to_codes_and_count,
     assign_band,
     assign_band_reason,
     compute_rank_score,
@@ -245,6 +247,8 @@ def evaluate_universe(
             score_bd["final_score"] = score
             if caps_s:
                 score_bd["score_caps"] = caps_s
+        pr = getattr(sr, "primary_reason", None) or ""
+        pr_codes, rj_delta_count = _reason_string_to_codes_and_count(pr)
         symbols_out.append(SymbolEvalSummary(
             symbol=sym_upper,
             verdict=verdict,
@@ -253,7 +257,9 @@ def evaluate_universe(
             band=band,
             final_score=score,
             pre_cap_score=raw_s,
-            primary_reason=getattr(sr, "primary_reason", None) or "",
+            primary_reason=pr,
+            primary_reason_codes=pr_codes,
+            rejected_due_to_delta_count=rj_delta_count,
             stage_status="RUN",
             stage1_status=stage1_status,
             stage2_status=stage2_status,
@@ -524,13 +530,17 @@ def _build_symbol_data_from_staged(
     prem_yield: Optional[float] = (expected_cr / capital_req * 100) if capital_req and capital_req > 0 and expected_cr is not None else None
     mcap: Optional[float] = getattr(sr, "market_cap", None)
     rk = compute_rank_score(band, float(score) if score is not None else None, prem_yield, capital_req, mcap)
+    pr = getattr(sr, "primary_reason", None) or ""
+    pr_codes, rj_delta_count = _reason_string_to_codes_and_count(pr)
     summary = SymbolEvalSummary(
         symbol=sym_upper,
         verdict=verdict,
         final_verdict=verdict,
         score=score,
         band=band,
-        primary_reason=getattr(sr, "primary_reason", None) or "",
+        primary_reason=pr,
+        primary_reason_codes=pr_codes,
+        rejected_due_to_delta_count=rj_delta_count,
         stage_status="RUN",
         stage1_status=stage1_status,
         stage2_status=stage2_status,

@@ -58,6 +58,46 @@ def _resample_daily_to_weekly(daily_candles: List[Dict[str, Any]]) -> List[Dict[
     return out
 
 
+def _resample_daily_to_monthly(daily_candles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Group daily candles into monthly bars. O=first open, H=max high, L=min low, C=last close, V=sum."""
+    if not daily_candles:
+        return []
+    months: Dict[tuple, List[Dict[str, Any]]] = {}
+    for c in daily_candles:
+        ts = c.get("ts")
+        if not ts:
+            continue
+        try:
+            dt = datetime.strptime(str(ts)[:10], "%Y-%m-%d")
+            key = (dt.year, dt.month)
+        except (ValueError, TypeError):
+            continue
+        if key not in months:
+            months[key] = []
+        months[key].append(c)
+    out: List[Dict[str, Any]] = []
+    for key in sorted(months.keys()):
+        bars = months[key]
+        if not bars:
+            continue
+        opens = [b.get("open") for b in bars if b.get("open") is not None]
+        highs = [b.get("high") for b in bars if b.get("high") is not None]
+        lows = [b.get("low") for b in bars if b.get("low") is not None]
+        closes = [b.get("close") for b in bars if b.get("close") is not None]
+        if not closes:
+            continue
+        first_ts = bars[0].get("ts") or bars[-1].get("ts")
+        out.append({
+            "ts": first_ts,
+            "open": opens[0] if opens else None,
+            "high": max(highs) if highs else None,
+            "low": min(lows) if lows else None,
+            "close": closes[-1] if closes else None,
+            "volume": sum(b.get("volume") or 0 for b in bars),
+        })
+    return out
+
+
 def get_daily_regime(symbol: str, lookback: int = 255) -> str:
     """Compute daily timeframe regime (UP, DOWN, SIDEWAYS) from daily candles."""
     sym = (symbol or "").strip().upper()

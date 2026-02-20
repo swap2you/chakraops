@@ -176,7 +176,7 @@ class EvaluationStoreV2:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".json.tmp")
         try:
-            data = artifact.to_dict()
+            data = artifact.to_dict_persist()
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, default=str)
                 f.flush()
@@ -204,7 +204,7 @@ class EvaluationStoreV2:
         run_id = meta.get("run_id")
         if not run_id:
             return
-        data = artifact.to_dict()
+        data = artifact.to_dict_persist()
         symbols = getattr(artifact, "symbols", []) or []
         for sym in symbols:
             s = (getattr(sym, "symbol", "") or "").strip().upper()

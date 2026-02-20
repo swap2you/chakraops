@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Literal, Optional
 
@@ -47,6 +48,72 @@ def assign_band_reason(score: Optional[int | float]) -> str:
     if b == "C":
         return f"Band {b} because score >= {TIER_C_MIN} and < {TIER_B_MIN}"
     return f"Band {b} because score < {TIER_C_MIN}"
+
+
+# R22.7: Strict machine code format — only ^[A-Z0-9_]+$ allowed in persisted primary_reason_codes
+_STRICT_CODE_RE = re.compile(r"^[A-Z0-9_]+$")
+
+def _reason_string_to_codes(reason: Optional[str]) -> List[str]:
+    """R22.7: Convert primary_reason string to strict machine codes (no prose)."""
+    codes, _ = _reason_string_to_codes_and_count(reason)
+    return codes
+
+
+def _reason_string_to_codes_and_count(reason: Optional[str]) -> tuple[List[str], Optional[int]]:
+    """R22.7: Normalize reason to strict codes + optional rejected_due_to_delta count. No prose."""
+    if not reason or not isinstance(reason, str):
+        return [], None
+    reason = reason.strip()
+    rejected_count: Optional[int] = None
+
+    # Prose -> single code mappings (no parentheses, colons, equals in output)
+    if "Stock qualified" in reason or reason.startswith("Stock qualified"):
+        return ["STOCK_QUALIFIED"], None
+    if "Chain evaluated" in reason or "contract selected" in reason.lower():
+        return ["CHAIN_SELECTED"], None
+    if "Options liquidity confirmed" in reason or "OPRA" in reason:
+        return ["OPTIONS_LIQUIDITY_OPRA"], None
+    if "Chain evaluation error" in reason:
+        return ["CHAIN_EVALUATION_ERROR"], None
+    if "OPTION_CHAIN_MISSING_FIELDS" in reason:
+        return ["OPTION_CHAIN_MISSING_FIELDS"], None
+    if "Stock qualified, chain pending" in reason:
+        return ["STOCK_QUALIFIED_CHAIN_PENDING"], None
+    if "Stage 2 skipped" in reason:
+        return ["STAGE2_SKIPPED"], None
+    if "Blocked by market regime" in reason or "RISK_OFF" in reason:
+        return ["REGIME_RISK_OFF"], None
+    if "Not evaluated" in reason:
+        return ["NOT_EVALUATED"], None
+    if "Evaluation error" in reason:
+        return ["EVALUATION_ERROR"], None
+
+    # rejected_due_to_delta=N -> code + count
+    match = re.search(r"rejected_due_to_delta\s*=\s*(\d+)", reason, re.IGNORECASE)
+    if match:
+        try:
+            rejected_count = int(match.group(1))
+        except (ValueError, TypeError):
+            pass
+        return ["REJECTED_DUE_TO_DELTA"], rejected_count
+
+    # FAIL_* / WARN_* -> strip prefix and keep only if strict
+    codes: List[str] = []
+    for part in reason.split(";"):
+        part = part.strip()
+        if not part:
+            continue
+        if part.startswith("FAIL_"):
+            c = part[5:]
+            if _STRICT_CODE_RE.match(c):
+                codes.append(c)
+        elif part.startswith("WARN_"):
+            c = part[5:]
+            if _STRICT_CODE_RE.match(c):
+                codes.append(c)
+        elif _STRICT_CODE_RE.match(part):
+            codes.append(part)
+    return codes, rejected_count
 
 
 def _band_rank_value(band: str) -> int:
@@ -109,6 +176,9 @@ class SymbolEvalSummary:
     premium_yield_pct: Optional[float] = None  # expected_credit / capital_required
     market_cap: Optional[float] = None  # if available
     rank_score: Optional[float] = None  # sortable numeric score
+    # R22.7: code-only persistence; no FAIL_* in persisted values
+    primary_reason_codes: Optional[List[str]] = None  # e.g. ["REGIME_CONFLICT", "NO_HOLDINGS"]
+    rejected_due_to_delta_count: Optional[int] = None  # when primary_reason_codes contains REJECTED_DUE_TO_DELTA
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -225,6 +295,88 @@ class DecisionArtifactV2:
         }
         return out
 
+    def to_dict_persist(self) -> Dict[str, Any]:
+        """R22.7: Persist code-only; no prose, no FAIL_*/WARN_* in values. Strict code regex only."""
+
+        def symbol_persist(s: SymbolEvalSummary) -> Dict[str, Any]:
+            d = asdict(s)
+            d.pop("primary_reason", None)
+            d.pop("band_reason", None)
+            codes = d.get("primary_reason_codes")
+            rj_count = d.get("rejected_due_to_delta_count")
+            if not codes:
+                codes, rj_count = _reason_string_to_codes_and_count(getattr(s, "primary_reason", None))
+            # Filter to strict machine codes only
+            codes = [c for c in (codes or []) if _STRICT_CODE_RE.match(str(c))]
+            d["primary_reason_codes"] = codes if codes else []
+            if "REJECTED_DUE_TO_DELTA" in codes and rj_count is not None:
+                d["rejected_due_to_delta_count"] = rj_count
+            else:
+                d.pop("rejected_due_to_delta_count", None)
+            return d
+
+        def candidate_persist(c: CandidateRow) -> Dict[str, Any]:
+            d = asdict(c)
+            d.pop("why_this_trade", None)
+            # R22.7: ensure contract identity for options — derive contract_key if missing
+            if (d.get("strategy") or "").upper() in ("CSP", "CC") and not d.get("contract_key") and not d.get("option_symbol"):
+                strike, expiry = d.get("strike"), d.get("expiry")
+                opt_type = "PUT" if (d.get("strategy") or "").upper() == "CSP" else "CALL"
+                if strike is not None and expiry:
+                    d["contract_key"] = f"{int(float(strike))}-{expiry}-{opt_type}"
+            return d
+
+        def gate_persist(g: GateEvaluation) -> Dict[str, Any]:
+            return {"name": g.name, "status": g.status}
+
+        def _diagnostics_persist(dd: SymbolDiagnosticsDetails) -> Dict[str, Any]:
+            out = dd.to_dict()
+            out.pop("explanation", None)
+            # R22.7: no prose in score_caps.applied_caps[].reason — use reason_code only if present
+            sc = out.get("score_breakdown") or {}
+            applied = sc.get("applied_caps") or []
+            if applied:
+                clean = []
+                for cap in applied:
+                    c = dict(cap)
+                    if "reason" in c and not _STRICT_CODE_RE.match(str(c.get("reason", ""))):
+                        c.pop("reason", None)
+                        if c.get("reason_code"):
+                            pass
+                        else:
+                            c["reason_code"] = "CAP_APPLIED"
+                    clean.append(c)
+                sc["applied_caps"] = clean
+                out["score_breakdown"] = sc
+            # liquidity.reason -> code only (or omit)
+            liq = out.get("liquidity") or {}
+            if isinstance(liq, dict) and liq.get("reason") and not _STRICT_CODE_RE.match(str(liq["reason"])):
+                liq = dict(liq)
+                liq.pop("reason", None)
+                out["liquidity"] = liq
+            return out
+
+        return {
+            "metadata": self.metadata,
+            "symbols": [symbol_persist(s) for s in self.symbols],
+            "selected_candidates": [candidate_persist(c) for c in self.selected_candidates],
+            "candidates_by_symbol": {
+                k: [candidate_persist(c) for c in v]
+                for k, v in self.candidates_by_symbol.items()
+            },
+            "gates_by_symbol": {
+                k: [gate_persist(g) for g in v]
+                for k, v in self.gates_by_symbol.items()
+            },
+            "earnings_by_symbol": {
+                k: v.to_dict() for k, v in self.earnings_by_symbol.items()
+            },
+            "diagnostics_by_symbol": {
+                k: _diagnostics_persist(v) for k, v in self.diagnostics_by_symbol.items()
+            },
+            "warnings": self.warnings,
+        }
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "DecisionArtifactV2":
         meta = data.get("metadata") or {}
@@ -233,6 +385,12 @@ class DecisionArtifactV2:
         for s in data.get("symbols") or []:
             row = s if isinstance(s, dict) else asdict(s)
             d = {k: v for k, v in row.items() if k in sym_fields}
+            # R22.7: backward compat — derive primary_reason_codes from primary_reason if missing
+            if not d.get("primary_reason_codes") and d.get("primary_reason"):
+                d["primary_reason_codes"] = _reason_string_to_codes(d.get("primary_reason"))
+            # R22.7: do not keep prose in memory; API derives display from primary_reason_codes
+            if d.get("primary_reason_codes") is not None:
+                d["primary_reason"] = None
             # Band never null: derive from final_score only (Phase 10.1)
             if d.get("band") not in ("A", "B", "C", "D"):
                 d["band"] = assign_band(d.get("final_score") or d.get("score"))

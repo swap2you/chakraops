@@ -79,7 +79,8 @@ class TestMarketLiveStoreGuardrails:
             assert len(syms) >= 1
             for s in syms:
                 assert s.get("band") in ("A", "B", "C", "D")
-                assert s.get("band_reason")
+                # R22.7: band_reason is prose; not persisted (code-only). primary_reason_codes may be present.
+                assert "band" in s
         finally:
             reset_output_dir()
 

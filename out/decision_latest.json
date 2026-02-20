@@ -2,13 +2,13 @@
   "metadata": {
     "artifact_version": "v2",
     "mode": "LIVE",
-    "pipeline_timestamp": "2026-02-20T19:30:33.037095+00:00",
-    "evaluation_timestamp_utc": "2026-02-20T19:30:33.037095+00:00",
-    "run_id": "79395760-80ff-4e4d-8e56-9ef3682141c7",
+    "pipeline_timestamp": "2026-02-20T20:51:00.853469+00:00",
+    "evaluation_timestamp_utc": "2026-02-20T20:51:00.853469+00:00",
+    "run_id": "d40fec6e-4faf-47d8-b257-bd2df1b624da",
     "market_phase": "OPEN",
     "universe_size": 28,
     "evaluated_count_stage1": 28,
-    "evaluated_count_stage2": 3,
+    "evaluated_count_stage2": 2,
     "eligible_count": 1,
     "warnings": []
   },
@@ -19,15 +19,14 @@
       "final_verdict": "HOLD",
       "score": 50,
       "band": "C",
-      "primary_reason": "Stock qualified (score: 50)",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:52:48Z",
-      "evaluated_at": "2026-02-20T19:09:00.960806+00:00",
+      "data_freshness": "2026-02-20T20:34:51Z",
+      "evaluated_at": "2026-02-20T20:51:11.715671+00:00",
       "strategy": null,
-      "price": 264.1,
+      "price": 263.2,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -53,14 +52,21 @@
       "pre_cap_score": null,
       "final_score": 50,
       "score_caps": null,
-      "band_reason": "Band C because score >= 40 and < 60",
       "max_loss": null,
-      "underlying_price": 264.1,
-      "capital_required": 26410.000000000004,
+      "underlying_price": 263.2,
+      "capital_required": 26320.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204735.9
+      "rank_score": 204736.8,
+      "primary_reason_codes": [
+        "REGIME_CONFLICT",
+        "RSI_RANGE",
+        "RSI_CC",
+        "REGIME_CSP",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
     },
     {
       "symbol": "ABNB",
@@ -68,15 +74,14 @@
       "final_verdict": "HOLD",
       "score": 35,
       "band": "D",
-      "primary_reason": "Stock qualified (score: 35)",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:52:53Z",
-      "evaluated_at": "2026-02-20T19:09:00.960806+00:00",
+      "data_freshness": "2026-02-20T20:34:48Z",
+      "evaluated_at": "2026-02-20T20:51:00.853469+00:00",
       "strategy": null,
-      "price": 127.59,
+      "price": 127.34,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -102,14 +107,16 @@
       "pre_cap_score": null,
       "final_score": 35,
       "score_caps": null,
-      "band_reason": "Band D because score < 40",
       "max_loss": null,
-      "underlying_price": 127.59,
-      "capital_required": 12759.0,
+      "underlying_price": 127.34,
+      "capital_required": 12734.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 103372.41
+      "rank_score": 103372.66,
+      "primary_reason_codes": [
+        "STOCK_QUALIFIED"
+      ]
     },
     {
       "symbol": "AMD",
@@ -117,15 +124,14 @@
       "final_verdict": "HOLD",
       "score": 50,
       "band": "C",
-      "primary_reason": "FAIL_REGIME_CONFLICT; FAIL_NOT_NEAR_SUPPORT; FAIL_NOT_NEAR_RESISTANCE; FAIL_RSI_RANGE; FAIL_RSI_CC; FAIL_ATR; FAIL_ATR_TOO_HIGH; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:52:50Z",
-      "evaluated_at": "2026-02-20T19:09:03.598802+00:00",
+      "data_freshness": "2026-02-20T20:34:57Z",
+      "evaluated_at": "2026-02-20T20:51:11.823640+00:00",
       "strategy": null,
-      "price": 201.12,
+      "price": 199.6,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -151,14 +157,24 @@
       "pre_cap_score": null,
       "final_score": 50,
       "score_caps": null,
-      "band_reason": "Band C because score >= 40 and < 60",
       "max_loss": null,
-      "underlying_price": 201.12,
-      "capital_required": 20112.0,
+      "underlying_price": 199.6,
+      "capital_required": 19960.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204798.88
+      "rank_score": 204800.4,
+      "primary_reason_codes": [
+        "REGIME_CONFLICT",
+        "NOT_NEAR_SUPPORT",
+        "NOT_NEAR_RESISTANCE",
+        "RSI_RANGE",
+        "RSI_CC",
+        "ATR",
+        "ATR_TOO_HIGH",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
     },
     {
       "symbol": "AMZN",
@@ -166,15 +182,14 @@
       "final_verdict": "HOLD",
       "score": 35,
       "band": "D",
-      "primary_reason": "Stock qualified (score: 35)",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:52:49Z",
-      "evaluated_at": "2026-02-20T19:09:00.960806+00:00",
+      "data_freshness": "2026-02-20T20:34:53Z",
+      "evaluated_at": "2026-02-20T20:51:00.853469+00:00",
       "strategy": null,
-      "price": 210.92,
+      "price": 209.41,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -200,14 +215,16 @@
       "pre_cap_score": null,
       "final_score": 35,
       "score_caps": null,
-      "band_reason": "Band D because score < 40",
       "max_loss": null,
-      "underlying_price": 210.92,
-      "capital_required": 21092.0,
+      "underlying_price": 209.41,
+      "capital_required": 20941.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 103289.08
+      "rank_score": 103290.59,
+      "primary_reason_codes": [
+        "STOCK_QUALIFIED"
+      ]
     },
     {
       "symbol": "AVGO",
@@ -215,15 +232,14 @@
       "final_verdict": "HOLD",
       "score": 50,
       "band": "C",
-      "primary_reason": "Stock qualified (score: 50)",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:52:53Z",
-      "evaluated_at": "2026-02-20T19:09:00.960806+00:00",
+      "data_freshness": "2026-02-20T20:34:54Z",
+      "evaluated_at": "2026-02-20T20:51:11.818728+00:00",
       "strategy": null,
-      "price": 334.46,
+      "price": 332.62,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -249,14 +265,21 @@
       "pre_cap_score": null,
       "final_score": 50,
       "score_caps": null,
-      "band_reason": "Band C because score >= 40 and < 60",
       "max_loss": null,
-      "underlying_price": 334.46,
-      "capital_required": 33446.0,
+      "underlying_price": 332.62,
+      "capital_required": 33262.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204665.54
+      "rank_score": 204667.38,
+      "primary_reason_codes": [
+        "REGIME_CONFLICT",
+        "RSI_RANGE",
+        "RSI_CC",
+        "REGIME_CSP",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
     },
     {
       "symbol": "COIN",
@@ -264,15 +287,14 @@
       "final_verdict": "HOLD",
       "score": 50,
       "band": "C",
-      "primary_reason": "FAIL_NOT_NEAR_SUPPORT; FAIL_RSI_RANGE; FAIL_RSI_CSP; FAIL_RSI_CC; FAIL_ATR; FAIL_ATR_TOO_HIGH; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:52:50Z",
-      "evaluated_at": "2026-02-20T19:09:03.792556+00:00",
+      "data_freshness": "2026-02-20T20:34:54Z",
+      "evaluated_at": "2026-02-20T20:51:11.803156+00:00",
       "strategy": null,
-      "price": 171.07,
+      "price": 170.61,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -298,30 +320,38 @@
       "pre_cap_score": null,
       "final_score": 50,
       "score_caps": null,
-      "band_reason": "Band C because score >= 40 and < 60",
       "max_loss": null,
-      "underlying_price": 171.07,
-      "capital_required": 17107.0,
+      "underlying_price": 170.61,
+      "capital_required": 17061.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204828.93
+      "rank_score": 204829.39,
+      "primary_reason_codes": [
+        "NOT_NEAR_SUPPORT",
+        "RSI_RANGE",
+        "RSI_CSP",
+        "RSI_CC",
+        "ATR",
+        "ATR_TOO_HIGH",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
     },
     {
       "symbol": "COST",
       "verdict": "HOLD",
       "final_verdict": "HOLD",
-      "score": 60,
-      "band": "B",
-      "primary_reason": "FAIL_NOT_NEAR_SUPPORT; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS",
+      "score": 50,
+      "band": "C",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:53:04Z",
-      "evaluated_at": "2026-02-20T19:09:03.343079+00:00",
+      "data_freshness": "2026-02-20T20:34:53Z",
+      "evaluated_at": "2026-02-20T20:51:11.915066+00:00",
       "strategy": null,
-      "price": 982.38,
+      "price": 985.38,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -336,8 +366,8 @@
         "notional_pct": null,
         "capital_penalties": [],
         "top_penalty": null,
-        "raw_score": 60,
-        "final_score": 60,
+        "raw_score": 50,
+        "final_score": 50,
         "score_caps": {
           "regime_cap": 65,
           "applied_caps": []
@@ -345,16 +375,20 @@
       },
       "raw_score": null,
       "pre_cap_score": null,
-      "final_score": 60,
+      "final_score": 50,
       "score_caps": null,
-      "band_reason": "Band B because score >= 60 and < 80",
       "max_loss": null,
-      "underlying_price": 982.38,
-      "capital_required": 98238.0,
+      "underlying_price": 985.38,
+      "capital_required": 98538.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 305017.62
+      "rank_score": 204014.62,
+      "primary_reason_codes": [
+        "NOT_NEAR_SUPPORT",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
     },
     {
       "symbol": "CRM",
@@ -362,15 +396,14 @@
       "final_verdict": "HOLD",
       "score": 60,
       "band": "B",
-      "primary_reason": "FAIL_NOT_NEAR_SUPPORT; FAIL_NOT_NEAR_RESISTANCE; FAIL_RSI_RANGE; FAIL_RSI_CSP; FAIL_RSI_CC; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:53:01Z",
-      "evaluated_at": "2026-02-20T19:09:03.224096+00:00",
+      "data_freshness": "2026-02-20T20:35:04Z",
+      "evaluated_at": "2026-02-20T20:51:11.714067+00:00",
       "strategy": null,
-      "price": 185.99,
+      "price": 184.41,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -396,14 +429,22 @@
       "pre_cap_score": null,
       "final_score": 60,
       "score_caps": null,
-      "band_reason": "Band B because score >= 60 and < 80",
       "max_loss": null,
-      "underlying_price": 185.99,
-      "capital_required": 18599.0,
+      "underlying_price": 184.41,
+      "capital_required": 18441.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 305814.01
+      "rank_score": 305815.59,
+      "primary_reason_codes": [
+        "NOT_NEAR_SUPPORT",
+        "NOT_NEAR_RESISTANCE",
+        "RSI_RANGE",
+        "RSI_CSP",
+        "RSI_CC",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
     },
     {
       "symbol": "CRWD",
@@ -411,15 +452,14 @@
       "final_verdict": "HOLD",
       "score": 50,
       "band": "C",
-      "primary_reason": "FAIL_NOT_NEAR_SUPPORT; FAIL_NOT_NEAR_RESISTANCE; FAIL_RSI_RANGE; FAIL_RSI_CC; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:52:51Z",
-      "evaluated_at": "2026-02-20T19:09:03.464109+00:00",
+      "data_freshness": "2026-02-20T20:34:57Z",
+      "evaluated_at": "2026-02-20T20:51:11.716386+00:00",
       "strategy": null,
-      "price": 405.72,
+      "price": 389.23,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -445,14 +485,21 @@
       "pre_cap_score": null,
       "final_score": 50,
       "score_caps": null,
-      "band_reason": "Band C because score >= 40 and < 60",
       "max_loss": null,
-      "underlying_price": 405.72,
-      "capital_required": 40572.0,
+      "underlying_price": 389.23,
+      "capital_required": 38923.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204594.28
+      "rank_score": 204610.77,
+      "primary_reason_codes": [
+        "NOT_NEAR_SUPPORT",
+        "NOT_NEAR_RESISTANCE",
+        "RSI_RANGE",
+        "RSI_CC",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
     },
     {
       "symbol": "DIS",
@@ -460,15 +507,14 @@
       "final_verdict": "HOLD",
       "score": 50,
       "band": "C",
-      "primary_reason": "Stock qualified (score: 50)",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:53:00Z",
-      "evaluated_at": "2026-02-20T19:09:00.960806+00:00",
+      "data_freshness": "2026-02-20T20:35:05Z",
+      "evaluated_at": "2026-02-20T20:51:11.849828+00:00",
       "strategy": null,
-      "price": 105.55,
+      "price": 105.59,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -494,14 +540,20 @@
       "pre_cap_score": null,
       "final_score": 50,
       "score_caps": null,
-      "band_reason": "Band C because score >= 40 and < 60",
       "max_loss": null,
-      "underlying_price": 105.55,
-      "capital_required": 10555.0,
+      "underlying_price": 105.59,
+      "capital_required": 10559.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204894.45
+      "rank_score": 204894.41,
+      "primary_reason_codes": [
+        "RSI_RANGE",
+        "RSI_CC",
+        "REGIME_CSP",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
     },
     {
       "symbol": "GOOGL",
@@ -509,15 +561,14 @@
       "final_verdict": "HOLD",
       "score": 50,
       "band": "C",
-      "primary_reason": "FAIL_REGIME_CONFLICT; FAIL_NOT_NEAR_SUPPORT; FAIL_RSI_RANGE; FAIL_RSI_CSP; FAIL_RSI_CC; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:52:55Z",
-      "evaluated_at": "2026-02-20T19:09:03.655318+00:00",
+      "data_freshness": "2026-02-20T20:34:59Z",
+      "evaluated_at": "2026-02-20T20:51:11.909243+00:00",
       "strategy": null,
-      "price": 315.04,
+      "price": 315.07,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -543,14 +594,22 @@
       "pre_cap_score": null,
       "final_score": 50,
       "score_caps": null,
-      "band_reason": "Band C because score >= 40 and < 60",
       "max_loss": null,
-      "underlying_price": 315.04,
-      "capital_required": 31504.000000000004,
+      "underlying_price": 315.07,
+      "capital_required": 31507.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204684.96
+      "rank_score": 204684.93,
+      "primary_reason_codes": [
+        "REGIME_CONFLICT",
+        "NOT_NEAR_SUPPORT",
+        "RSI_RANGE",
+        "RSI_CSP",
+        "RSI_CC",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
     },
     {
       "symbol": "HD",
@@ -558,15 +617,14 @@
       "final_verdict": "HOLD",
       "score": 65,
       "band": "B",
-      "primary_reason": "rejected_due_to_delta=15",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "FAIL",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:53:04Z",
-      "evaluated_at": "2026-02-20T19:09:03.222046+00:00",
+      "data_freshness": "2026-02-20T20:34:51Z",
+      "evaluated_at": "2026-02-20T20:51:11.714645+00:00",
       "strategy": null,
-      "price": 381.07,
+      "price": 381.7,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -600,14 +658,17 @@
       "pre_cap_score": null,
       "final_score": 65,
       "score_caps": null,
-      "band_reason": "Band B because score >= 60 and < 80",
       "max_loss": null,
-      "underlying_price": 381.07,
-      "capital_required": 38107.0,
+      "underlying_price": 381.7,
+      "capital_required": 38170.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 306118.93
+      "rank_score": 306118.3,
+      "primary_reason_codes": [
+        "REJECTED_DUE_TO_DELTA"
+      ],
+      "rejected_due_to_delta_count": 17
     },
     {
       "symbol": "JPM",
@@ -615,15 +676,14 @@
       "final_verdict": "HOLD",
       "score": 50,
       "band": "C",
-      "primary_reason": "FAIL_REGIME_CONFLICT; FAIL_RSI_RANGE; FAIL_RSI_CC; FAIL_REGIME_CSP; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:53:01Z",
-      "evaluated_at": "2026-02-20T19:09:03.505972+00:00",
+      "data_freshness": "2026-02-20T20:34:50Z",
+      "evaluated_at": "2026-02-20T20:51:12.137503+00:00",
       "strategy": null,
-      "price": 310.72,
+      "price": 310.4,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -649,14 +709,21 @@
       "pre_cap_score": null,
       "final_score": 50,
       "score_caps": null,
-      "band_reason": "Band C because score >= 40 and < 60",
       "max_loss": null,
-      "underlying_price": 310.72,
-      "capital_required": 31072.000000000004,
+      "underlying_price": 310.4,
+      "capital_required": 31039.999999999996,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204689.28
+      "rank_score": 204689.6,
+      "primary_reason_codes": [
+        "REGIME_CONFLICT",
+        "RSI_RANGE",
+        "RSI_CC",
+        "REGIME_CSP",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
     },
     {
       "symbol": "META",
@@ -664,15 +731,14 @@
       "final_verdict": "HOLD",
       "score": 50,
       "band": "C",
-      "primary_reason": "FAIL_NOT_NEAR_RESISTANCE; FAIL_RSI_RANGE; FAIL_RSI_CC; FAIL_REGIME_CSP; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:52:58Z",
-      "evaluated_at": "2026-02-20T19:09:03.846386+00:00",
+      "data_freshness": "2026-02-20T20:35:00Z",
+      "evaluated_at": "2026-02-20T20:51:11.945790+00:00",
       "strategy": null,
-      "price": 657.83,
+      "price": 654.27,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -698,14 +764,21 @@
       "pre_cap_score": null,
       "final_score": 50,
       "score_caps": null,
-      "band_reason": "Band C because score >= 40 and < 60",
       "max_loss": null,
-      "underlying_price": 657.83,
-      "capital_required": 65783.0,
+      "underlying_price": 654.27,
+      "capital_required": 65427.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204342.17
+      "rank_score": 204345.73,
+      "primary_reason_codes": [
+        "NOT_NEAR_RESISTANCE",
+        "RSI_RANGE",
+        "RSI_CC",
+        "REGIME_CSP",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
     },
     {
       "symbol": "MRVL",
@@ -713,15 +786,14 @@
       "final_verdict": "HOLD",
       "score": 50,
       "band": "C",
-      "primary_reason": "FAIL_REGIME_CONFLICT; FAIL_RSI_RANGE; FAIL_RSI_CC; FAIL_REGIME_CSP; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:53:05Z",
-      "evaluated_at": "2026-02-20T19:09:03.835897+00:00",
+      "data_freshness": "2026-02-20T20:34:51Z",
+      "evaluated_at": "2026-02-20T20:51:12.050643+00:00",
       "strategy": null,
-      "price": 79.37,
+      "price": 79.03,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -747,14 +819,21 @@
       "pre_cap_score": null,
       "final_score": 50,
       "score_caps": null,
-      "band_reason": "Band C because score >= 40 and < 60",
       "max_loss": null,
-      "underlying_price": 79.37,
-      "capital_required": 7937.0,
+      "underlying_price": 79.03,
+      "capital_required": 7903.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204920.63
+      "rank_score": 204920.97,
+      "primary_reason_codes": [
+        "REGIME_CONFLICT",
+        "RSI_RANGE",
+        "RSI_CC",
+        "REGIME_CSP",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
     },
     {
       "symbol": "MSFT",
@@ -762,15 +841,14 @@
       "final_verdict": "HOLD",
       "score": 50,
       "band": "C",
-      "primary_reason": "FAIL_NOT_NEAR_RESISTANCE; FAIL_RSI_RANGE; FAIL_RSI_CSP; FAIL_RSI_CC; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:53:02Z",
-      "evaluated_at": "2026-02-20T19:09:03.533674+00:00",
+      "data_freshness": "2026-02-20T20:34:51Z",
+      "evaluated_at": "2026-02-20T20:51:12.120714+00:00",
       "strategy": null,
-      "price": 398.65,
+      "price": 396.65,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -796,14 +874,21 @@
       "pre_cap_score": null,
       "final_score": 50,
       "score_caps": null,
-      "band_reason": "Band C because score >= 40 and < 60",
       "max_loss": null,
-      "underlying_price": 398.65,
-      "capital_required": 39865.0,
+      "underlying_price": 396.65,
+      "capital_required": 39665.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204601.35
+      "rank_score": 204603.35,
+      "primary_reason_codes": [
+        "NOT_NEAR_RESISTANCE",
+        "RSI_RANGE",
+        "RSI_CSP",
+        "RSI_CC",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
     },
     {
       "symbol": "MU",
@@ -811,15 +896,14 @@
       "final_verdict": "HOLD",
       "score": 50,
       "band": "C",
-      "primary_reason": "Stock qualified (score: 50)",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:53:00Z",
-      "evaluated_at": "2026-02-20T19:09:00.960806+00:00",
+      "data_freshness": "2026-02-20T20:35:01Z",
+      "evaluated_at": "2026-02-20T20:51:11.928785+00:00",
       "strategy": null,
-      "price": 426.84,
+      "price": 425.67,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -845,30 +929,36 @@
       "pre_cap_score": null,
       "final_score": 50,
       "score_caps": null,
-      "band_reason": "Band C because score >= 40 and < 60",
       "max_loss": null,
-      "underlying_price": 426.84,
-      "capital_required": 42684.0,
+      "underlying_price": 425.67,
+      "capital_required": 42567.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204573.16
+      "rank_score": 204574.33,
+      "primary_reason_codes": [
+        "NOT_NEAR_SUPPORT",
+        "NOT_NEAR_RESISTANCE",
+        "ATR",
+        "ATR_TOO_HIGH",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
     },
     {
       "symbol": "NKE",
       "verdict": "HOLD",
       "final_verdict": "HOLD",
-      "score": 50,
-      "band": "C",
-      "primary_reason": "FAIL_REGIME_CONFLICT; FAIL_REGIME_CSP; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS",
+      "score": 60,
+      "band": "B",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:58:52Z",
-      "evaluated_at": "2026-02-20T19:15:00.051824+00:00",
+      "data_freshness": "2026-02-20T20:34:52Z",
+      "evaluated_at": "2026-02-20T20:51:11.715171+00:00",
       "strategy": null,
-      "price": 65.06,
+      "price": 65.56,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -883,8 +973,8 @@
         "notional_pct": null,
         "capital_penalties": [],
         "top_penalty": null,
-        "raw_score": 50,
-        "final_score": 50,
+        "raw_score": 60,
+        "final_score": 60,
         "score_caps": {
           "regime_cap": 65,
           "applied_caps": []
@@ -892,16 +982,21 @@
       },
       "raw_score": null,
       "pre_cap_score": null,
-      "final_score": null,
+      "final_score": 60,
       "score_caps": null,
-      "band_reason": "Band C because score >= 40 and < 60",
       "max_loss": null,
-      "underlying_price": 65.06,
-      "capital_required": 6506.0,
+      "underlying_price": 65.56,
+      "capital_required": 6556.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204934.94
+      "rank_score": 305934.44,
+      "primary_reason_codes": [
+        "REGIME_CONFLICT",
+        "REGIME_CSP",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
     },
     {
       "symbol": "NVDA",
@@ -909,15 +1004,14 @@
       "final_verdict": "ELIGIBLE",
       "score": 65,
       "band": "B",
-      "primary_reason": "Chain evaluated, contract selected: delta=0.3936, DTE=30-45, bid=$9.1 (CSP V2)",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "PASS",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T19:14:56Z",
-      "evaluated_at": "2026-02-20T19:30:33.864204+00:00",
+      "data_freshness": "2026-02-20T20:34:51Z",
+      "evaluated_at": "2026-02-20T20:51:12.064261+00:00",
       "strategy": "CSP",
-      "price": 189.59,
+      "price": 189.5,
       "expiration": "2026-04-02",
       "has_candidates": true,
       "candidate_count": 1,
@@ -949,16 +1043,18 @@
       },
       "raw_score": null,
       "pre_cap_score": null,
-      "final_score": null,
+      "final_score": 65,
       "score_caps": null,
-      "band_reason": "Band B because score >= 60 and < 80",
-      "max_loss": 17590.0,
-      "underlying_price": 189.59,
-      "capital_required": 17590.0,
-      "expected_credit": 9.1,
-      "premium_yield_pct": 0.05173393973848777,
+      "max_loss": 17565.0,
+      "underlying_price": 189.5,
+      "capital_required": 17565.0,
+      "expected_credit": 9.35,
+      "premium_yield_pct": 0.053230856817534866,
       "market_cap": null,
-      "rank_score": 306324.6173393974
+      "rank_score": 306324.88230856817,
+      "primary_reason_codes": [
+        "CHAIN_SELECTED"
+      ]
     },
     {
       "symbol": "ORCL",
@@ -966,15 +1062,14 @@
       "final_verdict": "HOLD",
       "score": 50,
       "band": "C",
-      "primary_reason": "Stock qualified (score: 50)",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:52:54Z",
-      "evaluated_at": "2026-02-20T19:09:00.960806+00:00",
+      "data_freshness": "2026-02-20T20:34:57Z",
+      "evaluated_at": "2026-02-20T20:51:12.157230+00:00",
       "strategy": null,
-      "price": 149.31,
+      "price": 147.75,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -1000,14 +1095,23 @@
       "pre_cap_score": null,
       "final_score": 50,
       "score_caps": null,
-      "band_reason": "Band C because score >= 40 and < 60",
       "max_loss": null,
-      "underlying_price": 149.31,
-      "capital_required": 14931.0,
+      "underlying_price": 147.75,
+      "capital_required": 14775.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204850.69
+      "rank_score": 204852.25,
+      "primary_reason_codes": [
+        "NOT_NEAR_SUPPORT",
+        "NOT_NEAR_RESISTANCE",
+        "RSI_RANGE",
+        "RSI_CC",
+        "ATR",
+        "ATR_TOO_HIGH",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
     },
     {
       "symbol": "PLTR",
@@ -1015,15 +1119,14 @@
       "final_verdict": "HOLD",
       "score": 50,
       "band": "C",
-      "primary_reason": "FAIL_REGIME_CONFLICT; FAIL_NOT_NEAR_SUPPORT; FAIL_NOT_NEAR_RESISTANCE; FAIL_RSI_RANGE; FAIL_RSI_CSP; FAIL_RSI_CC; FAIL_ATR; FAIL_ATR_TOO_HIGH; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:53:01Z",
-      "evaluated_at": "2026-02-20T19:09:03.812969+00:00",
+      "data_freshness": "2026-02-20T20:35:04Z",
+      "evaluated_at": "2026-02-20T20:51:12.014716+00:00",
       "strategy": null,
-      "price": 135.76,
+      "price": 134.72,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -1049,14 +1152,25 @@
       "pre_cap_score": null,
       "final_score": 50,
       "score_caps": null,
-      "band_reason": "Band C because score >= 40 and < 60",
       "max_loss": null,
-      "underlying_price": 135.76,
-      "capital_required": 13576.0,
+      "underlying_price": 134.72,
+      "capital_required": 13472.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204864.24
+      "rank_score": 204865.28,
+      "primary_reason_codes": [
+        "REGIME_CONFLICT",
+        "NOT_NEAR_SUPPORT",
+        "NOT_NEAR_RESISTANCE",
+        "RSI_RANGE",
+        "RSI_CSP",
+        "RSI_CC",
+        "ATR",
+        "ATR_TOO_HIGH",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
     },
     {
       "symbol": "QQQ",
@@ -1064,15 +1178,14 @@
       "final_verdict": "HOLD",
       "score": 50,
       "band": "C",
-      "primary_reason": "FAIL_REGIME_CONFLICT; FAIL_RSI_RANGE; FAIL_RSI_CC; FAIL_REGIME_CSP; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:52:50Z",
-      "evaluated_at": "2026-02-20T19:09:03.741060+00:00",
+      "data_freshness": "2026-02-20T20:34:54Z",
+      "evaluated_at": "2026-02-20T20:51:00.853469+00:00",
       "strategy": null,
-      "price": 609.13,
+      "price": 607.6,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -1098,177 +1211,31 @@
       "pre_cap_score": null,
       "final_score": 50,
       "score_caps": null,
-      "band_reason": "Band C because score >= 40 and < 60",
       "max_loss": null,
-      "underlying_price": 609.13,
-      "capital_required": 60913.0,
+      "underlying_price": 607.6,
+      "capital_required": 60760.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204390.87
+      "rank_score": 204392.4,
+      "primary_reason_codes": [
+        "STOCK_QUALIFIED"
+      ]
     },
     {
       "symbol": "SMCI",
       "verdict": "HOLD",
       "final_verdict": "HOLD",
-      "score": 50,
-      "band": "C",
-      "primary_reason": "FAIL_NOT_NEAR_RESISTANCE; FAIL_ATR; FAIL_ATR_TOO_HIGH",
-      "stage_status": "RUN",
-      "stage1_status": "PASS",
-      "stage2_status": "NOT_RUN",
-      "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:53:02Z",
-      "evaluated_at": "2026-02-20T19:09:03.718430+00:00",
-      "strategy": null,
-      "price": 32.26,
-      "expiration": null,
-      "has_candidates": false,
-      "candidate_count": 0,
-      "score_breakdown": {
-        "data_quality_score": 100,
-        "regime_score": 65,
-        "options_liquidity_score": 20,
-        "strategy_fit_score": 50,
-        "capital_efficiency_score": 100,
-        "composite_score": 67,
-        "csp_notional": null,
-        "notional_pct": null,
-        "capital_penalties": [],
-        "top_penalty": null,
-        "raw_score": 50,
-        "final_score": 50,
-        "score_caps": {
-          "regime_cap": 65,
-          "applied_caps": []
-        }
-      },
-      "raw_score": null,
-      "pre_cap_score": null,
-      "final_score": 50,
-      "score_caps": null,
-      "band_reason": "Band C because score >= 40 and < 60",
-      "max_loss": null,
-      "underlying_price": 32.26,
-      "capital_required": 3226.0,
-      "expected_credit": null,
-      "premium_yield_pct": null,
-      "market_cap": null,
-      "rank_score": 204967.74
-    },
-    {
-      "symbol": "SNOW",
-      "verdict": "HOLD",
-      "final_verdict": "HOLD",
-      "score": 60,
-      "band": "B",
-      "primary_reason": "FAIL_NOT_NEAR_SUPPORT; FAIL_NOT_NEAR_RESISTANCE; FAIL_RSI_RANGE; FAIL_RSI_CC; FAIL_ATR; FAIL_ATR_TOO_HIGH; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS",
-      "stage_status": "RUN",
-      "stage1_status": "PASS",
-      "stage2_status": "NOT_RUN",
-      "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:52:54Z",
-      "evaluated_at": "2026-02-20T19:09:03.221501+00:00",
-      "strategy": null,
-      "price": 176.75,
-      "expiration": null,
-      "has_candidates": false,
-      "candidate_count": 0,
-      "score_breakdown": {
-        "data_quality_score": 100,
-        "regime_score": 65,
-        "options_liquidity_score": 20,
-        "strategy_fit_score": 50,
-        "capital_efficiency_score": 100,
-        "composite_score": 67,
-        "csp_notional": null,
-        "notional_pct": null,
-        "capital_penalties": [],
-        "top_penalty": null,
-        "raw_score": 60,
-        "final_score": 60,
-        "score_caps": {
-          "regime_cap": 65,
-          "applied_caps": []
-        }
-      },
-      "raw_score": null,
-      "pre_cap_score": null,
-      "final_score": 60,
-      "score_caps": null,
-      "band_reason": "Band B because score >= 60 and < 80",
-      "max_loss": null,
-      "underlying_price": 176.75,
-      "capital_required": 17675.0,
-      "expected_credit": null,
-      "premium_yield_pct": null,
-      "market_cap": null,
-      "rank_score": 305823.25
-    },
-    {
-      "symbol": "SPY",
-      "verdict": "HOLD",
-      "final_verdict": "HOLD",
-      "score": 60,
-      "band": "B",
-      "primary_reason": "FAIL_REGIME_CONFLICT; FAIL_RSI_RANGE; FAIL_RSI_CC; FAIL_REGIME_CSP; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS",
-      "stage_status": "RUN",
-      "stage1_status": "PASS",
-      "stage2_status": "NOT_RUN",
-      "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:53:00Z",
-      "evaluated_at": "2026-02-20T19:09:03.364475+00:00",
-      "strategy": null,
-      "price": 689.22,
-      "expiration": null,
-      "has_candidates": false,
-      "candidate_count": 0,
-      "score_breakdown": {
-        "data_quality_score": 100,
-        "regime_score": 65,
-        "options_liquidity_score": 20,
-        "strategy_fit_score": 50,
-        "capital_efficiency_score": 100,
-        "composite_score": 67,
-        "csp_notional": null,
-        "notional_pct": null,
-        "capital_penalties": [],
-        "top_penalty": null,
-        "raw_score": 60,
-        "final_score": 60,
-        "score_caps": {
-          "regime_cap": 65,
-          "applied_caps": []
-        }
-      },
-      "raw_score": null,
-      "pre_cap_score": null,
-      "final_score": 60,
-      "score_caps": null,
-      "band_reason": "Band B because score >= 60 and < 80",
-      "max_loss": null,
-      "underlying_price": 689.22,
-      "capital_required": 68922.0,
-      "expected_credit": null,
-      "premium_yield_pct": null,
-      "market_cap": null,
-      "rank_score": 305310.78
-    },
-    {
-      "symbol": "TSLA",
-      "verdict": "HOLD",
-      "final_verdict": "HOLD",
       "score": 35,
       "band": "D",
-      "primary_reason": "Stock qualified (score: 35)",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:53:01Z",
-      "evaluated_at": "2026-02-20T19:09:00.960806+00:00",
+      "data_freshness": "2026-02-20T20:34:50Z",
+      "evaluated_at": "2026-02-20T20:51:00.853469+00:00",
       "strategy": null,
-      "price": 412.88,
+      "price": 32.09,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -1294,30 +1261,31 @@
       "pre_cap_score": null,
       "final_score": 35,
       "score_caps": null,
-      "band_reason": "Band D because score < 40",
       "max_loss": null,
-      "underlying_price": 412.88,
-      "capital_required": 41288.0,
+      "underlying_price": 32.09,
+      "capital_required": 3209.0000000000005,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 103087.12
+      "rank_score": 103467.91,
+      "primary_reason_codes": [
+        "STOCK_QUALIFIED"
+      ]
     },
     {
-      "symbol": "TSM",
+      "symbol": "SNOW",
       "verdict": "HOLD",
       "final_verdict": "HOLD",
-      "score": 60,
-      "band": "B",
-      "primary_reason": "FAIL_NOT_NEAR_SUPPORT; FAIL_NOT_NEAR_RESISTANCE; FAIL_RSI_RANGE; FAIL_RSI_CSP; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS",
+      "score": 50,
+      "band": "C",
       "stage_status": "RUN",
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:52:54Z",
-      "evaluated_at": "2026-02-20T19:09:03.408781+00:00",
+      "data_freshness": "2026-02-20T20:34:56Z",
+      "evaluated_at": "2026-02-20T20:51:00.853469+00:00",
       "strategy": null,
-      "price": 371.12,
+      "price": 172.94,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -1332,8 +1300,8 @@
         "notional_pct": null,
         "capital_penalties": [],
         "top_penalty": null,
-        "raw_score": 60,
-        "final_score": 60,
+        "raw_score": 50,
+        "final_score": 50,
         "score_caps": {
           "regime_cap": 65,
           "applied_caps": []
@@ -1341,32 +1309,33 @@
       },
       "raw_score": null,
       "pre_cap_score": null,
-      "final_score": 60,
+      "final_score": 50,
       "score_caps": null,
-      "band_reason": "Band B because score >= 60 and < 80",
       "max_loss": null,
-      "underlying_price": 371.12,
-      "capital_required": 37112.0,
+      "underlying_price": 172.94,
+      "capital_required": 17294.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 305628.88
+      "rank_score": 204827.06,
+      "primary_reason_codes": [
+        "STOCK_QUALIFIED"
+      ]
     },
     {
-      "symbol": "WMT",
+      "symbol": "SPY",
       "verdict": "HOLD",
       "final_verdict": "HOLD",
-      "score": 65,
-      "band": "B",
-      "primary_reason": "rejected_due_to_delta=10",
+      "score": 50,
+      "band": "C",
       "stage_status": "RUN",
       "stage1_status": "PASS",
-      "stage2_status": "FAIL",
+      "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-20T18:57:54Z",
-      "evaluated_at": "2026-02-20T19:13:55.115650+00:00",
+      "data_freshness": "2026-02-20T20:35:01Z",
+      "evaluated_at": "2026-02-20T20:51:12.033768+00:00",
       "strategy": null,
-      "price": 121.86,
+      "price": 688.45,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -1381,33 +1350,182 @@
         "notional_pct": null,
         "capital_penalties": [],
         "top_penalty": null,
-        "raw_score": 67,
-        "final_score": 65,
+        "raw_score": 50,
+        "final_score": 50,
         "score_caps": {
           "regime_cap": 65,
-          "applied_caps": [
-            {
-              "type": "regime_cap",
-              "cap_value": 65,
-              "before": 67,
-              "after": 65,
-              "reason": "Regime NEUTRAL caps score to 65"
-            }
-          ]
+          "applied_caps": []
         }
       },
       "raw_score": null,
       "pre_cap_score": null,
-      "final_score": null,
+      "final_score": 50,
       "score_caps": null,
-      "band_reason": "Band B because score >= 60 and < 80",
       "max_loss": null,
-      "underlying_price": 121.86,
-      "capital_required": 12186.0,
+      "underlying_price": 688.45,
+      "capital_required": 68845.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 306378.14
+      "rank_score": 204311.55,
+      "primary_reason_codes": [
+        "REGIME_CONFLICT",
+        "RSI_RANGE",
+        "RSI_CC",
+        "REGIME_CSP",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
+    },
+    {
+      "symbol": "TSLA",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 35,
+      "band": "D",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-02-20T20:34:51Z",
+      "evaluated_at": "2026-02-20T20:51:00.853469+00:00",
+      "strategy": null,
+      "price": 409.96,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 35,
+        "final_score": 35,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 35,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 409.96,
+      "capital_required": 40996.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 103090.04,
+      "primary_reason_codes": [
+        "STOCK_QUALIFIED"
+      ]
+    },
+    {
+      "symbol": "TSM",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 50,
+      "band": "C",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-02-20T20:34:56Z",
+      "evaluated_at": "2026-02-20T20:51:00.853469+00:00",
+      "strategy": null,
+      "price": 370.4,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 50,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 370.4,
+      "capital_required": 37040.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 204629.6,
+      "primary_reason_codes": [
+        "STOCK_QUALIFIED"
+      ]
+    },
+    {
+      "symbol": "WMT",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 50,
+      "band": "C",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-02-20T20:35:01Z",
+      "evaluated_at": "2026-02-20T20:51:00.853469+00:00",
+      "strategy": null,
+      "price": 122.96,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 50,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 122.96,
+      "capital_required": 12296.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 204877.04,
+      "primary_reason_codes": [
+        "STOCK_QUALIFIED"
+      ]
     }
   ],
   "selected_candidates": [
@@ -1416,10 +1534,9 @@
       "strategy": "CSP",
       "expiry": "2026-04-02",
       "strike": 185.0,
-      "delta": -0.3936,
-      "credit_estimate": 9.1,
-      "max_loss": 17590.0,
-      "why_this_trade": "delta=0.3936, bid=$9.1 (CSP V2)",
+      "delta": -0.3966,
+      "credit_estimate": null,
+      "max_loss": null,
       "contract_key": "185.0-2026-04-02-PUT",
       "option_symbol": null
     }
@@ -1449,11 +1566,10 @@
         "strategy": "CSP",
         "expiry": "2026-04-02",
         "strike": 185.0,
-        "delta": -0.3936,
-        "credit_estimate": 9.1,
-        "max_loss": 17590.0,
-        "why_this_trade": "delta=0.3936, bid=$9.1 (CSP V2)",
-        "contract_key": "185.0-2026-04-02-PUT",
+        "delta": -0.3966,
+        "credit_estimate": 9.35,
+        "max_loss": 17565.0,
+        "contract_key": "185-2026-04-02-PUT",
         "option_symbol": null
       }
     ],
@@ -1468,169 +1584,142 @@
     "WMT": []
   },
   "gates_by_symbol": {
-    "AAPL": [],
+    "AAPL": [
+      {
+        "name": "Stock Quality (Stage 1)",
+        "status": "PASS"
+      }
+    ],
     "ABNB": [],
     "AMD": [
       {
         "name": "Stock Quality (Stage 1)",
-        "status": "PASS",
-        "reason": "Stock qualified (score: 50)"
+        "status": "PASS"
       }
     ],
     "AMZN": [],
-    "AVGO": [],
+    "AVGO": [
+      {
+        "name": "Stock Quality (Stage 1)",
+        "status": "PASS"
+      }
+    ],
     "COIN": [
       {
         "name": "Stock Quality (Stage 1)",
-        "status": "PASS",
-        "reason": "Stock qualified (score: 50)"
+        "status": "PASS"
       }
     ],
     "COST": [
       {
         "name": "Stock Quality (Stage 1)",
-        "status": "PASS",
-        "reason": "Stock qualified (score: 60)"
+        "status": "PASS"
       }
     ],
     "CRM": [
       {
         "name": "Stock Quality (Stage 1)",
-        "status": "PASS",
-        "reason": "Stock qualified (score: 60)"
+        "status": "PASS"
       }
     ],
     "CRWD": [
       {
         "name": "Stock Quality (Stage 1)",
-        "status": "PASS",
-        "reason": "Stock qualified (score: 50)"
+        "status": "PASS"
       }
     ],
-    "DIS": [],
+    "DIS": [
+      {
+        "name": "Stock Quality (Stage 1)",
+        "status": "PASS"
+      }
+    ],
     "GOOGL": [
       {
         "name": "Stock Quality (Stage 1)",
-        "status": "PASS",
-        "reason": "Stock qualified (score: 50)"
+        "status": "PASS"
       }
     ],
     "HD": [
       {
         "name": "Stock Quality (Stage 1)",
-        "status": "PASS",
-        "reason": "Stock qualified (score: 60)"
+        "status": "PASS"
       },
       {
         "name": "Options Liquidity (Stage 2)",
-        "status": "FAIL",
-        "reason": "rejected_due_to_delta=15 (top: rejected_due_to_delta=15)"
+        "status": "FAIL"
       }
     ],
     "JPM": [
       {
         "name": "Stock Quality (Stage 1)",
-        "status": "PASS",
-        "reason": "Stock qualified (score: 50)"
+        "status": "PASS"
       }
     ],
     "META": [
       {
         "name": "Stock Quality (Stage 1)",
-        "status": "PASS",
-        "reason": "Stock qualified (score: 50)"
+        "status": "PASS"
       }
     ],
     "MRVL": [
       {
         "name": "Stock Quality (Stage 1)",
-        "status": "PASS",
-        "reason": "Stock qualified (score: 50)"
+        "status": "PASS"
       }
     ],
     "MSFT": [
       {
         "name": "Stock Quality (Stage 1)",
-        "status": "PASS",
-        "reason": "Stock qualified (score: 50)"
+        "status": "PASS"
       }
     ],
-    "MU": [],
+    "MU": [
+      {
+        "name": "Stock Quality (Stage 1)",
+        "status": "PASS"
+      }
+    ],
     "NKE": [
       {
         "name": "Stock Quality (Stage 1)",
-        "status": "PASS",
-        "reason": "Stock qualified (score: 50)"
+        "status": "PASS"
       }
     ],
     "NVDA": [
       {
         "name": "Stock Quality (Stage 1)",
-        "status": "PASS",
-        "reason": "Stock qualified (score: 50)"
+        "status": "PASS"
       },
       {
         "name": "Options Liquidity (Stage 2)",
-        "status": "PASS",
-        "reason": "delta=0.3936, bid=$9.1"
+        "status": "PASS"
       }
     ],
-    "ORCL": [],
+    "ORCL": [
+      {
+        "name": "Stock Quality (Stage 1)",
+        "status": "PASS"
+      }
+    ],
     "PLTR": [
       {
         "name": "Stock Quality (Stage 1)",
-        "status": "PASS",
-        "reason": "Stock qualified (score: 50)"
+        "status": "PASS"
       }
     ],
-    "QQQ": [
-      {
-        "name": "Stock Quality (Stage 1)",
-        "status": "PASS",
-        "reason": "Stock qualified (score: 50)"
-      }
-    ],
-    "SMCI": [
-      {
-        "name": "Stock Quality (Stage 1)",
-        "status": "PASS",
-        "reason": "Stock qualified (score: 50)"
-      }
-    ],
-    "SNOW": [
-      {
-        "name": "Stock Quality (Stage 1)",
-        "status": "PASS",
-        "reason": "Stock qualified (score: 60)"
-      }
-    ],
+    "QQQ": [],
+    "SMCI": [],
+    "SNOW": [],
     "SPY": [
       {
         "name": "Stock Quality (Stage 1)",
-        "status": "PASS",
-        "reason": "Stock qualified (score: 60)"
+        "status": "PASS"
       }
     ],
     "TSLA": [],
-    "TSM": [
-      {
-        "name": "Stock Quality (Stage 1)",
-        "status": "PASS",
-        "reason": "Stock qualified (score: 60)"
-      }
-    ],
-    "WMT": [
-      {
-        "name": "Stock Quality (Stage 1)",
-        "status": "PASS",
-        "reason": "Stock qualified (score: 50)"
-      },
-      {
-        "name": "Options Liquidity (Stage 2)",
-        "status": "FAIL",
-        "reason": "rejected_due_to_delta=10 (top: rejected_due_to_delta=10)"
-      }
-    ]
+    "TSM": [],
+    "WMT": []
   },
   "earnings_by_symbol": {
     "AAPL": {
@@ -1777,11 +1866,11 @@
   "diagnostics_by_symbol": {
     "AAPL": {
       "technicals": {
-        "rsi": null,
-        "atr": null,
-        "atr_pct": null,
-        "support_level": null,
-        "resistance_level": null
+        "rsi": 45.452193166352366,
+        "atr": 6.500089152122074,
+        "atr_pct": 0.024944697030171444,
+        "support_level": 255.46,
+        "resistance_level": 261.64
       },
       "exit_plan": {
         "t1": null,
@@ -1789,7 +1878,7 @@
         "t3": null,
         "stop": null,
         "status": "NOT_AVAILABLE",
-        "reason": "Exit plan not computed: resistance_level"
+        "reason": "Exit plan not computed: mode_decision not CSP/CC"
       },
       "risk_flags": {
         "earnings_days": null,
@@ -1799,20 +1888,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "NEUTRAL",
-        "support_condition": null,
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "Stock qualified (score: 50)"
-      },
       "stock": {
-        "price": 264.1,
-        "bid": 264.06,
-        "ask": 264.14,
-        "volume": 820418,
-        "avg_option_volume_20d": 1045211.9,
+        "price": 263.2,
+        "bid": 263.15,
+        "ask": 263.25,
+        "volume": 992315,
+        "avg_option_volume_20d": 1032068.9,
         "avg_stock_volume_20d": 1276669998.55,
-        "quote_as_of": "2026-02-20T18:52:48Z"
+        "quote_as_of": "2026-02-20T20:34:51Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -1858,7 +1941,7 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 264.1
+        "underlying_price": 263.2
       },
       "sample_rejected_due_to_delta": []
     },
@@ -1886,20 +1969,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "NEUTRAL",
-        "support_condition": null,
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "Stock qualified (score: 35)"
-      },
       "stock": {
-        "price": 127.59,
-        "bid": 127.51,
-        "ask": 127.66,
-        "volume": 139994,
-        "avg_option_volume_20d": 14327.25,
+        "price": 127.34,
+        "bid": 127.28,
+        "ask": 127.4,
+        "volume": 178528,
+        "avg_option_volume_20d": 14040.75,
         "avg_stock_volume_20d": 6645083.6,
-        "quote_as_of": "2026-02-20T18:52:53Z"
+        "quote_as_of": "2026-02-20T20:34:48Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -1945,7 +2022,7 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 127.59
+        "underlying_price": 127.34
       },
       "sample_rejected_due_to_delta": []
     },
@@ -1973,20 +2050,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "SIDEWAYS",
-        "support_condition": "Support $198.66 vs spot $201.12",
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "FAIL_REGIME_CONFLICT; FAIL_NOT_NEAR_SUPPORT; FAIL_NOT_NEAR_RESISTANCE; FAIL_RSI_RANGE; FAIL_RSI_CC; FAIL_ATR; FAIL_ATR_TOO_HIGH; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS"
-      },
       "stock": {
-        "price": 201.12,
-        "bid": 201.06,
-        "ask": 201.18,
-        "volume": 1344740,
-        "avg_option_volume_20d": 661496.8,
+        "price": 199.6,
+        "bid": 199.57,
+        "ask": 199.63,
+        "volume": 1569780,
+        "avg_option_volume_20d": 635185.4,
         "avg_stock_volume_20d": 20313150.0,
-        "quote_as_of": "2026-02-20T18:52:50Z"
+        "quote_as_of": "2026-02-20T20:34:57Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -2032,7 +2103,7 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 201.12
+        "underlying_price": 199.6
       },
       "sample_rejected_due_to_delta": []
     },
@@ -2060,20 +2131,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "NEUTRAL",
-        "support_condition": null,
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "Stock qualified (score: 35)"
-      },
       "stock": {
-        "price": 210.92,
-        "bid": 210.9,
-        "ask": 210.94,
-        "volume": 2981480,
-        "avg_option_volume_20d": 965522.25,
+        "price": 209.41,
+        "bid": 209.39,
+        "ask": 209.43,
+        "volume": 3448310,
+        "avg_option_volume_20d": 980160.25,
         "avg_stock_volume_20d": 123458300.0,
-        "quote_as_of": "2026-02-20T18:52:49Z"
+        "quote_as_of": "2026-02-20T20:34:53Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -2119,17 +2184,17 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 210.92
+        "underlying_price": 209.41
       },
       "sample_rejected_due_to_delta": []
     },
     "AVGO": {
       "technicals": {
-        "rsi": null,
-        "atr": null,
-        "atr_pct": null,
-        "support_level": null,
-        "resistance_level": null
+        "rsi": 49.727257055941294,
+        "atr": 14.661006771712758,
+        "atr_pct": 0.04389654412321554,
+        "support_level": 330.5,
+        "resistance_level": 338.44
       },
       "exit_plan": {
         "t1": null,
@@ -2137,7 +2202,7 @@
         "t3": null,
         "stop": null,
         "status": "NOT_AVAILABLE",
-        "reason": "Exit plan not computed: resistance_level"
+        "reason": "Exit plan not computed: mode_decision not CSP/CC"
       },
       "risk_flags": {
         "earnings_days": null,
@@ -2147,20 +2212,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "NEUTRAL",
-        "support_condition": null,
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "Stock qualified (score: 50)"
-      },
       "stock": {
-        "price": 334.46,
-        "bid": 334.33,
-        "ask": 334.59,
-        "volume": 476977,
-        "avg_option_volume_20d": 305523.0,
+        "price": 332.62,
+        "bid": 332.55,
+        "ask": 332.68,
+        "volume": 554680,
+        "avg_option_volume_20d": 301117.3,
         "avg_stock_volume_20d": 34571732.15,
-        "quote_as_of": "2026-02-20T18:52:53Z"
+        "quote_as_of": "2026-02-20T20:34:54Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -2206,7 +2265,7 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 334.46
+        "underlying_price": 332.62
       },
       "sample_rejected_due_to_delta": []
     },
@@ -2234,20 +2293,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "DOWN",
-        "support_condition": "Support $145.16 vs spot $171.07",
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "FAIL_NOT_NEAR_SUPPORT; FAIL_RSI_RANGE; FAIL_RSI_CSP; FAIL_RSI_CC; FAIL_ATR; FAIL_ATR_TOO_HIGH; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS"
-      },
       "stock": {
-        "price": 171.07,
-        "bid": 170.84,
-        "ask": 171.3,
-        "volume": 571643,
-        "avg_option_volume_20d": 296609.6,
+        "price": 170.61,
+        "bid": 170.53,
+        "ask": 170.69,
+        "volume": 674336,
+        "avg_option_volume_20d": 305880.6,
         "avg_stock_volume_20d": 7290971.3,
-        "quote_as_of": "2026-02-20T18:52:50Z"
+        "quote_as_of": "2026-02-20T20:34:54Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -2293,7 +2346,7 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 171.07
+        "underlying_price": 170.61
       },
       "sample_rejected_due_to_delta": []
     },
@@ -2321,20 +2374,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "UP",
-        "support_condition": "Support $963.54 vs spot $982.38",
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "FAIL_NOT_NEAR_SUPPORT; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS"
-      },
       "stock": {
-        "price": 982.38,
-        "bid": 981.97,
-        "ask": 982.79,
-        "volume": 34999,
-        "avg_option_volume_20d": 38891.15,
+        "price": 985.38,
+        "bid": 985.19,
+        "ask": 985.57,
+        "volume": 41494,
+        "avg_option_volume_20d": 37947.95,
         "avg_stock_volume_20d": 3618834.5,
-        "quote_as_of": "2026-02-20T18:53:04Z"
+        "quote_as_of": "2026-02-20T20:34:53Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -2360,8 +2407,8 @@
         "notional_pct": null,
         "capital_penalties": [],
         "top_penalty": null,
-        "raw_score": 60,
-        "final_score": 60,
+        "raw_score": 50,
+        "final_score": 50,
         "score_caps": {
           "regime_cap": 65,
           "applied_caps": []
@@ -2380,7 +2427,7 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 982.38
+        "underlying_price": 985.38
       },
       "sample_rejected_due_to_delta": []
     },
@@ -2408,20 +2455,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "DOWN",
-        "support_condition": "Support $180.24 vs spot $185.99",
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "FAIL_NOT_NEAR_SUPPORT; FAIL_NOT_NEAR_RESISTANCE; FAIL_RSI_RANGE; FAIL_RSI_CSP; FAIL_RSI_CC; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS"
-      },
       "stock": {
-        "price": 185.99,
-        "bid": 185.82,
-        "ask": 186.15,
-        "volume": 349204,
-        "avg_option_volume_20d": 76498.35,
+        "price": 184.41,
+        "bid": 184.34,
+        "ask": 184.48,
+        "volume": 402730,
+        "avg_option_volume_20d": 81536.75,
         "avg_stock_volume_20d": 7309522.05,
-        "quote_as_of": "2026-02-20T18:53:01Z"
+        "quote_as_of": "2026-02-20T20:35:04Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -2467,7 +2508,7 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 185.99
+        "underlying_price": 184.41
       },
       "sample_rejected_due_to_delta": []
     },
@@ -2495,20 +2536,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "DOWN",
-        "support_condition": "Support $400.02 vs spot $405.72",
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "FAIL_NOT_NEAR_SUPPORT; FAIL_NOT_NEAR_RESISTANCE; FAIL_RSI_RANGE; FAIL_RSI_CC; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS"
-      },
       "stock": {
-        "price": 405.72,
-        "bid": 405.35,
-        "ask": 406.08,
-        "volume": 160564,
-        "avg_option_volume_20d": 39987.35,
+        "price": 389.23,
+        "bid": 389.04,
+        "ask": 389.42,
+        "volume": 347836,
+        "avg_option_volume_20d": 39996.95,
         "avg_stock_volume_20d": 4035010.0,
-        "quote_as_of": "2026-02-20T18:52:51Z"
+        "quote_as_of": "2026-02-20T20:34:57Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -2554,17 +2589,17 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 405.72
+        "underlying_price": 389.23
       },
       "sample_rejected_due_to_delta": []
     },
     "DIS": {
       "technicals": {
-        "rsi": null,
-        "atr": null,
-        "atr_pct": null,
-        "support_level": null,
-        "resistance_level": null
+        "rsi": 45.44500366823966,
+        "atr": 3.1560060941342196,
+        "atr_pct": 0.02977364239749264,
+        "support_level": 104.2,
+        "resistance_level": 106.11
       },
       "exit_plan": {
         "t1": null,
@@ -2572,7 +2607,7 @@
         "t3": null,
         "stop": null,
         "status": "NOT_AVAILABLE",
-        "reason": "Exit plan not computed: resistance_level"
+        "reason": "Exit plan not computed: mode_decision not CSP/CC"
       },
       "risk_flags": {
         "earnings_days": null,
@@ -2582,20 +2617,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "NEUTRAL",
-        "support_condition": null,
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "Stock qualified (score: 50)"
-      },
       "stock": {
-        "price": 105.55,
-        "bid": 105.51,
-        "ask": 105.59,
-        "volume": 179946,
-        "avg_option_volume_20d": 53622.25,
+        "price": 105.59,
+        "bid": 105.57,
+        "ask": 105.62,
+        "volume": 231429,
+        "avg_option_volume_20d": 52954.4,
         "avg_stock_volume_20d": 18554928.55,
-        "quote_as_of": "2026-02-20T18:53:00Z"
+        "quote_as_of": "2026-02-20T20:35:05Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -2641,7 +2670,7 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 105.55
+        "underlying_price": 105.59
       },
       "sample_rejected_due_to_delta": []
     },
@@ -2669,20 +2698,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "SIDEWAYS",
-        "support_condition": "Support $296.19 vs spot $315.04",
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "FAIL_REGIME_CONFLICT; FAIL_NOT_NEAR_SUPPORT; FAIL_RSI_RANGE; FAIL_RSI_CSP; FAIL_RSI_CC; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS"
-      },
       "stock": {
-        "price": 315.04,
-        "bid": 315.02,
-        "ask": 315.07,
-        "volume": 1006140,
-        "avg_option_volume_20d": 414113.55,
+        "price": 315.07,
+        "bid": 315.06,
+        "ask": 315.09,
+        "volume": 1248050,
+        "avg_option_volume_20d": 413787.0,
         "avg_stock_volume_20d": 603904433.25,
-        "quote_as_of": "2026-02-20T18:52:55Z"
+        "quote_as_of": "2026-02-20T20:34:59Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -2728,7 +2751,7 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 315.04
+        "underlying_price": 315.07
       },
       "sample_rejected_due_to_delta": []
     },
@@ -2741,9 +2764,9 @@
         "resistance_level": 391.1
       },
       "exit_plan": {
-        "t1": 386.085,
+        "t1": 386.4,
         "t2": 391.1,
-        "t3": 401.13,
+        "t3": 400.5,
         "stop": 365.5767,
         "status": "AVAILABLE"
       },
@@ -2755,20 +2778,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "UP",
-        "support_condition": "Support $378.20 vs spot $381.07",
-        "liquidity_condition": "rejected_due_to_delta=15",
-        "iv_condition": "rejected_due_to_delta=15"
-      },
       "stock": {
-        "price": 381.07,
-        "bid": 380.89,
-        "ask": 381.25,
-        "volume": 53244,
-        "avg_option_volume_20d": 15790.25,
+        "price": 381.7,
+        "bid": 381.6,
+        "ask": 381.8,
+        "volume": 79921,
+        "avg_option_volume_20d": 14907.05,
         "avg_stock_volume_20d": 15702870.3,
-        "quote_as_of": "2026-02-20T18:53:04Z"
+        "quote_as_of": "2026-02-20T20:34:51Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -2779,7 +2796,6 @@
       "liquidity": {
         "stock_liquidity_ok": false,
         "option_liquidity_ok": false,
-        "reason": "rejected_due_to_delta=15",
         "missing_fields": [],
         "chain_missing_fields": []
       },
@@ -2822,7 +2838,7 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 381.07
+        "underlying_price": 381.7
       },
       "sample_rejected_due_to_delta": []
     },
@@ -2850,20 +2866,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "SIDEWAYS",
-        "support_condition": "Support $306.98 vs spot $310.72",
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "FAIL_REGIME_CONFLICT; FAIL_RSI_RANGE; FAIL_RSI_CC; FAIL_REGIME_CSP; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS"
-      },
       "stock": {
-        "price": 310.72,
-        "bid": 310.48,
-        "ask": 310.95,
-        "volume": 149810,
-        "avg_option_volume_20d": 69068.45,
+        "price": 310.4,
+        "bid": 310.36,
+        "ask": 310.44,
+        "volume": 186050,
+        "avg_option_volume_20d": 68476.75,
         "avg_stock_volume_20d": 22033526.4,
-        "quote_as_of": "2026-02-20T18:53:01Z"
+        "quote_as_of": "2026-02-20T20:34:50Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -2909,7 +2919,7 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 310.72
+        "underlying_price": 310.4
       },
       "sample_rejected_due_to_delta": []
     },
@@ -2937,20 +2947,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "DOWN",
-        "support_condition": "Support $643.50 vs spot $657.83",
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "FAIL_NOT_NEAR_RESISTANCE; FAIL_RSI_RANGE; FAIL_RSI_CC; FAIL_REGIME_CSP; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS"
-      },
       "stock": {
-        "price": 657.83,
-        "bid": 657.51,
-        "ask": 658.15,
-        "volume": 470860,
-        "avg_option_volume_20d": 538934.95,
+        "price": 654.27,
+        "bid": 654.15,
+        "ask": 654.39,
+        "volume": 529496,
+        "avg_option_volume_20d": 540500.9,
         "avg_stock_volume_20d": 81862406.75,
-        "quote_as_of": "2026-02-20T18:52:58Z"
+        "quote_as_of": "2026-02-20T20:35:00Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -2996,7 +3000,7 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 657.83
+        "underlying_price": 654.27
       },
       "sample_rejected_due_to_delta": []
     },
@@ -3024,20 +3028,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "SIDEWAYS",
-        "support_condition": "Support $79.01 vs spot $79.37",
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "FAIL_REGIME_CONFLICT; FAIL_RSI_RANGE; FAIL_RSI_CC; FAIL_REGIME_CSP; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS"
-      },
       "stock": {
-        "price": 79.37,
-        "bid": 79.31,
-        "ask": 79.42,
-        "volume": 157967,
-        "avg_option_volume_20d": 56847.55,
+        "price": 79.03,
+        "bid": 78.96,
+        "ask": 79.09,
+        "volume": 188728,
+        "avg_option_volume_20d": 55359.7,
         "avg_stock_volume_20d": 12319578.15,
-        "quote_as_of": "2026-02-20T18:53:05Z"
+        "quote_as_of": "2026-02-20T20:34:51Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -3083,7 +3081,7 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 79.37
+        "underlying_price": 79.03
       },
       "sample_rejected_due_to_delta": []
     },
@@ -3111,20 +3109,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "DOWN",
-        "support_condition": "Support $392.53 vs spot $398.65",
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "FAIL_NOT_NEAR_RESISTANCE; FAIL_RSI_RANGE; FAIL_RSI_CSP; FAIL_RSI_CC; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS"
-      },
       "stock": {
-        "price": 398.65,
-        "bid": 398.57,
-        "ask": 398.74,
-        "volume": 982829,
-        "avg_option_volume_20d": 738417.25,
+        "price": 396.65,
+        "bid": 396.62,
+        "ask": 396.69,
+        "volume": 1219650,
+        "avg_option_volume_20d": 763023.05,
         "avg_stock_volume_20d": 99826583.0,
-        "quote_as_of": "2026-02-20T18:53:02Z"
+        "quote_as_of": "2026-02-20T20:34:51Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -3170,17 +3162,17 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 398.65
+        "underlying_price": 396.65
       },
       "sample_rejected_due_to_delta": []
     },
     "MU": {
       "technicals": {
-        "rsi": null,
-        "atr": null,
-        "atr_pct": null,
-        "support_level": null,
-        "resistance_level": null
+        "rsi": 59.41919232369824,
+        "atr": 25.385102918887977,
+        "atr_pct": 0.060824494833803706,
+        "support_level": 363.9,
+        "resistance_level": 438.77
       },
       "exit_plan": {
         "t1": null,
@@ -3188,7 +3180,7 @@
         "t3": null,
         "stop": null,
         "status": "NOT_AVAILABLE",
-        "reason": "Exit plan not computed: resistance_level"
+        "reason": "Exit plan not computed: mode_decision not CSP/CC"
       },
       "risk_flags": {
         "earnings_days": null,
@@ -3198,20 +3190,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "NEUTRAL",
-        "support_condition": null,
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "Stock qualified (score: 50)"
-      },
       "stock": {
-        "price": 426.84,
-        "bid": 426.72,
-        "ask": 426.95,
-        "volume": 1504780,
-        "avg_option_volume_20d": 493946.05,
+        "price": 425.67,
+        "bid": 425.59,
+        "ask": 425.76,
+        "volume": 1683960,
+        "avg_option_volume_20d": 483353.45,
         "avg_stock_volume_20d": 9519875.2,
-        "quote_as_of": "2026-02-20T18:53:00Z"
+        "quote_as_of": "2026-02-20T20:35:01Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -3257,7 +3243,7 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 426.84
+        "underlying_price": 425.67
       },
       "sample_rejected_due_to_delta": []
     },
@@ -3285,20 +3271,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "SIDEWAYS",
-        "support_condition": "Support $64.53 vs spot $65.06",
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "FAIL_REGIME_CONFLICT; FAIL_REGIME_CSP; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS"
-      },
       "stock": {
-        "price": 65.06,
-        "bid": 65.05,
-        "ask": 65.07,
-        "volume": 1126810,
-        "avg_option_volume_20d": 63626.1,
+        "price": 65.56,
+        "bid": 65.54,
+        "ask": 65.58,
+        "volume": 1268720,
+        "avg_option_volume_20d": 64247.45,
         "avg_stock_volume_20d": 22802729.25,
-        "quote_as_of": "2026-02-20T18:58:52Z"
+        "quote_as_of": "2026-02-20T20:34:52Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -3324,8 +3304,8 @@
         "notional_pct": null,
         "capital_penalties": [],
         "top_penalty": null,
-        "raw_score": 50,
-        "final_score": 50,
+        "raw_score": 60,
+        "final_score": 60,
         "score_caps": {
           "regime_cap": 65,
           "applied_caps": []
@@ -3344,7 +3324,7 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 65.06
+        "underlying_price": 65.56
       },
       "sample_rejected_due_to_delta": []
     },
@@ -3357,9 +3337,9 @@
         "resistance_level": 188.0
       },
       "exit_plan": {
-        "t1": 188.795,
+        "t1": 188.75,
         "t2": 188.0,
-        "t3": 186.41,
+        "t3": 186.5,
         "stop": 176.149,
         "status": "AVAILABLE"
       },
@@ -3371,20 +3351,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "UP",
-        "support_condition": "Support $185.42 vs spot $189.59",
-        "liquidity_condition": "OK",
-        "iv_condition": "Chain evaluated, contract selected: delta=0.3936, DTE=30-45, bid=$9.1 (CSP V2)"
-      },
       "stock": {
-        "price": 189.59,
-        "bid": 189.58,
-        "ask": 189.59,
-        "volume": 6819920,
-        "avg_option_volume_20d": 2359985.8,
+        "price": 189.5,
+        "bid": 189.5,
+        "ask": 189.51,
+        "volume": 7714230,
+        "avg_option_volume_20d": 2330667.4,
         "avg_stock_volume_20d": 519104161.6,
-        "quote_as_of": "2026-02-20T19:14:56Z"
+        "quote_as_of": "2026-02-20T20:34:51Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -3395,7 +3369,6 @@
       "liquidity": {
         "stock_liquidity_ok": true,
         "option_liquidity_ok": true,
-        "reason": "delta=0.3936, bid=$9.1",
         "missing_fields": [],
         "chain_missing_fields": []
       },
@@ -3438,17 +3411,17 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 189.59
+        "underlying_price": 189.5
       },
       "sample_rejected_due_to_delta": []
     },
     "ORCL": {
       "technicals": {
-        "rsi": null,
-        "atr": null,
-        "atr_pct": null,
-        "support_level": null,
-        "resistance_level": null
+        "rsi": 41.53900134099246,
+        "atr": 8.268555863814145,
+        "atr_pct": 0.05282072226788134,
+        "support_level": 151.37,
+        "resistance_level": 165.39
       },
       "exit_plan": {
         "t1": null,
@@ -3456,7 +3429,7 @@
         "t3": null,
         "stop": null,
         "status": "NOT_AVAILABLE",
-        "reason": "Exit plan not computed: resistance_level"
+        "reason": "Exit plan not computed: mode_decision not CSP/CC"
       },
       "risk_flags": {
         "earnings_days": null,
@@ -3466,20 +3439,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "NEUTRAL",
-        "support_condition": null,
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "Stock qualified (score: 50)"
-      },
       "stock": {
-        "price": 149.31,
-        "bid": 149.27,
-        "ask": 149.36,
-        "volume": 1148490,
-        "avg_option_volume_20d": 342028.8,
+        "price": 147.75,
+        "bid": 147.72,
+        "ask": 147.78,
+        "volume": 1383360,
+        "avg_option_volume_20d": 339584.3,
         "avg_stock_volume_20d": 67030259.55,
-        "quote_as_of": "2026-02-20T18:52:54Z"
+        "quote_as_of": "2026-02-20T20:34:57Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -3525,7 +3492,7 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 149.31
+        "underlying_price": 147.75
       },
       "sample_rejected_due_to_delta": []
     },
@@ -3553,20 +3520,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "SIDEWAYS",
-        "support_condition": "Support $128.32 vs spot $135.76",
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "FAIL_REGIME_CONFLICT; FAIL_NOT_NEAR_SUPPORT; FAIL_NOT_NEAR_RESISTANCE; FAIL_RSI_RANGE; FAIL_RSI_CSP; FAIL_RSI_CC; FAIL_ATR; FAIL_ATR_TOO_HIGH; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS"
-      },
       "stock": {
-        "price": 135.76,
-        "bid": 135.75,
-        "ask": 135.77,
-        "volume": 2192960,
-        "avg_option_volume_20d": 778565.15,
+        "price": 134.72,
+        "bid": 134.7,
+        "ask": 134.75,
+        "volume": 2641550,
+        "avg_option_volume_20d": 779185.2,
         "avg_stock_volume_20d": 38603917.05,
-        "quote_as_of": "2026-02-20T18:53:01Z"
+        "quote_as_of": "2026-02-20T20:35:04Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -3612,363 +3573,11 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 135.76
+        "underlying_price": 134.72
       },
       "sample_rejected_due_to_delta": []
     },
     "QQQ": {
-      "technicals": {
-        "rsi": 42.762492042093996,
-        "atr": 9.941417187341594,
-        "atr_pct": 0.016473755426684996,
-        "support_level": 596.33,
-        "resistance_level": 612.01
-      },
-      "exit_plan": {
-        "t1": null,
-        "t2": null,
-        "t3": null,
-        "stop": null,
-        "status": "NOT_AVAILABLE",
-        "reason": "Exit plan not computed: mode_decision not CSP/CC"
-      },
-      "risk_flags": {
-        "earnings_days": null,
-        "earnings_block": false,
-        "stock_liq": null,
-        "option_liq": null,
-        "data_status": "OK",
-        "missing_required": []
-      },
-      "explanation": {
-        "stock_regime_reason": "SIDEWAYS",
-        "support_condition": "Support $596.33 vs spot $609.13",
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "FAIL_REGIME_CONFLICT; FAIL_RSI_RANGE; FAIL_RSI_CC; FAIL_REGIME_CSP; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS"
-      },
-      "stock": {
-        "price": 609.13,
-        "bid": 609.1,
-        "ask": 609.16,
-        "volume": 3392490,
-        "avg_option_volume_20d": 5481699.2,
-        "avg_stock_volume_20d": 115136506.35,
-        "quote_as_of": "2026-02-20T18:52:50Z"
-      },
-      "symbol_eligibility": {
-        "status": "PASS",
-        "required_data_missing": [],
-        "required_data_stale": [],
-        "reasons": []
-      },
-      "liquidity": {
-        "stock_liquidity_ok": false,
-        "option_liquidity_ok": false,
-        "reason": "",
-        "missing_fields": [],
-        "chain_missing_fields": []
-      },
-      "score_breakdown": {
-        "data_quality_score": 100,
-        "regime_score": 65,
-        "options_liquidity_score": 20,
-        "strategy_fit_score": 50,
-        "capital_efficiency_score": 100,
-        "composite_score": 67,
-        "csp_notional": null,
-        "notional_pct": null,
-        "capital_penalties": [],
-        "top_penalty": null,
-        "raw_score": 50,
-        "final_score": 50,
-        "score_caps": {
-          "regime_cap": 65,
-          "applied_caps": []
-        }
-      },
-      "rank_reasons": {
-        "reasons": [
-          "Regime NEUTRAL",
-          "High data completeness",
-          "Capital efficient"
-        ],
-        "penalty": null
-      },
-      "suggested_capital_pct": 0.02,
-      "regime": "NEUTRAL",
-      "options": {
-        "expirations_count": 0,
-        "contracts_count": null,
-        "underlying_price": 609.13
-      },
-      "sample_rejected_due_to_delta": []
-    },
-    "SMCI": {
-      "technicals": {
-        "rsi": 52.72249138257238,
-        "atr": 1.9412012732577892,
-        "atr_pct": 0.06036073610876211,
-        "support_level": 32.12,
-        "resistance_level": 33.63
-      },
-      "exit_plan": {
-        "t1": null,
-        "t2": null,
-        "t3": null,
-        "stop": null,
-        "status": "NOT_AVAILABLE",
-        "reason": "Exit plan not computed: mode_decision not CSP/CC"
-      },
-      "risk_flags": {
-        "earnings_days": null,
-        "earnings_block": false,
-        "stock_liq": null,
-        "option_liq": null,
-        "data_status": "OK",
-        "missing_required": []
-      },
-      "explanation": {
-        "stock_regime_reason": "DOWN",
-        "support_condition": "Support $32.12 vs spot $32.26",
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "FAIL_NOT_NEAR_RESISTANCE; FAIL_ATR; FAIL_ATR_TOO_HIGH"
-      },
-      "stock": {
-        "price": 32.26,
-        "bid": 32.25,
-        "ask": 32.27,
-        "volume": 1054310,
-        "avg_option_volume_20d": 220393.25,
-        "avg_stock_volume_20d": 5137849.75,
-        "quote_as_of": "2026-02-20T18:53:02Z"
-      },
-      "symbol_eligibility": {
-        "status": "PASS",
-        "required_data_missing": [],
-        "required_data_stale": [],
-        "reasons": []
-      },
-      "liquidity": {
-        "stock_liquidity_ok": false,
-        "option_liquidity_ok": false,
-        "reason": "",
-        "missing_fields": [],
-        "chain_missing_fields": []
-      },
-      "score_breakdown": {
-        "data_quality_score": 100,
-        "regime_score": 65,
-        "options_liquidity_score": 20,
-        "strategy_fit_score": 50,
-        "capital_efficiency_score": 100,
-        "composite_score": 67,
-        "csp_notional": null,
-        "notional_pct": null,
-        "capital_penalties": [],
-        "top_penalty": null,
-        "raw_score": 50,
-        "final_score": 50,
-        "score_caps": {
-          "regime_cap": 65,
-          "applied_caps": []
-        }
-      },
-      "rank_reasons": {
-        "reasons": [
-          "Regime NEUTRAL",
-          "High data completeness",
-          "Capital efficient"
-        ],
-        "penalty": null
-      },
-      "suggested_capital_pct": 0.02,
-      "regime": "NEUTRAL",
-      "options": {
-        "expirations_count": 0,
-        "contracts_count": null,
-        "underlying_price": 32.26
-      },
-      "sample_rejected_due_to_delta": []
-    },
-    "SNOW": {
-      "technicals": {
-        "rsi": 42.203302830089,
-        "atr": 10.135033036060419,
-        "atr_pct": 0.056557103995872875,
-        "support_level": 156.08,
-        "resistance_level": 188.5
-      },
-      "exit_plan": {
-        "t1": null,
-        "t2": null,
-        "t3": null,
-        "stop": null,
-        "status": "NOT_AVAILABLE",
-        "reason": "Exit plan not computed: mode_decision not CSP/CC"
-      },
-      "risk_flags": {
-        "earnings_days": null,
-        "earnings_block": false,
-        "stock_liq": null,
-        "option_liq": null,
-        "data_status": "OK",
-        "missing_required": []
-      },
-      "explanation": {
-        "stock_regime_reason": "DOWN",
-        "support_condition": "Support $156.08 vs spot $176.75",
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "FAIL_NOT_NEAR_SUPPORT; FAIL_NOT_NEAR_RESISTANCE; FAIL_RSI_RANGE; FAIL_RSI_CC; FAIL_ATR; FAIL_ATR_TOO_HIGH; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS"
-      },
-      "stock": {
-        "price": 176.75,
-        "bid": 176.56,
-        "ask": 176.94,
-        "volume": 114498,
-        "avg_option_volume_20d": 48898.8,
-        "avg_stock_volume_20d": 1018595.0,
-        "quote_as_of": "2026-02-20T18:52:54Z"
-      },
-      "symbol_eligibility": {
-        "status": "FAIL",
-        "required_data_missing": [
-          "Volume 1018595 < 1500000"
-        ],
-        "required_data_stale": [],
-        "reasons": [
-          "Volume 1018595 < 1500000"
-        ]
-      },
-      "liquidity": {
-        "stock_liquidity_ok": false,
-        "option_liquidity_ok": false,
-        "reason": "",
-        "missing_fields": [],
-        "chain_missing_fields": []
-      },
-      "score_breakdown": {
-        "data_quality_score": 100,
-        "regime_score": 65,
-        "options_liquidity_score": 20,
-        "strategy_fit_score": 50,
-        "capital_efficiency_score": 100,
-        "composite_score": 67,
-        "csp_notional": null,
-        "notional_pct": null,
-        "capital_penalties": [],
-        "top_penalty": null,
-        "raw_score": 60,
-        "final_score": 60,
-        "score_caps": {
-          "regime_cap": 65,
-          "applied_caps": []
-        }
-      },
-      "rank_reasons": {
-        "reasons": [
-          "Regime NEUTRAL",
-          "High data completeness",
-          "Capital efficient"
-        ],
-        "penalty": null
-      },
-      "suggested_capital_pct": 0.02,
-      "regime": "NEUTRAL",
-      "options": {
-        "expirations_count": 0,
-        "contracts_count": null,
-        "underlying_price": 176.75
-      },
-      "sample_rejected_due_to_delta": []
-    },
-    "SPY": {
-      "technicals": {
-        "rsi": 46.80196930416467,
-        "atr": 7.924624926021741,
-        "atr_pct": 0.011577584335585759,
-        "support_level": 675.785,
-        "resistance_level": 684.96
-      },
-      "exit_plan": {
-        "t1": null,
-        "t2": null,
-        "t3": null,
-        "stop": null,
-        "status": "NOT_AVAILABLE",
-        "reason": "Exit plan not computed: mode_decision not CSP/CC"
-      },
-      "risk_flags": {
-        "earnings_days": null,
-        "earnings_block": false,
-        "stock_liq": null,
-        "option_liq": null,
-        "data_status": "OK",
-        "missing_required": []
-      },
-      "explanation": {
-        "stock_regime_reason": "SIDEWAYS",
-        "support_condition": "Support $675.78 vs spot $689.22",
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "FAIL_REGIME_CONFLICT; FAIL_RSI_RANGE; FAIL_RSI_CC; FAIL_REGIME_CSP; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS"
-      },
-      "stock": {
-        "price": 689.22,
-        "bid": 689.2,
-        "ask": 689.24,
-        "volume": 3367240,
-        "avg_option_volume_20d": 9313970.0,
-        "avg_stock_volume_20d": 88991424.4,
-        "quote_as_of": "2026-02-20T18:53:00Z"
-      },
-      "symbol_eligibility": {
-        "status": "PASS",
-        "required_data_missing": [],
-        "required_data_stale": [],
-        "reasons": []
-      },
-      "liquidity": {
-        "stock_liquidity_ok": false,
-        "option_liquidity_ok": false,
-        "reason": "",
-        "missing_fields": [],
-        "chain_missing_fields": []
-      },
-      "score_breakdown": {
-        "data_quality_score": 100,
-        "regime_score": 65,
-        "options_liquidity_score": 20,
-        "strategy_fit_score": 50,
-        "capital_efficiency_score": 100,
-        "composite_score": 67,
-        "csp_notional": null,
-        "notional_pct": null,
-        "capital_penalties": [],
-        "top_penalty": null,
-        "raw_score": 60,
-        "final_score": 60,
-        "score_caps": {
-          "regime_cap": 65,
-          "applied_caps": []
-        }
-      },
-      "rank_reasons": {
-        "reasons": [
-          "Regime NEUTRAL",
-          "High data completeness",
-          "Capital efficient"
-        ],
-        "penalty": null
-      },
-      "suggested_capital_pct": 0.02,
-      "regime": "NEUTRAL",
-      "options": {
-        "expirations_count": 0,
-        "contracts_count": null,
-        "underlying_price": 689.22
-      },
-      "sample_rejected_due_to_delta": []
-    },
-    "TSLA": {
       "technicals": {
         "rsi": null,
         "atr": null,
@@ -3992,20 +3601,95 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "NEUTRAL",
-        "support_condition": null,
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "Stock qualified (score: 35)"
+      "stock": {
+        "price": 607.6,
+        "bid": 607.58,
+        "ask": 607.61,
+        "volume": 3849150,
+        "avg_option_volume_20d": 5359379.9,
+        "avg_stock_volume_20d": 115136506.35,
+        "quote_as_of": "2026-02-20T20:34:54Z"
+      },
+      "symbol_eligibility": {
+        "status": "PASS",
+        "required_data_missing": [],
+        "required_data_stale": [],
+        "reasons": []
+      },
+      "liquidity": {
+        "stock_liquidity_ok": false,
+        "option_liquidity_ok": false,
+        "reason": "",
+        "missing_fields": [],
+        "chain_missing_fields": []
+      },
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "High data completeness",
+          "Capital efficient"
+        ],
+        "penalty": null
+      },
+      "suggested_capital_pct": 0.02,
+      "regime": "NEUTRAL",
+      "options": {
+        "expirations_count": 0,
+        "contracts_count": null,
+        "underlying_price": 607.6
+      },
+      "sample_rejected_due_to_delta": []
+    },
+    "SMCI": {
+      "technicals": {
+        "rsi": null,
+        "atr": null,
+        "atr_pct": null,
+        "support_level": null,
+        "resistance_level": null
+      },
+      "exit_plan": {
+        "t1": null,
+        "t2": null,
+        "t3": null,
+        "stop": null,
+        "status": "NOT_AVAILABLE",
+        "reason": "Exit plan not computed: resistance_level"
+      },
+      "risk_flags": {
+        "earnings_days": null,
+        "earnings_block": false,
+        "stock_liq": null,
+        "option_liq": null,
+        "data_status": "OK",
+        "missing_required": []
       },
       "stock": {
-        "price": 412.88,
-        "bid": 412.82,
-        "ask": 412.95,
-        "volume": 2862320,
-        "avg_option_volume_20d": 2076394.45,
-        "avg_stock_volume_20d": 74325446.7,
-        "quote_as_of": "2026-02-20T18:53:01Z"
+        "price": 32.09,
+        "bid": 32.09,
+        "ask": 32.1,
+        "volume": 1228990,
+        "avg_option_volume_20d": 221695.9,
+        "avg_stock_volume_20d": 5137849.75,
+        "quote_as_of": "2026-02-20T20:34:50Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -4051,17 +3735,17 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 412.88
+        "underlying_price": 32.09
       },
       "sample_rejected_due_to_delta": []
     },
-    "TSM": {
+    "SNOW": {
       "technicals": {
-        "rsi": 61.10590280395259,
-        "atr": 13.714816034499247,
-        "atr_pct": 0.038055484432140865,
-        "support_level": 351.33,
-        "resistance_level": 380.0
+        "rsi": null,
+        "atr": null,
+        "atr_pct": null,
+        "support_level": null,
+        "resistance_level": null
       },
       "exit_plan": {
         "t1": null,
@@ -4069,7 +3753,7 @@
         "t3": null,
         "stop": null,
         "status": "NOT_AVAILABLE",
-        "reason": "Exit plan not computed: mode_decision not CSP/CC"
+        "reason": "Exit plan not computed: resistance_level"
       },
       "risk_flags": {
         "earnings_days": null,
@@ -4079,20 +3763,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "UP",
-        "support_condition": "Support $351.33 vs spot $371.12",
-        "liquidity_condition": "Liquidity failed",
-        "iv_condition": "FAIL_NOT_NEAR_SUPPORT; FAIL_NOT_NEAR_RESISTANCE; FAIL_RSI_RANGE; FAIL_RSI_CSP; FAIL_NOT_HELD_FOR_CC; FAIL_NO_HOLDINGS"
-      },
       "stock": {
-        "price": 371.12,
-        "bid": 371.05,
-        "ask": 371.18,
-        "volume": 286216,
-        "avg_option_volume_20d": 136856.75,
-        "avg_stock_volume_20d": 19144400.85,
-        "quote_as_of": "2026-02-20T18:52:54Z"
+        "price": 172.94,
+        "bid": 172.76,
+        "ask": 173.12,
+        "volume": 147071,
+        "avg_option_volume_20d": 50315.5,
+        "avg_stock_volume_20d": 1018595.0,
+        "quote_as_of": "2026-02-20T20:34:56Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -4118,8 +3796,8 @@
         "notional_pct": null,
         "capital_penalties": [],
         "top_penalty": null,
-        "raw_score": 60,
-        "final_score": 60,
+        "raw_score": 50,
+        "final_score": 50,
         "score_caps": {
           "regime_cap": 65,
           "applied_caps": []
@@ -4138,24 +3816,25 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 371.12
+        "underlying_price": 172.94
       },
       "sample_rejected_due_to_delta": []
     },
-    "WMT": {
+    "SPY": {
       "technicals": {
-        "rsi": 52.00868151363085,
-        "atr": 3.4672616401986316,
-        "atr_pct": 0.027766970771191092,
-        "support_level": 124.4,
-        "resistance_level": 126.39
+        "rsi": 46.80196930416467,
+        "atr": 7.924624926021741,
+        "atr_pct": 0.011577584335585759,
+        "support_level": 675.785,
+        "resistance_level": 684.96
       },
       "exit_plan": {
-        "t1": 124.125,
-        "t2": 126.39,
-        "t3": 130.92,
-        "stop": 119.1991,
-        "status": "AVAILABLE"
+        "t1": null,
+        "t2": null,
+        "t3": null,
+        "stop": null,
+        "status": "NOT_AVAILABLE",
+        "reason": "Exit plan not computed: mode_decision not CSP/CC"
       },
       "risk_flags": {
         "earnings_days": null,
@@ -4165,20 +3844,14 @@
         "data_status": "OK",
         "missing_required": []
       },
-      "explanation": {
-        "stock_regime_reason": "UP",
-        "support_condition": "Support $124.40 vs spot $121.86",
-        "liquidity_condition": "rejected_due_to_delta=10",
-        "iv_condition": "rejected_due_to_delta=10"
-      },
       "stock": {
-        "price": 121.86,
-        "bid": 121.85,
-        "ask": 121.87,
-        "volume": 767665,
-        "avg_option_volume_20d": 119680.35,
-        "avg_stock_volume_20d": 72584446.65,
-        "quote_as_of": "2026-02-20T18:57:54Z"
+        "price": 688.45,
+        "bid": 688.44,
+        "ask": 688.46,
+        "volume": 3897380,
+        "avg_option_volume_20d": 9207541.0,
+        "avg_stock_volume_20d": 88991424.4,
+        "quote_as_of": "2026-02-20T20:35:01Z"
       },
       "symbol_eligibility": {
         "status": "PASS",
@@ -4189,7 +3862,7 @@
       "liquidity": {
         "stock_liquidity_ok": false,
         "option_liquidity_ok": false,
-        "reason": "rejected_due_to_delta=10",
+        "reason": "",
         "missing_fields": [],
         "chain_missing_fields": []
       },
@@ -4204,19 +3877,11 @@
         "notional_pct": null,
         "capital_penalties": [],
         "top_penalty": null,
-        "raw_score": 67,
-        "final_score": 65,
+        "raw_score": 50,
+        "final_score": 50,
         "score_caps": {
           "regime_cap": 65,
-          "applied_caps": [
-            {
-              "type": "regime_cap",
-              "cap_value": 65,
-              "before": 67,
-              "after": 65,
-              "reason": "Regime NEUTRAL caps score to 65"
-            }
-          ]
+          "applied_caps": []
         }
       },
       "rank_reasons": {
@@ -4232,7 +3897,250 @@
       "options": {
         "expirations_count": 0,
         "contracts_count": null,
-        "underlying_price": 121.86
+        "underlying_price": 688.45
+      },
+      "sample_rejected_due_to_delta": []
+    },
+    "TSLA": {
+      "technicals": {
+        "rsi": null,
+        "atr": null,
+        "atr_pct": null,
+        "support_level": null,
+        "resistance_level": null
+      },
+      "exit_plan": {
+        "t1": null,
+        "t2": null,
+        "t3": null,
+        "stop": null,
+        "status": "NOT_AVAILABLE",
+        "reason": "Exit plan not computed: resistance_level"
+      },
+      "risk_flags": {
+        "earnings_days": null,
+        "earnings_block": false,
+        "stock_liq": null,
+        "option_liq": null,
+        "data_status": "OK",
+        "missing_required": []
+      },
+      "stock": {
+        "price": 409.96,
+        "bid": 409.91,
+        "ask": 410.0,
+        "volume": 3413550,
+        "avg_option_volume_20d": 2082164.55,
+        "avg_stock_volume_20d": 74325446.7,
+        "quote_as_of": "2026-02-20T20:34:51Z"
+      },
+      "symbol_eligibility": {
+        "status": "PASS",
+        "required_data_missing": [],
+        "required_data_stale": [],
+        "reasons": []
+      },
+      "liquidity": {
+        "stock_liquidity_ok": false,
+        "option_liquidity_ok": false,
+        "reason": "",
+        "missing_fields": [],
+        "chain_missing_fields": []
+      },
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 35,
+        "final_score": 35,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "High data completeness",
+          "Capital efficient"
+        ],
+        "penalty": null
+      },
+      "suggested_capital_pct": 0.02,
+      "regime": "NEUTRAL",
+      "options": {
+        "expirations_count": 0,
+        "contracts_count": null,
+        "underlying_price": 409.96
+      },
+      "sample_rejected_due_to_delta": []
+    },
+    "TSM": {
+      "technicals": {
+        "rsi": null,
+        "atr": null,
+        "atr_pct": null,
+        "support_level": null,
+        "resistance_level": null
+      },
+      "exit_plan": {
+        "t1": null,
+        "t2": null,
+        "t3": null,
+        "stop": null,
+        "status": "NOT_AVAILABLE",
+        "reason": "Exit plan not computed: resistance_level"
+      },
+      "risk_flags": {
+        "earnings_days": null,
+        "earnings_block": false,
+        "stock_liq": null,
+        "option_liq": null,
+        "data_status": "OK",
+        "missing_required": []
+      },
+      "stock": {
+        "price": 370.4,
+        "bid": 370.36,
+        "ask": 370.44,
+        "volume": 356042,
+        "avg_option_volume_20d": 135268.0,
+        "avg_stock_volume_20d": 19144400.85,
+        "quote_as_of": "2026-02-20T20:34:56Z"
+      },
+      "symbol_eligibility": {
+        "status": "PASS",
+        "required_data_missing": [],
+        "required_data_stale": [],
+        "reasons": []
+      },
+      "liquidity": {
+        "stock_liquidity_ok": false,
+        "option_liquidity_ok": false,
+        "reason": "",
+        "missing_fields": [],
+        "chain_missing_fields": []
+      },
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "High data completeness",
+          "Capital efficient"
+        ],
+        "penalty": null
+      },
+      "suggested_capital_pct": 0.02,
+      "regime": "NEUTRAL",
+      "options": {
+        "expirations_count": 0,
+        "contracts_count": null,
+        "underlying_price": 370.4
+      },
+      "sample_rejected_due_to_delta": []
+    },
+    "WMT": {
+      "technicals": {
+        "rsi": null,
+        "atr": null,
+        "atr_pct": null,
+        "support_level": null,
+        "resistance_level": null
+      },
+      "exit_plan": {
+        "t1": null,
+        "t2": null,
+        "t3": null,
+        "stop": null,
+        "status": "NOT_AVAILABLE",
+        "reason": "Exit plan not computed: resistance_level"
+      },
+      "risk_flags": {
+        "earnings_days": null,
+        "earnings_block": false,
+        "stock_liq": null,
+        "option_liq": null,
+        "data_status": "OK",
+        "missing_required": []
+      },
+      "stock": {
+        "price": 122.96,
+        "bid": 122.93,
+        "ask": 122.98,
+        "volume": 952642,
+        "avg_option_volume_20d": 134144.7,
+        "avg_stock_volume_20d": 72584446.65,
+        "quote_as_of": "2026-02-20T20:35:01Z"
+      },
+      "symbol_eligibility": {
+        "status": "PASS",
+        "required_data_missing": [],
+        "required_data_stale": [],
+        "reasons": []
+      },
+      "liquidity": {
+        "stock_liquidity_ok": false,
+        "option_liquidity_ok": false,
+        "reason": "",
+        "missing_fields": [],
+        "chain_missing_fields": []
+      },
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "rank_reasons": {
+        "reasons": [
+          "Regime NEUTRAL",
+          "High data completeness",
+          "Capital efficient"
+        ],
+        "penalty": null
+      },
+      "suggested_capital_pct": 0.02,
+      "regime": "NEUTRAL",
+      "options": {
+        "expirations_count": 0,
+        "contracts_count": null,
+        "underlying_price": 122.96
       },
       "sample_rejected_due_to_delta": []
     }

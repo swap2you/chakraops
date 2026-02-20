@@ -319,7 +319,7 @@ def ui_universe(
                     "pre_cap_score": getattr(s, "pre_cap_score", None) or raw_score,
                     "score_caps": score_caps,
                     "band": s.band,
-                    "primary_reason": s.primary_reason or "",
+                    "primary_reason": _primary_reason_display(s),
                     "stage_status": s.stage_status,
                     "provider_status": s.provider_status or "n/a",
                     "data_freshness": s.data_freshness,
@@ -340,7 +340,11 @@ def ui_universe(
                 row["required_data_stale"] = sel_el.get("required_data_stale") or []
                 row["optional_missing"] = sel_el.get("optional_missing") or []
                 sample = (getattr(diag, "sample_rejected_due_to_delta", None) or (diag.get("sample_rejected_due_to_delta") if isinstance(diag, dict) else None) or []) if diag else []
-                row["reasons_explained"] = _compute_reasons_explained(s.primary_reason, sel_el, sample)
+                row["reasons_explained"] = _compute_reasons_explained(
+                    getattr(s, "primary_reason", None) or "",
+                    sel_el,
+                    sample,
+                )
                 sel_cand = sel_by_sym.get(sym_key)
                 if sel_cand and (s.verdict or "").upper() == "ELIGIBLE":
                     row["selected_contract_key"] = getattr(sel_cand, "contract_key", None)
@@ -2295,6 +2299,42 @@ def _liquidity_evaluated(summary: Any) -> bool:
     return stage2_status != "NOT_RUN"
 
 
+def _reason_code_to_label(code: str) -> str:
+    """R22.7: Map machine code to safe display label (no FAIL_/WARN_ in output)."""
+    c = (code or "").strip().upper()
+    if not c:
+        return ""
+    labels = {
+        "REGIME_CONFLICT": "Regime conflict",
+        "NOT_NEAR_SUPPORT": "Not near support",
+        "NOT_NEAR_RESISTANCE": "Not near resistance",
+        "NO_SUPPORT": "No support level",
+        "NO_RESISTANCE": "No resistance level",
+        "RSI_RANGE": "RSI out of range",
+        "RSI_CSP": "RSI (CSP) out of range",
+        "RSI_CC": "RSI (CC) out of range",
+        "ATR": "ATR check",
+        "ATR_TOO_HIGH": "ATR too high",
+        "NO_HOLDINGS": "No holdings",
+        "NOT_HELD_FOR_CC": "Not held for CC",
+        "REGIME_CSP": "Regime (CSP)",
+        "REGIME_CC": "Regime (CC)",
+        "NO_CANDLES": "No candles",
+    }
+    return labels.get(c, code.replace("_", " ").title())
+
+
+def _primary_reason_display(summary: Any) -> str:
+    """R22.7: Request-time display string from primary_reason_codes or primary_reason (no raw FAIL_* in output)."""
+    codes = getattr(summary, "primary_reason_codes", None) or []
+    if not codes and getattr(summary, "primary_reason", None):
+        from app.core.eval.decision_artifact_v2 import _reason_string_to_codes
+        codes = _reason_string_to_codes(getattr(summary, "primary_reason", None))
+    if codes:
+        return "; ".join(_reason_code_to_label(c) for c in codes)
+    return getattr(summary, "primary_reason", None) or ""
+
+
 def _compute_reasons_explained(
     primary_reason: Optional[str],
     symbol_eligibility: Dict[str, Any],
@@ -2310,22 +2350,112 @@ def _compute_reasons_explained(
 
 
 def _build_mtf_levels_at_request_time(
+    symbol: str,
     technicals: Dict[str, Any],
     exit_plan: Dict[str, Any],
     as_of_iso: Optional[str],
 ) -> Dict[str, Any]:
-    """R22.4: Multi-timeframe levels at request time. Not persisted in decision JSON."""
+    """R22.7: Multi-timeframe S/R from resampled OHLC. Daily from technicals or recomputed; weekly/monthly from resampled bars."""
     support = technicals.get("support_level")
     resistance = technicals.get("resistance_level")
     as_of = as_of_iso or ""
-    method = "pivot"
-    daily = {"support": support, "resistance": resistance, "as_of": as_of, "method": method} if (support is not None or resistance is not None) else None
+    method = "swing_cluster"
+    daily_block: Optional[Dict[str, Any]] = (
+        {"support": support, "resistance": resistance, "as_of": as_of, "method": method, "bar_count": None}
+        if (support is not None or resistance is not None) else None
+    )
+    weekly_block: Optional[Dict[str, Any]] = None
+    monthly_block: Optional[Dict[str, Any]] = None
+    min_bars = 7  # 2*k+1 with k=3
+    try:
+        from app.core.eligibility.candles import get_candles
+        from app.core.eligibility.multiframe import _resample_daily_to_weekly, _resample_daily_to_monthly
+        from app.core.eligibility.swing_cluster import compute_support_resistance
+        from app.core.eligibility.config import (
+            SWING_CLUSTER_WINDOW,
+            SWING_FRACTAL_K,
+            S_R_ATR_MULT,
+            S_R_PCT_TOL,
+        )
+        daily_candles = get_candles((symbol or "").strip().upper(), "daily", 400)
+        spot = technicals.get("spot")
+        if spot is None and daily_candles:
+            last = daily_candles[-1]
+            try:
+                spot = float(last.get("close") or last.get("open") or 0)
+            except (TypeError, ValueError):
+                spot = 0.0
+        atr14 = technicals.get("atr")
+        if not daily_candles or spot <= 0:
+            return {"monthly": monthly_block or _insufficient("monthly"), "weekly": weekly_block or _insufficient("weekly"), "daily": daily_block, "4h": None}
+
+        # Daily S/R from artifact technicals (already computed at eval) or from candles
+        if daily_block is None and len(daily_candles) >= min_bars:
+            sr_d = compute_support_resistance(
+                daily_candles, float(spot), atr14, SWING_CLUSTER_WINDOW, SWING_FRACTAL_K, S_R_ATR_MULT, S_R_PCT_TOL
+            )
+            if sr_d.get("support_level") is not None or sr_d.get("resistance_level") is not None:
+                daily_block = {
+                    "support": sr_d.get("support_level"),
+                    "resistance": sr_d.get("resistance_level"),
+                    "as_of": as_of,
+                    "method": sr_d.get("method") or method,
+                    "bar_count": len(daily_candles),
+                    "tolerance_used": sr_d.get("tolerance_used"),
+                }
+        elif daily_block and daily_block.get("bar_count") is None and daily_candles:
+            daily_block["bar_count"] = len(daily_candles)
+
+        # Weekly: resample daily -> weekly, then S/R
+        weekly_candles = _resample_daily_to_weekly(daily_candles)
+        window_w = min(20, len(weekly_candles))
+        if len(weekly_candles) >= min_bars and window_w >= min_bars:
+            sr_w = compute_support_resistance(
+                weekly_candles, float(spot), atr14, window_w, SWING_FRACTAL_K, S_R_ATR_MULT, S_R_PCT_TOL
+            )
+            weekly_block = {
+                "support": sr_w.get("support_level"),
+                "resistance": sr_w.get("resistance_level"),
+                "as_of": as_of,
+                "method": sr_w.get("method") or method,
+                "bar_count": len(weekly_candles),
+                "tolerance_used": sr_w.get("tolerance_used"),
+            }
+        else:
+            weekly_block = _insufficient("weekly")
+
+        # Monthly: resample daily -> monthly, then S/R
+        monthly_candles = _resample_daily_to_monthly(daily_candles)
+        window_m = min(24, len(monthly_candles))
+        if len(monthly_candles) >= min_bars and window_m >= min_bars:
+            sr_m = compute_support_resistance(
+                monthly_candles, float(spot), atr14, window_m, SWING_FRACTAL_K, S_R_ATR_MULT, S_R_PCT_TOL
+            )
+            monthly_block = {
+                "support": sr_m.get("support_level"),
+                "resistance": sr_m.get("resistance_level"),
+                "as_of": as_of,
+                "method": sr_m.get("method") or method,
+                "bar_count": len(monthly_candles),
+                "tolerance_used": sr_m.get("tolerance_used"),
+            }
+        else:
+            monthly_block = _insufficient("monthly")
+    except Exception:
+        weekly_block = weekly_block or _insufficient("weekly")
+        monthly_block = monthly_block or _insufficient("monthly")
+
     return {
-        "monthly": daily,
-        "weekly": daily,
-        "daily": daily,
+        "monthly": monthly_block,
+        "weekly": weekly_block,
+        "daily": daily_block,
         "4h": None,
     }
+
+
+def _insufficient(timeframe: str) -> Dict[str, Any]:
+    """Return INSUFFICIENT_HISTORY block for a timeframe (request-time only)."""
+    return {"status_code": "INSUFFICIENT_HISTORY", "support": None, "resistance": None, "as_of": None, "method": None, "bar_count": None}
 
 
 def _build_hold_time_estimate_at_request_time(
@@ -2420,6 +2550,17 @@ def _build_computed_values_at_request_time(
     }
 
 
+def _config_hash_for_diagnostics() -> str:
+    """R22.7: Stable hash of key eval config for As-of/Inputs fingerprint (request-time only)."""
+    try:
+        import hashlib
+        from app.core.scoring.config import TIER_A_MIN, TIER_B_MIN, TIER_C_MIN
+        blob = f"TIER_A={TIER_A_MIN}_B={TIER_B_MIN}_C={TIER_C_MIN}"
+        return hashlib.sha256(blob.encode()).hexdigest()[:12]
+    except Exception:
+        return ""
+
+
 def _build_symbol_diagnostics_from_v2_store(
     summary: Any,
     candidates: List[Any],
@@ -2430,6 +2571,7 @@ def _build_symbol_diagnostics_from_v2_store(
     selected_contract_key: Optional[str] = None,
     option_symbol: Optional[str] = None,
     pipeline_timestamp: Optional[str] = None,
+    run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build full SymbolDiagnosticsResponseExtended from v2 store (summary + candidates + gates + earnings + diagnostics_details)."""
     c_dicts = [c.to_dict() if hasattr(c, "to_dict") else (c if isinstance(c, dict) else {}) for c in candidates]
@@ -2464,7 +2606,7 @@ def _build_symbol_diagnostics_from_v2_store(
     regime = diag.get("regime") or getattr(summary, "regime", None)
     sample_rej = diag.get("sample_rejected_due_to_delta") or []
     computed_values = _build_computed_values_at_request_time(technicals, regime, sample_rej)
-    mtf_levels = _build_mtf_levels_at_request_time(technicals, exit_plan, pipeline_timestamp)
+    mtf_levels = _build_mtf_levels_at_request_time(symbol, technicals, exit_plan, pipeline_timestamp)
     methodology = {
         "candles_source": "diagnostics",
         "window": "20",
@@ -2474,11 +2616,21 @@ def _build_symbol_diagnostics_from_v2_store(
     targets = {"t1": exit_plan.get("t1"), "t2": exit_plan.get("t2"), "t3": exit_plan.get("t3")}
     invalidation = exit_plan.get("stop") or technicals.get("support_level")
     hold_time_estimate = _build_hold_time_estimate_at_request_time(technicals, exit_plan)
+    quote_as_of = stock.get("quote_as_of") or getattr(summary, "data_freshness", None)
+    as_of_inputs = {
+        "evaluation_run_id": run_id,
+        "pipeline_timestamp": pipeline_timestamp,
+        "quote_as_of": quote_as_of,
+        "candles_as_of": pipeline_timestamp,
+        "orats_as_of": quote_as_of,
+        "config_hash": _config_hash_for_diagnostics(),
+    }
     return {
         "symbol": symbol,
         "provider_status": getattr(summary, "provider_status", "OK") or "OK",
         "provider_message": "",
-        "primary_reason": getattr(summary, "primary_reason", None),
+        "primary_reason": _primary_reason_display(summary),
+        "as_of_inputs": as_of_inputs,
         "verdict": getattr(summary, "verdict", "HOLD"),
         "in_universe": True,
         "stock": stock if stock else None,
@@ -2530,7 +2682,7 @@ def _build_symbol_diagnostics_from_v2_store(
         "score_breakdown": diag.get("score_breakdown"),
         "rank_reasons": diag.get("rank_reasons"),
         "reasons_explained": _compute_reasons_explained(
-            getattr(summary, "primary_reason", None),
+            getattr(summary, "primary_reason", None) or "",
             symbol_eligibility,
             diag.get("sample_rejected_due_to_delta") or [],
         ),
@@ -2594,6 +2746,7 @@ def ui_symbol_diagnostics(
                     selected_contract_key=_sel_key,
                     option_symbol=_opt_sym,
                     pipeline_timestamp=pipeline_ts,
+                    run_id=(artifact.metadata or {}).get("run_id"),
                 )
                 result["exact_run"] = True
                 result["run_id"] = (artifact.metadata or {}).get("run_id")
@@ -2610,7 +2763,12 @@ def ui_symbol_diagnostics(
         _sel_key = getattr(sel_c, "contract_key", None) if sel_c else None
         _opt_sym = getattr(sel_c, "option_symbol", None) if sel_c else None
         pipeline_ts = (artifact.metadata or {}).get("pipeline_timestamp") if artifact else None
-        out = _build_symbol_diagnostics_from_v2_store(summary, candidates, gates, earnings, diagnostics_details, sym_upper, selected_contract_key=_sel_key, option_symbol=_opt_sym, pipeline_timestamp=pipeline_ts)
+        run_id_val = (artifact.metadata or {}).get("run_id") if artifact else None
+        out = _build_symbol_diagnostics_from_v2_store(
+            summary, candidates, gates, earnings, diagnostics_details, sym_upper,
+            selected_contract_key=_sel_key, option_symbol=_opt_sym, pipeline_timestamp=pipeline_ts,
+            run_id=run_id_val,
+        )
         if run_id and run_id.strip():
             out["exact_run"] = False
             out["run_id"] = None

@@ -192,4 +192,26 @@ def build_weekly_from_daily(df_daily: pd.DataFrame) -> pd.DataFrame:
     return weekly
 
 
-__all__ = ["compute_regime", "build_weekly_from_daily"]
+def build_monthly_from_daily(df_daily: pd.DataFrame) -> pd.DataFrame:
+    """Build monthly OHLCV bars from daily data. open=first, high=max, low=min, close=last, volume=sum."""
+    if df_daily.empty:
+        return pd.DataFrame(columns=["date", "open", "high", "low", "close", "volume"])
+
+    df = df_daily.copy()
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.set_index("date")
+
+    monthly = df.resample("M").agg({
+        "open": "first",
+        "high": "max",
+        "low": "min",
+        "close": "last",
+        "volume": "sum",
+    })
+    monthly = monthly.reset_index()
+    monthly = monthly.rename(columns={"date": "date"})
+    monthly = monthly.dropna().reset_index(drop=True)
+    return monthly
+
+
+__all__ = ["compute_regime", "build_weekly_from_daily", "build_monthly_from_daily"]

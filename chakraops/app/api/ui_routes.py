@@ -482,6 +482,82 @@ def ui_universe_reset(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# R23.2: Delta band overrides (advanced) — chakraops/data/delta_overrides.json; NOT in out/
+@router.get("/delta-overrides")
+def ui_delta_overrides_list(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """List per-symbol delta band overrides. Advanced."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.config.delta_overrides import load_delta_overrides
+        overrides = load_delta_overrides()
+        return {"overrides": dict(overrides)}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error loading delta overrides: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/delta-overrides/{symbol}")
+async def ui_delta_overrides_set(
+    symbol: str,
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Set delta band override for symbol. Enforces DELTA_OVERRIDE_MAX_WIDEN. Body: { delta_lo, delta_hi }."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json()
+        delta_lo = body.get("delta_lo")
+        delta_hi = body.get("delta_hi")
+        if delta_lo is None or delta_hi is None:
+            raise HTTPException(status_code=400, detail="delta_lo and delta_hi required")
+        try:
+            delta_lo = float(delta_lo)
+            delta_hi = float(delta_hi)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="delta_lo and delta_hi must be numbers")
+        from app.core.config.delta_overrides import save_delta_override
+        from app.core.config.trade_rules import CSP_TARGET_DELTA_LOW, CSP_TARGET_DELTA_HIGH, DELTA_OVERRIDE_MAX_WIDEN
+        canonical_lo = float(CSP_TARGET_DELTA_LOW)
+        canonical_hi = float(CSP_TARGET_DELTA_HIGH)
+        max_widen = float(DELTA_OVERRIDE_MAX_WIDEN)
+        ok, err = save_delta_override(
+            symbol.strip().upper(), delta_lo, delta_hi, max_widen, canonical_lo, canonical_hi
+        )
+        if not ok:
+            raise HTTPException(status_code=400, detail=err or "Invalid override")
+        return {"symbol": symbol.strip().upper(), "delta_lo": delta_lo, "delta_hi": delta_hi}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error saving delta override: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/delta-overrides/{symbol}")
+def ui_delta_overrides_delete(
+    symbol: str,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Remove delta band override for symbol."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.config.delta_overrides import delete_delta_override
+        ok = delete_delta_override(symbol.strip().upper())
+        if not ok:
+            raise HTTPException(status_code=400, detail="Failed to delete override")
+        return {"symbol": symbol.strip().upper(), "deleted": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error deleting delta override: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/market/status")
 def ui_market_status(
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
@@ -2738,6 +2814,57 @@ def _build_shares_plan_at_request_time(
     }
 
 
+def _build_delta_diagnostics_at_request_time(
+    sample_rejected_due_to_delta: List[Dict[str, Any]],
+    delta_lo: float,
+    delta_hi: float,
+) -> Optional[Dict[str, Any]]:
+    """R23.1: Request-time only. When rejected due to delta, return best_delta, miss, direction, best_candidate. Not persisted."""
+    if not sample_rejected_due_to_delta or delta_lo >= delta_hi:
+        return None
+    best_sample: Optional[Dict[str, Any]] = None
+    best_miss: Optional[float] = None
+    for s in sample_rejected_due_to_delta:
+        d_abs = s.get("observed_delta_decimal_abs")
+        if d_abs is None:
+            d_abs = s.get("observed_delta_decimal_raw")
+        if d_abs is None:
+            continue
+        try:
+            d_val = float(d_abs)
+        except (TypeError, ValueError):
+            continue
+        if d_val < delta_lo:
+            miss = delta_lo - d_val
+            direction = "BELOW_BAND"
+        elif d_val > delta_hi:
+            miss = d_val - delta_hi
+            direction = "ABOVE_BAND"
+        else:
+            miss = 0.0
+            direction = "IN_BAND"
+        if best_miss is None or miss < best_miss:
+            best_miss = miss
+            best_sample = {
+                "band_min": delta_lo,
+                "band_max": delta_hi,
+                "best_delta": round(d_val, 4),
+                "miss": round(miss, 4),
+                "direction": direction,
+                "best_candidate": {
+                    "strike": s.get("strike"),
+                    "expiry": s.get("expiry"),
+                    "dte": s.get("dte"),
+                    "bid": s.get("bid"),
+                    "ask": s.get("ask"),
+                    "spread": s.get("spread_pct"),
+                    "contract_key": s.get("contract_key"),
+                    "option_symbol": s.get("option_symbol"),
+                },
+            }
+    return best_sample
+
+
 def _build_computed_values_at_request_time(
     technicals: Dict[str, Any],
     regime: Any,
@@ -2796,9 +2923,10 @@ def _build_symbol_diagnostics_from_v2_store(
     """Build full SymbolDiagnosticsResponseExtended from v2 store (summary + candidates + gates + earnings + diagnostics_details)."""
     c_dicts = [c.to_dict() if hasattr(c, "to_dict") else (c if isinstance(c, dict) else {}) for c in candidates]
     from app.core.eval.reason_codes import format_reason_for_display
+    from app.core.eval.decision_artifact_v2 import gate_code_to_label, gate_name_to_code
     g_list = [
         {
-            "name": g.name,
+            "name": gate_code_to_label(getattr(g, "gate_code", None)) or gate_code_to_label(gate_name_to_code(g.name)) or (g.name or "Gate"),
             "status": g.status,
             "reason": format_reason_for_display(g.reason) or (g.reason or ""),
             "pass": g.status == "PASS",
@@ -2837,6 +2965,12 @@ def _build_symbol_diagnostics_from_v2_store(
     regime = diag.get("regime") or getattr(summary, "regime", None)
     sample_rej = diag.get("sample_rejected_due_to_delta") or []
     computed_values = _build_computed_values_at_request_time(technicals, regime, sample_rej)
+    try:
+        from app.core.config.trade_rules import CSP_TARGET_DELTA_LOW, CSP_TARGET_DELTA_HIGH
+        _dlo, _dhi = float(CSP_TARGET_DELTA_LOW), float(CSP_TARGET_DELTA_HIGH)
+    except Exception:
+        _dlo, _dhi = 0.25, 0.35
+    delta_diagnostics = _build_delta_diagnostics_at_request_time(sample_rej, _dlo, _dhi)
     mtf_levels = _build_mtf_levels_at_request_time(symbol, technicals, exit_plan, pipeline_timestamp)
     methodology = {
         "candles_source": "diagnostics",
@@ -2869,6 +3003,16 @@ def _build_symbol_diagnostics_from_v2_store(
         summary, technicals, exit_plan, hold_time_estimate, symbol,
         mtf_levels=mtf_levels, as_of_inputs=as_of_inputs,
     )
+    # R23.2: Include delta_override for this symbol when present (for UI "Override active" badge and advanced form)
+    delta_override = None
+    try:
+        from app.core.config.delta_overrides import load_delta_overrides
+        overrides = load_delta_overrides()
+        sym_upper = (symbol or "").strip().upper()
+        if sym_upper in overrides:
+            delta_override = overrides[sym_upper]
+    except Exception:
+        pass
     return {
         "symbol": symbol,
         "provider_status": getattr(summary, "provider_status", "OK") or "OK",
@@ -2931,6 +3075,8 @@ def _build_symbol_diagnostics_from_v2_store(
             diag.get("sample_rejected_due_to_delta") or [],
         ),
         "sample_rejected_due_to_delta": diag.get("sample_rejected_due_to_delta") or [],
+        "delta_diagnostics": delta_diagnostics,
+        "delta_override": delta_override,
         "earnings": earnings_out,
         "selected_contract_key": selected_contract_key,
         "option_symbol": option_symbol,

@@ -312,6 +312,11 @@ def run_csp_stage2_v2(
                         "observed_delta_decimal_abs": round(delta_abs, 4) if delta_abs is not None else None,
                         "observed_delta_pct_abs": round(delta_abs * 100, 1) if delta_abs is not None else None,
                         "target_range_decimal": f"{delta_lo}-{delta_hi}",
+                        "strike": c.get("strike"),
+                        "expiry": str(c.get("exp"))[:10] if c.get("exp") else None,
+                        "bid": c.get("bid"),
+                        "ask": c.get("ask"),
+                        "spread_pct": round(sp, 4) if sp is not None else None,
                     })
             elif not passes_oi:
                 rejected_counts["rejected_due_to_oi"] += 1
@@ -340,6 +345,11 @@ def run_csp_stage2_v2(
                     "observed_delta_decimal_abs": round(d_abs, 4) if d_abs is not None else None,
                     "observed_delta_pct_abs": round(d_abs * 100, 1) if d_abs is not None else None,
                     "target_range_decimal": f"{delta_lo}-{delta_hi}",
+                    "strike": c.get("strike"),
+                    "expiry": str(c.get("exp"))[:10] if c.get("exp") else None,
+                    "bid": c.get("bid"),
+                    "ask": c.get("ask"),
+                    "spread_pct": round(sp, 4) if sp is not None else None,
                 })
         elif not passes_oi:
             rej = "oi_below_min"

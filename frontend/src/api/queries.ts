@@ -71,6 +71,14 @@ function symbolRecomputePath(symbol: string, force?: boolean): string {
   return force ? `${base}?force=true` : base;
 }
 
+/** R23.2: Delta band overrides (advanced). */
+function uiDeltaOverridesPath(): string {
+  return `/api/ui/delta-overrides`;
+}
+function uiDeltaOverrideSymbolPath(symbol: string): string {
+  return `/api/ui/delta-overrides/${encodeURIComponent(symbol)}`;
+}
+
 function uiSystemHealthPath(): string {
   return `/api/ui/system-health`;
 }
@@ -308,6 +316,8 @@ export const queryKeys = {
   uiWheelOverview: (accountId?: string | null) => ["ui", "wheel", "overview", accountId ?? ""] as const,
   uiMarketStatus: () => ["ui", "marketStatus"] as const,
   uiSnapshotsLatest: () => ["ui", "snapshots", "latest"] as const,
+  /** R23.2 */
+  uiDeltaOverrides: () => ["ui", "deltaOverrides"] as const,
 };
 
 // =============================================================================
@@ -425,6 +435,39 @@ export function useRecomputeSymbolDiagnostics() {
       qc.invalidateQueries({ queryKey: ["ui", "symbolDiagnostics", result.symbol] });
       qc.invalidateQueries({ queryKey: queryKeys.universe() });
       qc.invalidateQueries({ queryKey: ["ui", "decision"] });
+    },
+  });
+}
+
+/** R23.2: GET /api/ui/delta-overrides */
+export function useDeltaOverridesList() {
+  return useQuery({
+    queryKey: queryKeys.uiDeltaOverrides(),
+    queryFn: () => apiGet<{ overrides: Record<string, { delta_lo: number; delta_hi: number; updated_at_utc?: string }> }>(uiDeltaOverridesPath()),
+  });
+}
+
+/** R23.2: POST /api/ui/delta-overrides/{symbol} */
+export function useSetDeltaOverride(symbol: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { delta_lo: number; delta_hi: number }) =>
+      apiPost<{ symbol: string; delta_lo: number; delta_hi: number }>(uiDeltaOverrideSymbolPath(symbol), payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiDeltaOverrides() });
+      qc.invalidateQueries({ queryKey: queryKeys.symbolDiagnostics(symbol, "") });
+    },
+  });
+}
+
+/** R23.2: DELETE /api/ui/delta-overrides/{symbol} */
+export function useDeleteDeltaOverride(symbol: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiDelete(uiDeltaOverrideSymbolPath(symbol)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiDeltaOverrides() });
+      qc.invalidateQueries({ queryKey: queryKeys.symbolDiagnostics(symbol, "") });
     },
   });
 }

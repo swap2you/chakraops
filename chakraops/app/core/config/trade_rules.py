@@ -76,6 +76,13 @@ TARGET_HIGH: float = 250.0
 Stocks in the range [TARGET_LOW, TARGET_HIGH] receive maximum price suitability score.
 """
 
+# R23.2: Near-miss and delta override (advanced)
+DELTA_NEAR_MISS_EPS: float = 0.02
+"""If rejected due to delta and miss <= this, add DELTA_NEAR_MISS to primary_reason_codes (code-only)."""
+
+DELTA_OVERRIDE_MAX_WIDEN: float = 0.05
+"""Hard cap: per-symbol delta override cannot widen the band by more than this (each side)."""
+
 
 __all__ = [
     "CSP_MIN_DTE",
@@ -87,4 +94,6 @@ __all__ = [
     "MAX_PRICE",
     "TARGET_LOW",
     "TARGET_HIGH",
+    "DELTA_NEAR_MISS_EPS",
+    "DELTA_OVERRIDE_MAX_WIDEN",
 ]

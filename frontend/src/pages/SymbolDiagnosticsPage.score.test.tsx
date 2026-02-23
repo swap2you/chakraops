@@ -4,7 +4,7 @@
  * - liquidity_evaluated=false shows "Not evaluated", not "failed".
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@/test/test-utils";
+import { render, screen, fireEvent } from "@/test/test-utils";
 import { SymbolDiagnosticsPage } from "./SymbolDiagnosticsPage";
 
 const mockDiagnosticsWithCap = {
@@ -76,6 +76,43 @@ describe("SymbolDiagnosticsPage score UX", () => {
   it("shows Not evaluated for liquidity when liquidity_evaluated=false", async () => {
     render(<SymbolDiagnosticsPage />);
     expect(screen.getAllByText("Not evaluated").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("R23.1: Symbol header shows price when present", () => {
+    render(<SymbolDiagnosticsPage />);
+    expect(screen.getByText("$450.00")).toBeInTheDocument();
+  });
+
+  it("R23.1: Symbol header shows — when price absent", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: { ...mockDiagnosticsWithCap, stock: {} },
+      isLoading: false,
+      isError: false,
+    });
+    render(<SymbolDiagnosticsPage />);
+    expect(screen.queryByText("$450.00")).not.toBeInTheDocument();
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("SymbolDiagnosticsPage R23.1 Shares opened date", () => {
+  beforeEach(() => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: { ...mockDiagnosticsWithCap, shares_plan: {}, shares_position: null },
+      isLoading: false,
+      isError: false,
+    });
+    window.history.pushState({}, "", "/symbol-diagnostics?symbol=SPY");
+  });
+
+  it("Shares opened date input has type=date", () => {
+    render(<SymbolDiagnosticsPage />);
+    const sharesTab = screen.getByRole("button", { name: /Shares/i });
+    fireEvent.click(sharesTab);
+    const addBtn = screen.getByRole("button", { name: /Add Shares Position/i });
+    fireEvent.click(addBtn);
+    const dateInput = document.querySelector('input[type="date"]');
+    expect(dateInput).toBeInTheDocument();
   });
 });
 
@@ -263,5 +300,70 @@ describe("SymbolDiagnosticsPage R22.4 MTF levels and hold-time", () => {
     render(<SymbolDiagnosticsPage />);
     await screen.findByText("Multi-timeframe levels");
     expect(document.body.innerHTML).not.toMatch(/FAIL_[A-Z_0-9]+/);
+  });
+});
+
+describe("SymbolDiagnosticsPage R23.2 Delta diagnostics and override", () => {
+  const mockWithDeltaDiagnostics = {
+    ...mockDiagnosticsWithCap,
+    delta_diagnostics: {
+      band_min: 0.2,
+      band_max: 0.4,
+      best_delta: 0.18,
+      miss: 0.02,
+      direction: "BELOW_BAND" as const,
+      best_candidate: { strike: 165, expiry: "2026-04-18", bid: 1.8, ask: 2 },
+    },
+  };
+
+  beforeEach(() => {
+    window.history.pushState({}, "", "/symbol-diagnostics?symbol=WMT");
+  });
+
+  it("renders Delta band (rejected) card with best_delta, miss, and direction when delta_diagnostics present", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: mockWithDeltaDiagnostics,
+      isLoading: false,
+      isError: false,
+    });
+    render(<SymbolDiagnosticsPage />);
+    expect(screen.getByText("Delta band (rejected)")).toBeInTheDocument();
+    expect(screen.getByText(/Best available delta/)).toBeInTheDocument();
+    expect(screen.getByText("0.18")).toBeInTheDocument();
+    expect(screen.getByText(/Distance to band/)).toBeInTheDocument();
+    expect(screen.getByText("0.02")).toBeInTheDocument();
+    expect(screen.getByText(/below band/)).toBeInTheDocument();
+    expect(screen.getByText(/Target band/)).toBeInTheDocument();
+    expect(screen.getByText(/0.2 – 0.4/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Closest contract/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Strike 165/)).toBeInTheDocument();
+  });
+
+  it("shows Override active badge when delta_override is present", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: {
+        ...mockWithDeltaDiagnostics,
+        delta_override: { delta_lo: 0.2, delta_hi: 0.42, updated_at_utc: "2026-02-17T20:00:00Z" },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<SymbolDiagnosticsPage />);
+    expect(screen.getByText("Override active")).toBeInTheDocument();
+    expect(screen.getByText(/Band: 0.2 – 0.42/)).toBeInTheDocument();
+  });
+
+  it("shows Adjust delta band (Advanced) only after Show Advanced is clicked", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: mockWithDeltaDiagnostics,
+      isLoading: false,
+      isError: false,
+    });
+    render(<SymbolDiagnosticsPage />);
+    expect(screen.queryByText("Adjust delta band (Advanced)")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Show Advanced"));
+    expect(screen.getByText("Adjust delta band (Advanced)")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Hide Advanced"));
+    expect(screen.queryByText("Adjust delta band (Advanced)")).not.toBeInTheDocument();
   });
 });

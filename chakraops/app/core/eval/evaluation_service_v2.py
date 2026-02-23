@@ -22,6 +22,8 @@ from app.core.eval.decision_artifact_v2 import (
     assign_band,
     assign_band_reason,
     compute_rank_score,
+    gate_name_to_code,
+    normalize_contract_key,
 )
 from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
 
@@ -127,15 +129,22 @@ def evaluate_universe(
         cand_list: List[CandidateRow] = []
         for ct in cds:
             ct_dict = asdict(ct) if hasattr(ct, "__dataclass_fields__") else (ct if isinstance(ct, dict) else {})
+            strat = str(ct_dict.get("strategy", "CSP"))
+            exp = ct_dict.get("expiry")
+            st = ct_dict.get("strike")
+            opt_type = "PUT" if (strat or "CSP").upper() == "CSP" else "CALL"
+            _ct_key = normalize_contract_key(st, exp, opt_type) if (st is not None and exp) else None
             cand_list.append(CandidateRow(
                 symbol=sym_upper,
-                strategy=str(ct_dict.get("strategy", "CSP")),
-                expiry=ct_dict.get("expiry"),
-                strike=ct_dict.get("strike"),
+                strategy=strat,
+                expiry=exp,
+                strike=st,
                 delta=ct_dict.get("delta"),
                 credit_estimate=ct_dict.get("credit_estimate"),
                 max_loss=ct_dict.get("max_loss"),
                 why_this_trade=ct_dict.get("why_this_trade"),
+                contract_key=_ct_key,
+                option_symbol=ct_dict.get("option_symbol"),
             ))
         candidates_by_symbol[sym_upper] = cand_list
 
@@ -156,9 +165,7 @@ def evaluate_universe(
                 contract_d = sc.get("contract") or sc
                 _opt_sym = contract_d.get("option_symbol") if isinstance(contract_d, dict) else None
                 st = sc.get("strike") or (contract_d.get("strike") if isinstance(contract_d, dict) else None)
-                if st is not None and expiry_val:
-                    opt_type = "PUT" if (strategy_val or "CSP").upper() == "CSP" else "CALL"
-                    _ct_key = f"{st}-{expiry_val[:10]}-{opt_type}"
+                _ct_key = normalize_contract_key(st, expiry_val, "PUT" if (strategy_val or "CSP").upper() == "CSP" else "CALL")
                 selected_candidates.append(CandidateRow(
                     symbol=sym_upper,
                     strategy=strategy_val,
@@ -178,7 +185,7 @@ def evaluate_universe(
                 expiry_val = expiry_val or str(ft.get("expiry") or ft.get("expiration") or "")[:10]
                 _opt_sym = ft.get("option_symbol")
                 st = ft.get("strike")
-                _ct_key = f"{st}-{expiry_val[:10]}-{'PUT' if (strategy_val or 'CSP').upper() == 'CSP' else 'CALL'}" if (st is not None and expiry_val) else None
+                _ct_key = normalize_contract_key(st, expiry_val, "PUT" if (strategy_val or "CSP").upper() == "CSP" else "CALL")
                 selected_candidates.append(CandidateRow(
                     symbol=sym_upper,
                     strategy=strategy_val,
@@ -195,10 +202,12 @@ def evaluate_universe(
         gates: List[GateEvaluation] = []
         for g in getattr(sr, "gates", []) or []:
             if isinstance(g, dict):
+                name = g.get("name", "")
                 gates.append(GateEvaluation(
-                    name=g.get("name", ""),
+                    name=name,
                     status=g.get("status", "SKIP"),
                     reason=g.get("reason"),
+                    gate_code=g.get("gate_code") or gate_name_to_code(name),
                 ))
         gates_by_symbol[sym_upper] = gates
 
@@ -463,8 +472,9 @@ def _build_symbol_data_from_staged(
         strat = str(ct_dict.get("strategy", "CSP"))
         exp = ct_dict.get("expiry")
         st = ct_dict.get("strike")
-        _opt_sym = contract_d.get("option_symbol") if isinstance(contract_d, dict) and i == 0 else None
-        _ct_key = f"{st}-{str(exp)[:10]}-{'PUT' if (strat or 'CSP').upper() == 'CSP' else 'CALL'}" if (st is not None and exp) else None
+        opt_type = "PUT" if (strat or "CSP").upper() == "CSP" else "CALL"
+        _ct_key = normalize_contract_key(st, exp, opt_type) if (st is not None and exp) else None
+        _opt_sym = contract_d.get("option_symbol") if isinstance(contract_d, dict) and i == 0 else ct_dict.get("option_symbol")
         cand_list.append(CandidateRow(
             symbol=sym_upper,
             strategy=strat,
@@ -474,8 +484,8 @@ def _build_symbol_data_from_staged(
             credit_estimate=ct_dict.get("credit_estimate"),
             max_loss=ct_dict.get("max_loss"),
             why_this_trade=ct_dict.get("why_this_trade"),
-            contract_key=_ct_key if i == 0 else None,
-            option_symbol=_opt_sym if i == 0 else None,
+            contract_key=_ct_key,
+            option_symbol=_opt_sym,
         ))
 
     sc = getattr(sr, "selected_contract", None)
@@ -489,10 +499,12 @@ def _build_symbol_data_from_staged(
     gates: List[GateEvaluation] = []
     for g in getattr(sr, "gates", []) or []:
         if isinstance(g, dict):
+            name = g.get("name", "")
             gates.append(GateEvaluation(
-                name=g.get("name", ""),
+                name=name,
                 status=g.get("status", "SKIP"),
                 reason=g.get("reason"),
+                gate_code=g.get("gate_code") or gate_name_to_code(name),
             ))
 
     earnings = EarningsInfo(
@@ -532,6 +544,32 @@ def _build_symbol_data_from_staged(
     rk = compute_rank_score(band, float(score) if score is not None else None, prem_yield, capital_req, mcap)
     pr = getattr(sr, "primary_reason", None) or ""
     pr_codes, rj_delta_count = _reason_string_to_codes_and_count(pr)
+    # R23.2: If rejected due to delta and miss <= DELTA_NEAR_MISS_EPS, add DELTA_NEAR_MISS (code-only)
+    if "REJECTED_DUE_TO_DELTA" in (pr_codes or []):
+        try:
+            from app.core.config.trade_rules import CSP_TARGET_DELTA_LOW, CSP_TARGET_DELTA_HIGH, DELTA_NEAR_MISS_EPS
+            dlo, dhi = float(CSP_TARGET_DELTA_LOW), float(CSP_TARGET_DELTA_HIGH)
+            eps = float(DELTA_NEAR_MISS_EPS)
+        except Exception:
+            dlo, dhi, eps = 0.25, 0.35, 0.02
+        top_rej = getattr(sr, "top_rejection_reasons", None) or {}
+        sample = top_rej.get("sample_rejected_due_to_delta") or []
+        if sample:
+            s0 = sample[0]
+            d_abs = s0.get("observed_delta_decimal_abs") or s0.get("observed_delta_decimal_raw")
+            if d_abs is not None:
+                try:
+                    d_val = float(d_abs)
+                    if d_val < dlo:
+                        miss = dlo - d_val
+                    elif d_val > dhi:
+                        miss = d_val - dhi
+                    else:
+                        miss = 0.0
+                    if miss <= eps:
+                        pr_codes = list(pr_codes or []) + ["DELTA_NEAR_MISS"]
+                except (TypeError, ValueError):
+                    pass
     summary = SymbolEvalSummary(
         symbol=sym_upper,
         verdict=verdict,

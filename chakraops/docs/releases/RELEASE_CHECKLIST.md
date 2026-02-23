@@ -170,6 +170,29 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Verification** — `out/verification/R23.0/notes.md` with gate outputs and UAT
 - [x] **Gate** — Backend pytest (651 passed), frontend tests (126 passed), frontend build pass (recorded in notes)
 
+### R23.1 — Operator Trust Fix Pack (identity + store loader + delta visibility + price header + date picker)
+
+- [x] **Part 1 — Contract identity:** normalize_contract_key; selected_candidates and candidates_by_symbol share identical contract_key; loader normalizes .0 on load
+- [x] **Part 2 — Loader compat:** GateEvaluation.reason / CandidateRow.why_this_trade optional; from_dict uses .get(); regression test persist then load
+- [x] **Part 3 — Delta diagnostics:** request-time delta_diagnostics (best_delta, miss, direction, best_candidate); UI card; not persisted
+- [x] **Part 4 — Price header:** Symbol header always shows price or "—"; quote_as_of when present
+- [x] **Part 5 — Date picker:** Shares opened date uses input type=date
+- [x] **Requirements** — `docs/releases/R23.1_requirements.md`
+- [x] **Release notes** — `docs/releases/R23.1_release_notes.md`
+- [x] **Verification** — `out/verification/R23.1/notes.md` with gate outputs and UAT
+- [x] **Gate** — Backend pytest (657 passed), frontend tests (129 passed), frontend build pass (recorded in notes)
+
+### R23.2 — Delta Transparency + Near-Miss + Optional Delta Override + Gate Code Persistence
+
+- [x] **Part 1 — Gate code:** Persist gate_code + status only; from_dict compat; API labels at request time
+- [x] **Part 2 — Delta transparency:** delta_diagnostics (BELOW_BAND/ABOVE_BAND); UI Delta band card
+- [x] **Part 3 — Near-miss + override:** DELTA_NEAR_MISS_EPS, DELTA_OVERRIDE_MAX_WIDEN; chakraops/data/delta_overrides.json; API GET/POST/DELETE; effective band in Stage-2; UI override badge + Advanced form
+- [x] **Part 4 — Tests:** test_r232_delta_transparency.py (gate_code, delta_diagnostics, override boundaries, overrides not in decision JSON)
+- [x] **Requirements** — docs/releases/R23.2_requirements.md
+- [x] **Release notes** — docs/releases/R23.2_release_notes.md
+- [x] **Verification** — out/verification/R23.2/notes.md with gate outputs, grep proofs, UAT checklist
+- [x] **Gate** — Backend pytest (663 passed), frontend tests (129 passed), frontend build pass (recorded in notes)
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 - [ ] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py` (fixture → mock staged result → evaluate_universe → store write → hygiene check + snapshot check + per-symbol summary)

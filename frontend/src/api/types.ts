@@ -694,6 +694,31 @@ export interface SymbolDiagnosticsResponseExtended extends SymbolDiagnosticsResp
     orats_as_of?: string | null;
     config_hash?: string | null;
   } | null;
+  /** R22.7: Sample of contracts rejected due to delta (for reasons_explained). */
+  sample_rejected_due_to_delta?: Array<Record<string, unknown>>;
+  /** R23.1: Request-time only. Best delta miss vs band when rejected due to delta. Not persisted. */
+  delta_diagnostics?: DeltaDiagnostics | null;
+  /** R23.2: Per-symbol delta band override when present (for "Override active" badge and advanced form). */
+  delta_override?: { delta_lo: number; delta_hi: number; updated_at_utc?: string } | null;
+}
+
+/** R23.1/R23.2: Delta reject visibility — best_delta, miss, direction (code-only), best_candidate. Request-time only. */
+export interface DeltaDiagnostics {
+  band_min: number;
+  band_max: number;
+  best_delta: number;
+  miss: number;
+  direction: "BELOW_BAND" | "ABOVE_BAND" | "IN_BAND";
+  best_candidate?: {
+    strike?: number | null;
+    expiry?: string | null;
+    dte?: number | null;
+    bid?: number | null;
+    ask?: number | null;
+    spread?: number | null;
+    contract_key?: string | null;
+    option_symbol?: string | null;
+  };
 }
 
 /** R22.5: Shares plan (recommendation only; no order placement). R23.0: optional Part D fields. */

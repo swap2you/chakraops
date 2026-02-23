@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Calendar, Database, Droplets, X } from "lucide-react";
-import { useSymbolDiagnostics, useRecomputeSymbolDiagnostics, useDefaultAccount, useUiSystemHealth, useUpsertSharePosition, useDeleteSharePosition } from "@/api/queries";
+import { useSymbolDiagnostics, useRecomputeSymbolDiagnostics, useDefaultAccount, useUiSystemHealth, useUpsertSharePosition, useDeleteSharePosition, useSetDeltaOverride, useDeleteDeltaOverride } from "@/api/queries";
 import type { SymbolDiagnosticsResponseExtended } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { TradeTicketDrawer } from "@/components/TradeTicketDrawer";
@@ -241,8 +241,17 @@ function ExecutionConsole({
   const [activeTab, setActiveTab] = useState<"Options" | "Shares">("Options");
   const [sharesModalOpen, setSharesModalOpen] = useState(false);
   const [sharesForm, setSharesForm] = useState({ quantity: "", avg_cost: "", opened_at: "" });
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const bandMin = data.delta_diagnostics?.band_min ?? data.computed_values?.delta_band?.[0] ?? 0.25;
+  const bandMax = data.delta_diagnostics?.band_max ?? data.computed_values?.delta_band?.[1] ?? 0.35;
+  const [deltaOverrideForm, setDeltaOverrideForm] = useState({ delta_lo: data.delta_override?.delta_lo ?? bandMin, delta_hi: data.delta_override?.delta_hi ?? bandMax });
+  useEffect(() => {
+    setDeltaOverrideForm({ delta_lo: data.delta_override?.delta_lo ?? bandMin, delta_hi: data.delta_override?.delta_hi ?? bandMax });
+  }, [data.delta_override?.delta_lo, data.delta_override?.delta_hi, bandMin, bandMax]);
   const upsertSharePosition = useUpsertSharePosition(data.symbol);
   const deleteSharePosition = useDeleteSharePosition();
+  const setDeltaOverride = useSetDeltaOverride(data.symbol);
+  const deleteDeltaOverride = useDeleteDeltaOverride(data.symbol);
   const comp = data.computed;
   const cv = data.computed_values;
   const ep = data.exit_plan;
@@ -260,7 +269,7 @@ function ExecutionConsole({
       <Card className="lg:col-span-2">
         <CardHeader
           title={data.symbol ?? "—"}
-          description={price != null ? `$${price.toFixed(2)}` : undefined}
+          description={price != null ? `$${price.toFixed(2)}` : "—"}
           actions={
             onRecompute ? (
               <Tooltip content={isRecomputeDisabled ? recomputeDisabledTooltip : undefined}>
@@ -278,6 +287,12 @@ function ExecutionConsole({
             ) : undefined
           }
         />
+        {price == null && (
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">Price unavailable</p>
+        )}
+        {data.stock && typeof data.stock === "object" && "quote_as_of" in data.stock && (data.stock as { quote_as_of?: string }).quote_as_of && (
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">Quote as of {(data.stock as { quote_as_of: string }).quote_as_of}</p>
+        )}
         <div className="flex flex-wrap items-center gap-3">
           <StatusBadge status={data.verdict ?? "—"} />
           <span
@@ -356,6 +371,98 @@ function ExecutionConsole({
       </Card>
       {activeTab === "Options" ? (
       <>
+      {/* R23.1/R23.2: Delta reject diagnostics — best delta, miss vs band, best candidate; optional override (Advanced) */}
+      {(data.delta_diagnostics || data.delta_override) && (
+        <Card className="lg:col-span-2 w-full">
+          <CardHeader
+            title="Delta band (rejected)"
+            description={data.delta_override ? "Closest contract missed the target delta range. Override active." : "Closest contract missed the target delta range."}
+          />
+          {data.delta_override && (
+            <div className="mb-3">
+              <Badge variant="warning">Override active</Badge>
+              <span className="ml-2 text-xs text-zinc-500 dark:text-zinc-400">
+                Band: {data.delta_override.delta_lo} – {data.delta_override.delta_hi}
+              </span>
+            </div>
+          )}
+          {data.delta_diagnostics && (
+            <div className="space-y-2 text-sm">
+              <p><span className="text-zinc-500 dark:text-zinc-400">Best available delta:</span> <span className="font-mono font-medium">{data.delta_diagnostics.best_delta}</span></p>
+              <p><span className="text-zinc-500 dark:text-zinc-400">Distance to band:</span> <span className="font-mono">{data.delta_diagnostics.miss}</span> ({data.delta_diagnostics.direction === "BELOW_BAND" ? "below band" : data.delta_diagnostics.direction === "ABOVE_BAND" ? "above band" : "in band"})</p>
+              <p><span className="text-zinc-500 dark:text-zinc-400">Target band:</span> {data.delta_diagnostics.band_min} – {data.delta_diagnostics.band_max}</p>
+              {data.delta_diagnostics.best_candidate && (data.delta_diagnostics.best_candidate.strike != null || data.delta_diagnostics.best_candidate.expiry) && (
+                <div className="pt-2 border-t border-zinc-200 dark:border-zinc-700">
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Closest contract</span>
+                  <p className="font-mono text-xs">
+                    Strike {data.delta_diagnostics.best_candidate.strike ?? "—"} · Exp {data.delta_diagnostics.best_candidate.expiry ?? "—"}
+                    {data.delta_diagnostics.best_candidate.bid != null && ` · Bid $${data.delta_diagnostics.best_candidate.bid}`}
+                    {data.delta_diagnostics.best_candidate.ask != null && ` · Ask $${data.delta_diagnostics.best_candidate.ask}`}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+          {/* R23.2: Adjust delta band (Advanced) — only when Show Advanced is enabled */}
+          <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((a) => !a)}
+              className="text-xs text-zinc-500 dark:text-zinc-400 hover:underline"
+            >
+              {showAdvanced ? "Hide Advanced" : "Show Advanced"}
+            </button>
+            {showAdvanced && (
+              <div className="mt-3 space-y-2">
+                <span className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">Adjust delta band (Advanced)</span>
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="text-xs text-zinc-500 dark:text-zinc-400">
+                    delta_lo
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="1"
+                      className="ml-1 w-20 rounded border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-800"
+                      value={deltaOverrideForm.delta_lo}
+                      onChange={(e) => setDeltaOverrideForm((p) => ({ ...p, delta_lo: parseFloat(e.target.value) || 0 }))}
+                    />
+                  </label>
+                  <label className="text-xs text-zinc-500 dark:text-zinc-400">
+                    delta_hi
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="1"
+                      className="ml-1 w-20 rounded border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-800"
+                      value={deltaOverrideForm.delta_hi}
+                      onChange={(e) => setDeltaOverrideForm((p) => ({ ...p, delta_hi: parseFloat(e.target.value) || 0 }))}
+                    />
+                  </label>
+                  <Button
+                    size="sm"
+                    disabled={setDeltaOverride.isPending}
+                    onClick={() => setDeltaOverride.mutate({ delta_lo: deltaOverrideForm.delta_lo, delta_hi: deltaOverrideForm.delta_hi })}
+                  >
+                    {setDeltaOverride.isPending ? "Saving…" : "Save override"}
+                  </Button>
+                  {data.delta_override && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={deleteDeltaOverride.isPending}
+                      onClick={() => deleteDeltaOverride.mutate()}
+                    >
+                      {deleteDeltaOverride.isPending ? "Removing…" : "Reset override"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
       {/* Gate Summary: reasons_explained from backend; fallback to primary_reason mapping (rejected_due_to_delta=N → rejected_count) */}
       <Card className="lg:col-span-2 w-full">
         <CardHeader title="Gate Summary" />
@@ -974,13 +1081,12 @@ function SharesTabContent({
               />
             </div>
             <div>
-              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Opened date (optional, YYYY-MM-DD)</label>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Opened date (optional)</label>
               <input
-                type="text"
-                placeholder="YYYY-MM-DD"
+                type="date"
                 className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800"
-                value={sharesForm.opened_at}
-                onChange={(e) => setSharesForm((p) => ({ ...p, opened_at: e.target.value }))}
+                value={sharesForm.opened_at || ""}
+                onChange={(e) => setSharesForm((p) => ({ ...p, opened_at: e.target.value || "" }))}
               />
             </div>
             <div className="flex gap-2">

@@ -15,6 +15,24 @@ except Exception:
     TIER_A_MIN, TIER_B_MIN, TIER_C_MIN = 80, 60, 40
 
 
+def normalize_contract_key(strike: Optional[float], expiry: Optional[str], option_type: str) -> Optional[str]:
+    """R23.1: Canonical contract_key format: {strike_int}-{expiry}-PUT|CALL. Strike as int (no trailing .0)."""
+    if strike is None or not expiry:
+        return None
+    try:
+        s = float(strike)
+        strike_int = int(round(s))
+    except (TypeError, ValueError):
+        return None
+    exp_str = str(expiry).strip()[:10]
+    if not exp_str:
+        return None
+    opt = (option_type or "PUT").upper()
+    if opt not in ("PUT", "CALL"):
+        opt = "PUT"
+    return f"{strike_int}-{exp_str}-{opt}"
+
+
 def assign_band(score: Optional[int | float]) -> str:
     """Centralized band assignment. NEVER null — returns A|B|C|D."""
     if score is None:
@@ -52,6 +70,45 @@ def assign_band_reason(score: Optional[int | float]) -> str:
 
 # R22.7: Strict machine code format — only ^[A-Z0-9_]+$ allowed in persisted primary_reason_codes
 _STRICT_CODE_RE = re.compile(r"^[A-Z0-9_]+$")
+
+# R23.2: Gate name <-> gate_code mapping (code-only persistence; UI labels at request time)
+_GATE_NAME_TO_CODE: Dict[str, str] = {
+    "Stock Quality (Stage 1)": "STOCK_QUALITY_STAGE1",
+    "Stage 1": "STOCK_QUALITY_STAGE1",
+    "Stage1": "STOCK_QUALITY_STAGE1",
+    "Options Liquidity (Stage 2)": "OPTIONS_LIQUIDITY_STAGE2",
+    "Options Liquidity": "OPTIONS_LIQUIDITY_STAGE2",
+    "Stage 2": "OPTIONS_LIQUIDITY_STAGE2",
+    "Stage2": "OPTIONS_LIQUIDITY_STAGE2",
+    "Delta band": "DELTA_BAND",
+    "DeltaBand": "DELTA_BAND",
+    "ORATS Summary": "ORATS_SUMMARY",
+    "Earnings Check": "EARNINGS_CHECK",
+}
+_GATE_CODE_TO_LABEL: Dict[str, str] = {
+    "STOCK_QUALITY_STAGE1": "Stock quality (Stage 1)",
+    "OPTIONS_LIQUIDITY_STAGE2": "Options liquidity (Stage 2)",
+    "DELTA_BAND": "Delta band",
+    "ORATS_SUMMARY": "ORATS summary",
+    "EARNINGS_CHECK": "Earnings check",
+}
+
+
+def gate_name_to_code(name: Optional[str]) -> str:
+    """R23.2: Map UI gate name to persisted code. Returns UNKNOWN_GATE if no match or invalid."""
+    if not name or not isinstance(name, str):
+        return "UNKNOWN_GATE"
+    n = name.strip()
+    if _STRICT_CODE_RE.match(n):
+        return n
+    return _GATE_NAME_TO_CODE.get(n, _GATE_NAME_TO_CODE.get(n.replace(" ", ""), "UNKNOWN_GATE"))
+
+
+def gate_code_to_label(code: Optional[str]) -> str:
+    """R23.2: Map persisted gate_code to safe UI label (request-time only)."""
+    if not code or not isinstance(code, str):
+        return "Gate"
+    return _GATE_CODE_TO_LABEL.get(code.strip(), code.replace("_", " ").title())
 
 def _reason_string_to_codes(reason: Optional[str]) -> List[str]:
     """R22.7: Convert primary_reason string to strict machine codes (no prose)."""
@@ -261,10 +318,11 @@ class CandidateRow:
 
 @dataclass
 class GateEvaluation:
-    """Gate pass/fail for Explain This Decision."""
+    """Gate pass/fail for Explain This Decision. R23.2: Persist gate_code only; name is for in-memory/API label."""
     name: str
     status: str  # PASS|FAIL|SKIP
     reason: Optional[str] = None  # R22.9: optional for loader compat; never persisted
+    gate_code: Optional[str] = None  # R23.2: code-only persisted (e.g. STOCK_QUALITY_STAGE1)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -398,14 +456,19 @@ class DecisionArtifactV2:
             if strategy_upper in ("CSP", "CC"):
                 strike, expiry = d.get("strike"), d.get("expiry") or getattr(c, "expiry", None)
                 opt_type = "PUT" if strategy_upper == "CSP" else "CALL"
-                if strike is not None and expiry:
-                    d["contract_key"] = d.get("contract_key") or f"{int(float(strike))}-{str(expiry)[:10]}-{opt_type}"
+                nkey = normalize_contract_key(strike, expiry, opt_type)
+                if nkey:
+                    d["contract_key"] = d.get("contract_key") or nkey
                 if not d.get("option_symbol") and getattr(c, "option_symbol", None):
                     d["option_symbol"] = c.option_symbol
             return d
 
         def gate_persist(g: GateEvaluation) -> Dict[str, Any]:
-            return {"name": g.name, "status": g.status}
+            # R23.2: Persist only gate_code + status (code-only; no name, no reason)
+            code = (g.gate_code or gate_name_to_code(g.name)).strip()
+            if not _STRICT_CODE_RE.match(code):
+                code = "UNKNOWN_GATE"
+            return {"gate_code": code, "status": g.status}
 
         def earnings_persist(e: EarningsInfo) -> Dict[str, Any]:
             """R22.7 Fix Pack: Persist status_code only; never prose note."""
@@ -460,10 +523,16 @@ class DecisionArtifactV2:
         selected = []
         for c in data.get("selected_candidates") or []:
             row = c if isinstance(c, dict) else asdict(c)
-            d = {k: v for k, v in row.items() if k in cand_fields}
-            for key in ("why_this_trade", "expiry", "strike", "delta", "credit_estimate", "max_loss", "contract_key", "option_symbol"):
-                if key in cand_fields and key not in d:
-                    d[key] = None
+            d = {k: row.get(k) for k in cand_fields}
+            # R23.1: Normalize contract_key on load (e.g. 673.0-... -> 673-...)
+            ck = d.get("contract_key")
+            if isinstance(ck, str) and ".0-" in ck:
+                try:
+                    pre, rest = ck.split(".0-", 1)
+                    if pre.isdigit() or (pre.replace(".", "", 1).isdigit()):
+                        d["contract_key"] = f"{int(float(pre))}-{rest}"
+                except Exception:
+                    pass
             selected.append(CandidateRow(**d))
         cb = data.get("candidates_by_symbol") or {}
         candidates_by_symbol = {}
@@ -471,10 +540,18 @@ class DecisionArtifactV2:
             list_c = []
             for c in v:
                 if isinstance(c, dict):
-                    d = {x: c[x] for x in cand_fields if x in c}
-                    for key in ("why_this_trade", "expiry", "strike", "delta", "credit_estimate", "max_loss", "contract_key", "option_symbol"):
-                        if key in cand_fields and key not in d:
+                    d = {x: c.get(x) for x in cand_fields}
+                    for key in cand_fields:
+                        if key not in d:
                             d[key] = None
+                    ck = d.get("contract_key")
+                    if isinstance(ck, str) and ".0-" in ck:
+                        try:
+                            pre, rest = ck.split(".0-", 1)
+                            if pre.isdigit() or (pre.replace(".", "", 1).isdigit()):
+                                d["contract_key"] = f"{int(float(pre))}-{rest}"
+                        except Exception:
+                            pass
                     list_c.append(CandidateRow(**d))
                 else:
                     list_c.append(c)
@@ -486,8 +563,14 @@ class DecisionArtifactV2:
             gates_by_symbol[k] = []
             for g in v:
                 if isinstance(g, dict):
-                    d = {x: g[x] for x in gate_fields if x in g}
-                    d.setdefault("reason", None)
+                    # R23.2: Backward compat — new format has gate_code; old has name
+                    code = g.get("gate_code")
+                    if code and _STRICT_CODE_RE.match(str(code)):
+                        name = gate_code_to_label(code)
+                    else:
+                        name = g.get("name") or "Gate"
+                        code = gate_name_to_code(name)
+                    d = {"name": name, "status": g.get("status", "SKIP"), "reason": g.get("reason"), "gate_code": code}
                     gates_by_symbol[k].append(GateEvaluation(**d))
                 else:
                     gates_by_symbol[k].append(g)

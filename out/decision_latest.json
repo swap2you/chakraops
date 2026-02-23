@@ -2,14 +2,14 @@
   "metadata": {
     "artifact_version": "v2",
     "mode": "LIVE",
-    "pipeline_timestamp": "2026-02-23T17:34:09.741311+00:00",
-    "evaluation_timestamp_utc": "2026-02-23T17:34:09.741311+00:00",
-    "run_id": "ed87dea6-882e-421a-887d-ff1312682de0",
+    "pipeline_timestamp": "2026-02-23T20:53:14.142607+00:00",
+    "evaluation_timestamp_utc": "2026-02-23T20:53:14.142607+00:00",
+    "run_id": "a446ab9b-3273-4df2-8dbd-c7b0080a5e25",
     "market_phase": "OPEN",
     "universe_size": 28,
     "evaluated_count_stage1": 28,
-    "evaluated_count_stage2": 2,
-    "eligible_count": 0,
+    "evaluated_count_stage2": 3,
+    "eligible_count": 1,
     "warnings": []
   },
   "symbols": [
@@ -23,10 +23,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:17:57Z",
-      "evaluated_at": "2026-02-23T17:34:19.960443+00:00",
+      "data_freshness": "2026-02-23T20:37:00Z",
+      "evaluated_at": "2026-02-23T20:53:14.142607+00:00",
       "strategy": null,
-      "price": 266.53,
+      "price": 266.68,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -53,19 +53,14 @@
       "final_score": 50,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 266.53,
-      "capital_required": 26652.999999999996,
+      "underlying_price": 266.68,
+      "capital_required": 26668.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204733.47,
+      "rank_score": 204733.32,
       "primary_reason_codes": [
-        "REGIME_CONFLICT",
-        "RSI_RANGE",
-        "RSI_CC",
-        "REGIME_CSP",
-        "NOT_HELD_FOR_CC",
-        "NO_HOLDINGS"
+        "STOCK_QUALIFIED"
       ]
     },
     {
@@ -78,10 +73,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:17:51Z",
-      "evaluated_at": "2026-02-23T17:34:09.741311+00:00",
+      "data_freshness": "2026-02-23T20:36:53Z",
+      "evaluated_at": "2026-02-23T20:53:14.142607+00:00",
       "strategy": null,
-      "price": 120.37,
+      "price": 122.38,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -108,12 +103,12 @@
       "final_score": 35,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 120.37,
-      "capital_required": 12037.0,
+      "underlying_price": 122.38,
+      "capital_required": 12238.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 103379.63,
+      "rank_score": 103377.62,
       "primary_reason_codes": [
         "STOCK_QUALIFIED"
       ]
@@ -128,10 +123,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:17:57Z",
-      "evaluated_at": "2026-02-23T17:34:19.946303+00:00",
+      "data_freshness": "2026-02-23T20:37:02Z",
+      "evaluated_at": "2026-02-23T20:53:14.733884+00:00",
       "strategy": null,
-      "price": 196.33,
+      "price": 195.46,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -158,12 +153,12 @@
       "final_score": 50,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 196.33,
-      "capital_required": 19633.0,
+      "underlying_price": 195.46,
+      "capital_required": 19546.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204803.67,
+      "rank_score": 204804.54,
       "primary_reason_codes": [
         "REGIME_CONFLICT",
         "NOT_NEAR_RESISTANCE",
@@ -186,10 +181,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:18:02Z",
-      "evaluated_at": "2026-02-23T17:34:19.998581+00:00",
+      "data_freshness": "2026-02-23T20:36:57Z",
+      "evaluated_at": "2026-02-23T20:53:14.591140+00:00",
       "strategy": null,
-      "price": 203.78,
+      "price": 205.0,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -216,12 +211,12 @@
       "final_score": 50,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 203.78,
-      "capital_required": 20378.0,
+      "underlying_price": 205.0,
+      "capital_required": 20500.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204796.22,
+      "rank_score": 204795.0,
       "primary_reason_codes": [
         "REGIME_CONFLICT",
         "NOT_NEAR_SUPPORT",
@@ -240,10 +235,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:17:58Z",
-      "evaluated_at": "2026-02-23T17:34:19.929306+00:00",
+      "data_freshness": "2026-02-23T20:36:50Z",
+      "evaluated_at": "2026-02-23T20:53:14.142607+00:00",
       "strategy": null,
-      "price": 331.76,
+      "price": 329.01,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -270,19 +265,14 @@
       "final_score": 50,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 331.76,
-      "capital_required": 33176.0,
+      "underlying_price": 329.01,
+      "capital_required": 32901.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204668.24,
+      "rank_score": 204670.99,
       "primary_reason_codes": [
-        "REGIME_CONFLICT",
-        "RSI_RANGE",
-        "RSI_CC",
-        "REGIME_CSP",
-        "NOT_HELD_FOR_CC",
-        "NO_HOLDINGS"
+        "STOCK_QUALIFIED"
       ]
     },
     {
@@ -295,10 +285,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:17:50Z",
-      "evaluated_at": "2026-02-23T17:34:19.908144+00:00",
+      "data_freshness": "2026-02-23T20:37:01Z",
+      "evaluated_at": "2026-02-23T20:53:14.142607+00:00",
       "strategy": null,
-      "price": 162.46,
+      "price": 159.45,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -325,21 +315,14 @@
       "final_score": 50,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 162.46,
-      "capital_required": 16246.0,
+      "underlying_price": 159.45,
+      "capital_required": 15944.999999999998,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204837.54,
+      "rank_score": 204840.55,
       "primary_reason_codes": [
-        "NOT_NEAR_SUPPORT",
-        "NOT_NEAR_RESISTANCE",
-        "RSI_RANGE",
-        "RSI_CC",
-        "ATR",
-        "ATR_TOO_HIGH",
-        "NOT_HELD_FOR_CC",
-        "NO_HOLDINGS"
+        "STOCK_QUALIFIED"
       ]
     },
     {
@@ -352,10 +335,10 @@
       "stage1_status": "PASS",
       "stage2_status": "FAIL",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:17:51Z",
-      "evaluated_at": "2026-02-23T17:34:19.672985+00:00",
+      "data_freshness": "2026-02-23T20:37:01Z",
+      "evaluated_at": "2026-02-23T20:53:14.364316+00:00",
       "strategy": null,
-      "price": 979.58,
+      "price": 985.97,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -390,16 +373,16 @@
       "final_score": 65,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 979.58,
-      "capital_required": 97958.0,
+      "underlying_price": 985.97,
+      "capital_required": 98597.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 305520.42,
+      "rank_score": 305514.03,
       "primary_reason_codes": [
         "REJECTED_DUE_TO_DELTA"
       ],
-      "rejected_due_to_delta_count": 41
+      "rejected_due_to_delta_count": 40
     },
     {
       "symbol": "CRM",
@@ -411,10 +394,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:18:07Z",
-      "evaluated_at": "2026-02-23T17:34:19.673482+00:00",
+      "data_freshness": "2026-02-23T20:37:02Z",
+      "evaluated_at": "2026-02-23T20:53:14.210555+00:00",
       "strategy": null,
-      "price": 175.45,
+      "price": 178.25,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -441,12 +424,12 @@
       "final_score": 60,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 175.45,
-      "capital_required": 17545.0,
+      "underlying_price": 178.25,
+      "capital_required": 17825.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 305824.55,
+      "rank_score": 305821.75,
       "primary_reason_codes": [
         "NOT_NEAR_SUPPORT",
         "NOT_NEAR_RESISTANCE",
@@ -467,10 +450,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:18:01Z",
-      "evaluated_at": "2026-02-23T17:34:19.672432+00:00",
+      "data_freshness": "2026-02-23T20:36:53Z",
+      "evaluated_at": "2026-02-23T20:53:14.371143+00:00",
       "strategy": null,
-      "price": 353.55,
+      "price": 346.46,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -497,12 +480,12 @@
       "final_score": 60,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 353.55,
-      "capital_required": 35355.0,
+      "underlying_price": 346.46,
+      "capital_required": 34646.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 305646.45,
+      "rank_score": 305653.54,
       "primary_reason_codes": [
         "NOT_NEAR_RESISTANCE",
         "RSI_RANGE",
@@ -524,10 +507,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:17:56Z",
-      "evaluated_at": "2026-02-23T17:34:20.037500+00:00",
+      "data_freshness": "2026-02-23T20:36:51Z",
+      "evaluated_at": "2026-02-23T20:53:14.142607+00:00",
       "strategy": null,
-      "price": 103.37,
+      "price": 104.53,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -554,18 +537,14 @@
       "final_score": 50,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 103.37,
-      "capital_required": 10337.0,
+      "underlying_price": 104.53,
+      "capital_required": 10453.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204896.63,
+      "rank_score": 204895.47,
       "primary_reason_codes": [
-        "RSI_RANGE",
-        "RSI_CC",
-        "REGIME_CSP",
-        "NOT_HELD_FOR_CC",
-        "NO_HOLDINGS"
+        "STOCK_QUALIFIED"
       ]
     },
     {
@@ -578,10 +557,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:18:57Z",
-      "evaluated_at": "2026-02-23T17:34:20.183787+00:00",
+      "data_freshness": "2026-02-23T20:36:50Z",
+      "evaluated_at": "2026-02-23T20:53:14.513192+00:00",
       "strategy": null,
-      "price": 313.9,
+      "price": 311.5,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -608,12 +587,12 @@
       "final_score": 50,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 313.9,
-      "capital_required": 31389.999999999996,
+      "underlying_price": 311.5,
+      "capital_required": 31150.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204686.1,
+      "rank_score": 204688.5,
       "primary_reason_codes": [
         "REGIME_CONFLICT",
         "RSI_RANGE",
@@ -633,10 +612,10 @@
       "stage1_status": "PASS",
       "stage2_status": "FAIL",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:19:01Z",
-      "evaluated_at": "2026-02-23T17:34:20.095345+00:00",
+      "data_freshness": "2026-02-23T20:36:50Z",
+      "evaluated_at": "2026-02-23T20:53:14.771945+00:00",
       "strategy": null,
-      "price": 376.13,
+      "price": 377.4,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -671,12 +650,12 @@
       "final_score": 65,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 376.13,
-      "capital_required": 37613.0,
+      "underlying_price": 377.4,
+      "capital_required": 37740.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 306123.87,
+      "rank_score": 306122.6,
       "primary_reason_codes": [
         "REJECTED_DUE_TO_DELTA"
       ],
@@ -692,10 +671,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:18:55Z",
-      "evaluated_at": "2026-02-23T17:34:20.159004+00:00",
+      "data_freshness": "2026-02-23T20:37:01Z",
+      "evaluated_at": "2026-02-23T20:53:14.142607+00:00",
       "strategy": null,
-      "price": 296.82,
+      "price": 298.32,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -722,18 +701,14 @@
       "final_score": 50,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 296.82,
-      "capital_required": 29682.0,
+      "underlying_price": 298.32,
+      "capital_required": 29832.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204703.18,
+      "rank_score": 204701.68,
       "primary_reason_codes": [
-        "REGIME_CONFLICT",
-        "NOT_NEAR_RESISTANCE",
-        "REGIME_CSP",
-        "NOT_HELD_FOR_CC",
-        "NO_HOLDINGS"
+        "STOCK_QUALIFIED"
       ]
     },
     {
@@ -746,10 +721,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:18:51Z",
-      "evaluated_at": "2026-02-23T17:34:20.058838+00:00",
+      "data_freshness": "2026-02-23T20:36:53Z",
+      "evaluated_at": "2026-02-23T20:53:14.893383+00:00",
       "strategy": null,
-      "price": 643.57,
+      "price": 637.68,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -776,12 +751,12 @@
       "final_score": 50,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 643.57,
-      "capital_required": 64357.00000000001,
+      "underlying_price": 637.68,
+      "capital_required": 63767.99999999999,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204356.43,
+      "rank_score": 204362.32,
       "primary_reason_codes": [
         "RSI_RANGE",
         "RSI_CC",
@@ -800,10 +775,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:19:03Z",
-      "evaluated_at": "2026-02-23T17:34:19.756253+00:00",
+      "data_freshness": "2026-02-23T20:37:01Z",
+      "evaluated_at": "2026-02-23T20:53:14.323731+00:00",
       "strategy": null,
-      "price": 77.13,
+      "price": 76.91,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -830,12 +805,12 @@
       "final_score": 60,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 77.13,
-      "capital_required": 7713.0,
+      "underlying_price": 76.91,
+      "capital_required": 7691.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 305922.87,
+      "rank_score": 305923.09,
       "primary_reason_codes": [
         "REGIME_CONFLICT",
         "NOT_NEAR_RESISTANCE",
@@ -856,10 +831,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:19:04Z",
-      "evaluated_at": "2026-02-23T17:34:19.674087+00:00",
+      "data_freshness": "2026-02-23T20:37:03Z",
+      "evaluated_at": "2026-02-23T20:53:14.211859+00:00",
       "strategy": null,
-      "price": 385.94,
+      "price": 383.78,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -886,12 +861,12 @@
       "final_score": 60,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 385.94,
-      "capital_required": 38594.0,
+      "underlying_price": 383.78,
+      "capital_required": 38378.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 305614.06,
+      "rank_score": 305616.22,
       "primary_reason_codes": [
         "NOT_NEAR_RESISTANCE",
         "RSI_RANGE",
@@ -911,10 +886,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:19:03Z",
-      "evaluated_at": "2026-02-23T17:34:20.198783+00:00",
+      "data_freshness": "2026-02-23T20:37:01Z",
+      "evaluated_at": "2026-02-23T20:53:14.760040+00:00",
       "strategy": null,
-      "price": 420.32,
+      "price": 420.85,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -941,12 +916,12 @@
       "final_score": 50,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 420.32,
-      "capital_required": 42032.0,
+      "underlying_price": 420.85,
+      "capital_required": 42085.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204579.68,
+      "rank_score": 204579.15,
       "primary_reason_codes": [
         "NOT_NEAR_SUPPORT",
         "RSI_RANGE",
@@ -967,10 +942,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:19:03Z",
-      "evaluated_at": "2026-02-23T17:34:19.674721+00:00",
+      "data_freshness": "2026-02-23T20:36:55Z",
+      "evaluated_at": "2026-02-23T20:53:14.211183+00:00",
       "strategy": null,
-      "price": 62.18,
+      "price": 62.97,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -997,12 +972,12 @@
       "final_score": 60,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 62.18,
-      "capital_required": 6218.0,
+      "underlying_price": 62.97,
+      "capital_required": 6297.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 305937.82,
+      "rank_score": 305937.03,
       "primary_reason_codes": [
         "REGIME_CONFLICT",
         "REGIME_CSP",
@@ -1020,10 +995,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:18:58Z",
-      "evaluated_at": "2026-02-23T17:34:09.741311+00:00",
+      "data_freshness": "2026-02-23T20:37:01Z",
+      "evaluated_at": "2026-02-23T20:53:14.681022+00:00",
       "strategy": null,
-      "price": 191.07,
+      "price": 191.09,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -1050,14 +1025,15 @@
       "final_score": 50,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 191.07,
-      "capital_required": 19107.0,
+      "underlying_price": 191.09,
+      "capital_required": 19109.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204808.93,
+      "rank_score": 204808.91,
       "primary_reason_codes": [
-        "STOCK_QUALIFIED"
+        "NOT_NEAR_SUPPORT",
+        "REGIME_CC"
       ]
     },
     {
@@ -1070,10 +1046,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:18:58Z",
-      "evaluated_at": "2026-02-23T17:34:19.819782+00:00",
+      "data_freshness": "2026-02-23T20:37:00Z",
+      "evaluated_at": "2026-02-23T20:53:14.212880+00:00",
       "strategy": null,
-      "price": 139.14,
+      "price": 140.82,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -1100,12 +1076,12 @@
       "final_score": 60,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 139.14,
-      "capital_required": 13913.999999999998,
+      "underlying_price": 140.82,
+      "capital_required": 14082.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 305860.86,
+      "rank_score": 305859.18,
       "primary_reason_codes": [
         "NOT_NEAR_RESISTANCE",
         "RSI_RANGE",
@@ -1127,10 +1103,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:18:56Z",
-      "evaluated_at": "2026-02-23T17:34:19.826225+00:00",
+      "data_freshness": "2026-02-23T20:37:02Z",
+      "evaluated_at": "2026-02-23T20:53:14.209929+00:00",
       "strategy": null,
-      "price": 130.4,
+      "price": 130.44,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -1157,12 +1133,12 @@
       "final_score": 60,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 130.4,
-      "capital_required": 13040.0,
+      "underlying_price": 130.44,
+      "capital_required": 13044.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 305869.6,
+      "rank_score": 305869.56,
       "primary_reason_codes": [
         "REGIME_CONFLICT",
         "NOT_NEAR_SUPPORT",
@@ -1186,10 +1162,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:18:57Z",
-      "evaluated_at": "2026-02-23T17:34:09.741311+00:00",
+      "data_freshness": "2026-02-23T20:36:52Z",
+      "evaluated_at": "2026-02-23T20:53:14.431732+00:00",
       "strategy": null,
-      "price": 601.12,
+      "price": 600.66,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -1216,14 +1192,19 @@
       "final_score": 50,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 601.12,
-      "capital_required": 60112.0,
+      "underlying_price": 600.66,
+      "capital_required": 60066.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204398.88,
+      "rank_score": 204399.34,
       "primary_reason_codes": [
-        "STOCK_QUALIFIED"
+        "REGIME_CONFLICT",
+        "RSI_RANGE",
+        "RSI_CC",
+        "REGIME_CSP",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
       ]
     },
     {
@@ -1236,10 +1217,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:18:56Z",
-      "evaluated_at": "2026-02-23T17:34:09.741311+00:00",
+      "data_freshness": "2026-02-23T20:36:51Z",
+      "evaluated_at": "2026-02-23T20:53:14.589437+00:00",
       "strategy": null,
-      "price": 31.02,
+      "price": 30.84,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -1266,14 +1247,15 @@
       "final_score": 50,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 31.02,
-      "capital_required": 3102.0,
+      "underlying_price": 30.84,
+      "capital_required": 3084.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204968.98,
+      "rank_score": 204969.16,
       "primary_reason_codes": [
-        "STOCK_QUALIFIED"
+        "ATR",
+        "ATR_TOO_HIGH"
       ]
     },
     {
@@ -1286,10 +1268,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:18:57Z",
-      "evaluated_at": "2026-02-23T17:34:09.741311+00:00",
+      "data_freshness": "2026-02-23T20:36:55Z",
+      "evaluated_at": "2026-02-23T20:53:14.619562+00:00",
       "strategy": null,
-      "price": 157.3,
+      "price": 156.5,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -1316,64 +1298,80 @@
       "final_score": 50,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 157.3,
-      "capital_required": 15730.000000000002,
+      "underlying_price": 156.5,
+      "capital_required": 15650.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204842.7,
+      "rank_score": 204843.5,
       "primary_reason_codes": [
-        "STOCK_QUALIFIED"
+        "NOT_NEAR_SUPPORT",
+        "NOT_NEAR_RESISTANCE",
+        "RSI_RANGE",
+        "RSI_CSP",
+        "RSI_CC",
+        "ATR",
+        "ATR_TOO_HIGH",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
       ]
     },
     {
       "symbol": "SPY",
-      "verdict": "HOLD",
-      "final_verdict": "HOLD",
-      "score": 50,
-      "band": "C",
+      "verdict": "ELIGIBLE",
+      "final_verdict": "ELIGIBLE",
+      "score": 65,
+      "band": "B",
       "stage_status": "RUN",
       "stage1_status": "PASS",
-      "stage2_status": "NOT_RUN",
+      "stage2_status": "PASS",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:18:55Z",
-      "evaluated_at": "2026-02-23T17:34:09.741311+00:00",
-      "strategy": null,
-      "price": 682.18,
-      "expiration": null,
-      "has_candidates": false,
-      "candidate_count": 0,
+      "data_freshness": "2026-02-23T20:37:00Z",
+      "evaluated_at": "2026-02-23T20:53:14.855694+00:00",
+      "strategy": "CSP",
+      "price": 681.87,
+      "expiration": "2026-03-31",
+      "has_candidates": true,
+      "candidate_count": 1,
       "score_breakdown": {
         "data_quality_score": 100,
         "regime_score": 65,
-        "options_liquidity_score": 20,
-        "strategy_fit_score": 50,
+        "options_liquidity_score": 80,
+        "strategy_fit_score": 100,
         "capital_efficiency_score": 100,
-        "composite_score": 67,
-        "csp_notional": null,
+        "composite_score": 89,
+        "csp_notional": 67300.0,
         "notional_pct": null,
         "capital_penalties": [],
         "top_penalty": null,
-        "raw_score": 50,
-        "final_score": 50,
+        "raw_score": 89,
+        "final_score": 65,
         "score_caps": {
           "regime_cap": 65,
-          "applied_caps": []
+          "applied_caps": [
+            {
+              "type": "regime_cap",
+              "cap_value": 65,
+              "before": 89,
+              "after": 65,
+              "reason_code": "REGIME_CAP"
+            }
+          ]
         }
       },
       "raw_score": null,
       "pre_cap_score": null,
-      "final_score": 50,
+      "final_score": 65,
       "score_caps": null,
-      "max_loss": null,
-      "underlying_price": 682.18,
-      "capital_required": 68218.0,
-      "expected_credit": null,
-      "premium_yield_pct": null,
+      "max_loss": 66136.0,
+      "underlying_price": 681.87,
+      "capital_required": 66136.0,
+      "expected_credit": 11.64,
+      "premium_yield_pct": 0.01760009677029152,
       "market_cap": null,
-      "rank_score": 204317.82,
+      "rank_score": 305838.8160009677,
       "primary_reason_codes": [
-        "STOCK_QUALIFIED"
+        "CHAIN_SELECTED"
       ]
     },
     {
@@ -1386,10 +1384,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:19:03Z",
-      "evaluated_at": "2026-02-23T17:34:09.741311+00:00",
+      "data_freshness": "2026-02-23T20:36:56Z",
+      "evaluated_at": "2026-02-23T20:53:14.142607+00:00",
       "strategy": null,
-      "price": 398.59,
+      "price": 395.97,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -1416,12 +1414,12 @@
       "final_score": 35,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 398.59,
-      "capital_required": 39859.0,
+      "underlying_price": 395.97,
+      "capital_required": 39597.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 103101.41,
+      "rank_score": 103104.03,
       "primary_reason_codes": [
         "STOCK_QUALIFIED"
       ]
@@ -1436,10 +1434,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:19:07Z",
-      "evaluated_at": "2026-02-23T17:34:19.832734+00:00",
+      "data_freshness": "2026-02-23T20:36:56Z",
+      "evaluated_at": "2026-02-23T20:53:14.391798+00:00",
       "strategy": null,
-      "price": 368.09,
+      "price": 369.65,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -1466,12 +1464,12 @@
       "final_score": 60,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 368.09,
-      "capital_required": 36809.0,
+      "underlying_price": 369.65,
+      "capital_required": 36965.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 305631.91,
+      "rank_score": 305630.35,
       "primary_reason_codes": [
         "NOT_NEAR_SUPPORT",
         "RSI_RANGE",
@@ -1491,10 +1489,10 @@
       "stage1_status": "PASS",
       "stage2_status": "NOT_RUN",
       "provider_status": "OK",
-      "data_freshness": "2026-02-23T17:18:58Z",
-      "evaluated_at": "2026-02-23T17:34:09.741311+00:00",
+      "data_freshness": "2026-02-23T20:37:01Z",
+      "evaluated_at": "2026-02-23T20:53:14.142607+00:00",
       "strategy": null,
-      "price": 125.31,
+      "price": 125.65,
       "expiration": null,
       "has_candidates": false,
       "candidate_count": 0,
@@ -1521,18 +1519,30 @@
       "final_score": 50,
       "score_caps": null,
       "max_loss": null,
-      "underlying_price": 125.31,
-      "capital_required": 12531.0,
+      "underlying_price": 125.65,
+      "capital_required": 12565.0,
       "expected_credit": null,
       "premium_yield_pct": null,
       "market_cap": null,
-      "rank_score": 204874.69,
+      "rank_score": 204874.35,
       "primary_reason_codes": [
         "STOCK_QUALIFIED"
       ]
     }
   ],
-  "selected_candidates": [],
+  "selected_candidates": [
+    {
+      "symbol": "SPY",
+      "strategy": "CSP",
+      "expiry": "2026-03-31",
+      "strike": 673.0,
+      "delta": -0.3888,
+      "credit_estimate": null,
+      "max_loss": null,
+      "contract_key": "673-2026-03-31-PUT",
+      "option_symbol": null
+    }
+  ],
   "candidates_by_symbol": {
     "AAPL": [],
     "ABNB": [],
@@ -1558,144 +1568,160 @@
     "QQQ": [],
     "SMCI": [],
     "SNOW": [],
-    "SPY": [],
+    "SPY": [
+      {
+        "symbol": "SPY",
+        "strategy": "CSP",
+        "expiry": "2026-03-31",
+        "strike": 673.0,
+        "delta": -0.3888,
+        "credit_estimate": 11.64,
+        "max_loss": 66136.0,
+        "contract_key": "673-2026-03-31-PUT",
+        "option_symbol": null
+      }
+    ],
     "TSLA": [],
     "TSM": [],
     "WMT": []
   },
   "gates_by_symbol": {
-    "AAPL": [
-      {
-        "name": "Stock Quality (Stage 1)",
-        "status": "PASS"
-      }
-    ],
+    "AAPL": [],
     "ABNB": [],
     "AMD": [
       {
-        "name": "Stock Quality (Stage 1)",
+        "gate_code": "STOCK_QUALITY_STAGE1",
         "status": "PASS"
       }
     ],
     "AMZN": [
       {
-        "name": "Stock Quality (Stage 1)",
+        "gate_code": "STOCK_QUALITY_STAGE1",
         "status": "PASS"
       }
     ],
-    "AVGO": [
-      {
-        "name": "Stock Quality (Stage 1)",
-        "status": "PASS"
-      }
-    ],
-    "COIN": [
-      {
-        "name": "Stock Quality (Stage 1)",
-        "status": "PASS"
-      }
-    ],
+    "AVGO": [],
+    "COIN": [],
     "COST": [
       {
-        "name": "Stock Quality (Stage 1)",
+        "gate_code": "STOCK_QUALITY_STAGE1",
         "status": "PASS"
       },
       {
-        "name": "Options Liquidity (Stage 2)",
+        "gate_code": "OPTIONS_LIQUIDITY_STAGE2",
         "status": "FAIL"
       }
     ],
     "CRM": [
       {
-        "name": "Stock Quality (Stage 1)",
+        "gate_code": "STOCK_QUALITY_STAGE1",
         "status": "PASS"
       }
     ],
     "CRWD": [
       {
-        "name": "Stock Quality (Stage 1)",
+        "gate_code": "STOCK_QUALITY_STAGE1",
         "status": "PASS"
       }
     ],
-    "DIS": [
-      {
-        "name": "Stock Quality (Stage 1)",
-        "status": "PASS"
-      }
-    ],
+    "DIS": [],
     "GOOGL": [
       {
-        "name": "Stock Quality (Stage 1)",
+        "gate_code": "STOCK_QUALITY_STAGE1",
         "status": "PASS"
       }
     ],
     "HD": [
       {
-        "name": "Stock Quality (Stage 1)",
+        "gate_code": "STOCK_QUALITY_STAGE1",
         "status": "PASS"
       },
       {
-        "name": "Options Liquidity (Stage 2)",
+        "gate_code": "OPTIONS_LIQUIDITY_STAGE2",
         "status": "FAIL"
       }
     ],
-    "JPM": [
-      {
-        "name": "Stock Quality (Stage 1)",
-        "status": "PASS"
-      }
-    ],
+    "JPM": [],
     "META": [
       {
-        "name": "Stock Quality (Stage 1)",
+        "gate_code": "STOCK_QUALITY_STAGE1",
         "status": "PASS"
       }
     ],
     "MRVL": [
       {
-        "name": "Stock Quality (Stage 1)",
+        "gate_code": "STOCK_QUALITY_STAGE1",
         "status": "PASS"
       }
     ],
     "MSFT": [
       {
-        "name": "Stock Quality (Stage 1)",
+        "gate_code": "STOCK_QUALITY_STAGE1",
         "status": "PASS"
       }
     ],
     "MU": [
       {
-        "name": "Stock Quality (Stage 1)",
+        "gate_code": "STOCK_QUALITY_STAGE1",
         "status": "PASS"
       }
     ],
     "NKE": [
       {
-        "name": "Stock Quality (Stage 1)",
+        "gate_code": "STOCK_QUALITY_STAGE1",
         "status": "PASS"
       }
     ],
-    "NVDA": [],
+    "NVDA": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
     "ORCL": [
       {
-        "name": "Stock Quality (Stage 1)",
+        "gate_code": "STOCK_QUALITY_STAGE1",
         "status": "PASS"
       }
     ],
     "PLTR": [
       {
-        "name": "Stock Quality (Stage 1)",
+        "gate_code": "STOCK_QUALITY_STAGE1",
         "status": "PASS"
       }
     ],
-    "QQQ": [],
-    "SMCI": [],
-    "SNOW": [],
-    "SPY": [],
+    "QQQ": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
+    "SMCI": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
+    "SNOW": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
+    "SPY": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      },
+      {
+        "gate_code": "OPTIONS_LIQUIDITY_STAGE2",
+        "status": "PASS"
+      }
+    ],
     "TSLA": [],
     "TSM": [
       {
-        "name": "Stock Quality (Stage 1)",
+        "gate_code": "STOCK_QUALITY_STAGE1",
         "status": "PASS"
       }
     ],

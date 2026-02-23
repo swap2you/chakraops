@@ -1017,6 +1017,13 @@ def evaluate_stage2(
         dte_min = WHEEL_CONFIG[DTE_MIN]
         dte_max = WHEEL_CONFIG[DTE_MAX]
         delta_lo, delta_hi = get_target_delta_range()
+        # R23.2: Apply per-symbol delta overrides (bounded by DELTA_OVERRIDE_MAX_WIDEN)
+        try:
+            from app.core.config.delta_overrides import get_effective_delta_band
+            from app.core.config.trade_rules import DELTA_OVERRIDE_MAX_WIDEN
+            delta_lo, delta_hi = get_effective_delta_band(symbol, delta_lo, delta_hi, float(DELTA_OVERRIDE_MAX_WIDEN))
+        except Exception:
+            pass
         min_oi = WHEEL_CONFIG[MIN_OPTION_OI]
         max_spread_pct = WHEEL_CONFIG[MAX_OPTION_SPREAD_PCT]
 
@@ -1052,6 +1059,8 @@ def evaluate_stage2(
                     quote_as_of=getattr(stage1, "quote_date", None) or getattr(stage1, "quote_as_of", None),
                     dte_min=dte_min,
                     dte_max=dte_max,
+                    delta_lo=delta_lo,
+                    delta_hi=delta_hi,
                 )
                 option_type = OptionType.PUT
                 delta_sign = -1.0

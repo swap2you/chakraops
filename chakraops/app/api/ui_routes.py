@@ -2700,7 +2700,7 @@ def _build_symbol_diagnostics_from_v2_store(
             "status": exit_plan.get("status"),
             "reason": exit_plan.get("reason"),
         },
-        "score_breakdown": diag.get("score_breakdown"),
+        "score_breakdown": diag.get("score_breakdown") or getattr(summary, "score_breakdown", None),
         "rank_reasons": diag.get("rank_reasons"),
         "reasons_explained": _compute_reasons_explained(
             getattr(summary, "primary_reason", None) or "",

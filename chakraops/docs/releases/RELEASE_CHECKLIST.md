@@ -149,6 +149,16 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [ ] Part 9 — UX polish (full-width cards; info tooltips)
 - [x] Release notes + verification (`R22.7_release_notes.md`, `out/verification/R22.7/notes.md`); gate run and pasted in verification (see notes.md)
 
+### R22.9 — Fix Pack (schema-compat + trade ticket identity + strict code-only + score breakdown UI)
+
+- [x] **Part 1 — Persist:** No diagnostics_by_symbol; no reason/note; applied_caps reason_code only
+- [x] **Part 2 — Loader:** GateEvaluation.reason and CandidateRow.why_this_trade optional; from_dict tolerates missing keys
+- [x] **Part 3 — Trade ticket:** contract_key/option_symbol in API; normalized format
+- [x] **Part 4 — Score breakdown UI:** Card on Symbol page (request-time only)
+- [x] **Release notes** — `docs/releases/R22.9_release_notes.md`
+- [x] **Verification** — `out/verification/R22.9/notes.md` with gate outputs and grep proofs
+- [x] **Gate** — Backend pytest, frontend tests, frontend build pass
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 - [ ] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py` (fixture → mock staged result → evaluate_universe → store write → hygiene check + snapshot check + per-symbol summary)

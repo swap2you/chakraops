@@ -250,9 +250,9 @@ class CandidateRow:
     delta: Optional[float]
     credit_estimate: Optional[float]
     max_loss: Optional[float]
-    why_this_trade: Optional[str]
+    why_this_trade: Optional[str] = None  # R22.9: optional for loader compat; never persisted
     # Phase 11.3: Exact contract identity from decision artifact (no recompute)
-    contract_key: Optional[str] = None  # strike-expiry-PUT|CALL
+    contract_key: Optional[str] = None  # strike-expiry-PUT|CALL (normalized: strike as int)
     option_symbol: Optional[str] = None  # OCC symbol when available
 
     def to_dict(self) -> Dict[str, Any]:
@@ -264,7 +264,7 @@ class GateEvaluation:
     """Gate pass/fail for Explain This Decision."""
     name: str
     status: str  # PASS|FAIL|SKIP
-    reason: Optional[str]
+    reason: Optional[str] = None  # R22.9: optional for loader compat; never persisted
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -363,24 +363,45 @@ class DecisionArtifactV2:
             rj_count = d.get("rejected_due_to_delta_count")
             if not codes:
                 codes, rj_count = _reason_string_to_codes_and_count(getattr(s, "primary_reason", None))
-            # Filter to strict machine codes only
             codes = [c for c in (codes or []) if _STRICT_CODE_RE.match(str(c))]
             d["primary_reason_codes"] = codes if codes else []
             if "REJECTED_DUE_TO_DELTA" in codes and rj_count is not None:
                 d["rejected_due_to_delta_count"] = rj_count
             else:
                 d.pop("rejected_due_to_delta_count", None)
+            # R22.9: applied_caps code-only (reason_code only, no reason) in score_breakdown / score_caps
+            def _sanitize_applied_caps(obj: Any) -> None:
+                if isinstance(obj, dict):
+                    if "applied_caps" in obj and isinstance(obj["applied_caps"], list):
+                        clean = []
+                        for cap in obj["applied_caps"]:
+                            c = dict(cap) if isinstance(cap, dict) else {}
+                            c.pop("reason", None)
+                            rc = c.get("reason_code")
+                            if not rc or not _STRICT_CODE_RE.match(str(rc)):
+                                c["reason_code"] = "REGIME_CAP"
+                            clean.append({k: v for k, v in c.items() if k in ("type", "cap_value", "before", "after", "reason_code")})
+                        obj["applied_caps"] = clean
+                    for v in obj.values():
+                        _sanitize_applied_caps(v)
+                elif isinstance(obj, list):
+                    for x in obj:
+                        _sanitize_applied_caps(x)
+            _sanitize_applied_caps(d.get("score_breakdown"))
+            _sanitize_applied_caps(d.get("score_caps"))
             return d
 
         def candidate_persist(c: CandidateRow) -> Dict[str, Any]:
             d = asdict(c)
             d.pop("why_this_trade", None)
-            # R22.7: ensure contract identity for options — derive contract_key if missing
-            if (d.get("strategy") or "").upper() in ("CSP", "CC") and not d.get("contract_key") and not d.get("option_symbol"):
-                strike, expiry = d.get("strike"), d.get("expiry")
-                opt_type = "PUT" if (d.get("strategy") or "").upper() == "CSP" else "CALL"
+            strategy_upper = (d.get("strategy") or "").upper()
+            if strategy_upper in ("CSP", "CC"):
+                strike, expiry = d.get("strike"), d.get("expiry") or getattr(c, "expiry", None)
+                opt_type = "PUT" if strategy_upper == "CSP" else "CALL"
                 if strike is not None and expiry:
-                    d["contract_key"] = f"{int(float(strike))}-{expiry}-{opt_type}"
+                    d["contract_key"] = d.get("contract_key") or f"{int(float(strike))}-{str(expiry)[:10]}-{opt_type}"
+                if not d.get("option_symbol") and getattr(c, "option_symbol", None):
+                    d["option_symbol"] = c.option_symbol
             return d
 
         def gate_persist(g: GateEvaluation) -> Dict[str, Any]:
@@ -398,56 +419,7 @@ class DecisionArtifactV2:
             d["status_code"] = status
             return d
 
-        def _diagnostics_persist(dd: SymbolDiagnosticsDetails) -> Dict[str, Any]:
-            out = dd.to_dict()
-            out.pop("explanation", None)
-            # R22.7 Fix Pack: applied_caps — reason_code only, never reason
-            sc = out.get("score_breakdown") or {}
-            applied = sc.get("applied_caps") or []
-            if applied:
-                clean = []
-                for cap in applied:
-                    c = dict(cap)
-                    c.pop("reason", None)
-                    if not c.get("reason_code") or not _STRICT_CODE_RE.match(str(c.get("reason_code", ""))):
-                        c["reason_code"] = c.get("reason_code") if _STRICT_CODE_RE.match(str(c.get("reason_code", ""))) else "REGIME_CAP"
-                    clean.append(c)
-                sc["applied_caps"] = clean
-                out["score_breakdown"] = sc
-            # rank_reasons.reasons (prose) -> rank_reason_codes only
-            rr = out.get("rank_reasons")
-            if isinstance(rr, dict) and "reasons" in rr:
-                rr = dict(rr)
-                codes = _rank_reason_prose_to_codes(rr.get("reasons"))
-                rr.pop("reasons", None)
-                rr["rank_reason_codes"] = codes
-                if rr.get("penalty") and not _STRICT_CODE_RE.match(str(rr.get("penalty", ""))):
-                    rr.pop("penalty", None)
-                    rr["penalty_code"] = "PENALTY"
-                out["rank_reasons"] = rr
-            # exit_plan.reason (prose) -> reason_code only
-            ep = out.get("exit_plan") or {}
-            if isinstance(ep, dict) and ep.get("reason") is not None:
-                ep = dict(ep)
-                ep["reason_code"] = _exit_plan_reason_to_code(ep.get("reason"))
-                ep.pop("reason", None)
-                out["exit_plan"] = ep
-            # liquidity.reason -> code only (or omit)
-            liq = out.get("liquidity") or {}
-            if isinstance(liq, dict) and liq.get("reason") and not _STRICT_CODE_RE.match(str(liq["reason"])):
-                liq = dict(liq)
-                liq.pop("reason", None)
-                out["liquidity"] = liq
-            # symbol_eligibility.reasons (prose) -> reason_codes only
-            sel = out.get("symbol_eligibility") or {}
-            if isinstance(sel, dict) and sel.get("reasons"):
-                sel = dict(sel)
-                reasons = sel.get("reasons") or []
-                sel["reason_codes"] = [x if _STRICT_CODE_RE.match(str(x)) else "ELIGIBILITY_REASON" for x in reasons]
-                sel.pop("reasons", None)
-                out["symbol_eligibility"] = sel
-            return out
-
+        # R22.9: DO NOT persist diagnostics_by_symbol; diagnostics is request-time only.
         return {
             "metadata": self.metadata,
             "symbols": [symbol_persist(s) for s in self.symbols],
@@ -462,9 +434,6 @@ class DecisionArtifactV2:
             },
             "earnings_by_symbol": {
                 k: earnings_persist(v) for k, v in self.earnings_by_symbol.items()
-            },
-            "diagnostics_by_symbol": {
-                k: _diagnostics_persist(v) for k, v in self.diagnostics_by_symbol.items()
             },
             "warnings": self.warnings,
         }
@@ -488,20 +457,40 @@ class DecisionArtifactV2:
                 d["band"] = assign_band(d.get("final_score") or d.get("score"))
             symbols.append(SymbolEvalSummary(**d))
         cand_fields = {f.name for f in CandidateRow.__dataclass_fields__.values()}
-        selected = [
-            CandidateRow(**{k: v for k, v in (c if isinstance(c, dict) else asdict(c)).items() if k in cand_fields})
-            for c in data.get("selected_candidates") or []
-        ]
+        selected = []
+        for c in data.get("selected_candidates") or []:
+            row = c if isinstance(c, dict) else asdict(c)
+            d = {k: v for k, v in row.items() if k in cand_fields}
+            for key in ("why_this_trade", "expiry", "strike", "delta", "credit_estimate", "max_loss", "contract_key", "option_symbol"):
+                if key in cand_fields and key not in d:
+                    d[key] = None
+            selected.append(CandidateRow(**d))
         cb = data.get("candidates_by_symbol") or {}
-        candidates_by_symbol = {
-            k: [CandidateRow(**c) if isinstance(c, dict) else c for c in v]
-            for k, v in cb.items()
-        }
+        candidates_by_symbol = {}
+        for k, v in cb.items():
+            list_c = []
+            for c in v:
+                if isinstance(c, dict):
+                    d = {x: c[x] for x in cand_fields if x in c}
+                    for key in ("why_this_trade", "expiry", "strike", "delta", "credit_estimate", "max_loss", "contract_key", "option_symbol"):
+                        if key in cand_fields and key not in d:
+                            d[key] = None
+                    list_c.append(CandidateRow(**d))
+                else:
+                    list_c.append(c)
+            candidates_by_symbol[k] = list_c
         gb = data.get("gates_by_symbol") or {}
-        gates_by_symbol = {
-            k: [GateEvaluation(**g) if isinstance(g, dict) else g for g in v]
-            for k, v in gb.items()
-        }
+        gate_fields = {f.name for f in GateEvaluation.__dataclass_fields__.values()}
+        gates_by_symbol = {}
+        for k, v in gb.items():
+            gates_by_symbol[k] = []
+            for g in v:
+                if isinstance(g, dict):
+                    d = {x: g[x] for x in gate_fields if x in g}
+                    d.setdefault("reason", None)
+                    gates_by_symbol[k].append(GateEvaluation(**d))
+                else:
+                    gates_by_symbol[k].append(g)
         eb = data.get("earnings_by_symbol") or {}
         _earnings_fields = {f.name for f in EarningsInfo.__dataclass_fields__.values()}
         earnings_by_symbol = {}

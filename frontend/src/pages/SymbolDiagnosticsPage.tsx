@@ -274,7 +274,7 @@ function ExecutionConsole({
           <span
             title={
               data.score_caps?.applied_caps?.length
-                ? `Raw: ${data.raw_score ?? data.score_caps.applied_caps[0].before} → Final: ${data.final_score ?? data.composite_score ?? data.score_caps.applied_caps[0].after} (${data.score_caps.applied_caps[0].reason})`
+                ? `Raw: ${data.raw_score ?? data.score_caps.applied_caps[0].before} → Final: ${data.final_score ?? data.composite_score ?? data.score_caps.applied_caps[0].after} (${(data.score_caps.applied_caps[0] as { reason_code?: string; reason?: string }).reason_code ?? (data.score_caps.applied_caps[0] as { reason?: string }).reason ?? "cap"})`
                 : undefined
             }
           >
@@ -541,6 +541,35 @@ function ExecutionConsole({
             <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">{data.band_reason}</p>
           )}
         </Card>
+
+        {/* R22.9: Score breakdown panel (request-time only; from diagnostics/summary) */}
+        {(data.score_breakdown || data.score_caps?.applied_caps?.length) ? (
+          <Card data-testid="score-breakdown-panel">
+            <CardHeader title="Score breakdown" />
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
+              {data.score_breakdown?.data_quality_score != null && <Kv label="Data quality" value={fmt(data.score_breakdown.data_quality_score)} />}
+              {data.score_breakdown?.regime_score != null && <Kv label="Regime" value={fmt(data.score_breakdown.regime_score)} />}
+              {data.score_breakdown?.options_liquidity_score != null && <Kv label="Options liquidity" value={fmt(data.score_breakdown.options_liquidity_score)} />}
+              {data.score_breakdown?.strategy_fit_score != null && <Kv label="Strategy fit" value={fmt(data.score_breakdown.strategy_fit_score)} />}
+              {data.score_breakdown?.capital_efficiency_score != null && <Kv label="Capital efficiency" value={fmt(data.score_breakdown.capital_efficiency_score)} />}
+              {data.score_breakdown?.composite_score != null && <Kv label="Composite" value={fmt(data.score_breakdown.composite_score)} />}
+              <Kv label="Raw score" value={fmt(data.raw_score ?? data.score_breakdown?.raw_score)} />
+              <Kv label="Final score" value={fmt(data.final_score ?? data.composite_score ?? data.score_breakdown?.final_score)} />
+            </div>
+            {data.score_caps?.applied_caps?.length ? (
+              <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700">
+                <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">Applied caps</span>
+                <ul className="space-y-1 text-xs font-mono text-zinc-600 dark:text-zinc-300">
+                  {data.score_caps.applied_caps.map((cap, i) => (
+                    <li key={i}>
+                      {(cap as { reason_code?: string }).reason_code ?? (cap as { reason?: string }).reason ?? "CAP"}: {fmt((cap as { before?: number }).before)} → {fmt((cap as { after?: number }).after)} (cap={fmt((cap as { cap_value?: number }).cap_value)})
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </Card>
+        ) : null}
 
         <div data-testid="technical-details-panel">
           <Card>

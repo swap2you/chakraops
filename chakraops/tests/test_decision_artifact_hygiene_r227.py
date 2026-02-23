@@ -155,6 +155,21 @@ def _check_option_candidates_identity(persisted: Dict[str, Any]) -> List[str]:
     return violations
 
 
+def _check_no_reason_keys(obj: Any, path: str = "") -> List[str]:
+    """R22.9: Persisted JSON must not contain any key 'reason' (use reason_code only)."""
+    violations: List[str] = []
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            p = f"{path}.{k}" if path else k
+            if k == "reason":
+                violations.append(f"{p}: must not persist 'reason'; use reason_code only")
+            violations.extend(_check_no_reason_keys(v, p))
+    elif isinstance(obj, list):
+        for i, item in enumerate(obj):
+            violations.extend(_check_no_reason_keys(item, f"{path}[{i}]"))
+    return violations
+
+
 def test_decision_artifact_no_forbidden_keys_or_patterns(tmp_path: Path) -> None:
     """Load a minimal v2 artifact (from code path) and assert no forbidden keys or FAIL_/WARN_ strings."""
     from app.core.eval.decision_artifact_v2 import DecisionArtifactV2
@@ -443,6 +458,7 @@ def test_persisted_artifact_applied_caps_have_reason_code_not_reason() -> None:
                 expiration=None,
                 has_candidates=False,
                 candidate_count=0,
+                score_breakdown={"score_caps": {"applied_caps": [{"type": "regime_cap", "cap_value": 60, "before": 70, "after": 60, "reason": "Regime NEUTRAL caps score to 60"}]}},
             ),
         ],
         selected_candidates=[],
@@ -469,12 +485,8 @@ def test_persisted_artifact_applied_caps_have_reason_code_not_reason() -> None:
     assert not violations, f"applied_caps must have reason_code not reason: {violations}"
     assert "note" not in (d.get("earnings_by_symbol") or {}).get("T1", {}), "earnings must not persist note"
     assert (d.get("earnings_by_symbol") or {}).get("T1", {}).get("status_code") == "EARNINGS_NOT_EVALUATED"
-    diag = (d.get("diagnostics_by_symbol") or {}).get("T1") or {}
-    assert "reason" not in (diag.get("exit_plan") or {}), "exit_plan must not persist reason"
-    assert (diag.get("exit_plan") or {}).get("reason_code") in ("EXITPLAN_MISSING_INPUTS", "EXITPLAN_NOT_AVAILABLE")
-    rr = diag.get("rank_reasons") or {}
-    assert "reasons" not in rr
-    assert "rank_reason_codes" in rr
+    # R22.9: diagnostics_by_symbol is not persisted; only symbols/gates/earnings/candidates are
+    assert "diagnostics_by_symbol" not in d, "R22.9: must not persist diagnostics_by_symbol"
     # No prose anywhere in persisted
     violations_str = _check_forbidden_strings(d)
     assert not violations_str, f"Persisted must have no prose: {violations_str}"
@@ -556,5 +568,152 @@ def test_artifact_written_by_store_passes_hygiene(tmp_path: Path) -> None:
         assert not violations_str, f"Prose/spaces in on-disk artifact: {violations_str}"
         assert not violations_codes, f"primary_reason_codes strict: {violations_codes}"
         assert not violations_caps, f"applied_caps reason_code only: {violations_caps}"
+        assert "diagnostics_by_symbol" not in raw, "R22.9: persisted must not contain diagnostics_by_symbol"
+        violations_reason = _check_no_reason_keys(raw)
+        assert not violations_reason, f"R22.9: persisted must have no 'reason' keys: {violations_reason}"
+    finally:
+        reset_output_dir()
+
+
+def test_r229_persist_no_diagnostics_by_symbol() -> None:
+    """R22.9: to_dict_persist() must NOT include diagnostics_by_symbol."""
+    from app.core.eval.decision_artifact_v2 import DecisionArtifactV2, SymbolEvalSummary
+
+    artifact = DecisionArtifactV2(
+        metadata={"artifact_version": "v2", "pipeline_timestamp": "2026-02-17T12:00:00Z", "run_id": "r229"},
+        symbols=[
+            SymbolEvalSummary(
+                symbol="NVDA",
+                verdict="ELIGIBLE",
+                final_verdict="ELIGIBLE",
+                score=62,
+                band="B",
+                primary_reason=None,
+                primary_reason_codes=["STOCK_QUALIFIED"],
+                stage_status="RUN",
+                stage1_status="PASS",
+                stage2_status="PASS",
+                provider_status="OK",
+                data_freshness="2026-02-17",
+                evaluated_at="2026-02-17T12:00:00Z",
+                strategy="CSP",
+                price=140.0,
+                expiration="2026-03-20",
+                has_candidates=True,
+                candidate_count=1,
+            ),
+        ],
+        selected_candidates=[],
+        candidates_by_symbol={},
+        gates_by_symbol={},
+        earnings_by_symbol={},
+        diagnostics_by_symbol={"NVDA": None},
+        warnings=[],
+    )
+    d = artifact.to_dict_persist()
+    assert "diagnostics_by_symbol" not in d
+
+
+def test_r229_persist_no_reason_keys() -> None:
+    """R22.9: Persisted JSON must not contain any 'reason' key."""
+    from app.core.eval.decision_artifact_v2 import DecisionArtifactV2, SymbolEvalSummary
+
+    artifact = DecisionArtifactV2(
+        metadata={"artifact_version": "v2", "pipeline_timestamp": "2026-02-17T12:00:00Z", "run_id": "r229"},
+        symbols=[
+            SymbolEvalSummary(
+                symbol="NKE",
+                verdict="HOLD",
+                final_verdict="HOLD",
+                score=55,
+                band="C",
+                primary_reason=None,
+                primary_reason_codes=["REGIME_NEUTRAL_CAP"],
+                stage_status="RUN",
+                stage1_status="PASS",
+                stage2_status="NOT_RUN",
+                provider_status="OK",
+                data_freshness=None,
+                evaluated_at=None,
+                strategy=None,
+                price=98.0,
+                expiration=None,
+                has_candidates=False,
+                candidate_count=0,
+                score_breakdown={"score_caps": {"applied_caps": [{"type": "REGIME_CAP", "cap_value": 65, "before": 70, "after": 65, "reason_code": "REGIME_NEUTRAL"}]}},
+            ),
+        ],
+        selected_candidates=[],
+        candidates_by_symbol={},
+        gates_by_symbol={},
+        earnings_by_symbol={},
+        diagnostics_by_symbol={},
+        warnings=[],
+    )
+    d = artifact.to_dict_persist()
+    violations = _check_no_reason_keys(d)
+    assert not violations, f"persisted must have no 'reason' keys: {violations}"
+
+
+def test_r229_loader_regression_minimal_persisted_json(tmp_path: Path) -> None:
+    """R22.9: Load minimal persisted-shaped JSON (no diagnostics_by_symbol, no reason, no why_this_trade) without exception."""
+    from app.core.eval.decision_artifact_v2 import DecisionArtifactV2
+    from app.core.eval.evaluation_store_v2 import set_output_dir, reset_output_dir, get_evaluation_store_v2, get_decision_store_path
+
+    minimal = {
+        "metadata": {"artifact_version": "v2", "pipeline_timestamp": "2026-02-17T12:00:00Z", "run_id": "loader-test"},
+        "symbols": [
+            {
+                "symbol": "AAPL",
+                "verdict": "ELIGIBLE",
+                "final_verdict": "ELIGIBLE",
+                "score": 65,
+                "band": "B",
+                "primary_reason_codes": ["STOCK_QUALIFIED"],
+                "stage_status": "RUN",
+                "stage1_status": "PASS",
+                "stage2_status": "PASS",
+                "provider_status": "OK",
+                "data_freshness": "2026-02-17",
+                "evaluated_at": "2026-02-17T12:00:00Z",
+                "strategy": "CSP",
+                "price": 185.0,
+                "expiration": "2026-03-20",
+                "has_candidates": True,
+                "candidate_count": 1,
+            },
+        ],
+        "selected_candidates": [
+            {"symbol": "AAPL", "strategy": "CSP", "expiry": "2026-03-20", "strike": 180.0, "delta": -0.25, "credit_estimate": 3.0, "max_loss": None, "contract_key": "180-2026-03-20-PUT", "option_symbol": "AAPL260320P00180000"},
+        ],
+        "candidates_by_symbol": {
+            "AAPL": [{"symbol": "AAPL", "strategy": "CSP", "expiry": "2026-03-20", "strike": 180.0, "delta": -0.25, "credit_estimate": 3.0, "max_loss": None, "contract_key": "180-2026-03-20-PUT", "option_symbol": "AAPL260320P00180000"}],
+        },
+        "gates_by_symbol": {"AAPL": [{"name": "STOCK_QUALITY", "status": "PASS"}]},
+        "earnings_by_symbol": {"AAPL": {"earnings_days": None, "earnings_block": False, "status_code": "EARNINGS_NOT_EVALUATED"}},
+        "warnings": [],
+    }
+    set_output_dir(tmp_path)
+    store_path = get_decision_store_path()
+    store_path.parent.mkdir(parents=True, exist_ok=True)
+    store_path.write_text(json.dumps(minimal, indent=2), encoding="utf-8")
+    try:
+        art = DecisionArtifactV2.from_dict(minimal)
+        assert art is not None
+        assert len(art.symbols) == 1
+        assert art.symbols[0].symbol == "AAPL"
+        assert len(art.selected_candidates) == 1
+        c = art.selected_candidates[0]
+        assert getattr(c, "contract_key", None) == "180-2026-03-20-PUT"
+        assert getattr(c, "option_symbol", None) == "AAPL260320P00180000"
+        assert getattr(c, "why_this_trade", None) is None
+        assert len(art.gates_by_symbol.get("AAPL", [])) == 1
+        g = art.gates_by_symbol["AAPL"][0]
+        assert getattr(g, "reason", None) is None
+        store = get_evaluation_store_v2()
+        store.reload_from_disk()
+        loaded = store.get_latest()
+        assert loaded is not None
+        assert len(loaded.symbols) == 1
     finally:
         reset_output_dir()

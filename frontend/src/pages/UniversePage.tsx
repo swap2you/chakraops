@@ -34,20 +34,21 @@ function isOptionsStrategy(s: string | null | undefined): boolean {
   return upper === "CSP" || upper === "CC";
 }
 
-/** Phase 10.1: Raw → Pre-cap → Final and cap reason for Universe row tooltip. */
+/** Phase 10.1: Raw → Pre-cap → Final and cap reason for Universe row tooltip. Prefer reason_code (code-only). */
 function formatScoreCapTooltip(row: {
   score?: number | null;
   raw_score?: number | null;
   final_score?: number | null;
   pre_cap_score?: number | null;
-  score_caps?: { regime_cap?: number | null; applied_caps?: Array<{ type: string; cap_value: number; before: number; after: number; reason: string }> } | null;
+  score_caps?: { regime_cap?: number | null; applied_caps?: Array<{ type: string; cap_value: number; before: number; after: number; reason?: string; reason_code?: string }> } | null;
 }): string | null {
   const caps = row.score_caps?.applied_caps;
   if (!caps || caps.length === 0) return null;
   const cap = caps[0];
   const raw = row.raw_score ?? row.pre_cap_score ?? cap.before;
   const final = row.final_score ?? row.score ?? cap.after;
-  return `Raw: ${raw} → Final: ${final} (${cap.reason})`;
+  const label = cap.reason ?? cap.reason_code ?? "—";
+  return `Raw: ${raw} → Final: ${final} (${label})`;
 }
 
 function formatScoreBreakdown(bd: unknown): string {

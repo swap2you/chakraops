@@ -44,12 +44,18 @@ const mockDiagnosticsWithCap = {
 };
 
 const useSymbolDiagnosticsMock = vi.fn();
-vi.mock("@/api/queries", () => ({
-  useSymbolDiagnostics: (...args: unknown[]) => useSymbolDiagnosticsMock(...args),
-  useRecomputeSymbolDiagnostics: () => ({ mutate: vi.fn(), isPending: false }),
-  useDefaultAccount: () => ({ data: null }),
-  useUiSystemHealth: () => ({ data: { market: { phase: "OPEN" } } }),
-}));
+vi.mock("@/api/queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/api/queries")>();
+  return {
+    ...actual,
+    useSymbolDiagnostics: (...args: unknown[]) => useSymbolDiagnosticsMock(...args),
+    useRecomputeSymbolDiagnostics: () => ({ mutate: vi.fn(), isPending: false }),
+    useDefaultAccount: () => ({ data: null }),
+    useUiSystemHealth: () => ({ data: { market: { phase: "OPEN" } } }),
+    useUpsertSharePosition: () => ({ mutate: vi.fn(), isPending: false }),
+    useDeleteSharePosition: () => ({ mutate: vi.fn(), isPending: false }),
+  };
+});
 
 describe("SymbolDiagnosticsPage score UX", () => {
   beforeEach(() => {

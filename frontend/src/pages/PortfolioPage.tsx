@@ -74,6 +74,7 @@ export function PortfolioPage() {
 
   const positions = data?.positions ?? [];
   const capitalDeployed = data?.capital_deployed ?? 0;
+  const sharesPositions = data?.shares_positions ?? [];
   const openPositionsCount = data?.open_positions_count ?? positions.filter((p) => (p.status ?? "").toUpperCase() === "OPEN" || (p.status ?? "").toUpperCase() === "PARTIAL_EXIT").length;
 
   const accounts = accountsData?.accounts ?? [];
@@ -327,6 +328,48 @@ export function PortfolioPage() {
           </Table>
         )}
       </Card>
+
+      {sharesPositions.length > 0 && (
+        <Card>
+          <CardHeader title="Shares Positions" description="R23.0: Share positions (MTM when price available)." />
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Symbol</TableHead>
+                <TableHead>Qty</TableHead>
+                <TableHead>Avg cost</TableHead>
+                <TableHead>Last price</TableHead>
+                <TableHead>Market value</TableHead>
+                <TableHead>Unrealized PnL</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sharesPositions.map((row: { symbol: string; quantity: number; avg_cost?: number | null; last_price?: number | null; market_value?: number | null; unrealized_pnl?: number | null }) => (
+                <TableRow key={row.symbol}>
+                  <TableCell>
+                    <Link
+                      to={`/symbol-diagnostics?symbol=${encodeURIComponent(row.symbol)}`}
+                      className="font-mono font-medium text-zinc-900 dark:text-zinc-200 hover:underline"
+                    >
+                      {row.symbol}
+                    </Link>
+                  </TableCell>
+                  <TableCell numeric className="font-mono">{row.quantity}</TableCell>
+                  <TableCell numeric className="font-mono">{row.avg_cost != null ? fmtNum(row.avg_cost) : "—"}</TableCell>
+                  <TableCell numeric className="font-mono">{row.last_price != null ? fmtNum(row.last_price) : "—"}</TableCell>
+                  <TableCell numeric className="font-mono">{row.market_value != null ? fmtCurrency(row.market_value) : "—"}</TableCell>
+                  <TableCell
+                    numeric
+                    className={`font-mono ${row.unrealized_pnl != null ? (row.unrealized_pnl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400") : ""}`}
+                  >
+                    {row.unrealized_pnl != null ? fmtCurrency(row.unrealized_pnl) : "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
 
       {accounts.length > 0 && (
         <Card>

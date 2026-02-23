@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Calendar, Database, Droplets, X } from "lucide-react";
-import { useSymbolDiagnostics, useRecomputeSymbolDiagnostics, useDefaultAccount, useUiSystemHealth } from "@/api/queries";
+import { useSymbolDiagnostics, useRecomputeSymbolDiagnostics, useDefaultAccount, useUiSystemHealth, useUpsertSharePosition, useDeleteSharePosition } from "@/api/queries";
 import type { SymbolDiagnosticsResponseExtended } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { TradeTicketDrawer } from "@/components/TradeTicketDrawer";
@@ -182,6 +183,7 @@ export function SymbolDiagnosticsPage() {
         <ExecutionConsole
           data={data}
           symbol={activeSymbol ?? ""}
+          accountId={(accountData?.account as { account_id?: string } | undefined)?.account_id ?? "default"}
           onRecompute={() => activeSymbol && recompute.mutate(activeSymbol)}
           isRecomputing={recompute.isPending}
           isRecomputeDisabled={marketClosed}
@@ -223,9 +225,11 @@ function ExecutionConsole({
   recomputeDisabledTooltip,
   onOpenTradeTicket,
   defaultCapital,
+  accountId = "default",
 }: {
   data: SymbolDiagnosticsResponseExtended;
   symbol: string;
+  accountId?: string | null;
   onRecompute?: () => void;
   isRecomputing?: boolean;
   isRecomputeDisabled?: boolean;
@@ -234,6 +238,11 @@ function ExecutionConsole({
   defaultCapital?: number | null;
 }) {
   const [infoDrawerKey, setInfoDrawerKey] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"Options" | "Shares">("Options");
+  const [sharesModalOpen, setSharesModalOpen] = useState(false);
+  const [sharesForm, setSharesForm] = useState({ quantity: "", avg_cost: "", opened_at: "" });
+  const upsertSharePosition = useUpsertSharePosition(data.symbol);
+  const deleteSharePosition = useDeleteSharePosition();
   const comp = data.computed;
   const cv = data.computed_values;
   const ep = data.exit_plan;
@@ -327,7 +336,26 @@ function ExecutionConsole({
             </div>
           </div>
         )}
+        {/* R23.0: Options | Shares tab */}
+        <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700 flex gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab("Options")}
+            className={`px-3 py-1.5 rounded text-sm font-medium ${activeTab === "Options" ? "bg-zinc-700 text-white dark:bg-zinc-500 dark:text-zinc-900" : "bg-zinc-200 text-zinc-700 hover:bg-zinc-300 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600"}`}
+          >
+            Options
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("Shares")}
+            className={`px-3 py-1.5 rounded text-sm font-medium ${activeTab === "Shares" ? "bg-zinc-700 text-white dark:bg-zinc-500 dark:text-zinc-900" : "bg-zinc-200 text-zinc-700 hover:bg-zinc-300 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600"}`}
+          >
+            Shares
+          </button>
+        </div>
       </Card>
+      {activeTab === "Options" ? (
+      <>
       {/* Gate Summary: reasons_explained from backend; fallback to primary_reason mapping (rejected_due_to_delta=N → rejected_count) */}
       <Card className="lg:col-span-2 w-full">
         <CardHeader title="Gate Summary" />
@@ -828,12 +856,159 @@ function ExecutionConsole({
           </Card>
         )}
       </div>
+      </> ) : (
+        <SharesTabContent
+          data={data}
+          accountId={accountId ?? ""}
+          upsertSharePosition={upsertSharePosition}
+          deleteSharePosition={deleteSharePosition}
+          sharesModalOpen={sharesModalOpen}
+          setSharesModalOpen={setSharesModalOpen}
+          sharesForm={sharesForm}
+          setSharesForm={setSharesForm}
+        />
+      )}
     </div>
   );
 }
 
 function earningsDaysReason(_value: unknown): string {
   return "Not evaluated";
+}
+
+/** R23.0: Shares tab content — eligibility (safe label), Your Shares Position, Add/Update modal. */
+function SharesTabContent({
+  data,
+  accountId,
+  upsertSharePosition,
+  deleteSharePosition,
+  sharesModalOpen,
+  setSharesModalOpen,
+  sharesForm,
+  setSharesForm,
+}: {
+  data: SymbolDiagnosticsResponseExtended;
+  accountId: string;
+  upsertSharePosition: ReturnType<typeof useUpsertSharePosition>;
+  deleteSharePosition: ReturnType<typeof useDeleteSharePosition>;
+  sharesModalOpen: boolean;
+  setSharesModalOpen: (v: boolean) => void;
+  sharesForm: { quantity: string; avg_cost: string; opened_at: string };
+  setSharesForm: Dispatch<SetStateAction<{ quantity: string; avg_cost: string; opened_at: string }>>;
+}) {
+  const pos = data.shares_position;
+  const plan = data.shares_plan;
+  const eligibleLabel = plan?.eligible ? "Eligible for shares" : "Not eligible for shares (regime or score)";
+  return (
+    <div className="space-y-4 lg:col-span-2">
+      <Card>
+        <CardHeader title="Shares" description="BUY SHARES recommendation only; no order placement." />
+        <div className="space-y-3 text-sm">
+          <p><span className="text-zinc-500 dark:text-zinc-400">Eligibility:</span> {eligibleLabel}</p>
+          {data.mtf_levels && (data.mtf_levels.daily || data.mtf_levels.weekly || data.mtf_levels.monthly) && (
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Multi-timeframe levels</span>
+              <p className="text-zinc-700 dark:text-zinc-300">See Options tab for M/W/D support and resistance.</p>
+            </div>
+          )}
+          {data.targets && (data.targets.t1 != null || data.targets.t2 != null) && (
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-400">Targets & hold-time</span>
+              <p className="text-zinc-700 dark:text-zinc-300">T1 {fmt(data.targets.t1)} · T2 {fmt(data.targets.t2)} · Hold-time: {data.hold_time_estimate?.sessions ?? "—"} sessions</p>
+            </div>
+          )}
+        </div>
+      </Card>
+      <Card>
+        <CardHeader title="Your Shares Position" />
+        {pos ? (
+          <div className="space-y-2 text-sm">
+            <p><span className="text-zinc-500 dark:text-zinc-400">Quantity:</span> <span className="font-mono font-medium">{pos.quantity}</span></p>
+            {pos.avg_cost != null && <p><span className="text-zinc-500 dark:text-zinc-400">Avg cost:</span> <span className="font-mono">${pos.avg_cost.toFixed(2)}</span></p>}
+            <p><span className="text-zinc-500 dark:text-zinc-400">Last updated:</span> {pos.updated_at ? new Date(pos.updated_at).toLocaleString() : "—"}</p>
+            <div className="flex gap-2 pt-2">
+              <Button size="sm" variant="secondary" onClick={() => { setSharesForm({ quantity: String(pos.quantity), avg_cost: pos.avg_cost != null ? String(pos.avg_cost) : "", opened_at: "" }); setSharesModalOpen(true); }}>
+                Update
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={deleteSharePosition.isPending}
+                onClick={() => { if (window.confirm(`Remove shares position for ${data.symbol}?`)) deleteSharePosition.mutate({ accountId, symbol: data.symbol }); }}
+              >
+                {deleteSharePosition.isPending ? "Deleting…" : "Delete"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-zinc-500 dark:text-zinc-400">No shares position recorded.</p>
+        )}
+        {!pos && (
+          <Button size="sm" className="mt-2" onClick={() => { setSharesForm({ quantity: "", avg_cost: "", opened_at: "" }); setSharesModalOpen(true); }}>
+            Add Shares Position
+          </Button>
+        )}
+      </Card>
+      {sharesModalOpen && (
+        <Card className="border-zinc-400 dark:border-zinc-500">
+          <CardHeader title="Add / Update Shares Position" />
+          <div className="grid grid-cols-1 gap-3 max-w-xs">
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Quantity (required)</label>
+              <input
+                type="number"
+                min="1"
+                className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800"
+                value={sharesForm.quantity}
+                onChange={(e) => setSharesForm((p) => ({ ...p, quantity: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Avg cost (optional)</label>
+              <input
+                type="number"
+                step="0.01"
+                className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800"
+                value={sharesForm.avg_cost}
+                onChange={(e) => setSharesForm((p) => ({ ...p, avg_cost: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Opened date (optional, YYYY-MM-DD)</label>
+              <input
+                type="text"
+                placeholder="YYYY-MM-DD"
+                className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800"
+                value={sharesForm.opened_at}
+                onChange={(e) => setSharesForm((p) => ({ ...p, opened_at: e.target.value }))}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={() => {
+                  const qty = parseInt(sharesForm.quantity, 10);
+                  if (!Number.isNaN(qty) && qty >= 0) {
+                    upsertSharePosition.mutate({
+                      account_id: accountId,
+                      quantity: qty,
+                      avg_cost: sharesForm.avg_cost.trim() ? parseFloat(sharesForm.avg_cost) : null,
+                      opened_at: sharesForm.opened_at.trim() || null,
+                    });
+                    setSharesModalOpen(false);
+                  }
+                }}
+                disabled={upsertSharePosition.isPending}
+              >
+                {upsertSharePosition.isPending ? "Saving…" : "Save"}
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setSharesModalOpen(false)}>Cancel</Button>
+            </div>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
 }
 
 function earningsBlockReason(_value: unknown): string {

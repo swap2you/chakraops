@@ -159,6 +159,17 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Verification** — `out/verification/R22.9/notes.md` with gate outputs and grep proofs
 - [x] **Gate** — Backend pytest, frontend tests, frontend build pass
 
+### R23.0 — Shares Positions + Symbol Shares Tab + Portfolio Wiring
+
+- [x] **Part A — DB:** share_positions table + CRUD; get_total_shares_for_evaluation (holdings + share_positions)
+- [x] **Part B — API:** GET/POST/DELETE shares/positions; portfolio + portfolio/mtm include shares_positions; symbol-diagnostics shares_plan + shares_position
+- [x] **Part C — UI:** Symbol Options | Shares tab; Portfolio Shares Positions card
+- [x] **Part D — Shares plan:** symbol-diagnostics shares_plan (Part D contract); request-time only
+- [x] **Requirements** — `chakraops/docs/releases/R23.0_requirements.md`
+- [x] **Release notes** — `docs/releases/R23.0_release_notes.md`
+- [x] **Verification** — `out/verification/R23.0/notes.md` with gate outputs and UAT
+- [x] **Gate** — Backend pytest (651 passed), frontend tests (126 passed), frontend build pass (recorded in notes)
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 - [ ] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py` (fixture → mock staged result → evaluate_universe → store write → hygiene check + snapshot check + per-symbol summary)

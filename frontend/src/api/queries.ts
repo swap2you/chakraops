@@ -21,6 +21,8 @@ import type {
   UniverseSymbolsResponse,
   UiAlertsResponse,
   SharesPlan,
+  SharePosition,
+  SharesPositionsListResponse,
 } from "./types";
 import type { DecisionMode, DecisionRef } from "./types";
 export type { DecisionRef };
@@ -160,6 +162,20 @@ function uiAlertsPath(): string {
   return `/api/ui/alerts`;
 }
 
+/** R23.0: Share positions */
+function uiSharesPositionsListPath(accountId: string): string {
+  return `/api/ui/shares/positions?account_id=${encodeURIComponent(accountId)}`;
+}
+function uiSharePositionGetPath(symbol: string, accountId: string): string {
+  return `/api/ui/shares/positions/${encodeURIComponent(symbol)}?account_id=${encodeURIComponent(accountId)}`;
+}
+function uiSharePositionUpsertPath(symbol: string): string {
+  return `/api/ui/shares/positions/${encodeURIComponent(symbol)}`;
+}
+function uiSharePositionDeletePath(symbol: string, accountId: string): string {
+  return `/api/ui/shares/positions/${encodeURIComponent(symbol)}?account_id=${encodeURIComponent(accountId)}`;
+}
+
 function uiEvalRunPath(force?: boolean): string {
   const base = `/api/ui/eval/run`;
   return force ? `${base}?force=true` : base;
@@ -274,6 +290,9 @@ export const queryKeys = {
   uiPortfolio: () => ["ui", "portfolio"] as const,
   uiAccountSummary: () => ["ui", "account", "summary"] as const,
   uiAccountHoldings: () => ["ui", "account", "holdings"] as const,
+  /** R23.0 */
+  uiSharesPositions: (accountId: string) => ["ui", "shares", "positions", accountId] as const,
+  uiSharePosition: (accountId: string, symbol: string) => ["ui", "shares", "positions", accountId, symbol] as const,
   uiPortfolioMetrics: (accountId?: string | null) => ["ui", "portfolio", "metrics", accountId ?? ""] as const,
   uiPortfolioRisk: (accountId?: string | null) => ["ui", "portfolio", "risk", accountId ?? ""] as const,
   uiPortfolioMtm: (accountId?: string | null) => ["ui", "portfolio", "mtm", accountId ?? ""] as const,
@@ -704,6 +723,53 @@ export function useDeleteHolding() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.uiAccountSummary() });
       qc.invalidateQueries({ queryKey: queryKeys.uiAccountHoldings() });
+    },
+  });
+}
+
+/** R23.0: GET /api/ui/shares/positions?account_id= */
+export function useSharesPositions(accountId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.uiSharesPositions(accountId ?? "default"),
+    queryFn: () => apiGet<SharesPositionsListResponse>(uiSharesPositionsListPath(accountId ?? "default")),
+    enabled: !!accountId,
+  });
+}
+
+/** R23.0: GET /api/ui/shares/positions/{symbol}?account_id= */
+export function useSharePosition(accountId: string | null, symbol: string | null) {
+  return useQuery({
+    queryKey: queryKeys.uiSharePosition(accountId ?? "default", symbol ?? ""),
+    queryFn: () =>
+      apiGet<SharePosition>(uiSharePositionGetPath(symbol!, accountId ?? "default")),
+    enabled: !!accountId && !!symbol,
+  });
+}
+
+/** R23.0: POST /api/ui/shares/positions/{symbol} */
+export function useUpsertSharePosition(symbol: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { account_id: string; quantity: number; avg_cost?: number | null; opened_at?: string | null }) =>
+      apiPost<SharePosition>(uiSharePositionUpsertPath(symbol!), payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "shares"] });
+      qc.invalidateQueries({ queryKey: queryKeys.uiPortfolio() });
+      qc.invalidateQueries({ queryKey: ["ui", "symbolDiagnostics"] });
+    },
+  });
+}
+
+/** R23.0: DELETE /api/ui/shares/positions/{symbol}?account_id= */
+export function useDeleteSharePosition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ accountId, symbol }: { accountId: string; symbol: string }) =>
+      apiDelete<{ deleted: boolean; symbol: string }>(uiSharePositionDeletePath(symbol, accountId)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "shares"] });
+      qc.invalidateQueries({ queryKey: queryKeys.uiPortfolio() });
+      qc.invalidateQueries({ queryKey: ["ui", "symbolDiagnostics"] });
     },
   });
 }

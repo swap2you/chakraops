@@ -1,12 +1,13 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""Phase 21.1: SQLite persistence for account profile, balances, and holdings (manual entry)."""
+"""Phase 21.1: SQLite persistence for account profile, balances, holdings (manual entry), and R23.0 share_positions."""
 
 from __future__ import annotations
 
 import logging
 import sqlite3
 import threading
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -59,6 +60,19 @@ def init_db() -> None:
         source TEXT NOT NULL DEFAULT 'manual',
         updated_at TEXT NOT NULL,
         PRIMARY KEY (account_id, symbol),
+        FOREIGN KEY (account_id) REFERENCES account_profile(id)
+    );
+    CREATE TABLE IF NOT EXISTS share_positions (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        symbol TEXT NOT NULL,
+        quantity INTEGER NOT NULL,
+        avg_cost REAL,
+        opened_at TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(account_id, symbol),
         FOREIGN KEY (account_id) REFERENCES account_profile(id)
     );
     """
@@ -242,17 +256,167 @@ def delete_holding(symbol: str) -> bool:
 
 def get_holdings_for_evaluation() -> Dict[str, int]:
     """
-    Return symbol -> shares for default account. Used by eligibility engine for CC gating.
-    Only includes holdings with shares >= 1 (no zero entries).
+    Return symbol -> total shares for default account (holdings + share_positions).
+    Used by eligibility engine for CC gating. Only includes symbols with shares >= 1.
+    R23.0: Merges holdings table and share_positions table.
+    """
+    return get_total_shares_for_evaluation(_DEFAULT_ACCOUNT_ID)
+
+
+def get_total_shares_for_evaluation(account_id: str) -> Dict[str, int]:
+    """
+    R23.0: Return symbol -> total shares for account (holdings + share_positions).
+    Used for CC eligibility: total_shares >= 100.
     """
     init_db()
+    aid = (account_id or "").strip() or _DEFAULT_ACCOUNT_ID
+    with _LOCK:
+        conn = _get_conn()
+        try:
+            # Holdings: symbol -> shares
+            rows = conn.execute(
+                "SELECT symbol, shares FROM holdings WHERE account_id = ? AND shares >= 1",
+                (aid,),
+            ).fetchall()
+            total: Dict[str, int] = {r["symbol"]: int(r["shares"]) for r in rows}
+            # Add share_positions (same symbol => add quantity)
+            rows2 = conn.execute(
+                "SELECT symbol, quantity FROM share_positions WHERE account_id = ? AND quantity >= 1",
+                (aid,),
+            ).fetchall()
+            for r in rows2:
+                sym = r["symbol"]
+                total[sym] = total.get(sym, 0) + int(r["quantity"])
+            return {k: v for k, v in total.items() if v >= 1}
+        finally:
+            conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Share positions (R23.0)
+# ---------------------------------------------------------------------------
+
+
+def list_share_positions(account_id: str) -> List[Dict[str, Any]]:
+    """List all share positions for account. Symbol normalized to uppercase in response."""
+    init_db()
+    aid = (account_id or "").strip() or _DEFAULT_ACCOUNT_ID
     with _LOCK:
         conn = _get_conn()
         try:
             rows = conn.execute(
-                "SELECT symbol, shares FROM holdings WHERE account_id = ? AND shares >= 1",
-                (_DEFAULT_ACCOUNT_ID,),
+                """SELECT id, account_id, symbol, quantity, avg_cost, opened_at, notes, created_at, updated_at
+                   FROM share_positions WHERE account_id = ? ORDER BY symbol""",
+                (aid,),
             ).fetchall()
-            return {r["symbol"]: int(r["shares"]) for r in rows}
+            return [_row_to_share_position(r) for r in rows]
+        finally:
+            conn.close()
+
+
+def get_share_position(account_id: str, symbol: str) -> Optional[Dict[str, Any]]:
+    """Get share position for account+symbol. Returns None if not found."""
+    init_db()
+    aid = (account_id or "").strip() or _DEFAULT_ACCOUNT_ID
+    sym = (symbol or "").strip().upper()
+    if not sym:
+        return None
+    with _LOCK:
+        conn = _get_conn()
+        try:
+            row = conn.execute(
+                """SELECT id, account_id, symbol, quantity, avg_cost, opened_at, notes, created_at, updated_at
+                   FROM share_positions WHERE account_id = ? AND symbol = ?""",
+                (aid, sym),
+            ).fetchone()
+            return _row_to_share_position(row) if row else None
+        finally:
+            conn.close()
+
+
+def _row_to_share_position(r: Any) -> Dict[str, Any]:
+    if r is None:
+        return {}
+    return {
+        "id": r["id"],
+        "account_id": r["account_id"],
+        "symbol": r["symbol"],
+        "quantity": int(r["quantity"]),
+        "avg_cost": float(r["avg_cost"]) if r["avg_cost"] is not None else None,
+        "opened_at": r["opened_at"],
+        "notes": r["notes"],
+        "created_at": r["created_at"],
+        "updated_at": r["updated_at"],
+    }
+
+
+def upsert_share_position(
+    account_id: str,
+    symbol: str,
+    quantity: int,
+    avg_cost: Optional[float] = None,
+    opened_at: Optional[str] = None,
+    notes: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Upsert share position. One row per (account_id, symbol). Returns the position row."""
+    init_db()
+    from datetime import datetime, timezone
+    aid = (account_id or "").strip() or _DEFAULT_ACCOUNT_ID
+    sym = (symbol or "").strip().upper()
+    if not sym:
+        raise ValueError("symbol is required")
+    if not isinstance(quantity, int) or quantity < 0:
+        raise ValueError("quantity must be a non-negative integer")
+    if avg_cost is not None and (not isinstance(avg_cost, (int, float)) or avg_cost < 0):
+        raise ValueError("avg_cost must be non-negative if provided")
+    now = datetime.now(timezone.utc).isoformat()
+    with _LOCK:
+        conn = _get_conn()
+        try:
+            existing = conn.execute(
+                "SELECT id FROM share_positions WHERE account_id = ? AND symbol = ?",
+                (aid, sym),
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    """UPDATE share_positions SET quantity = ?, avg_cost = ?, opened_at = ?, notes = ?, updated_at = ?
+                       WHERE account_id = ? AND symbol = ?""",
+                    (quantity, avg_cost, opened_at, notes, now, aid, sym),
+                )
+                conn.commit()
+            else:
+                pos_id = str(uuid.uuid4())
+                conn.execute(
+                    """INSERT INTO share_positions (id, account_id, symbol, quantity, avg_cost, opened_at, notes, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (pos_id, aid, sym, quantity, avg_cost, opened_at, notes, now, now),
+                )
+                conn.commit()
+            row = conn.execute(
+                """SELECT id, account_id, symbol, quantity, avg_cost, opened_at, notes, created_at, updated_at
+                   FROM share_positions WHERE account_id = ? AND symbol = ?""",
+                (aid, sym),
+            ).fetchone()
+            return _row_to_share_position(row)
+        finally:
+            conn.close()
+
+
+def delete_share_position(account_id: str, symbol: str) -> bool:
+    """Remove share position for account+symbol. Returns True if deleted."""
+    init_db()
+    aid = (account_id or "").strip() or _DEFAULT_ACCOUNT_ID
+    sym = (symbol or "").strip().upper()
+    if not sym:
+        return False
+    with _LOCK:
+        conn = _get_conn()
+        try:
+            cur = conn.execute(
+                "DELETE FROM share_positions WHERE account_id = ? AND symbol = ?",
+                (aid, sym),
+            )
+            conn.commit()
+            return cur.rowcount > 0
         finally:
             conn.close()

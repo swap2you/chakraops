@@ -1470,15 +1470,54 @@ def ui_portfolio(
                 elif p.strike and p.contracts:
                     capital_deployed += float(p.strike) * 100 * int(p.contracts)
             out.append(enriched)
+        # R23.0: Include share positions (qty, avg_cost, last_price when available from artifact)
+        shares_positions_out: List[Dict[str, Any]] = []
+        try:
+            from app.core.accounts.holdings_db import list_share_positions
+            from app.core.accounts.holdings_db import _DEFAULT_ACCOUNT_ID
+            from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
+            store = get_evaluation_store_v2()
+            store.reload_from_disk()
+            artifact = store.get_latest()
+            price_by_symbol: Dict[str, float] = {}
+            if artifact and getattr(artifact, "symbols", None):
+                for s in artifact.symbols:
+                    sym = (getattr(s, "symbol", "") or "").strip().upper()
+                    if not sym:
+                        continue
+                    p = getattr(s, "price", None) or getattr(s, "underlying_price", None)
+                    if p is not None:
+                        try:
+                            price_by_symbol[sym] = float(p)
+                        except (TypeError, ValueError):
+                            pass
+            for pos in list_share_positions(_DEFAULT_ACCOUNT_ID):
+                last_price = price_by_symbol.get(pos["symbol"])
+                qty = pos.get("quantity") or 0
+                avg_cost = pos.get("avg_cost")
+                market_value = (last_price * qty) if last_price is not None and qty else None
+                unrealized_pnl = (last_price - avg_cost) * qty if (last_price is not None and avg_cost is not None and qty) else None
+                shares_positions_out.append({
+                    "symbol": pos["symbol"],
+                    "quantity": qty,
+                    "avg_cost": pos.get("avg_cost"),
+                    "last_price": last_price,
+                    "market_value": round(market_value, 2) if market_value is not None else None,
+                    "unrealized_pnl": round(unrealized_pnl, 2) if unrealized_pnl is not None else None,
+                    "updated_at": pos.get("updated_at"),
+                })
+        except Exception:
+            pass
         return {
             "positions": out,
             "capital_deployed": round(capital_deployed, 2),
             "open_positions_count": open_count,
+            "shares_positions": shares_positions_out,
         }
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Error loading portfolio: %s", e)
-        return {"positions": [], "capital_deployed": 0, "open_positions_count": 0}
+        return {"positions": [], "capital_deployed": 0, "open_positions_count": 0, "shares_positions": []}
 
 
 @router.get("/portfolio/metrics")
@@ -1933,15 +1972,166 @@ def ui_portfolio_mtm(
                 realized_total += float(p.realized_pnl)
             if (p.status or "").upper() in ("OPEN", "PARTIAL_EXIT") and enriched.get("unrealized_pnl") is not None:
                 unrealized_total += float(enriched["unrealized_pnl"])
+        # R23.0: Include share positions with optional last_price from artifact
+        shares_out: List[Dict[str, Any]] = []
+        try:
+            from app.core.accounts.holdings_db import list_share_positions, _DEFAULT_ACCOUNT_ID
+            from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
+            store = get_evaluation_store_v2()
+            store.reload_from_disk()
+            art = store.get_latest()
+            price_by_sym: Dict[str, float] = {}
+            if art and getattr(art, "symbols", None):
+                for s in art.symbols:
+                    sym = (getattr(s, "symbol", "") or "").strip().upper()
+                    if sym:
+                        p = getattr(s, "price", None) or getattr(s, "underlying_price", None)
+                        if p is not None:
+                            try:
+                                price_by_sym[sym] = float(p)
+                            except (TypeError, ValueError):
+                                pass
+            for pos in list_share_positions(account_id or _DEFAULT_ACCOUNT_ID):
+                last_price = price_by_sym.get(pos["symbol"])
+                qty = pos.get("quantity") or 0
+                avg = pos.get("avg_cost")
+                mv = (last_price * qty) if last_price is not None and qty else None
+                unpnl = (last_price - avg) * qty if (last_price is not None and avg is not None and qty) else None
+                shares_out.append({
+                    "symbol": pos["symbol"],
+                    "quantity": qty,
+                    "avg_cost": avg,
+                    "last_price": last_price,
+                    "market_value": round(mv, 2) if mv is not None else None,
+                    "unrealized_pnl": round(unpnl, 2) if unpnl is not None else None,
+                })
+        except Exception:
+            pass
         return {
             "realized_total": round(realized_total, 2),
             "unrealized_total": round(unrealized_total, 2),
             "positions": per_position,
+            "shares_positions": shares_out,
         }
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Error loading portfolio MTM: %s", e)
-        return {"realized_total": 0, "unrealized_total": 0, "positions": []}
+        return {"realized_total": 0, "unrealized_total": 0, "positions": [], "shares_positions": []}
+
+
+# ---------------------------------------------------------------------------
+# R23.0: Share positions (shares holdings per symbol; used for CC eligibility + Portfolio)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/shares/positions")
+def ui_shares_positions_list(
+    account_id: str = Query(..., description="Account ID"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R23.0: List share positions for account."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.accounts.holdings_db import list_share_positions
+        positions = list_share_positions(account_id)
+        return {"account_id": account_id, "positions": positions}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error listing share positions: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/shares/positions/{symbol}")
+def ui_shares_position_get(
+    symbol: str = Path(..., min_length=1, max_length=12),
+    account_id: str = Query(..., description="Account ID"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R23.0: Get single share position for account+symbol. 404 if none."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.accounts.holdings_db import get_share_position
+        pos = get_share_position(account_id, symbol)
+        if pos is None:
+            raise HTTPException(status_code=404, detail=f"No share position for {symbol}")
+        return pos
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error getting share position: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/shares/positions/{symbol}")
+async def ui_shares_position_upsert(
+    symbol: str = Path(..., min_length=1, max_length=12),
+    account_id: str | None = Query(default=None),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+    request: Request = None,
+) -> Dict[str, Any]:
+    """R23.0: Upsert share position. Body: { account_id, quantity, avg_cost?, opened_at? }."""
+    _require_ui_key(x_ui_key)
+    try:
+        body: Dict[str, Any] = {}
+        if request and request.headers.get("content-type", "").strip().lower().startswith("application/json"):
+            body = await request.json() or {}
+        if not isinstance(body, dict):
+            body = {}
+        aid = (body.get("account_id") or account_id or "").strip()
+        if not aid:
+            raise HTTPException(status_code=400, detail="account_id is required")
+        qty = body.get("quantity")
+        if qty is None:
+            raise HTTPException(status_code=400, detail="quantity is required")
+        try:
+            qty = int(qty)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="quantity must be an integer")
+        if qty < 0:
+            raise HTTPException(status_code=400, detail="quantity must be non-negative")
+        avg_cost = body.get("avg_cost")
+        if avg_cost is not None:
+            try:
+                avg_cost = float(avg_cost)
+            except (TypeError, ValueError):
+                avg_cost = None
+        opened_at = body.get("opened_at")
+        if opened_at is not None and not isinstance(opened_at, str):
+            opened_at = None
+        from app.core.accounts.holdings_db import upsert_share_position
+        pos = upsert_share_position(aid, symbol, qty, avg_cost=avg_cost, opened_at=opened_at)
+        return pos
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error upserting share position: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/shares/positions/{symbol}")
+def ui_shares_position_delete(
+    symbol: str = Path(..., min_length=1, max_length=12),
+    account_id: str = Query(..., description="Account ID"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R23.0: Delete share position for account+symbol."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.accounts.holdings_db import delete_share_position
+        deleted = delete_share_position(account_id, symbol)
+        if not deleted:
+            raise HTTPException(status_code=404, detail=f"No share position for {symbol}")
+        return {"deleted": True, "symbol": symbol.strip().upper()}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error deleting share position: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/alerts")
@@ -2483,40 +2673,68 @@ def _build_shares_plan_at_request_time(
     exit_plan: Dict[str, Any],
     hold_time_estimate: Optional[Dict[str, Any]],
     symbol: str,
+    mtf_levels: Optional[Dict[str, Any]] = None,
+    as_of_inputs: Optional[Dict[str, Any]] = None,
+    eligibility_codes: Optional[List[str]] = None,
 ) -> Optional[Dict[str, Any]]:
-    """R22.5: Shares plan at request time when symbol qualifies (recommendation only). Not persisted."""
+    """R22.5/R23.0: Shares plan at request time (recommendation only). Not persisted. Part D: eligible, eligibility_codes, spot, support_resistance, targets, hold_time, indicators_used, as_of_inputs."""
     regime = (technicals.get("regime") or getattr(summary, "regime", None) or "").upper()
     score = getattr(summary, "score", None) or getattr(summary, "final_score", None)
     support = technicals.get("support_level")
     resistance = technicals.get("resistance_level")
-    if regime != "UP" or score is None:
-        return None
+    codes = eligibility_codes or getattr(summary, "primary_reason_codes", None) or []
+    if not codes and getattr(summary, "primary_reason", None):
+        from app.core.eval.decision_artifact_v2 import _reason_string_to_codes
+        codes = _reason_string_to_codes(getattr(summary, "primary_reason", None)) or []
+    eligible = regime == "UP" and score is not None
     try:
         sup = float(support) if support is not None else None
         res = float(resistance) if resistance is not None else None
     except (TypeError, ValueError):
         sup, res = None, None
-    if sup is None and res is None:
+    if sup is None and res is None and not eligible:
         return None
     spot = technicals.get("spot") or (sup if sup is not None else res)
     try:
-        spot = float(spot)
+        spot = float(spot) if spot is not None else None
     except (TypeError, ValueError):
-        return None
+        spot = None
     band = 0.02
-    entry_low = sup * (1 - band) if sup is not None else spot * 0.98
-    entry_high = sup * (1 + band) if sup is not None else spot * 1.02
-    stop = (sup * 0.97) if sup is not None else spot * 0.95
+    entry_low = sup * (1 - band) if sup is not None else (spot * 0.98 if spot else None)
+    entry_high = sup * (1 + band) if sup is not None else (spot * 1.02 if spot else None)
+    stop = (sup * 0.97) if sup is not None else (spot * 0.95 if spot else None)
     t1, t2, t3 = exit_plan.get("t1"), exit_plan.get("t2"), exit_plan.get("t3")
+    hold_time = hold_time_estimate or {"sessions": 5, "basis_key": "default_estimate"}
+    support_resistance = {"daily": None, "weekly": None, "monthly": None}
+    if mtf_levels:
+        for tf in ("daily", "weekly", "monthly"):
+            block = mtf_levels.get(tf)
+            if block and isinstance(block, dict) and block.get("status_code") != "INSUFFICIENT_HISTORY":
+                support_resistance[tf] = {"support": block.get("support"), "resistance": block.get("resistance"), "bar_count": block.get("bar_count"), "as_of": block.get("as_of"), "method": block.get("method")}
+    indicators_used: Dict[str, Any] = {
+        "rsi": technicals.get("rsi"),
+        "atr": technicals.get("atr"),
+        "regime": regime or None,
+    }
+    for k in ("ema20", "ema50", "ema200", "macd", "bbands"):
+        if technicals.get(k) is not None:
+            indicators_used[k] = technicals.get(k)
     return {
         "symbol": symbol,
-        "entry_zone": {"low": round(entry_low, 2), "high": round(entry_high, 2)},
-        "stop": round(stop, 2),
-        "targets": {"t1": t1, "t2": t2, "t3": t3},
-        "invalidation": round(stop, 2),
-        "hold_time_estimate": hold_time_estimate or {"sessions": 5, "basis_key": "default_estimate"},
+        "eligible": eligible,
+        "eligibility_codes": list(codes) if codes else [],
+        "spot": round(spot, 2) if spot is not None else None,
+        "support_resistance": support_resistance,
+        "targets": {"t1": t1, "t2": t2, "t3": t3, "stop": stop, "invalidation": exit_plan.get("stop") or support},
+        "hold_time": {"sessions_to_t1": hold_time.get("sessions"), "sessions_to_t2": None, "method": (hold_time.get("basis_key") or "default_estimate").upper().replace("-", "_")},
+        "indicators_used": indicators_used,
+        "as_of_inputs": as_of_inputs or {},
+        "entry_zone": {"low": round(entry_low, 2) if entry_low is not None else None, "high": round(entry_high, 2) if entry_high is not None else None},
+        "stop": round(stop, 2) if stop is not None else None,
+        "invalidation": round(stop, 2) if stop is not None else None,
+        "hold_time_estimate": hold_time,
         "confidence_score": int(score) if score is not None else None,
-        "why_recommended": "MTF_SUPPORT_REGIME_UP",
+        "why_recommended": "MTF_SUPPORT_REGIME_UP" if eligible else None,
     }
 
 
@@ -2573,6 +2791,7 @@ def _build_symbol_diagnostics_from_v2_store(
     pipeline_timestamp: Optional[str] = None,
     run_id: Optional[str] = None,
     eval_snapshot: Optional[Dict[str, Any]] = None,
+    shares_position: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build full SymbolDiagnosticsResponseExtended from v2 store (summary + candidates + gates + earnings + diagnostics_details)."""
     c_dicts = [c.to_dict() if hasattr(c, "to_dict") else (c if isinstance(c, dict) else {}) for c in candidates]
@@ -2646,6 +2865,10 @@ def _build_symbol_diagnostics_from_v2_store(
             as_of_inputs["candles_as_of"] = eval_snapshot.get("candles_as_of")
         if eval_snapshot.get("orats_as_of") is not None:
             as_of_inputs["orats_as_of"] = eval_snapshot.get("orats_as_of")
+    shares_plan = _build_shares_plan_at_request_time(
+        summary, technicals, exit_plan, hold_time_estimate, symbol,
+        mtf_levels=mtf_levels, as_of_inputs=as_of_inputs,
+    )
     return {
         "symbol": symbol,
         "provider_status": getattr(summary, "provider_status", "OK") or "OK",
@@ -2716,7 +2939,8 @@ def _build_symbol_diagnostics_from_v2_store(
         "targets": targets,
         "invalidation": invalidation,
         "hold_time_estimate": hold_time_estimate,
-        "shares_plan": _build_shares_plan_at_request_time(summary, technicals, exit_plan, hold_time_estimate, symbol),
+        "shares_plan": shares_plan,
+        "shares_position": shares_position,
     }
 
 
@@ -2759,6 +2983,8 @@ def ui_symbol_diagnostics(
                 pipeline_ts = (artifact.metadata or {}).get("pipeline_timestamp") if artifact else None
                 from app.core.eval.evaluation_store_v2 import get_eval_snapshot
                 _snap = get_eval_snapshot()
+                from app.core.accounts.holdings_db import get_share_position, _DEFAULT_ACCOUNT_ID
+                _share_pos = get_share_position(_DEFAULT_ACCOUNT_ID, sym_upper)
                 result = _build_symbol_diagnostics_from_v2_store(
                     summary,
                     candidates.get(sym_upper, []),
@@ -2771,6 +2997,7 @@ def ui_symbol_diagnostics(
                     pipeline_timestamp=pipeline_ts,
                     run_id=(artifact.metadata or {}).get("run_id"),
                     eval_snapshot=_snap,
+                    shares_position=_share_pos,
                 )
                 result["exact_run"] = True
                 result["run_id"] = (artifact.metadata or {}).get("run_id")
@@ -2790,11 +3017,14 @@ def ui_symbol_diagnostics(
         run_id_val = (artifact.metadata or {}).get("run_id") if artifact else None
         from app.core.eval.evaluation_store_v2 import get_eval_snapshot
         _snap = get_eval_snapshot()
+        from app.core.accounts.holdings_db import get_share_position, _DEFAULT_ACCOUNT_ID
+        _share_pos = get_share_position(_DEFAULT_ACCOUNT_ID, sym_upper)
         out = _build_symbol_diagnostics_from_v2_store(
             summary, candidates, gates, earnings, diagnostics_details, sym_upper,
             selected_contract_key=_sel_key, option_symbol=_opt_sym, pipeline_timestamp=pipeline_ts,
             run_id=run_id_val,
             eval_snapshot=_snap,
+            shares_position=_share_pos,
         )
         if run_id and run_id.strip():
             out["exact_run"] = False

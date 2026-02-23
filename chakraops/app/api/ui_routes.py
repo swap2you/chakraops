@@ -343,7 +343,7 @@ def ui_universe(
                 try:
                     from app.core.shares.shares_plan import compute_shares_eligibility
                     tech = (diag.get("technicals") if isinstance(diag, dict) else getattr(diag, "technicals", None)) or {}
-                    shares_eligible, _ = compute_shares_eligibility(s, tech, sel_el, mtf_levels=None)
+                    shares_eligible, _ = compute_shares_eligibility(s, tech, sel_el, mtf_levels=None, symbol=sym_key)
                     row["shares_eligible"] = shares_eligible
                 except Exception:
                     row["shares_eligible"] = False

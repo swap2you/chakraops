@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
@@ -13,6 +14,7 @@ try:
         SHARES_ALLOW_REGIME_NEUTRAL,
         SHARES_ENTRY_ZONE_ATR_MULT,
         SHARES_STOP_ATR_MULT,
+        SHARES_UAT_FORCE_ELIGIBLE_SYMBOLS,
     )
 except Exception:
     SHARES_NEAR_SUPPORT_PCT = 0.02
@@ -20,6 +22,15 @@ except Exception:
     SHARES_ALLOW_REGIME_NEUTRAL = False
     SHARES_ENTRY_ZONE_ATR_MULT = 0.25
     SHARES_STOP_ATR_MULT = 1.0
+    SHARES_UAT_FORCE_ELIGIBLE_SYMBOLS = ""
+
+
+def _uat_force_eligible_symbols() -> List[str]:
+    """UAT-only: symbols to force eligible (env overrides config). Read-time only."""
+    raw = os.environ.get("SHARES_UAT_FORCE_ELIGIBLE_SYMBOLS", "").strip() or SHARES_UAT_FORCE_ELIGIBLE_SYMBOLS
+    if not raw:
+        return []
+    return [s.strip().upper() for s in raw.split(",") if s.strip()]
 
 try:
     from app.core.eligibility.config import CSP_RSI_MIN, CSP_RSI_MAX
@@ -32,10 +43,12 @@ def compute_shares_eligibility(
     technicals: Dict[str, Any],
     symbol_eligibility: Dict[str, Any],
     mtf_levels: Optional[Dict[str, Any]] = None,
+    symbol: str = "",
 ) -> Tuple[bool, List[str]]:
     """
     R23.3: Compute shares eligibility and code-only reason_codes.
     Returns (eligible, reason_codes). Not persisted.
+    UAT-only: if symbol in SHARES_UAT_FORCE_ELIGIBLE_SYMBOLS (env or config), force eligible and add SHARES_UAT_FORCED.
     """
     reason_codes: List[str] = []
     # 1) Stock quality (Stage 1) pass
@@ -79,6 +92,13 @@ def compute_shares_eligibility(
     eligible = len(reason_codes) == 0
     if eligible:
         reason_codes = ["SHARES_ELIGIBLE"]
+    # UAT-only: force eligible for configured symbols (request-time only; does not affect persistence)
+    force_list = _uat_force_eligible_symbols()
+    sym_upper = (symbol or "").strip().upper()
+    if sym_upper and sym_upper in force_list:
+        eligible = True
+        if "SHARES_UAT_FORCED" not in reason_codes:
+            reason_codes = list(reason_codes) + ["SHARES_UAT_FORCED"]
     return eligible, reason_codes
 
 
@@ -108,7 +128,7 @@ def build_shares_plan_r233(
     targets (with basis), hold_time (sessions + method), sizing, as_of_inputs.
     """
     sel = symbol_eligibility or {}
-    eligible, reason_codes = compute_shares_eligibility(summary, technicals, sel, mtf_levels)
+    eligible, reason_codes = compute_shares_eligibility(summary, technicals, sel, mtf_levels, symbol=symbol)
     spot = _float(technicals.get("spot") or technicals.get("support_level") or getattr(summary, "price", None))
     if spot is None:
         spot = _float(technicals.get("resistance_level"))

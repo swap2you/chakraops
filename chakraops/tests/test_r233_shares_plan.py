@@ -1,8 +1,9 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""R23.3: Shares eligibility, plan (entry_zone, stop, targets), sizing; shares_plan not persisted."""
+"""R23.3: Shares eligibility, plan (entry_zone, stop, targets), sizing; shares_plan not persisted; UAT override."""
 
 import json
+import os
 import pytest
 
 from app.core.shares.shares_plan import (
@@ -144,3 +145,58 @@ def test_shares_plan_not_in_decision_artifact(tmp_path):
         assert "shares_plan" not in raw
     finally:
         reset_output_dir()
+
+
+def test_uat_force_eligible_override():
+    """UAT override: when symbol in SHARES_UAT_FORCE_ELIGIBLE_SYMBOLS, eligible=True and reason_codes include SHARES_UAT_FORCED."""
+    summary = _Summary(stage1_status="FAIL", regime="DOWN")
+    technicals = {"spot": 100.0, "support_level": 90.0, "rsi": 30.0}
+    sel = {}
+    # Without override: not eligible
+    eligible, codes = compute_shares_eligibility(summary, technicals, sel, mtf_levels=None, symbol="NVDA")
+    assert eligible is False
+    # With env override: forced eligible and SHARES_UAT_FORCED in codes
+    prev = os.environ.pop("SHARES_UAT_FORCE_ELIGIBLE_SYMBOLS", None)
+    try:
+        os.environ["SHARES_UAT_FORCE_ELIGIBLE_SYMBOLS"] = "NVDA"
+        eligible, codes = compute_shares_eligibility(summary, technicals, sel, mtf_levels=None, symbol="NVDA")
+        assert eligible is True
+        assert "SHARES_UAT_FORCED" in codes
+        # Other symbol not in list still not eligible
+        eligible2, _ = compute_shares_eligibility(summary, technicals, sel, mtf_levels=None, symbol="WMT")
+        assert eligible2 is False
+    finally:
+        if prev is not None:
+            os.environ["SHARES_UAT_FORCE_ELIGIBLE_SYMBOLS"] = prev
+        else:
+            os.environ.pop("SHARES_UAT_FORCE_ELIGIBLE_SYMBOLS", None)
+
+
+def test_uat_override_does_not_persist(tmp_path):
+    """With UAT override, shares_plan is still request-time only; decision_latest.json must not contain shares_plan."""
+    from app.core.eval.evaluation_store_v2 import set_output_dir, reset_output_dir, get_evaluation_store_v2
+
+    artifact_dict = {
+        "metadata": {"artifact_version": "v2", "pipeline_timestamp": "2026-02-17T20:00:00Z"},
+        "symbols": [{"symbol": "NVDA", "verdict": "HOLD", "final_verdict": "HOLD", "score": 50, "band": "C", "stage1_status": "FAIL", "stage2_status": "FAIL", "primary_reason_codes": [], "stage_status": "RUN", "provider_status": "OK", "data_freshness": None, "evaluated_at": None, "strategy": None, "price": 500.0, "expiration": None, "has_candidates": False, "candidate_count": 0}],
+        "selected_candidates": [],
+        "candidates_by_symbol": {},
+        "gates_by_symbol": {"NVDA": [{"gate_code": "STOCK_QUALITY_STAGE1", "status": "FAIL"}]},
+        "earnings_by_symbol": {},
+        "warnings": [],
+    }
+    (tmp_path / "decision_latest.json").write_text(json.dumps(artifact_dict), encoding="utf-8")
+    prev = os.environ.pop("SHARES_UAT_FORCE_ELIGIBLE_SYMBOLS", None)
+    try:
+        os.environ["SHARES_UAT_FORCE_ELIGIBLE_SYMBOLS"] = "NVDA"
+        set_output_dir(tmp_path)
+        store = get_evaluation_store_v2()
+        store.reload_from_disk()
+        raw = (tmp_path / "decision_latest.json").read_text(encoding="utf-8")
+        assert "shares_plan" not in raw
+    finally:
+        reset_output_dir()
+        if prev is not None:
+            os.environ["SHARES_UAT_FORCE_ELIGIBLE_SYMBOLS"] = prev
+        else:
+            os.environ.pop("SHARES_UAT_FORCE_ELIGIBLE_SYMBOLS", None)

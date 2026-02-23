@@ -100,6 +100,11 @@ SHARES_ENTRY_ZONE_ATR_MULT: float = 0.25
 SHARES_STOP_ATR_MULT: float = 1.0
 """Stop distance below support as multiple of ATR."""
 
+# R23.3 UAT only: force shares eligibility for these symbols (request-time only; not persisted).
+# Comma-separated, e.g. "NVDA" or "NVDA,WMT". Override via env SHARES_UAT_FORCE_ELIGIBLE_SYMBOLS for UAT.
+SHARES_UAT_FORCE_ELIGIBLE_SYMBOLS: str = ""
+"""UAT-only: when non-empty, symbols in this list get shares_plan.eligible=true and reason_codes include SHARES_UAT_FORCED."""
+
 
 __all__ = [
     "CSP_MIN_DTE",
@@ -118,4 +123,5 @@ __all__ = [
     "SHARES_ALLOW_REGIME_NEUTRAL",
     "SHARES_ENTRY_ZONE_ATR_MULT",
     "SHARES_STOP_ATR_MULT",
+    "SHARES_UAT_FORCE_ELIGIBLE_SYMBOLS",
 ]

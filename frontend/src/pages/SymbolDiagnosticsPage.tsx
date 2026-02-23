@@ -987,6 +987,7 @@ function earningsDaysReason(_value: unknown): string {
 function sharesReasonCodeToLabel(code: string): string {
   const m: Record<string, string> = {
     SHARES_ELIGIBLE: "Meets all shares eligibility rules",
+    SHARES_UAT_FORCED: "UAT forced",
     NOT_STOCK_QUALITY: "Stock quality (Stage 1) did not pass",
     REGIME_NOT_PREFERRED: "Regime not preferred for shares (UP required)",
     NOT_NEAR_SUPPORT: "Price not near daily/weekly support",
@@ -1029,7 +1030,11 @@ function SharesTabContent({
       <Card>
         <CardHeader title="Shares" description="BUY SHARES recommendation only; no order placement." />
         <div className="space-y-3 text-sm">
-          <p><span className="text-zinc-500 dark:text-zinc-400">Eligibility:</span> <span className={plan?.eligible ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-zinc-600 dark:text-zinc-400"}>{eligibleLabel}</span></p>
+          <p><span className="text-zinc-500 dark:text-zinc-400">Eligibility:</span> <span className={plan?.eligible ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-zinc-600 dark:text-zinc-400"}>{eligibleLabel}</span>
+            {reasonCodes.includes("SHARES_UAT_FORCED") && (
+              <Badge variant="warning" className="ml-2">UAT forced</Badge>
+            )}
+          </p>
           {reasonCodes.length > 0 && (
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Why</span>

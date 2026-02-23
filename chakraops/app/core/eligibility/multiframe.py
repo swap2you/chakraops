@@ -60,6 +60,7 @@ def _resample_daily_to_weekly(daily_candles: List[Dict[str, Any]]) -> List[Dict[
 
 def _resample_daily_to_monthly(daily_candles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Group daily candles into monthly bars. O=first open, H=max high, L=min low, C=last close, V=sum."""
+    from datetime import datetime
     if not daily_candles:
         return []
     months: Dict[tuple, List[Dict[str, Any]]] = {}

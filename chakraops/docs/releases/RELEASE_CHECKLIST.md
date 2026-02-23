@@ -28,6 +28,7 @@ No release is marked DONE unless all of the following are satisfied:
 **out/ allowed contents (canonical list):**
 
 - `decision_latest.json`, `slack_status.json`, `universe_overrides.json`
+- `eval_snapshot.json` (R22.7 Fix Pack: snapshot_id + as_of timestamps for deterministic recompute)
 - `verification/<Release>/` (notes.md, api_samples, E2E report if applicable)
 - `evaluations/`, `alerts/`, `lifecycle/` (or current equivalent)
 - Optional: `mtf_cache/` or similar with documented retention (when added in a release)
@@ -147,3 +148,12 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] Part 8 — Trade ticket contract identity (contract_key/option_symbol derived when missing)
 - [ ] Part 9 — UX polish (full-width cards; info tooltips)
 - [x] Release notes + verification (`R22.7_release_notes.md`, `out/verification/R22.7/notes.md`); gate run and pasted in verification (see notes.md)
+
+### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
+
+- [ ] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py` (fixture → mock staged result → evaluate_universe → store write → hygiene check + snapshot check + per-symbol summary)
+- [ ] **Fixture provider** — `app/core/eval/offline_fixture_provider.py`; fixture `tests/fixtures/r22_8_offline_proof_fixture.json` (NVDA, NKE, HD)
+- [ ] **Tests** — `tests/test_offline_proof_harness_r228.py`: hygiene (no prose, no FAIL_/WARN_, applied_caps reason_code), primary_reason_codes regex, golden determinism (run twice → same score/band/verdict), eval_snapshot written
+- [ ] **Release notes** — `docs/releases/R22.8_release_notes.md`
+- [ ] **Verification** — `out/verification/R22.8/notes.md` with gate outputs and offline proof + grep proof commands
+- [ ] **Gate** — Backend pytest, frontend tests, frontend build pass

@@ -41,12 +41,18 @@ FORBIDDEN_UI_SNIPPETS = [
 # R22.7: strict code format for primary_reason_codes and any "codes" fields
 STRICT_CODE_RE = re.compile(r"^[A-Z0-9_]+$")
 
-# Prose substrings that must never appear in persisted values
+# R22.7 Fix Pack: Prose substrings that must never appear in persisted values
 FORBIDDEN_PROSE_SUBSTRINGS = [
     "Stock qualified",
     "Chain evaluated",
     "contract selected",
     "rejected_due_to_delta=",
+    "caps score",
+    "Not evaluated",
+    "Exit plan not computed",
+    "High data completeness",
+    "Regime NEUTRAL",
+    "Regime RISK_ON",
 ]
 
 
@@ -93,6 +99,27 @@ def _check_forbidden_strings(obj: Any) -> List[str]:
         for sub in FORBIDDEN_PROSE_SUBSTRINGS:
             if sub in s:
                 violations.append(f"Value contains prose substring {sub!r}: {s[:80]!r}...")
+        # R22.7 Fix Pack: no string value may contain spaces (zero-whitelist; catches prose)
+        if " " in s:
+            violations.append(f"Value contains space (prose): {s[:80]!r}...")
+    return violations
+
+
+def _check_applied_caps_reason_code_only(obj: Any, path: str = "") -> List[str]:
+    """R22.7 Fix Pack: applied_caps items must have reason_code, not reason."""
+    violations: List[str] = []
+    if not isinstance(obj, dict):
+        return violations
+    for k, v in obj.items():
+        p = f"{path}.{k}" if path else k
+        if k == "applied_caps" and isinstance(v, list):
+            for i, cap in enumerate(v):
+                if isinstance(cap, dict) and "reason" in cap:
+                    violations.append(f"{p}[{i}]: must not persist 'reason'; use reason_code only")
+                if isinstance(cap, dict) and not cap.get("reason_code"):
+                    violations.append(f"{p}[{i}]: must have reason_code")
+        else:
+            violations.extend(_check_applied_caps_reason_code_only(v, p))
     return violations
 
 
@@ -383,3 +410,151 @@ def test_option_candidates_have_identity_fields() -> None:
     nvda_cands = (d.get("candidates_by_symbol") or {}).get("NVDA") or []
     assert len(nvda_cands) == 1
     assert nvda_cands[0].get("contract_key") == "500-2026-03-20-PUT"
+
+
+def test_persisted_artifact_applied_caps_have_reason_code_not_reason() -> None:
+    """R22.7 Fix Pack: applied_caps must contain reason_code only; never reason (prose)."""
+    from app.core.eval.decision_artifact_v2 import (
+        DecisionArtifactV2,
+        SymbolEvalSummary,
+        SymbolDiagnosticsDetails,
+        EarningsInfo,
+    )
+
+    artifact = DecisionArtifactV2(
+        metadata={"artifact_version": "v2", "pipeline_timestamp": "2026-02-01T12:00:00Z", "run_id": "r"},
+        symbols=[
+            SymbolEvalSummary(
+                symbol="T1",
+                verdict="HOLD",
+                final_verdict="HOLD",
+                score=50,
+                band="C",
+                primary_reason=None,
+                primary_reason_codes=["REGIME_NEUTRAL"],
+                stage_status="RUN",
+                stage1_status="PASS",
+                stage2_status="NOT_RUN",
+                provider_status="OK",
+                data_freshness=None,
+                evaluated_at=None,
+                strategy=None,
+                price=100.0,
+                expiration=None,
+                has_candidates=False,
+                candidate_count=0,
+            ),
+        ],
+        selected_candidates=[],
+        candidates_by_symbol={},
+        gates_by_symbol={},
+        earnings_by_symbol={"T1": EarningsInfo(None, None, "Not evaluated")},
+        diagnostics_by_symbol={
+            "T1": SymbolDiagnosticsDetails(
+                technicals={},
+                exit_plan={"t1": None, "t2": None, "t3": None, "stop": None, "reason": "Exit plan not computed: Missing inputs."},
+                risk_flags={},
+                explanation={},
+                stock={},
+                symbol_eligibility={"status": "PASS", "reasons": ["High data completeness"]},
+                liquidity={},
+                score_breakdown={"applied_caps": [{"type": "regime_cap", "cap_value": 60, "before": 70, "after": 60, "reason": "Regime NEUTRAL caps score to 60"}]},
+                rank_reasons={"reasons": ["High data completeness", "Regime NEUTRAL"], "penalty": None},
+            ),
+        },
+        warnings=[],
+    )
+    d = artifact.to_dict_persist()
+    violations = _check_applied_caps_reason_code_only(d)
+    assert not violations, f"applied_caps must have reason_code not reason: {violations}"
+    assert "note" not in (d.get("earnings_by_symbol") or {}).get("T1", {}), "earnings must not persist note"
+    assert (d.get("earnings_by_symbol") or {}).get("T1", {}).get("status_code") == "EARNINGS_NOT_EVALUATED"
+    diag = (d.get("diagnostics_by_symbol") or {}).get("T1") or {}
+    assert "reason" not in (diag.get("exit_plan") or {}), "exit_plan must not persist reason"
+    assert (diag.get("exit_plan") or {}).get("reason_code") in ("EXITPLAN_MISSING_INPUTS", "EXITPLAN_NOT_AVAILABLE")
+    rr = diag.get("rank_reasons") or {}
+    assert "reasons" not in rr
+    assert "rank_reason_codes" in rr
+    # No prose anywhere in persisted
+    violations_str = _check_forbidden_strings(d)
+    assert not violations_str, f"Persisted must have no prose: {violations_str}"
+
+
+def test_artifact_written_by_store_passes_hygiene(tmp_path: Path) -> None:
+    """R22.7 Fix Pack: Re-generate artifact via actual store writer; validate on-disk JSON has no prose."""
+    from app.core.eval.decision_artifact_v2 import (
+        DecisionArtifactV2,
+        SymbolEvalSummary,
+        SymbolDiagnosticsDetails,
+        EarningsInfo,
+    )
+    from app.core.eval.evaluation_store_v2 import (
+        set_output_dir,
+        reset_output_dir,
+        get_evaluation_store_v2,
+        get_decision_store_path,
+    )
+
+    set_output_dir(tmp_path)
+    store_path = get_decision_store_path()
+    store_path.parent.mkdir(parents=True, exist_ok=True)
+
+    artifact = DecisionArtifactV2(
+        metadata={"artifact_version": "v2", "pipeline_timestamp": "2026-02-17T12:00:00Z", "run_id": "store-test-run"},
+        symbols=[
+            SymbolEvalSummary(
+                symbol="NKE",
+                verdict="ELIGIBLE",
+                final_verdict="ELIGIBLE",
+                score=55,
+                band="B",
+                primary_reason=None,
+                primary_reason_codes=["STOCK_QUALIFIED", "CHAIN_SELECTED"],
+                stage_status="RUN",
+                stage1_status="PASS",
+                stage2_status="PASS",
+                provider_status="OK",
+                data_freshness="2026-02-17",
+                evaluated_at="2026-02-17T12:00:00Z",
+                strategy="CSP",
+                price=100.0,
+                expiration="2026-03-20",
+                has_candidates=True,
+                candidate_count=1,
+            ),
+        ],
+        selected_candidates=[],
+        candidates_by_symbol={},
+        gates_by_symbol={},
+        earnings_by_symbol={"NKE": EarningsInfo(30, False, "Earnings in 30 days")},
+        diagnostics_by_symbol={
+            "NKE": SymbolDiagnosticsDetails(
+                technicals={"support_level": 98.0, "resistance_level": 105.0},
+                exit_plan={"t1": 102, "t2": 104, "t3": 106, "stop": 95, "status": "AVAILABLE"},
+                risk_flags={},
+                explanation={},
+                stock={},
+                symbol_eligibility={"status": "PASS", "reasons": []},
+                liquidity={},
+                score_breakdown={"applied_caps": [{"type": "regime_cap", "cap_value": 60, "before": 70, "after": 60, "reason": "Regime NEUTRAL caps score to 60"}]},
+                rank_reasons={"reasons": ["High data completeness"], "penalty": None},
+            ),
+        },
+        warnings=[],
+    )
+    try:
+        store = get_evaluation_store_v2()
+        store.set_latest(artifact)
+        if not store_path.exists():
+            pytest.fail("Store did not write decision_latest.json")
+        raw = json.loads(store_path.read_text(encoding="utf-8"))
+        violations_keys = _check_forbidden_keys(raw)
+        violations_str = _check_forbidden_strings(raw)
+        violations_codes = _check_primary_reason_codes_strict(raw)
+        violations_caps = _check_applied_caps_reason_code_only(raw)
+        assert not violations_keys, f"Forbidden keys in on-disk artifact: {violations_keys}"
+        assert not violations_str, f"Prose/spaces in on-disk artifact: {violations_str}"
+        assert not violations_codes, f"primary_reason_codes strict: {violations_codes}"
+        assert not violations_caps, f"applied_caps reason_code only: {violations_caps}"
+    finally:
+        reset_output_dir()

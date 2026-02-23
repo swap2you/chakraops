@@ -14,6 +14,9 @@ from typing import Any, Dict, List, Optional
 # Phase 11.2: Keep last N decision history files per symbol (configurable; DECISION_ARCHIVE_MAX overrides)
 DECISION_HISTORY_KEEP = int(os.getenv("DECISION_ARCHIVE_MAX", os.getenv("DECISION_HISTORY_KEEP", "50")))
 
+# R22.7 Fix Pack: Eval snapshot valid for N minutes (recompute without force uses same inputs)
+EVAL_SNAPSHOT_VALID_MINUTES = int(os.getenv("EVAL_SNAPSHOT_VALID_MINUTES", "10"))
+
 from app.core.eval.decision_artifact_v2 import (
     CandidateRow,
     DecisionArtifactV2,
@@ -87,6 +90,67 @@ def get_active_decision_path(market_phase: Optional[str] = None) -> Path:
 
 def _decision_latest_path() -> Path:
     return get_decision_store_path()
+
+
+def _eval_snapshot_path() -> Path:
+    """R22.7 Fix Pack: out/eval_snapshot.json — snapshot id + as_of timestamps (whitelisted)."""
+    return get_decision_store_path().parent / "eval_snapshot.json"
+
+
+def _write_eval_snapshot(artifact: DecisionArtifactV2) -> None:
+    """R22.7 Fix Pack: When eval/run completes, persist snapshot for deterministic recompute."""
+    from datetime import datetime, timezone
+    meta = getattr(artifact, "metadata", None) or {}
+    run_id = meta.get("run_id")
+    pipeline_ts = meta.get("pipeline_timestamp")
+    created_at = datetime.now(timezone.utc).isoformat()
+    payload: Dict[str, Any] = {
+        "snapshot_id": run_id,
+        "pipeline_timestamp": pipeline_ts,
+        "created_at": created_at,
+        "quote_as_of": pipeline_ts,
+        "candles_as_of": pipeline_ts,
+        "orats_as_of": pipeline_ts,
+    }
+    path = _eval_snapshot_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        logger.debug("[EVAL_STORE_V2] Wrote eval_snapshot %s", path)
+    except Exception as e:
+        logger.warning("[EVAL_STORE_V2] Failed to write eval_snapshot %s: %s", path, e)
+
+
+def get_eval_snapshot() -> Optional[Dict[str, Any]]:
+    """R22.7 Fix Pack: Read eval_snapshot.json if present."""
+    path = _eval_snapshot_path()
+    if not path.exists():
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.warning("[EVAL_STORE_V2] Failed to read eval_snapshot %s: %s", path, e)
+        return None
+
+
+def eval_snapshot_is_fresh(snapshot: Dict[str, Any], valid_minutes: int = EVAL_SNAPSHOT_VALID_MINUTES) -> bool:
+    """R22.7 Fix Pack: True if snapshot created_at is within valid_minutes."""
+    from datetime import datetime, timezone, timedelta
+    created = snapshot.get("created_at")
+    if not created:
+        return False
+    try:
+        if hasattr(datetime, "fromisoformat"):
+            dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+        else:
+            dt = datetime.strptime(created[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - dt) <= timedelta(minutes=valid_minutes)
+    except Exception:
+        return False
 
 
 def _active_read_path() -> Path:
@@ -183,6 +247,7 @@ class EvaluationStoreV2:
                 os.fsync(f.fileno())
             tmp.replace(path)  # replace handles existing file (Windows)
             logger.info("[EVAL_STORE_V2] Wrote %s", path)
+            _write_eval_snapshot(artifact)
         except Exception as e:
             logger.exception("[EVAL_STORE_V2] Failed to write %s: %s", path, e)
             if tmp.exists():

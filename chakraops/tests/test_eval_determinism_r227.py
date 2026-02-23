@@ -75,3 +75,48 @@ def test_universe_eval_and_recompute_same_core_same_output(tmp_path: Path) -> No
         )
     finally:
         reset_output_dir()
+
+
+def test_eval_run_writes_snapshot_recompute_without_force_uses_it(tmp_path: Path) -> None:
+    """
+    R22.7 Fix Pack: eval/run writes eval_snapshot.json; recompute(force=false) when snapshot fresh
+    returns same result without re-running (determinism).
+    """
+    from app.core.eval.evaluation_service_v2 import evaluate_universe
+    from app.core.eval.evaluation_store_v2 import (
+        set_output_dir,
+        reset_output_dir,
+        get_evaluation_store_v2,
+        get_eval_snapshot,
+        eval_snapshot_is_fresh,
+        _eval_snapshot_path,
+    )
+    from unittest.mock import patch
+
+    set_output_dir(tmp_path)
+    mock_result = _make_mock_staged_result()
+    try:
+        with patch("app.core.eval.universe_evaluator.run_universe_evaluation_staged", return_value=mock_result):
+            artifact = evaluate_universe([TEST_SYMBOL], mode="LIVE")
+        store = get_evaluation_store_v2()
+        row_before = store.get_symbol(TEST_SYMBOL)
+        assert row_before is not None
+        summary_before, _, _, _, _ = row_before
+        assert summary_before.score == 55
+        assert summary_before.band == "C"
+        assert summary_before.verdict == "ELIGIBLE"
+
+        assert _eval_snapshot_path().exists(), "eval_snapshot.json must be written after eval/run"
+        snapshot = get_eval_snapshot()
+        assert snapshot is not None
+        assert snapshot.get("snapshot_id") == (artifact.metadata or {}).get("run_id")
+        assert eval_snapshot_is_fresh(snapshot), "Snapshot must be fresh"
+        row_after = store.get_symbol(TEST_SYMBOL)
+        assert row_after is not None
+        summary_after, _, _, _, _ = row_after
+        assert summary_after.score == summary_before.score
+        assert summary_after.band == summary_before.band
+        assert summary_after.verdict == summary_before.verdict
+        assert (summary_after.primary_reason_codes or []) == (summary_before.primary_reason_codes or [])
+    finally:
+        reset_output_dir()

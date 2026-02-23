@@ -1,0 +1,50 @@
+{
+  "symbols": ["NVDA", "NKE", "HD"],
+  "quotes": {
+    "NVDA": {
+      "price": 140.0,
+      "bid": 139.5,
+      "ask": 140.5,
+      "volume": 10000000,
+      "quote_date": "2026-02-17",
+      "iv_rank": 45.0
+    },
+    "NKE": {
+      "price": 98.0,
+      "bid": 97.8,
+      "ask": 98.2,
+      "volume": 5000000,
+      "quote_date": "2026-02-17",
+      "iv_rank": 35.0
+    },
+    "HD": {
+      "price": 385.0,
+      "bid": 384.0,
+      "ask": 386.0,
+      "volume": 3000000,
+      "quote_date": "2026-02-17",
+      "iv_rank": 28.0
+    }
+  },
+  "candles": {},
+  "eval_overrides": {
+    "NVDA": {
+      "verdict": "ELIGIBLE",
+      "score": 62,
+      "primary_reason": "STOCK_QUALIFIED",
+      "stage_reached": "STAGE2_CHAIN"
+    },
+    "NKE": {
+      "verdict": "HOLD",
+      "score": 55,
+      "primary_reason": "REGIME_NEUTRAL_CAP",
+      "stage_reached": "STAGE1_ONLY"
+    },
+    "HD": {
+      "verdict": "HOLD",
+      "score": 52,
+      "primary_reason": "REGIME_NEUTRAL_CAP",
+      "stage_reached": "STAGE1_ONLY"
+    }
+  }
+}

@@ -116,6 +116,62 @@ def _reason_string_to_codes_and_count(reason: Optional[str]) -> tuple[List[str],
     return codes, rejected_count
 
 
+def _rank_reason_prose_to_codes(reasons: Optional[List[Any]]) -> List[str]:
+    """R22.7 Fix Pack: Map rank_reasons.reasons (prose) to rank_reason_codes. No prose in persisted artifact."""
+    if not reasons:
+        return []
+    codes: List[str] = []
+    for r in reasons:
+        s = (r or "").strip()
+        if not s or not _STRICT_CODE_RE.match(s):
+            if "Regime RISK_ON" in s or s == "Regime RISK_ON":
+                codes.append("REGIME_RISK_ON")
+            elif "Regime NEUTRAL" in s or s == "Regime NEUTRAL":
+                codes.append("REGIME_NEUTRAL")
+            elif "IV Rank HIGH" in s or "favorable premium" in s.lower():
+                codes.append("IVR_HIGH_FAVORABLE")
+            elif "High data completeness" in s:
+                codes.append("HIGH_DATA_COMPLETENESS")
+            elif "Acceptable data completeness" in s:
+                codes.append("ACCEPTABLE_DATA_COMPLETENESS")
+            elif "Options liquidity passed" in s or "liquidity passed" in s.lower():
+                codes.append("OPTIONS_LIQUIDITY_PASSED")
+            elif "Eligible for trade" in s:
+                codes.append("ELIGIBLE_FOR_TRADE")
+            elif "Capital efficient" in s:
+                codes.append("CAPITAL_EFFICIENT")
+            elif "Low notional" in s or "notional %" in s.lower():
+                codes.append("LOW_NOTIONAL_PCT")
+            else:
+                codes.append("RANK_REASON")
+        else:
+            codes.append(s)
+    return codes[:5]
+
+
+def _exit_plan_reason_to_code(reason: Optional[str]) -> str:
+    """R22.7 Fix Pack: Map exit_plan.reason (prose) to reason_code. No prose in persisted artifact."""
+    if not reason or not isinstance(reason, str):
+        return "EXITPLAN_AVAILABLE"
+    r = reason.strip()
+    if "not computed" in r.lower() or "Missing inputs" in r:
+        return "EXITPLAN_MISSING_INPUTS"
+    if "error" in r.lower():
+        return "EXITPLAN_ERROR"
+    return "EXITPLAN_NOT_AVAILABLE"
+
+
+def _earnings_note_to_status_code(note: Optional[str], earnings_block: Optional[bool], earnings_days: Optional[int]) -> str:
+    """R22.7 Fix Pack: Persist status_code only; never prose note."""
+    if earnings_block:
+        return "EARNINGS_BLOCKED"
+    if earnings_days is not None:
+        return "EARNINGS_OK"
+    if (note or "").strip().lower() in ("not evaluated", "not evaluated.", ""):
+        return "EARNINGS_NOT_EVALUATED"
+    return "EARNINGS_STATUS"
+
+
 def _band_rank_value(band: str) -> int:
     """Numeric value for band ordering (A > B > C > D). Phase 8.0."""
     return {"A": 4, "B": 3, "C": 2, "D": 1}.get((band or "D").upper(), 1)
@@ -219,7 +275,8 @@ class EarningsInfo:
     """Earnings info for a symbol."""
     earnings_days: Optional[int]
     earnings_block: Optional[bool]
-    note: Optional[str]  # e.g. "Not evaluated"
+    note: Optional[str]  # e.g. "Not evaluated" (request-time display; not persisted)
+    status_code: Optional[str] = None  # R22.7 Fix Pack: persisted code only (EARNINGS_NOT_EVALUATED, etc.)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -329,31 +386,66 @@ class DecisionArtifactV2:
         def gate_persist(g: GateEvaluation) -> Dict[str, Any]:
             return {"name": g.name, "status": g.status}
 
+        def earnings_persist(e: EarningsInfo) -> Dict[str, Any]:
+            """R22.7 Fix Pack: Persist status_code only; never prose note."""
+            d = asdict(e)
+            d.pop("note", None)
+            status = _earnings_note_to_status_code(
+                getattr(e, "note", None),
+                getattr(e, "earnings_block", None),
+                getattr(e, "earnings_days", None),
+            )
+            d["status_code"] = status
+            return d
+
         def _diagnostics_persist(dd: SymbolDiagnosticsDetails) -> Dict[str, Any]:
             out = dd.to_dict()
             out.pop("explanation", None)
-            # R22.7: no prose in score_caps.applied_caps[].reason — use reason_code only if present
+            # R22.7 Fix Pack: applied_caps — reason_code only, never reason
             sc = out.get("score_breakdown") or {}
             applied = sc.get("applied_caps") or []
             if applied:
                 clean = []
                 for cap in applied:
                     c = dict(cap)
-                    if "reason" in c and not _STRICT_CODE_RE.match(str(c.get("reason", ""))):
-                        c.pop("reason", None)
-                        if c.get("reason_code"):
-                            pass
-                        else:
-                            c["reason_code"] = "CAP_APPLIED"
+                    c.pop("reason", None)
+                    if not c.get("reason_code") or not _STRICT_CODE_RE.match(str(c.get("reason_code", ""))):
+                        c["reason_code"] = c.get("reason_code") if _STRICT_CODE_RE.match(str(c.get("reason_code", ""))) else "REGIME_CAP"
                     clean.append(c)
                 sc["applied_caps"] = clean
                 out["score_breakdown"] = sc
+            # rank_reasons.reasons (prose) -> rank_reason_codes only
+            rr = out.get("rank_reasons")
+            if isinstance(rr, dict) and "reasons" in rr:
+                rr = dict(rr)
+                codes = _rank_reason_prose_to_codes(rr.get("reasons"))
+                rr.pop("reasons", None)
+                rr["rank_reason_codes"] = codes
+                if rr.get("penalty") and not _STRICT_CODE_RE.match(str(rr.get("penalty", ""))):
+                    rr.pop("penalty", None)
+                    rr["penalty_code"] = "PENALTY"
+                out["rank_reasons"] = rr
+            # exit_plan.reason (prose) -> reason_code only
+            ep = out.get("exit_plan") or {}
+            if isinstance(ep, dict) and ep.get("reason") is not None:
+                ep = dict(ep)
+                ep["reason_code"] = _exit_plan_reason_to_code(ep.get("reason"))
+                ep.pop("reason", None)
+                out["exit_plan"] = ep
             # liquidity.reason -> code only (or omit)
             liq = out.get("liquidity") or {}
             if isinstance(liq, dict) and liq.get("reason") and not _STRICT_CODE_RE.match(str(liq["reason"])):
                 liq = dict(liq)
                 liq.pop("reason", None)
                 out["liquidity"] = liq
+            # symbol_eligibility.reasons (prose) -> reason_codes only
+            sel = out.get("symbol_eligibility") or {}
+            if isinstance(sel, dict) and sel.get("reasons"):
+                sel = dict(sel)
+                reasons = sel.get("reasons") or []
+                sel["reason_codes"] = [x if _STRICT_CODE_RE.match(str(x)) else "ELIGIBILITY_REASON" for x in reasons]
+                sel.pop("reasons", None)
+                out["symbol_eligibility"] = sel
             return out
 
         return {
@@ -369,7 +461,7 @@ class DecisionArtifactV2:
                 for k, v in self.gates_by_symbol.items()
             },
             "earnings_by_symbol": {
-                k: v.to_dict() for k, v in self.earnings_by_symbol.items()
+                k: earnings_persist(v) for k, v in self.earnings_by_symbol.items()
             },
             "diagnostics_by_symbol": {
                 k: _diagnostics_persist(v) for k, v in self.diagnostics_by_symbol.items()
@@ -411,10 +503,15 @@ class DecisionArtifactV2:
             for k, v in gb.items()
         }
         eb = data.get("earnings_by_symbol") or {}
-        earnings_by_symbol = {
-            k: EarningsInfo(**v) if isinstance(v, dict) else v
-            for k, v in eb.items()
-        }
+        _earnings_fields = {f.name for f in EarningsInfo.__dataclass_fields__.values()}
+        earnings_by_symbol = {}
+        for k, v in eb.items():
+            if isinstance(v, dict):
+                d = {x: v[x] for x in v if x in _earnings_fields}
+                d.setdefault("note", None)  # R22.7 Fix Pack: persisted has status_code only
+                earnings_by_symbol[k] = EarningsInfo(**d)
+            else:
+                earnings_by_symbol[k] = v
         db = data.get("diagnostics_by_symbol") or {}
         diag_fields = {f.name for f in SymbolDiagnosticsDetails.__dataclass_fields__.values()}
         _empty: Dict[str, Any] = {}

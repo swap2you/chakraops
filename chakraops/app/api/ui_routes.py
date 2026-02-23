@@ -2572,6 +2572,7 @@ def _build_symbol_diagnostics_from_v2_store(
     option_symbol: Optional[str] = None,
     pipeline_timestamp: Optional[str] = None,
     run_id: Optional[str] = None,
+    eval_snapshot: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build full SymbolDiagnosticsResponseExtended from v2 store (summary + candidates + gates + earnings + diagnostics_details)."""
     c_dicts = [c.to_dict() if hasattr(c, "to_dict") else (c if isinstance(c, dict) else {}) for c in candidates]
@@ -2598,10 +2599,21 @@ def _build_symbol_diagnostics_from_v2_store(
     liquidity = diag.get("liquidity") or {}
     earnings_out = None
     if earnings:
+        note = getattr(earnings, "note", None)
+        if not note and getattr(earnings, "status_code", None):
+            sc = (earnings.status_code or "").strip()
+            if sc == "EARNINGS_NOT_EVALUATED":
+                note = "Not evaluated"
+            elif sc == "EARNINGS_BLOCKED":
+                note = "Earnings block"
+            elif sc == "EARNINGS_OK":
+                note = None
+            else:
+                note = "Not evaluated"
         earnings_out = {
             "earnings_days": getattr(earnings, "earnings_days", None),
             "earnings_block": getattr(earnings, "earnings_block", None),
-            "note": getattr(earnings, "note", None) or "Not evaluated",
+            "note": note or "Not evaluated",
         }
     regime = diag.get("regime") or getattr(summary, "regime", None)
     sample_rej = diag.get("sample_rejected_due_to_delta") or []
@@ -2625,6 +2637,15 @@ def _build_symbol_diagnostics_from_v2_store(
         "orats_as_of": quote_as_of,
         "config_hash": _config_hash_for_diagnostics(),
     }
+    if eval_snapshot:
+        as_of_inputs["snapshot_id"] = eval_snapshot.get("snapshot_id")
+        as_of_inputs["snapshot_created_at"] = eval_snapshot.get("created_at")
+        if eval_snapshot.get("quote_as_of") is not None:
+            as_of_inputs["quote_as_of"] = eval_snapshot.get("quote_as_of")
+        if eval_snapshot.get("candles_as_of") is not None:
+            as_of_inputs["candles_as_of"] = eval_snapshot.get("candles_as_of")
+        if eval_snapshot.get("orats_as_of") is not None:
+            as_of_inputs["orats_as_of"] = eval_snapshot.get("orats_as_of")
     return {
         "symbol": symbol,
         "provider_status": getattr(summary, "provider_status", "OK") or "OK",
@@ -2736,6 +2757,8 @@ def ui_symbol_diagnostics(
                 _sel_key = getattr(sel_c, "contract_key", None) if sel_c else None
                 _opt_sym = getattr(sel_c, "option_symbol", None) if sel_c else None
                 pipeline_ts = (artifact.metadata or {}).get("pipeline_timestamp") if artifact else None
+                from app.core.eval.evaluation_store_v2 import get_eval_snapshot
+                _snap = get_eval_snapshot()
                 result = _build_symbol_diagnostics_from_v2_store(
                     summary,
                     candidates.get(sym_upper, []),
@@ -2747,6 +2770,7 @@ def ui_symbol_diagnostics(
                     option_symbol=_opt_sym,
                     pipeline_timestamp=pipeline_ts,
                     run_id=(artifact.metadata or {}).get("run_id"),
+                    eval_snapshot=_snap,
                 )
                 result["exact_run"] = True
                 result["run_id"] = (artifact.metadata or {}).get("run_id")
@@ -2764,10 +2788,13 @@ def ui_symbol_diagnostics(
         _opt_sym = getattr(sel_c, "option_symbol", None) if sel_c else None
         pipeline_ts = (artifact.metadata or {}).get("pipeline_timestamp") if artifact else None
         run_id_val = (artifact.metadata or {}).get("run_id") if artifact else None
+        from app.core.eval.evaluation_store_v2 import get_eval_snapshot
+        _snap = get_eval_snapshot()
         out = _build_symbol_diagnostics_from_v2_store(
             summary, candidates, gates, earnings, diagnostics_details, sym_upper,
             selected_contract_key=_sel_key, option_symbol=_opt_sym, pipeline_timestamp=pipeline_ts,
             run_id=run_id_val,
+            eval_snapshot=_snap,
         )
         if run_id and run_id.strip():
             out["exact_run"] = False
@@ -2813,13 +2840,13 @@ def ui_shares_candidates(
 @router.post("/symbols/{symbol}/recompute")
 def ui_symbol_recompute(
     symbol: str = Path(..., min_length=1, max_length=12),
-    force: bool = Query(False, description="Override market-closed guardrail"),
+    force: bool = Query(False, description="Override market-closed guardrail; if true bypass snapshot (use fresh data)"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
     """
     Run full evaluation for one symbol and merge into the canonical store.
-    Updates decision_latest.json; Universe and Dashboard read from same store.
-    Phase 9: When market closed, returns 409 unless force=true.
+    R22.7 Fix Pack: When force=false and eval snapshot is fresh (< N min), uses snapshot (no re-run) for determinism.
+    When force=true, always re-runs with fresh data.
     Returns pipeline_timestamp and updated symbol summary so UI can refetch.
     """
     _require_ui_key(x_ui_key)
@@ -2837,30 +2864,60 @@ def ui_symbol_recompute(
             logging.getLogger(__name__).info("[RECOMPUTE] Symbol %s with force=true (market phase=%s)", sym_upper, phase)
     except HTTPException:
         raise
-    try:
-        from app.core.eval.evaluation_service_v2 import evaluate_single_symbol_and_merge
-        from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
-        merged = evaluate_single_symbol_and_merge(symbol=sym_upper)
-    except Exception as e:
-        try:
-            from app.api.notifications_store import append_notification
-            append_notification(
-                "WARN", "RECOMPUTE_FAILURE", str(e),
-                symbol=sym_upper, details={"error": str(e)[:500]}, subtype="RECOMPUTE_FAILED",
-            )
-        except Exception:
-            pass
-        raise HTTPException(status_code=500, detail=f"Recompute failed: {e}")
+    from app.core.eval.evaluation_store_v2 import (
+        get_evaluation_store_v2,
+        get_eval_snapshot,
+        eval_snapshot_is_fresh,
+    )
     store = get_evaluation_store_v2()
     store.reload_from_disk()
+    merged = None
+    snapshot_used = False
+    if not force:
+        snapshot = get_eval_snapshot()
+        if snapshot and eval_snapshot_is_fresh(snapshot):
+            row = store.get_symbol(sym_upper)
+            if row is not None:
+                snapshot_used = True
+                summary, _c, _g, _e, _d = row
+                artifact = store.get_latest()
+                meta = (artifact.metadata or {}) if artifact else {}
+                ts = meta.get("pipeline_timestamp") or (snapshot.get("pipeline_timestamp") or "")
+                result: Dict[str, Any] = {
+                    "symbol": sym_upper,
+                    "pipeline_timestamp": ts,
+                    "artifact_version": "v2",
+                    "updated": False,
+                    "snapshot_used": True,
+                    "score": summary.score,
+                    "band": summary.band,
+                    "verdict": summary.verdict,
+                }
+                return result
+    if not snapshot_used:
+        try:
+            from app.core.eval.evaluation_service_v2 import evaluate_single_symbol_and_merge
+            merged = evaluate_single_symbol_and_merge(symbol=sym_upper)
+        except Exception as e:
+            try:
+                from app.api.notifications_store import append_notification
+                append_notification(
+                    "WARN", "RECOMPUTE_FAILURE", str(e),
+                    symbol=sym_upper, details={"error": str(e)[:500]}, subtype="RECOMPUTE_FAILED",
+                )
+            except Exception:
+                pass
+            raise HTTPException(status_code=500, detail=f"Recompute failed: {e}")
+    store.reload_from_disk()
     row = store.get_symbol(sym_upper)
-    meta = (merged.metadata or {}) if merged else {}
+    meta = (merged.metadata or {}) if merged else (store.get_latest().metadata or {} if store.get_latest() else {})
     ts = meta.get("pipeline_timestamp") or ""
-    result: Dict[str, Any] = {
+    result = {
         "symbol": sym_upper,
         "pipeline_timestamp": ts,
         "artifact_version": "v2",
-        "updated": True,
+        "updated": not snapshot_used,
+        "snapshot_used": snapshot_used,
     }
     if row is not None:
         summary, _candidates, _gates, _earnings, _diag = row

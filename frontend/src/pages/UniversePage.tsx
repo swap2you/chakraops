@@ -84,7 +84,9 @@ function formatScoreBreakdown(bd: unknown): string {
 }
 
 type VerdictFilter = "all" | "ELIGIBLE" | "HOLD" | "BLOCKED" | "NOT_EVALUATED";
-type SortBy = "rank" | "score" | "capital_required" | "premium_yield" | "market_cap";
+type SortBy = "rank" | "score" | "capital_required" | "premium_yield" | "market_cap" | "shares_eligible";
+/** R23.3: Universe row may include shares_eligible (request-time only). */
+type UniverseRow = SymbolEvalSummary & { shares_eligible?: boolean };
 
 const VERDICT_FILTER_OPTIONS: VerdictFilter[] = ["all", "ELIGIBLE", "HOLD", "BLOCKED", "NOT_EVALUATED"];
 const SORT_OPTIONS: { value: SortBy; label: string }[] = [
@@ -93,6 +95,7 @@ const SORT_OPTIONS: { value: SortBy; label: string }[] = [
   { value: "capital_required", label: "Capital Required" },
   { value: "premium_yield", label: "Premium Yield" },
   { value: "market_cap", label: "Market Cap" },
+  { value: "shares_eligible", label: "Shares eligibility" },
 ];
 
 const RANK_TOOLTIP =
@@ -110,6 +113,12 @@ function sortSymbols(list: SymbolEvalSummary[], sortBy: SortBy): SymbolEvalSumma
     arr.sort((a, b) => (b.premium_yield_pct ?? -Infinity) - (a.premium_yield_pct ?? -Infinity));
   } else if (sortBy === "market_cap") {
     arr.sort((a, b) => (b.market_cap ?? -Infinity) - (a.market_cap ?? -Infinity));
+  } else if (sortBy === "shares_eligible") {
+    arr.sort((a, b) => {
+      const ae = (a as UniverseRow).shares_eligible === true ? 1 : 0;
+      const be = (b as UniverseRow).shares_eligible === true ? 1 : 0;
+      return be - ae;
+    });
   }
   return arr;
 }
@@ -123,6 +132,7 @@ export function UniversePage() {
   const [search, setSearch] = useState("");
   const [verdictFilter, setVerdictFilter] = useState<VerdictFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("rank");
+  const [sharesFilter, setSharesFilter] = useState<boolean>(false);
   const [tradeTicket, setTradeTicket] = useState<{ symbol: string; candidate: SymbolDiagnosticsCandidate } | null>(null);
   const [addSymbolInput, setAddSymbolInput] = useState("");
   const [addSymbolError, setAddSymbolError] = useState<string | null>(null);
@@ -154,6 +164,9 @@ export function UniversePage() {
     if (verdictFilter !== "all") {
       list = list.filter((s) => (s.final_verdict ?? s.verdict ?? "").toUpperCase() === verdictFilter);
     }
+    if (sharesFilter) {
+      list = list.filter((s) => (s as UniverseRow).shares_eligible === true);
+    }
     const q = search.trim().toUpperCase();
     if (q) {
       list = list.filter(
@@ -163,7 +176,7 @@ export function UniversePage() {
       );
     }
     return sortSymbols(list, sortBy);
-  }, [mergedRows, verdictFilter, search, sortBy]);
+  }, [mergedRows, verdictFilter, sharesFilter, search, sortBy]);
 
   const addSymbolValidation = (val: string): string | null => {
     const s = val.trim().toUpperCase();
@@ -284,6 +297,17 @@ export function UniversePage() {
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            onClick={() => setSharesFilter((v) => !v)}
+            className={`rounded border px-2 py-1 text-xs font-medium ${
+              sharesFilter
+                ? "border-emerald-600 bg-emerald-100 text-emerald-800 dark:border-emerald-500 dark:bg-emerald-900/40 dark:text-emerald-300"
+                : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800"
+            }`}
+          >
+            Shares eligible
+          </button>
         </div>
       </Card>
       <Card>
@@ -322,6 +346,7 @@ export function UniversePage() {
             <TableHeader>
               <TableHead>Symbol</TableHead>
               <TableHead>Verdict</TableHead>
+              <TableHead>Shares</TableHead>
               <TableHead>Score</TableHead>
               <TableHead>Band</TableHead>
               <TableHead>Stage</TableHead>
@@ -345,6 +370,14 @@ export function UniversePage() {
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={row.final_verdict ?? row.verdict ?? "n/a"} />
+                  </TableCell>
+                  <TableCell>
+                    {(() => {
+                      const se = (row as UniverseRow).shares_eligible;
+                      if (se === true) return <span className="text-emerald-600 dark:text-emerald-400 font-medium">ELIGIBLE</span>;
+                      if (se === false) return <span className="text-zinc-500 dark:text-zinc-400">NOT_ELIGIBLE</span>;
+                      return <span className="text-zinc-400 dark:text-zinc-500">N/A</span>;
+                    })()}
                   </TableCell>
                   <TableCell numeric>
                     <span className="inline-flex items-center gap-1">

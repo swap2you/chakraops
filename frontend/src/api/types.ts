@@ -721,22 +721,35 @@ export interface DeltaDiagnostics {
   };
 }
 
-/** R22.5: Shares plan (recommendation only; no order placement). R23.0: optional Part D fields. */
+/** R22.5/R23.3: Shares plan (recommendation only; no order placement). Request-time only; not persisted. */
 export interface SharesPlan {
-  symbol: string;
-  entry_zone?: { low: number | null; high: number | null };
-  stop?: number | null;
-  targets?: { t1?: number | null; t2?: number | null; t3?: number | null };
+  symbol?: string;
+  /** R23.3: code-only; UI maps to safe text. */
+  eligible?: boolean;
+  /** R23.3: code-only reason_codes (e.g. SHARES_ELIGIBLE, NOT_NEAR_SUPPORT). */
+  reason_codes?: string[];
+  spot?: number | null;
+  /** R23.3: basis = DAILY_SUPPORT | WEEKLY_SUPPORT | BOTH. */
+  entry_zone?: { low?: number | null; high?: number | null; basis?: string };
+  /** R23.3: stop as { price, basis } (e.g. WEEKLY_SUPPORT_MINUS_ATR). */
+  stop?: number | null | { price?: number | null; basis?: string };
+  targets?: { t1?: number | null; t2?: number | null; t3?: number | null; basis?: string };
   invalidation?: number | null;
   hold_time_estimate?: { sessions?: number; basis_key?: string };
+  /** R23.3: hold_time with method (e.g. ATR_DISTANCE). */
+  hold_time?: { sessions_to_t1?: number; sessions_to_t2?: number | null; method?: string };
+  /** R23.3: sizing block; basis ACCOUNT_RISK | INSUFFICIENT_DATA. */
+  sizing?: {
+    suggested_shares?: number | null;
+    suggested_cost?: number | null;
+    max_loss?: number | null;
+    risk_pct_used?: number | null;
+    basis?: string;
+  };
   confidence_score?: number | null;
   why_recommended?: string | null;
-  /** R23.0 Part D: machine codes only; UI maps to safe text. */
-  eligible?: boolean;
   eligibility_codes?: string[];
-  spot?: number | null;
   support_resistance?: Record<string, { support?: number | null; resistance?: number | null; bar_count?: number | null; as_of?: string; method?: string } | null>;
-  hold_time?: { sessions_to_t1?: number; sessions_to_t2?: number | null; method?: string };
   indicators_used?: Record<string, unknown>;
   as_of_inputs?: Record<string, unknown>;
 }

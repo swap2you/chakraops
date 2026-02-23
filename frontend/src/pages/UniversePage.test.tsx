@@ -16,6 +16,15 @@ const mockUniverse = {
       capital_required: 45000,
       band: "B",
       score: 65,
+      shares_eligible: true,
+    },
+    {
+      symbol: "WMT",
+      verdict: "HOLD",
+      final_verdict: "HOLD",
+      band: "C",
+      score: 50,
+      shares_eligible: false,
     },
   ],
   updated_at: "2026-02-17T20:00:00Z",
@@ -31,8 +40,8 @@ vi.mock("@/api/queries", () => ({
   useUniverse: () => ({ data: mockUniverse }),
   useUniverseSymbols: () => ({
     data: {
-      symbols: ["SPY"],
-      base_count: 1,
+      symbols: ["SPY", "WMT"],
+      base_count: 2,
       overlay_added_count: 0,
       overlay_removed_count: 0,
     },
@@ -110,5 +119,19 @@ describe("UniversePage", () => {
       }),
       expect.any(Object)
     );
+  });
+
+  it("R23.3: renders Shares column with ELIGIBLE / NOT_ELIGIBLE", async () => {
+    render(<UniversePage />);
+    expect(screen.getByRole("columnheader", { name: /Shares/i })).toBeInTheDocument();
+    expect(screen.getByText("NOT_ELIGIBLE")).toBeInTheDocument();
+    expect(screen.getAllByText("ELIGIBLE").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("R23.3: Shares eligible filter shows only shares-eligible symbols", async () => {
+    render(<UniversePage />);
+    fireEvent.click(screen.getByRole("button", { name: /Shares eligible/i }));
+    expect(screen.getByText("SPY")).toBeInTheDocument();
+    expect(screen.queryByText("WMT")).not.toBeInTheDocument();
   });
 });

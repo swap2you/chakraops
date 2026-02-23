@@ -836,18 +836,18 @@ function ExecutionConsole({
           </Card>
         ) : null}
 
-        {/* R22.5: Shares plan (recommendation only) */}
+        {/* R22.5/R23.3: Shares plan (recommendation only) */}
         {data.shares_plan ? (
           <Card>
             <CardHeader title="Shares plan" description="BUY SHARES recommendation only; no order placement" />
             <div className="space-y-2 text-sm">
               <p><span className="text-zinc-500 dark:text-zinc-500">Entry zone:</span> {fmt(data.shares_plan.entry_zone?.low)} – {fmt(data.shares_plan.entry_zone?.high)}</p>
-              <p><span className="text-zinc-500 dark:text-zinc-500">Stop:</span> {fmt(data.shares_plan.stop)}</p>
+              <p><span className="text-zinc-500 dark:text-zinc-500">Stop:</span> {fmt(typeof data.shares_plan.stop === "object" && data.shares_plan.stop && "price" in data.shares_plan.stop ? (data.shares_plan.stop as { price?: number | null }).price ?? null : typeof data.shares_plan.stop === "number" ? data.shares_plan.stop : null)}</p>
               <p><span className="text-zinc-500 dark:text-zinc-500">Targets:</span> T1 {fmt(data.shares_plan.targets?.t1)} · T2 {fmt(data.shares_plan.targets?.t2)} · T3 {fmt(data.shares_plan.targets?.t3)}</p>
               <p><span className="text-zinc-500 dark:text-zinc-500">Invalidation:</span> {fmt(data.shares_plan.invalidation)}</p>
-              <p><span className="text-zinc-500 dark:text-zinc-500">Hold-time:</span> {data.shares_plan.hold_time_estimate?.sessions ?? "—"} sessions · {holdTimeBasisLabel(data.shares_plan.hold_time_estimate?.basis_key)}</p>
+              <p><span className="text-zinc-500 dark:text-zinc-500">Hold-time:</span> {data.shares_plan.hold_time?.sessions_to_t1 ?? data.shares_plan.hold_time_estimate?.sessions ?? "—"} sessions · {holdTimeBasisLabel(data.shares_plan.hold_time_estimate?.basis_key)}</p>
               {data.shares_plan.confidence_score != null && <p><span className="text-zinc-500 dark:text-zinc-500">Confidence:</span> {data.shares_plan.confidence_score}</p>}
-              <p><span className="text-zinc-500 dark:text-zinc-500">Why:</span> {sharesWhyLabel(data.shares_plan.why_recommended)}</p>
+              <p><span className="text-zinc-500 dark:text-zinc-500">Why:</span> {(data.shares_plan.reason_codes?.length ? data.shares_plan.reason_codes.map(sharesReasonCodeToLabel).join("; ") : sharesWhyLabel(data.shares_plan.why_recommended)) || "—"}</p>
             </div>
           </Card>
         ) : null}
@@ -983,7 +983,21 @@ function earningsDaysReason(_value: unknown): string {
   return "Not evaluated";
 }
 
-/** R23.0: Shares tab content — eligibility (safe label), Your Shares Position, Add/Update modal. */
+/** R23.3: Map shares reason_codes to safe UI labels (no raw FAIL_/WARN_). */
+function sharesReasonCodeToLabel(code: string): string {
+  const m: Record<string, string> = {
+    SHARES_ELIGIBLE: "Meets all shares eligibility rules",
+    NOT_STOCK_QUALITY: "Stock quality (Stage 1) did not pass",
+    REGIME_NOT_PREFERRED: "Regime not preferred for shares (UP required)",
+    NOT_NEAR_SUPPORT: "Price not near daily/weekly support",
+    NO_SUPPORT_OR_SPOT: "No support or spot price available",
+    RSI_OUT_OF_RANGE: "RSI outside preferred range",
+    DATA_STALE: "Data missing or stale",
+  };
+  return m[code] ?? code.replace(/_/g, " ").toLowerCase();
+}
+
+/** R23.0/R23.3: Shares tab — Plan view: eligibility badge, Why list, plan card (spot, entry zone, stop, targets, hold-time, sizing), Your Shares Position. */
 function SharesTabContent({
   data,
   accountId,
@@ -1005,23 +1019,81 @@ function SharesTabContent({
 }) {
   const pos = data.shares_position;
   const plan = data.shares_plan;
-  const eligibleLabel = plan?.eligible ? "Eligible for shares" : "Not eligible for shares (regime or score)";
+  const eligibleLabel = plan?.eligible ? "Eligible" : "Not eligible";
+  const reasonCodes = plan?.reason_codes ?? plan?.eligibility_codes ?? [];
+  const stopObj = plan?.stop && typeof plan.stop === "object" && "price" in plan.stop ? plan.stop : { price: typeof plan?.stop === "number" ? plan.stop : null, basis: "" };
+  const stopPrice = stopObj?.price ?? (typeof plan?.stop === "number" ? plan.stop : null);
+  const hasPlan = plan && (plan.spot != null || plan.entry_zone?.low != null || stopPrice != null || plan.targets?.t1 != null || plan.sizing);
   return (
     <div className="space-y-4 lg:col-span-2">
       <Card>
         <CardHeader title="Shares" description="BUY SHARES recommendation only; no order placement." />
         <div className="space-y-3 text-sm">
-          <p><span className="text-zinc-500 dark:text-zinc-400">Eligibility:</span> {eligibleLabel}</p>
-          {data.mtf_levels && (data.mtf_levels.daily || data.mtf_levels.weekly || data.mtf_levels.monthly) && (
+          <p><span className="text-zinc-500 dark:text-zinc-400">Eligibility:</span> <span className={plan?.eligible ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-zinc-600 dark:text-zinc-400"}>{eligibleLabel}</span></p>
+          {reasonCodes.length > 0 && (
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Why</span>
+              <ul className="list-disc pl-4 space-y-0.5 text-zinc-700 dark:text-zinc-300">
+                {reasonCodes.map((c, i) => (
+                  <li key={i}>{sharesReasonCodeToLabel(c)}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {hasPlan && (
+            <div className="pt-2 border-t border-zinc-200 dark:border-zinc-700 space-y-2">
+              <span className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">Shares Plan</span>
+              {plan.spot != null && <p><span className="text-zinc-500 dark:text-zinc-400">Spot:</span> <span className="font-mono">{plan.spot}</span></p>}
+              {plan.entry_zone && (plan.entry_zone.low != null || plan.entry_zone.high != null) && (
+                <p>
+                  <span className="text-zinc-500 dark:text-zinc-400">Entry zone:</span> {fmt(plan.entry_zone.low)} – {fmt(plan.entry_zone.high)}
+                  <Tooltip content={plan.entry_zone.basis ? `Based on ${plan.entry_zone.basis.replace(/_/g, " ").toLowerCase()}` : "Range around support"} className="ml-1 inline">
+                    <span className="cursor-help text-zinc-400 dark:text-zinc-500" aria-label="Entry zone basis">ⓘ</span>
+                  </Tooltip>
+                </p>
+              )}
+              {stopPrice != null && (
+                <p>
+                  <span className="text-zinc-500 dark:text-zinc-400">Stop:</span> <span className="font-mono">{stopPrice}</span>
+                  <Tooltip content="Stop below support (ATR-based)" className="ml-1 inline">
+                    <span className="cursor-help text-zinc-400 dark:text-zinc-500" aria-label="Stop basis">ⓘ</span>
+                  </Tooltip>
+                </p>
+              )}
+              {plan.targets && (plan.targets.t1 != null || plan.targets.t2 != null) && (
+                <p><span className="text-zinc-500 dark:text-zinc-400">Targets:</span> T1 {fmt(plan.targets.t1)} · T2 {fmt(plan.targets.t2)}</p>
+              )}
+              {plan.hold_time?.sessions_to_t1 != null && (
+                <p>
+                  <span className="text-zinc-500 dark:text-zinc-400">Hold-time estimate:</span> {plan.hold_time.sessions_to_t1} sessions
+                  <Tooltip content={plan.hold_time.method === "ATR_DISTANCE" ? "Estimated sessions to T1 using ATR distance" : "Default or ATR-based estimate"} className="ml-1 inline">
+                    <span className="cursor-help text-zinc-400 dark:text-zinc-500" aria-label="Hold-time method">ⓘ</span>
+                  </Tooltip>
+                </p>
+              )}
+              {plan.sizing && (
+                <div className="pt-1">
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-400 mb-0.5">Sizing</span>
+                  {plan.sizing.basis === "INSUFFICIENT_DATA" ? (
+                    <p className="text-zinc-500 dark:text-zinc-400">Insufficient data (set account balances for suggested size)</p>
+                  ) : (
+                    <>
+                      <p><span className="text-zinc-500 dark:text-zinc-400">Suggested shares:</span> <span className="font-mono font-medium">{plan.sizing.suggested_shares ?? "—"}</span></p>
+                      {plan.sizing.suggested_cost != null && <p><span className="text-zinc-500 dark:text-zinc-400">Suggested cost:</span> <span className="font-mono">${plan.sizing.suggested_cost.toFixed(2)}</span></p>}
+                      {plan.sizing.max_loss != null && <p><span className="text-zinc-500 dark:text-zinc-400">Max loss:</span> <span className="font-mono">${plan.sizing.max_loss.toFixed(2)}</span></p>}
+                      <Tooltip content="Risk budget from account value × risk %; size = budget / stop distance" className="inline">
+                        <span className="cursor-help text-zinc-400 dark:text-zinc-500" aria-label="Sizing method">ⓘ</span>
+                      </Tooltip>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          {data.mtf_levels && (data.mtf_levels.daily || data.mtf_levels.weekly || data.mtf_levels.monthly) && !hasPlan && (
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Multi-timeframe levels</span>
               <p className="text-zinc-700 dark:text-zinc-300">See Options tab for M/W/D support and resistance.</p>
-            </div>
-          )}
-          {data.targets && (data.targets.t1 != null || data.targets.t2 != null) && (
-            <div>
-              <span className="block text-xs text-zinc-500 dark:text-zinc-400">Targets & hold-time</span>
-              <p className="text-zinc-700 dark:text-zinc-300">T1 {fmt(data.targets.t1)} · T2 {fmt(data.targets.t2)} · Hold-time: {data.hold_time_estimate?.sessions ?? "—"} sessions</p>
             </div>
           )}
         </div>

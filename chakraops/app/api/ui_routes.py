@@ -339,6 +339,14 @@ def ui_universe(
                 row["required_data_missing"] = sel_el.get("required_data_missing") or []
                 row["required_data_stale"] = sel_el.get("required_data_stale") or []
                 row["optional_missing"] = sel_el.get("optional_missing") or []
+                # R23.3: shares_eligible at request time (code-only; not persisted)
+                try:
+                    from app.core.shares.shares_plan import compute_shares_eligibility
+                    tech = (diag.get("technicals") if isinstance(diag, dict) else getattr(diag, "technicals", None)) or {}
+                    shares_eligible, _ = compute_shares_eligibility(s, tech, sel_el, mtf_levels=None)
+                    row["shares_eligible"] = shares_eligible
+                except Exception:
+                    row["shares_eligible"] = False
                 sample = (getattr(diag, "sample_rejected_due_to_delta", None) or (diag.get("sample_rejected_due_to_delta") if isinstance(diag, dict) else None) or []) if diag else []
                 row["reasons_explained"] = _compute_reasons_explained(
                     getattr(s, "primary_reason", None) or "",
@@ -2999,9 +3007,24 @@ def _build_symbol_diagnostics_from_v2_store(
             as_of_inputs["candles_as_of"] = eval_snapshot.get("candles_as_of")
         if eval_snapshot.get("orats_as_of") is not None:
             as_of_inputs["orats_as_of"] = eval_snapshot.get("orats_as_of")
-    shares_plan = _build_shares_plan_at_request_time(
+    # R23.3: Shares plan (eligibility + plan + sizing) — request-time only, not persisted
+    account_summary = None
+    try:
+        from app.core.accounts.holdings_db import get_account_summary
+        account_summary = get_account_summary()
+        from app.core.accounts.service import get_default_account
+        default_acc = get_default_account()
+        if default_acc and getattr(default_acc, "total_capital", None) is not None:
+            account_summary = dict(account_summary or {})
+            account_summary["total_capital"] = default_acc.total_capital
+    except Exception:
+        pass
+    from app.core.shares.shares_plan import build_shares_plan_r233
+    shares_plan = build_shares_plan_r233(
         summary, technicals, exit_plan, hold_time_estimate, symbol,
         mtf_levels=mtf_levels, as_of_inputs=as_of_inputs,
+        symbol_eligibility=symbol_eligibility,
+        account_summary=account_summary,
     )
     # R23.2: Include delta_override for this symbol when present (for UI "Override active" badge and advanced form)
     delta_override = None

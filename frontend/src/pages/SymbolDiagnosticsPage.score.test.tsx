@@ -367,3 +367,67 @@ describe("SymbolDiagnosticsPage R23.2 Delta diagnostics and override", () => {
     expect(screen.queryByText("Adjust delta band (Advanced)")).not.toBeInTheDocument();
   });
 });
+
+describe("SymbolDiagnosticsPage R23.3 Shares plan", () => {
+  const mockWithSharesPlan = {
+    ...mockDiagnosticsWithCap,
+    shares_plan: {
+      eligible: true,
+      reason_codes: ["SHARES_ELIGIBLE"],
+      spot: 100,
+      entry_zone: { low: 98, high: 102, basis: "DAILY_SUPPORT" },
+      stop: { price: 96, basis: "WEEKLY_SUPPORT_MINUS_ATR" },
+      targets: { t1: 104, t2: 108, basis: "WEEKLY_RESISTANCE" },
+      hold_time: { sessions_to_t1: 5, sessions_to_t2: null, method: "ATR_DISTANCE" },
+      sizing: { suggested_shares: 40, suggested_cost: 4000, max_loss: 160, risk_pct_used: 0.008, basis: "ACCOUNT_RISK" },
+    },
+  };
+
+  beforeEach(() => {
+    window.history.pushState({}, "", "/symbol-diagnostics?symbol=WMT");
+  });
+
+  it("Shares tab shows eligibility and reason codes as safe labels", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: mockWithSharesPlan,
+      isLoading: false,
+      isError: false,
+    });
+    render(<SymbolDiagnosticsPage />);
+    fireEvent.click(screen.getByText("Shares"));
+    expect(screen.getByText("Eligible")).toBeInTheDocument();
+    expect(screen.getByText("Meets all shares eligibility rules")).toBeInTheDocument();
+  });
+
+  it("Shares tab shows plan block (spot, entry zone, stop, targets, sizing) when eligible", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: mockWithSharesPlan,
+      isLoading: false,
+      isError: false,
+    });
+    render(<SymbolDiagnosticsPage />);
+    fireEvent.click(screen.getByText("Shares"));
+    expect(screen.getByText("Shares Plan")).toBeInTheDocument();
+    expect(screen.getByText("100")).toBeInTheDocument();
+    expect(screen.getByText(/98 – 102/)).toBeInTheDocument();
+    expect(screen.getByText("96")).toBeInTheDocument();
+    expect(screen.getByText("40")).toBeInTheDocument();
+  });
+
+  it("Shares tab shows insufficient data when sizing basis is INSUFFICIENT_DATA", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: {
+        ...mockWithSharesPlan,
+        shares_plan: {
+          ...mockWithSharesPlan.shares_plan,
+          sizing: { suggested_shares: null, suggested_cost: null, max_loss: null, risk_pct_used: null, basis: "INSUFFICIENT_DATA" },
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<SymbolDiagnosticsPage />);
+    fireEvent.click(screen.getByText("Shares"));
+    expect(screen.getByText(/Insufficient data/)).toBeInTheDocument();
+  });
+});

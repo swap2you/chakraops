@@ -317,8 +317,8 @@ export function DashboardPage() {
               <div className="space-y-1.5">
                 {sharesCandidates.slice(0, 10).map((plan) => (
                   <Link
-                    key={plan.symbol}
-                    to={`/symbol-diagnostics?symbol=${encodeURIComponent(plan.symbol)}`}
+                    key={plan.symbol ?? ""}
+                    to={`/symbol-diagnostics?symbol=${encodeURIComponent(plan.symbol ?? "")}`}
                     className="flex items-center justify-between text-xs block py-1"
                   >
                     <span className="font-mono text-zinc-700 hover:underline dark:text-zinc-300 dark:hover:text-zinc-100">{plan.symbol}</span>

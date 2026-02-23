@@ -84,6 +84,23 @@ DELTA_OVERRIDE_MAX_WIDEN: float = 0.05
 """Hard cap: per-symbol delta override cannot widen the band by more than this (each side)."""
 
 
+# R23.3: Shares recommendation spine (eligibility + plan + sizing)
+SHARES_NEAR_SUPPORT_PCT: float = 0.02
+"""Symbol is 'near support' when distance_to_support_pct <= this (e.g. 2%)."""
+
+SHARES_RISK_PCT_DEFAULT: float = 0.005
+"""Default risk per trade for shares sizing (0.5% of account value)."""
+
+SHARES_ALLOW_REGIME_NEUTRAL: bool = False
+"""If True, shares eligible when regime is UP or NEUTRAL; else UP only."""
+
+SHARES_ENTRY_ZONE_ATR_MULT: float = 0.25
+"""Entry zone width (each side) as multiple of ATR."""
+
+SHARES_STOP_ATR_MULT: float = 1.0
+"""Stop distance below support as multiple of ATR."""
+
+
 __all__ = [
     "CSP_MIN_DTE",
     "CSP_MAX_DTE",
@@ -96,4 +113,9 @@ __all__ = [
     "TARGET_HIGH",
     "DELTA_NEAR_MISS_EPS",
     "DELTA_OVERRIDE_MAX_WIDEN",
+    "SHARES_NEAR_SUPPORT_PCT",
+    "SHARES_RISK_PCT_DEFAULT",
+    "SHARES_ALLOW_REGIME_NEUTRAL",
+    "SHARES_ENTRY_ZONE_ATR_MULT",
+    "SHARES_STOP_ATR_MULT",
 ]

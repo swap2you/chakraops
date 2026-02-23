@@ -193,6 +193,18 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Verification** — out/verification/R23.2/notes.md with gate outputs, grep proofs, UAT checklist
 - [x] **Gate** — Backend pytest (663 passed), frontend tests (129 passed), frontend build pass (recorded in notes)
 
+### R23.3 — Shares Recommendation Spine (Eligibility + Plan + Sizing + Universe Badge)
+
+- [x] **Part A — Shares eligibility:** Code-only rules; shares_plan in symbol-diagnostics (request-time only); config knobs
+- [x] **Part B — Sizing:** Risk budget / stop_dist; INSUFFICIENT_DATA when no account
+- [x] **Part C — UI Shares tab:** Plan view (eligibility, Why, plan card, sizing, tooltips)
+- [x] **Part D — Universe:** Shares column, Shares eligible filter, sort by Shares eligibility
+- [x] **Part E — Tests:** test_r233_shares_plan.py; SymbolDiagnosticsPage R23.3; UniversePage R23.3
+- [x] **Requirements** — docs/releases/R23.3_requirements.md
+- [x] **Release notes** — docs/releases/R23.3_release_notes.md
+- [x] **Verification** — out/verification/R23.3/notes.md with gate outputs and UAT checklist
+- [x] **Gate** — Backend pytest (670 passed), frontend tests (137 passed), frontend build pass (recorded in notes)
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 - [ ] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py` (fixture → mock staged result → evaluate_universe → store write → hygiene check + snapshot check + per-symbol summary)

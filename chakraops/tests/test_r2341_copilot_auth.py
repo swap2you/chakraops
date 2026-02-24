@@ -46,4 +46,4 @@ def test_copilot_returns_502_copilot_auth_failed_on_openai_authentication_error(
     data = resp.json()
     assert data.get("error_code") == "COPILOT_AUTH_FAILED"
     assert "message" in data
-    assert "COPILOT_OPENAI_API_KEY" in data["message"] or "Verify" in data["message"]
+    assert "authentication failed" in data["message"].lower()

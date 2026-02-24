@@ -232,6 +232,16 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Verification** — out/verification/R23.4.2/notes.md with gate outputs and manual steps
 - [x] **Gate** — Backend pytest (697 passed, 1 skipped), frontend tests (142 passed, 18 skipped), frontend build pass (recorded in notes)
 
+### R23.4.3 — Copilot key parsing + clear operator diagnostics
+
+- [x] **Backend:** _clean_api_key; _get_copilot_key_and_source (key_source); LAST_COPILOT_ERROR_CODE; get_copilot_status (key_source, last_error_code); system-health copilot block
+- [x] **Frontend:** Fix hint “COPILOT_OPENAI_API_KEY (preferred) or OPENAI_API_KEY”; COPILOT_AUTH_FAILED hint; UiSystemHealthResponse.copilot (key_source, last_error_code)
+- [x] **Tests:** test_r2343_copilot_diagnostics.py (_clean_api_key, quoted env, system-health); CopilotPanel.test.tsx fix hint assertion
+- [x] **Requirements** — docs/releases/R23.4.3_requirements.md
+- [x] **Release notes** — docs/releases/R23.4.3_release_notes.md
+- [x] **Verification** — out/verification/R23.4.3/notes.md with gate outputs and manual steps
+- [x] **Gate** — Backend pytest (707 passed, 1 skipped), frontend tests (143 passed, 18 skipped), frontend build pass (recorded in notes)
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 - [ ] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py` (fixture → mock staged result → evaluate_universe → store write → hygiene check + snapshot check + per-symbol summary)

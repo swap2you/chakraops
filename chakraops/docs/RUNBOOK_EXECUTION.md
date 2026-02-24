@@ -53,6 +53,8 @@ python -m uvicorn app.api.server:app --reload --port 8000
 # Terminal 3: Start React frontend
 cd C:\Development\Workspace\ChakraOps\frontend
 npm install
+npm run build
+npm run test
 npm run dev
 
 # Terminal 4: Smoke checks (after backend is up)

@@ -35,6 +35,24 @@ COPILOT_AUTH_FAILED = "COPILOT_AUTH_FAILED"
 COPILOT_UPSTREAM_UNAVAILABLE = "COPILOT_UPSTREAM_UNAVAILABLE"
 COPILOT_INTERNAL_ERROR = "COPILOT_INTERNAL_ERROR"
 
+# R23.4.3: Last Copilot error code (set on 502/503/500); exposed in system-health only.
+LAST_COPILOT_ERROR_CODE: Optional[str] = None
+
+
+def _clean_api_key(v: str | None) -> str | None:
+    """
+    R23.4.3: Clean env key value — strip whitespace, remove surrounding quotes, return None if empty.
+    Does not strip VAR= prefix (handled in _get_copilot_api_key).
+    """
+    if v is None:
+        return None
+    s = (v or "").strip()
+    if not s:
+        return None
+    if len(s) >= 2 and s[0] in ("'", '"') and s[-1] == s[0]:
+        s = s[1:-1].strip()
+    return s if s else None
+
 
 def _normalize_copilot_key(raw: str) -> str:
     """Strip whitespace, surrounding quotes, and accidental VAR= prefix. Does not check internal whitespace."""
@@ -71,43 +89,62 @@ def _validate_key_format(key: str) -> Tuple[bool, Optional[str]]:
     return (True, None)
 
 
+def _get_copilot_key_and_source() -> Tuple[Optional[str], str]:
+    """
+    R23.4.3: Return (cleaned_key, key_source). key_source is COPILOT_OPENAI_API_KEY, OPENAI_API_KEY, or NONE.
+    Uses _clean_api_key; strips pasted VAR= prefix; rejects internal whitespace and invalid format.
+    """
+    for env_key in ("COPILOT_OPENAI_API_KEY", "OPENAI_API_KEY"):
+        raw = os.getenv(env_key)
+        cleaned = _clean_api_key(raw)
+        if not cleaned:
+            continue
+        for prefix in ("COPILOT_OPENAI_API_KEY=", "OPENAI_API_KEY="):
+            if cleaned.upper().startswith(prefix):
+                cleaned = cleaned[len(prefix) :].strip()
+                break
+        if not cleaned or any(c in cleaned for c in (" ", "\n", "\r", "\t")):
+            continue
+        ok, _ = _validate_key_format(cleaned)
+        if ok:
+            return (cleaned, env_key)
+    return (None, "NONE")
+
+
+def _get_copilot_key_present() -> bool:
+    """True if any env var has a non-empty value after _clean_api_key (even if malformed)."""
+    c1 = _clean_api_key(os.getenv("COPILOT_OPENAI_API_KEY"))
+    c2 = _clean_api_key(os.getenv("OPENAI_API_KEY"))
+    return bool(c1 or c2)
+
+
 def get_copilot_status() -> Dict[str, Any]:
     """
-    R23.4.2: Status only, no secrets. For system-health and startup log.
-    Returns: enabled (bool), key_present (bool), key_format_ok (bool), model (str).
+    R23.4.2/R23.4.3: Status only, no secrets. For system-health and startup log.
+    Returns: enabled, key_present, key_format_ok, key_source, model, last_error_code.
     """
-    raw = (os.getenv("COPILOT_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY") or "").strip()
-    key_present = bool(raw)
-    normalized = _normalize_copilot_key(raw) if raw else ""
-    has_internal_whitespace = key_present and any(c in normalized for c in (" ", "\n", "\r", "\t"))
-    key_format_ok = False
-    if normalized and not has_internal_whitespace:
-        key_format_ok, _ = _validate_key_format(normalized)
+    key, key_source = _get_copilot_key_and_source()
+    key_present = _get_copilot_key_present()
+    key_format_ok = key is not None
     enabled = key_format_ok
     return {
         "enabled": enabled,
         "key_present": key_present,
         "key_format_ok": key_format_ok,
+        "key_source": key_source,
         "model": COPILOT_OPENAI_MODEL,
+        "last_error_code": LAST_COPILOT_ERROR_CODE,
     }
 
 
 def _get_copilot_api_key() -> Optional[str]:
     """
-    R23.4.2: Robust key parsing. COPILOT_OPENAI_API_KEY then OPENAI_API_KEY.
-    Normalize (strip, quotes, VAR= prefix). Reject internal whitespace or invalid format.
+    R23.4.2/R23.4.3: Robust key parsing. COPILOT_OPENAI_API_KEY then OPENAI_API_KEY.
+    Uses _clean_api_key; strips VAR= prefix; rejects internal whitespace or invalid format.
     Returns None if missing or malformed.
     """
-    raw = (os.getenv("COPILOT_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY") or "").strip()
-    if not raw:
-        return None
-    normalized = _normalize_copilot_key(raw)
-    if not normalized:
-        return None
-    if any(c in normalized for c in (" ", "\n", "\r", "\t")):
-        return None
-    ok, _ = _validate_key_format(normalized)
-    return normalized if ok else None
+    key, _ = _get_copilot_key_and_source()
+    return key
 
 
 _copilot_startup_logged = False
@@ -563,17 +600,20 @@ async def copilot_ask(
     _require_ui_key(x_ui_key)
     _copilot_startup_log()
 
+    global LAST_COPILOT_ERROR_CODE
     status = get_copilot_status()
     if not status["key_present"]:
+        LAST_COPILOT_ERROR_CODE = COPILOT_KEY_MISSING
         logger.warning("Copilot request rejected: key missing (503)")
         return JSONResponse(
             status_code=503,
             content={
                 "error_code": COPILOT_KEY_MISSING,
-                "message": "Copilot is disabled on this server. Set COPILOT_OPENAI_API_KEY and restart.",
+                "message": "Copilot is disabled on this server. Set COPILOT_OPENAI_API_KEY (or OPENAI_API_KEY) and restart.",
             },
         )
     if not status["key_format_ok"]:
+        LAST_COPILOT_ERROR_CODE = COPILOT_KEY_MALFORMED
         logger.warning("Copilot request rejected: key malformed (503)")
         return JSONResponse(
             status_code=503,
@@ -603,15 +643,17 @@ async def copilot_ask(
         err_type = type(e).__name__
         err_msg = _redact_sk(str(e))
         if "AuthenticationError" in err_type or "invalid_api_key" in err_msg.lower() or "401" in err_msg:
+            LAST_COPILOT_ERROR_CODE = COPILOT_AUTH_FAILED
             logger.warning("Copilot auth failed: error_code=%s status=502 msg=%s", COPILOT_AUTH_FAILED, _redact_sk(err_msg[:200]))
             return JSONResponse(
                 status_code=502,
                 content={
                     "error_code": COPILOT_AUTH_FAILED,
-                    "message": "Copilot authentication failed. Verify COPILOT_OPENAI_API_KEY on the server and restart.",
+                    "message": "Copilot authentication failed.",
                 },
             )
         if "HTTPStatusError" in err_type or "RateLimitError" in err_type or "429" in err_msg or "503" in err_msg:
+            LAST_COPILOT_ERROR_CODE = COPILOT_UPSTREAM_UNAVAILABLE
             logger.warning("Copilot upstream unavailable: error_code=%s status=503 msg=%s", COPILOT_UPSTREAM_UNAVAILABLE, _redact_sk(err_msg[:200]))
             return JSONResponse(
                 status_code=503,
@@ -620,6 +662,7 @@ async def copilot_ask(
                     "message": "Copilot upstream is temporarily unavailable. Try again later.",
                 },
             )
+        LAST_COPILOT_ERROR_CODE = COPILOT_INTERNAL_ERROR
         logger.exception("Copilot internal error: error_code=%s status=500", COPILOT_INTERNAL_ERROR)
         return JSONResponse(
             status_code=500,

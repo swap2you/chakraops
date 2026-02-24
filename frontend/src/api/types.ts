@@ -359,8 +359,15 @@ export interface UiSystemHealthResponse {
   eod_freeze?: UiSystemHealthEodFreeze;
   /** Phase 16.0 */
   mark_refresh?: UiSystemHealthMarkRefresh;
-  /** R23.4.2 — Copilot status (enabled, key_present, key_format_ok, model); no secrets */
-  copilot?: { enabled?: boolean; key_present?: boolean; key_format_ok?: boolean; model?: string };
+  /** R23.4.2/R23.4.3 — Copilot status; no secrets. key_source: which env var (or NONE). */
+  copilot?: {
+    enabled?: boolean;
+    key_present?: boolean;
+    key_format_ok?: boolean;
+    key_source?: "COPILOT_OPENAI_API_KEY" | "OPENAI_API_KEY" | "NONE";
+    model?: string;
+    last_error_code?: string | null;
+  };
 }
 
 // =============================================================================

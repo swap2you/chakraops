@@ -120,12 +120,12 @@ def _get_slack_status_health() -> Dict[str, Any]:
 
 
 def _get_copilot_status_health() -> Dict[str, Any]:
-    """R23.4.2: Copilot status for system-health (enabled, key_present, key_format_ok, model). No secrets."""
+    """R23.4.2/R23.4.3: Copilot status for system-health (enabled, key_present, key_source, model, last_error_code). No secrets."""
     try:
         from app.api.copilot import get_copilot_status
         return get_copilot_status()
     except Exception:
-        return {"enabled": False, "key_present": False, "key_format_ok": False, "model": ""}
+        return {"enabled": False, "key_present": False, "key_format_ok": False, "key_source": "NONE", "model": "", "last_error_code": None}
 
 
 def _get_mark_refresh_health() -> Dict[str, Any]:

@@ -74,7 +74,7 @@ describe("CopilotPanel R23.4", () => {
     mockApiPost.mockRejectedValue(
       new ApiError("API 502: Bad Gateway", 502, {
         error_code: "COPILOT_AUTH_FAILED",
-        message: "Copilot authentication failed. Verify COPILOT_OPENAI_API_KEY on the server and restart.",
+        message: "Copilot authentication failed.",
       })
     );
     render(<CopilotPanel symbol="NVDA" conversationId="copilot-NVDA" />);
@@ -82,6 +82,21 @@ describe("CopilotPanel R23.4", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Copilot unavailable");
     expect(alert).toHaveTextContent("Copilot authentication failed");
-    expect(alert).toHaveTextContent("Set COPILOT_OPENAI_API_KEY in backend env and restart uvicorn");
+    expect(alert).toHaveTextContent("COPILOT_OPENAI_API_KEY (preferred) or OPENAI_API_KEY");
+    expect(alert).toHaveTextContent("Key is present but rejected by OpenAI (401)");
+  });
+
+  it("R23.4.3: fix hint for COPILOT_KEY_MISSING includes both env var names", async () => {
+    mockApiPost.mockRejectedValue(
+      new ApiError("API 503", 503, {
+        error_code: "COPILOT_KEY_MISSING",
+        message: "Copilot is disabled on this server.",
+      })
+    );
+    render(<CopilotPanel symbol="NVDA" conversationId="copilot-NVDA" />);
+    fireEvent.click(screen.getByText("Why is this symbol not eligible?"));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("COPILOT_OPENAI_API_KEY (preferred) or OPENAI_API_KEY");
+    expect(alert).toHaveTextContent("Key missing");
   });
 });

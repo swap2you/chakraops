@@ -29,12 +29,15 @@ export interface CopilotErrorPayload {
   message: string;
 }
 
+/** R23.4.3: Fix hints; no keys or stack traces. */
 function copilotFixHint(errorCode: string): string {
-  if (
-    errorCode === "COPILOT_KEY_MISSING" ||
-    errorCode === "COPILOT_AUTH_FAILED"
-  ) {
-    return "Set COPILOT_OPENAI_API_KEY in backend env and restart uvicorn.";
+  const baseHint =
+    "Set COPILOT_OPENAI_API_KEY (preferred) or OPENAI_API_KEY on the backend and restart uvicorn.";
+  if (errorCode === "COPILOT_KEY_MISSING") {
+    return `Key missing. ${baseHint}`;
+  }
+  if (errorCode === "COPILOT_AUTH_FAILED") {
+    return `${baseHint} Key is present but rejected by OpenAI (401).`;
   }
   if (errorCode === "COPILOT_KEY_MALFORMED") {
     return "Key looks malformed (quotes/spaces). Fix .env and restart.";
@@ -65,9 +68,14 @@ function safeMarkdownToHtml(md: string): string {
   return withBold.replace(/\n/g, "<br />");
 }
 
-/** R23.4.2: Optional system health; if copilot.key_present && !key_format_ok show malformed hint. */
+/** R23.4.2/R23.4.3: Optional system health; key_source and last_error_code for operator diagnostics. */
 export interface CopilotSystemHealth {
-  copilot?: { key_present?: boolean; key_format_ok?: boolean };
+  copilot?: {
+    key_present?: boolean;
+    key_format_ok?: boolean;
+    key_source?: "COPILOT_OPENAI_API_KEY" | "OPENAI_API_KEY" | "NONE";
+    last_error_code?: string | null;
+  };
 }
 
 export function CopilotPanel({

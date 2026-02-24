@@ -288,7 +288,9 @@ def ui_decision_file(
 
 
 def _build_universe_symbols_list(artifact: Any) -> List[Dict[str, Any]]:
-    """Build the symbols list for universe response. Used by ui_universe and get_universe_row_for_copilot."""
+    """Build the symbols list for universe response. Used by ui_universe and get_universe_row_for_copilot.
+    R23.4.5: When diagnostics missing, use same request-time technicals + mtf_levels as symbol-diagnostics
+    so shares_eligible matches Shares tab (compute_shares_eligibility with same inputs)."""
     symbols_out: List[Dict[str, Any]] = []
     if not artifact:
         return symbols_out
@@ -298,10 +300,12 @@ def _build_universe_symbols_list(artifact: Any) -> List[Dict[str, Any]]:
         if sym_k:
             sel_by_sym[sym_k] = c
     diag_by_sym = getattr(artifact, "diagnostics_by_symbol", None) or {}
+    pipeline_ts = (getattr(artifact, "metadata", None) or {}).get("pipeline_timestamp") if artifact else None
     for s in getattr(artifact, "symbols", []) or []:
         sym_key = (s.symbol or "").strip().upper()
         diag = diag_by_sym.get(sym_key)
-        sel_el = (diag.symbol_eligibility or {}) if diag else {}
+        diag_dict = diag.to_dict() if diag and hasattr(diag, "to_dict") else (diag if isinstance(diag, dict) else {})
+        sel_el = (diag_dict.get("symbol_eligibility") or getattr(diag, "symbol_eligibility", None) or {}) if diag else {}
         score_caps = getattr(s, "score_caps", None)
         raw_score = getattr(s, "raw_score", None)
         row: Dict[str, Any] = {
@@ -336,8 +340,14 @@ def _build_universe_symbols_list(artifact: Any) -> List[Dict[str, Any]]:
         row["optional_missing"] = sel_el.get("optional_missing") or []
         try:
             from app.core.shares.shares_plan import compute_shares_eligibility
-            tech = (diag.get("technicals") if isinstance(diag, dict) else getattr(diag, "technicals", None)) or {}
-            shares_eligible, _ = compute_shares_eligibility(s, tech, sel_el, mtf_levels=None, symbol=sym_key)
+            tech = (diag_dict.get("technicals") if diag_dict else (getattr(diag, "technicals", None) if diag else None)) or {}
+            mtf_levels = None
+            if not tech and sym_key:
+                spot_u = float(getattr(s, "price", None) or getattr(s, "underlying_price", None) or 0)
+                tech = _build_technicals_at_request_time(sym_key, spot_u if spot_u > 0 else None)
+            if sym_key and tech:
+                mtf_levels = _build_mtf_levels_at_request_time(sym_key, tech, {}, pipeline_ts)
+            shares_eligible, _ = compute_shares_eligibility(s, tech, sel_el, mtf_levels=mtf_levels, symbol=sym_key)
             row["shares_eligible"] = shares_eligible
         except Exception:
             row["shares_eligible"] = False
@@ -2710,6 +2720,8 @@ def _build_mtf_levels_at_request_time(
                     "method": sr_d.get("method") or method,
                     "bar_count": len(daily_candles),
                     "tolerance_used": sr_d.get("tolerance_used"),
+                    "supports_ordered": sr_d.get("supports_ordered") or [],
+                    "resistances_ordered": sr_d.get("resistances_ordered") or [],
                 }
         elif daily_block and daily_block.get("bar_count") is None and daily_candles:
             daily_block["bar_count"] = len(daily_candles)
@@ -2728,6 +2740,8 @@ def _build_mtf_levels_at_request_time(
                 "method": sr_w.get("method") or method,
                 "bar_count": len(weekly_candles),
                 "tolerance_used": sr_w.get("tolerance_used"),
+                "supports_ordered": sr_w.get("supports_ordered") or [],
+                "resistances_ordered": sr_w.get("resistances_ordered") or [],
             }
         else:
             weekly_block = _insufficient("weekly")
@@ -2746,6 +2760,8 @@ def _build_mtf_levels_at_request_time(
                 "method": sr_m.get("method") or method,
                 "bar_count": len(monthly_candles),
                 "tolerance_used": sr_m.get("tolerance_used"),
+                "supports_ordered": sr_m.get("supports_ordered") or [],
+                "resistances_ordered": sr_m.get("resistances_ordered") or [],
             }
         else:
             monthly_block = _insufficient("monthly")
@@ -3042,16 +3058,30 @@ def _build_symbol_diagnostics_from_v2_store(
         spot_for_tech = getattr(summary, "price", None) or getattr(summary, "underlying_price", None)
     if not technicals and symbol and spot_for_tech is not None:
         technicals = _build_technicals_at_request_time(symbol, float(spot_for_tech))
-    elif not technicals and symbol:
+    if not technicals and symbol:
         technicals = _build_technicals_at_request_time(symbol, None)
-    if technicals and exit_plan.get("t1") is None and exit_plan.get("t2") is None and exit_plan.get("stop") is None:
+    mtf_levels_early: Optional[Dict[str, Any]] = None
+    if technicals and (exit_plan.get("t1") is None and exit_plan.get("t2") is None and exit_plan.get("stop") is None):
         try:
-            from app.core.lifecycle.exit_planner import build_exit_plan
-            el_for_ep = {"support_level": technicals.get("support_level"), "resistance_level": technicals.get("resistance_level"), "regime": technicals.get("regime"), "computed": {"ATR14": technicals.get("atr")}}
-            spot_ep = technicals.get("spot") or spot_for_tech
-            ep_result = build_exit_plan(symbol, "CSP", spot_ep, el_for_ep, {}, None)
+            from app.core.lifecycle.exit_planner import build_exit_plan_v235
+            from app.core.config.trade_rules import MIN_TARGET_DISTANCE_PCT, TARGET_EPS_PCT
+            spot_ep = float(technicals.get("spot") or spot_for_tech or 0)
+            atr_ep = technicals.get("atr")
+            mtf_levels_early = _build_mtf_levels_at_request_time(symbol, technicals, {}, pipeline_timestamp)
+            resistances_by_tf = {
+                tf: (mtf_levels_early.get(tf) or {}).get("resistances_ordered") or []
+                for tf in ("daily", "weekly", "monthly")
+            }
+            supports_by_tf = {
+                tf: (mtf_levels_early.get(tf) or {}).get("supports_ordered") or []
+                for tf in ("daily", "weekly", "monthly")
+            }
+            ep_result = build_exit_plan_v235(
+                spot_ep, "CSP", atr_ep, resistances_by_tf, supports_by_tf,
+                min_distance_pct=MIN_TARGET_DISTANCE_PCT, eps_pct=TARGET_EPS_PCT,
+            )
             sp = (ep_result.get("structure_plan") or {}) if isinstance(ep_result, dict) else {}
-            if sp:
+            if sp and (sp.get("T1") is not None or sp.get("stop_hint_price") is not None):
                 exit_plan = {
                     "t1": sp.get("T1"),
                     "t2": sp.get("T2"),
@@ -3059,7 +3089,19 @@ def _build_symbol_diagnostics_from_v2_store(
                     "stop": sp.get("stop_hint_price"),
                     "status": "AVAILABLE",
                     "reason": None,
+                    "target_basis": ep_result.get("target_basis"),
+                    "level_source_timeframe": ep_result.get("level_source_timeframe"),
+                    "distance_to_t1_pct": ep_result.get("distance_to_t1_pct"),
                 }
+                if ep_result.get("support_level") is not None or ep_result.get("resistance_level") is not None:
+                    technicals = dict(technicals)
+                    if ep_result.get("support_level") is not None:
+                        technicals["support_level"] = ep_result.get("support_level")
+                    if ep_result.get("resistance_level") is not None:
+                        technicals["resistance_level"] = ep_result.get("resistance_level")
+                t1_val = sp.get("T1")
+                if t1_val is not None and spot_ep and spot_ep >= float(t1_val):
+                    exit_plan["targets_already_exceeded"] = True
             elif not exit_plan:
                 exit_plan = {"status": "NOT_AVAILABLE", "reason": "Missing inputs (support_level, resistance_level, or ATR)."}
         except Exception:
@@ -3112,14 +3154,22 @@ def _build_symbol_diagnostics_from_v2_store(
     except Exception:
         _dlo, _dhi = 0.25, 0.35
     delta_diagnostics = _build_delta_diagnostics_at_request_time(sample_rej, _dlo, _dhi)
-    mtf_levels = _build_mtf_levels_at_request_time(symbol, technicals, exit_plan, pipeline_timestamp)
+    mtf_levels = mtf_levels_early if mtf_levels_early is not None else _build_mtf_levels_at_request_time(symbol, technicals, exit_plan, pipeline_timestamp)
     methodology = {
         "candles_source": "diagnostics",
         "window": "20",
         "clustering_tolerance_pct": 1.0,
         "active_criteria": "nearest_to_spot",
     }
-    targets = {"t1": exit_plan.get("t1"), "t2": exit_plan.get("t2"), "t3": exit_plan.get("t3")}
+    targets = {
+        "t1": exit_plan.get("t1"),
+        "t2": exit_plan.get("t2"),
+        "t3": exit_plan.get("t3"),
+        "target_basis": exit_plan.get("target_basis"),
+        "level_source_timeframe": exit_plan.get("level_source_timeframe"),
+        "distance_to_t1_pct": exit_plan.get("distance_to_t1_pct"),
+        "targets_already_exceeded": exit_plan.get("targets_already_exceeded"),
+    }
     invalidation = exit_plan.get("stop") or technicals.get("support_level")
     hold_time_estimate = _build_hold_time_estimate_at_request_time(technicals, exit_plan)
     quote_as_of = stock.get("quote_as_of") or getattr(summary, "data_freshness", None)
@@ -3222,6 +3272,10 @@ def _build_symbol_diagnostics_from_v2_store(
             "stop": exit_plan.get("stop"),
             "status": exit_plan.get("status"),
             "reason": exit_plan.get("reason"),
+            "target_basis": exit_plan.get("target_basis"),
+            "level_source_timeframe": exit_plan.get("level_source_timeframe"),
+            "distance_to_t1_pct": exit_plan.get("distance_to_t1_pct"),
+            "targets_already_exceeded": exit_plan.get("targets_already_exceeded"),
         },
         "score_breakdown": diag.get("score_breakdown") or getattr(summary, "score_breakdown", None),
         "rank_reasons": diag.get("rank_reasons"),

@@ -784,7 +784,9 @@ function ExecutionConsole({
                     <th className="py-2 pr-2">Timeframe</th>
                     <th className="py-2 pr-2">Support</th>
                     <th className="py-2 pr-2">Resistance</th>
-                    <th className="py-2 pr-2">bar_count</th>
+                    <th className="py-2 pr-2">
+                      <Tooltip content="Candles sampled for this timeframe S/R calculation.">bar_count</Tooltip>
+                    </th>
                     <th className="py-2 pr-2">as_of</th>
                     <th className="py-2 pr-2">method</th>
                   </tr>
@@ -836,7 +838,7 @@ function ExecutionConsole({
           </Card>
         ) : null}
 
-        {/* R22.4: Targets, invalidation, hold-time estimate */}
+        {/* R22.4 / R23.4.5: Targets, invalidation, hold-time, target_basis, already-exceeded badge */}
         {(data.targets || data.invalidation != null || data.hold_time_estimate) ? (
           <Card>
             <CardHeader title="Targets & hold-time" />
@@ -849,9 +851,30 @@ function ExecutionConsole({
                 </>
               )}
               {data.invalidation != null && <Kv label="Invalidation" value={fmt(data.invalidation)} />}
+              {data.targets && (data.targets.target_basis != null || data.targets.level_source_timeframe != null) && (
+                <div className="col-span-2" data-testid="target-basis-label">
+                  <span className="text-xs text-zinc-500 dark:text-zinc-500">
+                    Basis: {data.targets.target_basis === "SR_LEVEL" ? "SR level used" : data.targets.target_basis === "ATR_FALLBACK" ? "ATR fallback used" : data.targets.target_basis ?? "—"}
+                    {data.targets.level_source_timeframe ? ` · ${data.targets.level_source_timeframe}` : ""}
+                  </span>
+                  <Tooltip content={data.targets.target_basis === "SR_LEVEL" ? "Targets from support/resistance level." : "Targets from ATR when no valid S/R level met distance threshold."} className="ml-1 inline"><span aria-hidden>(?)</span></Tooltip>
+                </div>
+              )}
+              {(data.targets?.targets_already_exceeded === true || ((): boolean => {
+                const spot = data.stock?.price ?? data.stock?.underlying_price;
+                const t1 = data.targets?.t1;
+                return typeof spot === "number" && typeof t1 === "number" && spot >= t1;
+              })()) && (
+                <div className="col-span-2" data-testid="target-already-exceeded-badge">
+                  <Badge variant="warning">Target already exceeded (price above T1)</Badge>
+                </div>
+              )}
               {data.hold_time_estimate && (
                 <div className="col-span-2">
-                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">Hold-time estimate</span>
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">
+                    Hold-time estimate
+                    <Tooltip content="Estimated sessions for price to travel 1 ATR toward T1 (heuristic)." className="ml-1 inline"><span aria-hidden>(?)</span></Tooltip>
+                  </span>
                   <p className="mt-1 text-zinc-700 dark:text-zinc-300">
                     {data.hold_time_estimate.sessions ?? "—"} sessions · {holdTimeBasisLabel(data.hold_time_estimate.basis_key)}
                   </p>

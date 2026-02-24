@@ -251,6 +251,15 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Verification** — out/verification/R23.4.4/notes.md
 - [x] **Gate** — Backend pytest (709 passed), frontend tests (146 passed, 18 skipped), frontend build pass (recorded in notes)
 
+### R23.4.5 — Targets/Exit Plan Validity + S/R Hardening + Universe Shares Consistency
+
+- [x] **Backend:** build_exit_plan_v235; MIN_TARGET_DISTANCE_PCT / TARGET_EPS_PCT; swing_cluster supports_ordered/resistances_ordered; universe shares via same request-time technicals + mtf_levels; target_basis, level_source_timeframe, distance_to_t1_pct, targets_already_exceeded
+- [x] **Frontend:** target_basis label and tooltips; targets_already_exceeded badge; types for new fields
+- [x] **Tests:** test_exit_plan_v235_r2345, test_swing_cluster ordered lists, test_r2345_universe_shares_eligible_matches_symbol_diagnostics
+- [x] **Requirements** — docs/releases/R23.4.5_requirements.md
+- [x] **Release notes** — docs/releases/R23.4.5_release_notes.md
+- [x] **Verification** — out/verification/R23.4.5/notes.md with gate output (715 passed, 147 passed, build pass)
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 - [ ] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py` (fixture → mock staged result → evaluate_universe → store write → hygiene check + snapshot check + per-symbol summary)

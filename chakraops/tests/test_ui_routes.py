@@ -1595,3 +1595,61 @@ def test_phase17_stores_integrity_and_repair(tmp_path):
     assert repair["after"]["removed_count"] == 1
     assert repair["after"]["valid_count"] == 2
     assert repair["backup_path"] is not None
+
+
+def test_r2345_universe_shares_eligible_matches_symbol_diagnostics(tmp_path):
+    """R23.4.5: Universe Shares column uses same compute_shares_eligibility path as symbol-diagnostics Shares tab."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    from app.core.eval.decision_artifact_v2 import DecisionArtifactV2, SymbolEvalSummary
+    from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2, set_output_dir, reset_output_dir
+
+    sym = SymbolEvalSummary(
+        symbol="SPY",
+        verdict="HOLD",
+        final_verdict="HOLD",
+        score=50,
+        band="C",
+        primary_reason="test",
+        stage_status="RUN",
+        stage1_status="PASS",
+        stage2_status="NOT_RUN",
+        provider_status="OK",
+        data_freshness=None,
+        evaluated_at=None,
+        strategy=None,
+        price=100.0,
+        expiration=None,
+        has_candidates=False,
+        candidate_count=0,
+    )
+    artifact = DecisionArtifactV2(
+        metadata={"artifact_version": "v2", "pipeline_timestamp": "2026-02-17T22:00:00Z"},
+        symbols=[sym],
+        selected_candidates=[],
+        diagnostics_by_symbol={},
+    )
+    try:
+        set_output_dir(tmp_path)
+        store = get_evaluation_store_v2()
+        store.set_latest(artifact)
+        store.reload_from_disk()
+        app = _get_app()
+        client = TestClient(app)
+        uni = client.get("/api/ui/universe")
+        assert uni.status_code == 200
+        symbols = uni.json().get("symbols") or []
+        spy_row = next((r for r in symbols if (r.get("symbol") or "").strip().upper() == "SPY"), None)
+        assert spy_row is not None, "SPY should be in universe"
+
+        diag = client.get("/api/ui/symbol-diagnostics?symbol=SPY")
+        assert diag.status_code == 200
+        diag_data = diag.json()
+        shares_plan = diag_data.get("shares_plan") or {}
+        diag_eligible = shares_plan.get("eligible") if isinstance(shares_plan, dict) else None
+
+        assert spy_row.get("shares_eligible") == diag_eligible, (
+            "Universe shares_eligible must match symbol-diagnostics shares_plan.eligible (same request-time path)"
+        )
+    finally:
+        reset_output_dir()

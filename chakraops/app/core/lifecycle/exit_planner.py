@@ -18,6 +18,154 @@ from app.core.lifecycle.config import (
 )
 
 
+def _first_valid_resistance(
+    spot: float,
+    resistances_by_tf: Dict[str, List[Dict[str, Any]]],
+    min_distance_pct: float,
+    eps_pct: float,
+) -> tuple[Optional[float], Optional[str], Optional[float]]:
+    """First resistance > spot*(1+eps) with distance_pct >= min_distance_pct. Returns (level, timeframe, distance_pct)."""
+    for tf in ("daily", "weekly", "monthly"):
+        for item in (resistances_by_tf.get(tf) or []):
+            level = item.get("level")
+            dist = item.get("distance_pct")
+            if level is None or dist is None:
+                continue
+            if level <= spot * (1.0 + eps_pct):
+                continue
+            if dist < min_distance_pct:
+                continue
+            return (float(level), tf, float(dist))
+    return (None, None, None)
+
+
+def _first_valid_support(
+    spot: float,
+    supports_by_tf: Dict[str, List[Dict[str, Any]]],
+    min_distance_pct: float,
+    eps_pct: float,
+) -> tuple[Optional[float], Optional[str], Optional[float]]:
+    """First support < spot*(1-eps) with distance_pct >= min_distance_pct. Returns (level, timeframe, distance_pct)."""
+    for tf in ("daily", "weekly", "monthly"):
+        for item in (supports_by_tf.get(tf) or []):
+            level = item.get("level")
+            dist = item.get("distance_pct")
+            if level is None or dist is None:
+                continue
+            if level >= spot * (1.0 - eps_pct):
+                continue
+            if dist < min_distance_pct:
+                continue
+            return (float(level), tf, float(dist))
+    return (None, None, None)
+
+
+def build_exit_plan_v235(
+    spot: float,
+    mode: str,
+    atr: Optional[float],
+    resistances_by_tf: Dict[str, List[Dict[str, Any]]],
+    supports_by_tf: Dict[str, List[Dict[str, Any]]],
+    min_distance_pct: float = 0.002,
+    eps_pct: float = 0.001,
+) -> Dict[str, Any]:
+    """
+    R23.4.5: Build structure plan with valid targets (monotonic T1 < T2 < T3) and S/R selection hardening.
+    Uses first resistance/support beyond spot (by eps) and meeting min_distance_pct; else ATR fallback.
+    """
+    mode = (mode or "CSP").strip().upper()
+    if mode not in ("CSP", "CC"):
+        return {
+            "structure_plan": {"T1": None, "T2": None, "T3": None, "stop_hint_price": None},
+            "target_basis": "ATR_FALLBACK",
+            "level_source_timeframe": None,
+            "distance_to_t1_pct": None,
+            "support_level": None,
+            "resistance_level": None,
+        }
+    atr_f = float(atr) if atr is not None and atr > 0 else 0.0
+
+    if mode == "CSP":
+        res_level, res_tf, res_dist = _first_valid_resistance(
+            spot, resistances_by_tf, min_distance_pct, eps_pct
+        )
+        sup_level, _, _ = _first_valid_support(spot, supports_by_tf, min_distance_pct, eps_pct)
+        if res_level is not None and res_level > spot:
+            t1 = (spot + res_level) / 2.0
+            t2 = res_level
+            t3 = res_level + (res_level - spot) if STRUCTURE_EXTENSION_ENABLED else res_level
+            if t1 >= t2:
+                t1, t2, t3 = spot + atr_f, spot + 2 * atr_f, spot + 3 * atr_f if atr_f else (t2, t2, t2)
+                res_level, res_tf, res_dist = None, None, None
+            else:
+                t1, t2, t3 = round(t1, 4), round(t2, 4), round(t3, 4)
+            dist_to_t1 = round((t1 - spot) / spot, 6) if spot and t1 else None
+            target_basis = "SR_LEVEL" if res_level is not None else "ATR_FALLBACK"
+            level_tf = res_tf
+            distance_to_t1_pct = dist_to_t1
+        else:
+            if atr_f <= 0:
+                t1 = t2 = t3 = spot
+            else:
+                t1, t2, t3 = round(spot + atr_f, 4), round(spot + 2 * atr_f, 4), round(spot + 3 * atr_f, 4)
+            target_basis, level_tf, distance_to_t1_pct = "ATR_FALLBACK", None, round(atr_f / spot, 6) if spot else None
+        stop = None
+        if sup_level is not None and sup_level < spot:
+            stop = sup_level - atr_f * PANIC_ATR_MULT if atr_f else sup_level
+        elif atr_f:
+            stop = spot - atr_f * PANIC_ATR_MULT
+        stop = round(max(0.0, stop), 4) if stop is not None else None
+        return {
+            "structure_plan": {"T1": t1, "T2": t2, "T3": t3, "stop_hint_price": stop},
+            "target_basis": target_basis,
+            "level_source_timeframe": level_tf,
+            "distance_to_t1_pct": distance_to_t1_pct,
+            "support_level": round(sup_level, 4) if sup_level is not None else None,
+            "resistance_level": round(res_level, 4) if res_level is not None else None,
+        }
+    # CC: targets below spot — require t1 > t2 > t3 (strictly decreasing)
+    sup_level, sup_tf, sup_dist = _first_valid_support(spot, supports_by_tf, min_distance_pct, eps_pct)
+    res_level, _, _ = _first_valid_resistance(spot, resistances_by_tf, min_distance_pct, eps_pct)
+    if sup_level is not None and sup_level < spot:
+        t1 = (spot + sup_level) / 2.0
+        t2 = sup_level
+        t3 = max(0.0, sup_level - (spot - sup_level)) if STRUCTURE_EXTENSION_ENABLED else sup_level
+        if not (t1 > t2 > t3):
+            t1 = spot - atr_f if atr_f else t2
+            t2 = spot - 2 * atr_f if atr_f else t2
+            t3 = max(0.0, spot - 3 * atr_f) if atr_f else t2
+            sup_level, sup_tf, sup_dist = None, None, None
+            level_tf = None
+            distance_to_t1_pct = round(atr_f / spot, 6) if spot and atr_f else None
+        else:
+            t1, t2, t3 = round(t1, 4), round(t2, 4), round(t3, 4)
+            dist_to_t1 = round((spot - t1) / spot, 6) if spot and t1 is not None else None
+            level_tf = sup_tf
+            distance_to_t1_pct = dist_to_t1
+        target_basis = "SR_LEVEL" if sup_level is not None else "ATR_FALLBACK"
+    else:
+        if atr_f <= 0:
+            t1 = t2 = t3 = spot
+        else:
+            t1, t2, t3 = round(spot - atr_f, 4), round(max(0.0, spot - 2 * atr_f), 4), round(max(0.0, spot - 3 * atr_f), 4)
+        target_basis, level_tf = "ATR_FALLBACK", None
+        distance_to_t1_pct = round(atr_f / spot, 6) if spot else None
+    stop = None
+    if res_level is not None and res_level > spot:
+        stop = res_level + atr_f * PANIC_ATR_MULT if atr_f else res_level
+    elif atr_f:
+        stop = spot + atr_f * PANIC_ATR_MULT
+    stop = round(stop, 4) if stop is not None else None
+    return {
+        "structure_plan": {"T1": t1, "T2": t2, "T3": t3, "stop_hint_price": stop},
+        "target_basis": target_basis,
+        "level_source_timeframe": level_tf,
+        "distance_to_t1_pct": distance_to_t1_pct,
+        "support_level": round(sup_level, 4) if sup_level is not None else None,
+        "resistance_level": round(res_level, 4) if res_level is not None else None,
+    }
+
+
 def _parse_expiration(exp: Any) -> Optional[date]:
     """Parse exp from stage2 (iso string or date) to date."""
     if exp is None:

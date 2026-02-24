@@ -233,3 +233,4 @@
 {"event": "ack", "ref_id": "1ae3a685-b0c3-47b6-b042-7639acd5803a", "ack_at_utc": "2026-02-24T17:44:18.249693+00:00", "ack_by": "ui"}
 {"event": "ack", "ref_id": "2fbfb590-2fee-4be0-b944-1b320f5464be", "ack_at_utc": "2026-02-24T17:44:18.761621+00:00", "ack_by": "ui"}
 {"event": "ack", "ref_id": "9e87d280-6f2a-41e7-a005-3f5a1fd4ce91", "ack_at_utc": "2026-02-24T17:44:19.309826+00:00", "ack_by": "ui"}
+{"id": "854a4b0f-4511-48e4-b781-d84de883e7bc", "timestamp_utc": "2026-02-24T18:22:54.211055+00:00", "severity": "WARN", "type": "ORATS_WARN", "subtype": "ORATS_STALE", "symbol": null, "message": "ORATS status WARN; data may be stale", "details": {"status": "WARN", "last_success_at": "2026-02-15T05:32:29.751858+00:00", "last_error_reason": null}}

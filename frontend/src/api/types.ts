@@ -579,6 +579,12 @@ export interface SymbolDiagnosticsExitPlan {
   status?: string | null;
   /** Plain-English reason when status is NOT_AVAILABLE. */
   reason?: string | null;
+  /** R23.4.5: SR_LEVEL when targets from S/R; ATR_FALLBACK when from ATR. */
+  target_basis?: string | null;
+  /** R23.4.5: daily | weekly | monthly when target_basis is SR_LEVEL. */
+  level_source_timeframe?: string | null;
+  /** R23.4.5: Distance from spot to T1 as fraction (e.g. 0.01 = 1%). */
+  distance_to_t1_pct?: number | null;
 }
 
 /** One explained reason (code → plain-English with metrics). */
@@ -688,8 +694,16 @@ export interface SymbolDiagnosticsResponseExtended extends SymbolDiagnosticsResp
   } | null;
   /** R22.4: Methodology (candles_source, window, clustering_tolerance_pct, active_criteria). */
   methodology?: { candles_source?: string; window?: string; clustering_tolerance_pct?: number; active_criteria?: string } | null;
-  /** R22.4: Targets t1/t2/t3. */
-  targets?: { t1?: number | null; t2?: number | null; t3?: number | null } | null;
+  /** R22.4: Targets t1/t2/t3. R23.4.5: target_basis, level_source_timeframe, distance_to_t1_pct, targets_already_exceeded. */
+  targets?: {
+    t1?: number | null;
+    t2?: number | null;
+    t3?: number | null;
+    target_basis?: string | null;
+    level_source_timeframe?: string | null;
+    distance_to_t1_pct?: number | null;
+    targets_already_exceeded?: boolean | null;
+  } | null;
   /** R22.4: Invalidation level. */
   invalidation?: number | null;
   /** R22.4: Hold-time estimate (sessions + basis_key for display mapping). */

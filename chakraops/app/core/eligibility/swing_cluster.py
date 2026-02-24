@@ -185,4 +185,16 @@ def compute_support_resistance(
     out["resistance_level"] = round(res, 4) if res is not None else None
     out["distance_to_support_pct"] = round(distance_to_level_pct(spot, sup), 6) if sup is not None else None
     out["distance_to_resistance_pct"] = round(distance_to_level_pct(spot, res), 6) if res is not None else None
+
+    # R23.4.5: Ordered lists for target selection (actionable level = first meeting min distance)
+    supports_below = sorted([c for c in centers if c < spot], reverse=True)
+    resistances_above = sorted([c for c in centers if c > spot])
+    out["supports_ordered"] = [
+        {"level": round(lev, 4), "distance_pct": round(distance_to_level_pct(spot, lev) or 0, 6)}
+        for lev in supports_below
+    ]
+    out["resistances_ordered"] = [
+        {"level": round(lev, 4), "distance_pct": round(distance_to_level_pct(spot, lev) or 0, 6)}
+        for lev in resistances_above
+    ]
     return out

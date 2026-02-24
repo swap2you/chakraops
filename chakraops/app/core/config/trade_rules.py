@@ -105,6 +105,13 @@ SHARES_STOP_ATR_MULT: float = 1.0
 SHARES_UAT_FORCE_ELIGIBLE_SYMBOLS: str = ""
 """UAT-only: when non-empty, symbols in this list get shares_plan.eligible=true and reason_codes include SHARES_UAT_FORCED."""
 
+# R23.4.5: Targets/exit plan validity — minimum distance for S/R levels to be used as targets
+MIN_TARGET_DISTANCE_PCT: float = 0.002
+"""Minimum distance (as fraction of spot) for resistance/support to be used as target. 0.002 = 0.20%. If no level meets this, use ATR fallback."""
+
+TARGET_EPS_PCT: float = 0.001
+"""Epsilon: level is considered 'at or past spot' when within this fraction of spot. 0.001 = 0.10%. Do not use resistance <= spot*(1+eps) or support >= spot*(1-eps)."""
+
 
 __all__ = [
     "CSP_MIN_DTE",
@@ -124,4 +131,6 @@ __all__ = [
     "SHARES_ENTRY_ZONE_ATR_MULT",
     "SHARES_STOP_ATR_MULT",
     "SHARES_UAT_FORCE_ELIGIBLE_SYMBOLS",
+    "MIN_TARGET_DISTANCE_PCT",
+    "TARGET_EPS_PCT",
 ]

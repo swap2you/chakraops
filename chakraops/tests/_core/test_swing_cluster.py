@@ -115,6 +115,15 @@ def test_compute_support_resistance_synthetic():
     if result["resistance_level"] is not None:
         assert result["resistance_level"] > 100.0
         assert result["distance_to_resistance_pct"] is not None
+    # R23.4.5: ordered lists present
+    assert "supports_ordered" in result
+    assert "resistances_ordered" in result
+    assert isinstance(result["supports_ordered"], list)
+    assert isinstance(result["resistances_ordered"], list)
+    for item in result["supports_ordered"]:
+        assert "level" in item and "distance_pct" in item
+    for item in result["resistances_ordered"]:
+        assert "level" in item and "distance_pct" in item
 
 
 def test_missing_support_all_levels_above_spot():

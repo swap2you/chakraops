@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Calendar, Database, Droplets, X } from "lucide-react";
+import { Calendar, ChevronDown, ChevronRight, Database, Droplets, MessageSquare, X } from "lucide-react";
 import { useSymbolDiagnostics, useRecomputeSymbolDiagnostics, useDefaultAccount, useUiSystemHealth, useUpsertSharePosition, useDeleteSharePosition, useSetDeltaOverride, useDeleteDeltaOverride } from "@/api/queries";
 import type { SymbolDiagnosticsResponseExtended } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
@@ -10,14 +10,6 @@ import { CopilotPanel } from "@/components/CopilotPanel";
 import { Card, CardHeader, Badge, StatusBadge, Button, Tooltip } from "@/components/ui";
 import type { SymbolDiagnosticsCandidate } from "@/api/types";
 import { buildReasonsFromPrimary, formatGateReason } from "@/reasons/parsePrimaryReason";
-
-function verdictColor(v: string | null | undefined): string {
-  const s = (v ?? "").toUpperCase();
-  if (s === "ELIGIBLE") return "text-emerald-600 dark:text-emerald-400";
-  if (s === "HOLD") return "text-amber-600 dark:text-amber-400";
-  if (s === "BLOCKED" || s === "UNKNOWN") return "text-red-600 dark:text-red-400";
-  return "text-zinc-600 dark:text-zinc-400";
-}
 
 function regimeColor(r: string | null | undefined): string {
   const s = (r ?? "").toUpperCase();
@@ -101,6 +93,7 @@ export function SymbolDiagnosticsPage() {
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
   const [tradeTicketCandidate, setTradeTicketCandidate] = useState<SymbolDiagnosticsCandidate | null>(null);
+  const [copilotDrawerOpen, setCopilotDrawerOpen] = useState(false);
 
   const shouldFetch = activeSymbol != null && isValidSymbol(activeSymbol);
   const { data, isLoading, isError } = useSymbolDiagnostics(
@@ -130,6 +123,13 @@ export function SymbolDiagnosticsPage() {
       setActiveSymbol(symbolFromUrl);
     }
   }, [symbolFromUrl]);
+
+  useEffect(() => {
+    if (!copilotDrawerOpen) return;
+    const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") setCopilotDrawerOpen(false); };
+    window.addEventListener("keydown", onEsc);
+    return () => window.removeEventListener("keydown", onEsc);
+  }, [copilotDrawerOpen]);
 
   const showInvalidError = touched && symbol.trim().length > 0 && !isValidSymbol(symbol);
 
@@ -174,24 +174,56 @@ export function SymbolDiagnosticsPage() {
       )}
 
       {data && !isLoading && (
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4">
-          <ExecutionConsole
-            data={data}
-            symbol={activeSymbol ?? ""}
-            accountId={(accountData?.account as { account_id?: string } | undefined)?.account_id ?? "default"}
-            onRecompute={() => activeSymbol && recompute.mutate(activeSymbol)}
-            isRecomputing={recompute.isPending}
-            isRecomputeDisabled={marketClosed}
-            recomputeDisabledTooltip="Market closed: evaluation disabled to protect canonical decision. Use System Diagnostics or force to override."
-            onOpenTradeTicket={(c) => setTradeTicketCandidate(c)}
-            defaultCapital={getDefaultCapital(accountData?.account)}
-          />
-          <CopilotPanel
-            symbol={activeSymbol ?? ""}
-            conversationId={`copilot-${activeSymbol ?? "general"}`}
-            systemHealth={health ?? undefined}
-          />
-        </div>
+        <>
+          <div className="w-full max-w-full">
+            <ExecutionConsole
+              data={data}
+              symbol={activeSymbol ?? ""}
+              accountId={(accountData?.account as { account_id?: string } | undefined)?.account_id ?? "default"}
+              onRecompute={() => activeSymbol && recompute.mutate(activeSymbol)}
+              isRecomputing={recompute.isPending}
+              isRecomputeDisabled={marketClosed}
+              recomputeDisabledTooltip="Market closed: evaluation disabled to protect canonical decision. Use System Diagnostics or force to override."
+              onOpenTradeTicket={(c) => setTradeTicketCandidate(c)}
+              defaultCapital={getDefaultCapital(accountData?.account)}
+              onOpenCopilot={() => setCopilotDrawerOpen(true)}
+            />
+          </div>
+          {/* R23.4.6: Copilot as slide-over drawer, default closed */}
+          {copilotDrawerOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-40 bg-black/40"
+                aria-hidden
+                onClick={() => setCopilotDrawerOpen(false)}
+              />
+              <div
+                className="fixed top-0 right-0 h-full w-full max-w-md z-50 bg-zinc-900 border-l border-zinc-700 shadow-xl flex flex-col"
+                role="dialog"
+                aria-label="Copilot"
+              >
+                <div className="flex items-center justify-between p-3 border-b border-zinc-700">
+                  <span className="font-semibold text-zinc-200">Copilot</span>
+                  <button
+                    type="button"
+                    onClick={() => setCopilotDrawerOpen(false)}
+                    className="rounded p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                    aria-label="Close Copilot"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-auto">
+                  <CopilotPanel
+                    symbol={activeSymbol ?? ""}
+                    conversationId={`copilot-${activeSymbol ?? "general"}`}
+                    systemHealth={health ?? undefined}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+        </>
       )}
 
       {tradeTicketCandidate && activeSymbol && (
@@ -212,10 +244,16 @@ export function SymbolDiagnosticsPage() {
 const INFO_DRAWER_CONTENT: Record<string, string> = {
   RSI: "Relative Strength Index (14). Overbought >70, oversold <30. Used for regime context.",
   ATR: "Average True Range (14). Volatility measure. ATR% = ATR/price.",
+  "ATR%": "ATR as percentage of price. Higher values mean more volatility.",
   Provider: "Data provider status. NO_CHAIN: No option chain expirations for this symbol. NOT_FOUND: Symbol or quote not found.",
-  support: "Technical support level from eligibility trace.",
-  resistance: "Technical resistance level from eligibility trace.",
+  support: "Technical support level (nearest cluster below spot). Used for stop and entry zone.",
+  resistance: "Technical resistance level (nearest cluster above spot). Used for targets.",
   regime: "Market regime: UP, DOWN, or SIDEWAYS/NEUTRAL from evaluation.",
+  "Delta band": "Target delta range for CSP (e.g. 0.25–0.35). Contracts outside this may be rejected.",
+  "bar_count": "Candles sampled for this timeframe S/R calculation.",
+  "Hold-time estimate": "Estimated sessions for price to travel 1 ATR toward T1 (heuristic; not a promise).",
+  "Targets basis": "SR_LEVEL: targets from support/resistance. ATR_FALLBACK: from ATR when no valid S/R met distance.",
+  Invalidation: "Price level that invalidates the structure (e.g. stop below support).",
 };
 
 function ExecutionConsole({
@@ -225,6 +263,7 @@ function ExecutionConsole({
   isRecomputeDisabled,
   recomputeDisabledTooltip,
   onOpenTradeTicket,
+  onOpenCopilot,
   defaultCapital,
   accountId = "default",
 }: {
@@ -236,6 +275,7 @@ function ExecutionConsole({
   isRecomputeDisabled?: boolean;
   recomputeDisabledTooltip?: string;
   onOpenTradeTicket: (c: SymbolDiagnosticsCandidate) => void;
+  onOpenCopilot?: () => void;
   defaultCapital?: number | null;
 }) {
   const [infoDrawerKey, setInfoDrawerKey] = useState<string | null>(null);
@@ -244,6 +284,9 @@ function ExecutionConsole({
   const [sharesForm, setSharesForm] = useState({ quantity: "", avg_cost: "", opened_at: "" });
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [tradeAccordionOpen, setTradeAccordionOpen] = useState(true);
+  const [technicalsAccordionOpen, setTechnicalsAccordionOpen] = useState(false);
+  const [riskAccordionOpen, setRiskAccordionOpen] = useState(false);
   const bandMin = data.delta_diagnostics?.band_min ?? data.computed_values?.delta_band?.[0] ?? 0.25;
   const bandMax = data.delta_diagnostics?.band_max ?? data.computed_values?.delta_band?.[1] ?? 0.35;
   const [deltaOverrideForm, setDeltaOverrideForm] = useState({ delta_lo: data.delta_override?.delta_lo ?? bandMin, delta_hi: data.delta_override?.delta_hi ?? bandMax });
@@ -267,16 +310,56 @@ function ExecutionConsole({
     : null;
   const providerStatus = data.provider_status ?? "OK";
   const totalCapital = defaultCapital ?? null;
+  const primaryReasons = (data.reasons_explained?.length ? data.reasons_explained : buildReasonsFromPrimary(data.primary_reason)).slice(0, 2).map((r) => r.message);
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      {/* Symbol header */}
-      <Card className="lg:col-span-2">
-        <CardHeader
-          title={data.symbol ?? "—"}
-          description={price != null ? `$${price.toFixed(2)}` : "—"}
-          actions={
-            onRecompute ? (
+    <div className="w-full max-w-full space-y-4">
+      {/* R23.4.6: Hero header — symbol, price, quote_as_of, verdict, score, band, regime, primary reason(s) */}
+      <Card className="w-full">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-zinc-800 dark:text-zinc-100">{data.symbol ?? "—"}</h1>
+            <div className="mt-1 flex items-baseline gap-3 flex-wrap">
+              {price != null ? (
+                <span className="text-xl font-mono font-semibold text-zinc-700 dark:text-zinc-200">${price.toFixed(2)}</span>
+              ) : (
+                <span className="text-sm text-zinc-500 dark:text-zinc-400">Not available</span>
+              )}
+              {stockObj?.quote_as_of != null && (
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">as of {stockObj.quote_as_of}</span>
+              )}
+            </div>
+            {primaryReasons.length > 0 && (
+              <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400 max-w-2xl">{primaryReasons.join(" · ")}</p>
+            )}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <StatusBadge status={data.verdict ?? "—"} />
+              <Badge variant="default">
+                <span className="font-mono text-sm">
+                  {data.score_caps?.applied_caps?.length ? "Final " : ""}Score {fmt(data.final_score ?? data.composite_score)}
+                  {data.score_caps?.applied_caps?.length ? ` (capped)` : ""}
+                </span>
+              </Badge>
+              <Badge variant={data.confidence_band === "A" ? "success" : data.confidence_band === "B" ? "warning" : "neutral"}>
+                Band {data.confidence_band ?? "—"}
+              </Badge>
+              <Badge variant="default" className={regimeColor(data.regime)}>
+                Regime {data.regime ?? "—"}
+              </Badge>
+              {providerStatus !== "OK" && (
+                <button
+                  type="button"
+                  onClick={() => setInfoDrawerKey("Provider")}
+                  className="text-xs text-amber-600 dark:text-amber-400 hover:underline"
+                  title={data.provider_message ?? ""}
+                >
+                  Provider: {providerStatus}
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {onRecompute && (
               <Tooltip content={isRecomputeDisabled ? recomputeDisabledTooltip : undefined}>
                 <span className="inline-block">
                   <Button
@@ -289,91 +372,17 @@ function ExecutionConsole({
                   </Button>
                 </span>
               </Tooltip>
-            ) : undefined
-          }
-        />
-        {price == null && (
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">Price unavailable</p>
-        )}
-        {stockObj?.quote_as_of && (
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">Quote as of {stockObj.quote_as_of}</p>
-        )}
-        <div className="flex flex-wrap items-center gap-3">
-          <StatusBadge status={data.verdict ?? "—"} />
-          <span
-            title={
-              data.score_caps?.applied_caps?.length
-                ? `Raw: ${data.raw_score ?? data.score_caps.applied_caps[0].before} → Final: ${data.final_score ?? data.composite_score ?? data.score_caps.applied_caps[0].after} (${(data.score_caps.applied_caps[0] as { reason_code?: string; reason?: string }).reason_code ?? (data.score_caps.applied_caps[0] as { reason?: string }).reason ?? "cap"})`
-                : undefined
-            }
-          >
-            <Badge variant="default">
-              <span className="font-mono">
-                {data.score_caps?.applied_caps?.length ? "Final score " : "Score "}
-                {fmt(data.final_score ?? data.composite_score)}
-                {data.score_caps?.applied_caps?.length ? (
-                  <span className="ml-1 text-xs opacity-80">
-                    (capped from {data.raw_score ?? data.score_caps.applied_caps[0].before})
-                  </span>
-                ) : null}
-              </span>
-            </Badge>
-          </span>
-          <Badge variant={data.confidence_band === "A" ? "success" : data.confidence_band === "B" ? "warning" : "neutral"}>
-            Band {data.confidence_band ?? "—"}
-          </Badge>
-          <Badge variant="default" className={regimeColor(data.regime)}>
-            Regime {data.regime ?? "—"}
-          </Badge>
-          {providerStatus !== "OK" && (
-            <button
-              type="button"
-              onClick={() => setInfoDrawerKey("Provider")}
-              className="text-xs text-amber-600 dark:text-amber-400 hover:underline"
-              title={data.provider_message ?? ""}
-            >
-              Provider: {providerStatus}
-            </button>
-          )}
-        </div>
-        {/* R23.4.4: Collapsible Details — As-of/Inputs and debug raw reason */}
-        <details
-          className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700"
-          open={detailsOpen}
-          onToggle={(e) => setDetailsOpen((e.target as HTMLDetailsElement).open)}
-        >
-          <summary className="cursor-pointer text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 list-none">
-            <span className="inline-block select-none">Details</span>
-          </summary>
-          <div className="mt-2 space-y-2">
-            {data.as_of_inputs && (data.as_of_inputs.pipeline_timestamp ?? data.as_of_inputs.evaluation_run_id) && (
-              <div>
-                <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">As-of / Inputs</span>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs font-mono text-zinc-600 dark:text-zinc-300">
-                  {data.as_of_inputs.evaluation_run_id != null && (
-                    <div><span className="text-zinc-500 dark:text-zinc-500">run_id</span> {String(data.as_of_inputs.evaluation_run_id).slice(0, 8)}…</div>
-                  )}
-                  {data.as_of_inputs.pipeline_timestamp != null && (
-                    <div><span className="text-zinc-500 dark:text-zinc-500">pipeline</span> {new Date(data.as_of_inputs.pipeline_timestamp).toLocaleString()}</div>
-                  )}
-                  {data.as_of_inputs.quote_as_of != null && (
-                    <div><span className="text-zinc-500 dark:text-zinc-500">quote_as_of</span> {data.as_of_inputs.quote_as_of}</div>
-                  )}
-                  {data.as_of_inputs.config_hash != null && (
-                    <div><span className="text-zinc-500 dark:text-zinc-500">config_hash</span> {data.as_of_inputs.config_hash}</div>
-                  )}
-                </div>
-              </div>
             )}
-            {data.primary_reason && (
-              <Tooltip content={data.primary_reason} className="max-w-sm">
-                <span className="block text-xs text-zinc-400 dark:text-zinc-500 cursor-help">Debug: raw reason</span>
-              </Tooltip>
+            {onOpenCopilot && (
+              <Button size="sm" variant="secondary" onClick={onOpenCopilot} className="gap-1.5">
+                <MessageSquare className="h-4 w-4" />
+                Copilot
+              </Button>
             )}
           </div>
-        </details>
-        {/* R23.0: Options | Shares tab */}
-        <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700 flex gap-2">
+        </div>
+        {/* Options | Shares tab */}
+        <div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-700 flex gap-2">
           <button
             type="button"
             onClick={() => setActiveTab("Options")}
@@ -391,10 +400,17 @@ function ExecutionConsole({
         </div>
       </Card>
       {activeTab === "Options" ? (
-      <>
-      {/* R23.1/R23.2: Delta reject diagnostics — best delta, miss vs band, best candidate; optional override (Advanced) */}
+      <div className="w-full space-y-2">
+      {/* R23.4.6: Accordion 1 — Trade (Candidates, Exit Plan, Targets); default open */}
+      <details open={tradeAccordionOpen} onToggle={(e) => setTradeAccordionOpen((e.target as HTMLDetailsElement).open)} className="group rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900/60">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+          {tradeAccordionOpen ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+          Trade
+        </summary>
+        <div className="border-t border-zinc-200 dark:border-zinc-700 px-4 pb-4 pt-3 space-y-4">
+      {/* R23.1/R23.2: Delta reject diagnostics */}
       {(data.delta_diagnostics || data.delta_override) && (
-        <Card className="lg:col-span-2 w-full">
+        <Card className="w-full">
           <CardHeader
             title="Delta band (rejected)"
             description={data.delta_override ? "Closest contract missed the target delta range. Override active." : "Closest contract missed the target delta range."}
@@ -484,8 +500,8 @@ function ExecutionConsole({
           </div>
         </Card>
       )}
-      {/* Gate Summary: reasons_explained from backend; fallback to primary_reason mapping (rejected_due_to_delta=N → rejected_count) */}
-      <Card className="lg:col-span-2 w-full">
+      {/* Gate Summary */}
+      <Card className="w-full">
         <CardHeader title="Gate Summary" />
         <div className="space-y-3 text-sm">
           <div>
@@ -568,8 +584,8 @@ function ExecutionConsole({
         </div>
       </Card>
 
-      {/* Candidates: full width, same as header */}
-      <Card className="lg:col-span-2 w-full">
+      {/* Candidates */}
+      <Card className="w-full">
         <CardHeader
           title="Candidates"
           actions={
@@ -653,86 +669,58 @@ function ExecutionConsole({
           </table>
         </div>
       </Card>
-      {/* Left column */}
-      <div className="space-y-4">
-        <Card>
-          <CardHeader title="Thesis" />
-          <div className="flex flex-wrap items-baseline gap-4">
-            <div>
-              <span className="block text-xs text-zinc-500 dark:text-zinc-500">verdict</span>
-              <span className={`text-xl font-bold ${verdictColor(data.verdict)}`}>
-                {data.verdict ?? "—"}
-              </span>
-            </div>
-            <div>
-              <span className="block text-xs text-zinc-500 dark:text-zinc-500">score</span>
-              <span className="font-mono text-2xl font-semibold text-zinc-700 dark:text-zinc-300">
-                {fmt(data.composite_score)}
-              </span>
-            </div>
-            <div>
-              <span className="block text-xs text-zinc-500">band</span>
-              <span
-                className={`inline-flex rounded border px-2 py-0.5 font-semibold ${
-                  data.confidence_band === "A"
-                    ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-400"
-                    : data.confidence_band === "B"
-                      ? "border-amber-500/50 bg-amber-500/10 text-amber-400"
-                      : data.confidence_band === "C"
-                        ? "border-zinc-500/50 bg-zinc-500/10 text-zinc-400"
-                        : "border-zinc-600 bg-zinc-800/50 text-zinc-400"
-                }`}
-              >
-                {data.confidence_band ?? "—"}
-              </span>
-            </div>
-            <div>
-              <span className="block text-xs text-zinc-500">cap%</span>
-              <span className="font-mono text-sm text-zinc-300">
-                {fmtPct(data.suggested_capital_pct ?? undefined)}
-              </span>
-            </div>
-          </div>
-          {data.band_reason && (
-            <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">{data.band_reason}</p>
-          )}
-        </Card>
-
-        {/* R22.9: Score breakdown panel (request-time only; from diagnostics/summary) */}
-        {(data.score_breakdown || data.score_caps?.applied_caps?.length) ? (
-          <Card data-testid="score-breakdown-panel">
-            <CardHeader title="Score breakdown" />
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
-              {data.score_breakdown?.data_quality_score != null && <Kv label="Data quality" value={fmt(data.score_breakdown.data_quality_score)} />}
-              {data.score_breakdown?.regime_score != null && <Kv label="Regime" value={fmt(data.score_breakdown.regime_score)} />}
-              {data.score_breakdown?.options_liquidity_score != null && <Kv label="Options liquidity" value={fmt(data.score_breakdown.options_liquidity_score)} />}
-              {data.score_breakdown?.strategy_fit_score != null && <Kv label="Strategy fit" value={fmt(data.score_breakdown.strategy_fit_score)} />}
-              {data.score_breakdown?.capital_efficiency_score != null && <Kv label="Capital efficiency" value={fmt(data.score_breakdown.capital_efficiency_score)} />}
-              {data.score_breakdown?.composite_score != null && <Kv label="Composite" value={fmt(data.score_breakdown.composite_score)} />}
-              <Kv label="Raw score" value={fmt(data.raw_score ?? data.score_breakdown?.raw_score)} />
-              <Kv label="Final score" value={fmt(data.final_score ?? data.composite_score ?? data.score_breakdown?.final_score)} />
-            </div>
-            {data.score_caps?.applied_caps?.length ? (
-              <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700">
-                <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">Capped by</span>
-                <p className="text-sm text-zinc-700 dark:text-zinc-300 mb-2">
-                  {(data.score_caps.applied_caps[0] as { reason_code?: string }).reason_code ?? (data.score_caps.applied_caps[0] as { reason?: string }).reason ?? "Cap"}: {fmt((data.score_caps.applied_caps[0] as { before?: number }).before)} → {fmt((data.score_caps.applied_caps[0] as { after?: number }).after)}
-                </p>
-                <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">Applied caps</span>
-                <ul className="space-y-1 text-xs font-mono text-zinc-600 dark:text-zinc-300">
-                  {data.score_caps.applied_caps.map((cap, i) => (
-                    <li key={i}>
-                      {(cap as { reason_code?: string }).reason_code ?? (cap as { reason?: string }).reason ?? "CAP"}: {fmt((cap as { before?: number }).before)} → {fmt((cap as { after?: number }).after)} (cap={fmt((cap as { cap_value?: number }).cap_value)})
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </Card>
+      {/* Exit Plan + Targets inside Trade accordion */}
+      <Card className="w-full">
+        <CardHeader title="Exit Plan" />
+        {ep?.status === "NOT_AVAILABLE" && ep?.reason ? (
+          <p className="text-sm text-amber-700 dark:text-amber-400">{ep.reason}</p>
         ) : null}
+        <div className="flex flex-wrap gap-4 text-sm">
+          {ep?.t1 != null && (<div><span className="block text-xs text-zinc-500 dark:text-zinc-500">T1</span><span className="font-mono text-zinc-700 dark:text-zinc-300">{fmt(ep.t1)}</span></div>)}
+          {ep?.t2 != null && (<div><span className="block text-xs text-zinc-500 dark:text-zinc-500">T2</span><span className="font-mono text-zinc-700 dark:text-zinc-300">{fmt(ep.t2)}</span></div>)}
+          {ep?.t3 != null && (<div><span className="block text-xs text-zinc-500 dark:text-zinc-500">T3</span><span className="font-mono text-zinc-700 dark:text-zinc-300">{fmt(ep.t3)}</span></div>)}
+          {ep?.stop != null && (<div><span className="block text-xs text-zinc-500 dark:text-zinc-500">stop</span><span className="font-mono font-semibold text-red-600 dark:text-red-400">{fmt(ep.stop)}</span></div>)}
+        </div>
+      </Card>
+      {(data.targets || data.invalidation != null || data.hold_time_estimate) && (
+        <Card className="w-full">
+          <CardHeader title="Targets & hold-time" description="Targets from next resistances above spot (passed levels skipped). Hold-time is ATR-distance based and rough (not a promise)." />
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+            {data.targets && (<>{data.targets.t1 != null && <Kv label="T1" value={fmt(data.targets.t1)} />}{data.targets.t2 != null && <Kv label="T2" value={fmt(data.targets.t2)} />}{data.targets.t3 != null && <Kv label="T3" value={fmt(data.targets.t3)} />}</>)}
+            {data.invalidation != null && <Kv label="Invalidation" value={fmt(data.invalidation)} />}
+            {data.targets && (data.targets.target_basis != null || data.targets.level_source_timeframe != null) && (
+              <div className="col-span-2" data-testid="target-basis-label">
+                <span className="text-xs text-zinc-500 dark:text-zinc-500">Basis: {data.targets.target_basis === "SR_LEVEL" ? "SR level used" : data.targets.target_basis === "ATR_FALLBACK" ? "ATR fallback used" : data.targets.target_basis ?? "—"}{data.targets.level_source_timeframe ? ` · ${data.targets.level_source_timeframe}` : ""}</span>
+                <Tooltip content={data.targets.target_basis === "SR_LEVEL" ? "Targets from support/resistance level." : "Targets from ATR when no valid S/R level met distance threshold."} className="ml-1 inline"><span aria-hidden>(?)</span></Tooltip>
+              </div>
+            )}
+            {(data.targets?.targets_already_exceeded === true || (typeof data.stock?.price === "number" && typeof data.targets?.t1 === "number" && data.stock.price >= data.targets.t1)) && (
+              <div className="col-span-2" data-testid="target-already-exceeded-badge">
+                <Badge variant="warning">Target already exceeded (price above T1)</Badge>
+                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Targets already exceeded at snapshot; recompute for updated levels.</p>
+              </div>
+            )}
+            {data.hold_time_estimate && (
+              <div className="col-span-2">
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Hold-time estimate <Tooltip content="Estimated sessions for price to travel 1 ATR toward T1 (heuristic)." className="ml-1 inline"><span aria-hidden>(?)</span></Tooltip></span>
+                <p className="mt-1 text-zinc-700 dark:text-zinc-300">{data.hold_time_estimate.sessions != null ? data.hold_time_estimate.sessions : "Not available"} sessions · {holdTimeBasisLabel(data.hold_time_estimate.basis_key)}</p>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+        </div>
+      </details>
 
+      {/* Accordion 2: Technicals */}
+      <details open={technicalsAccordionOpen} onToggle={(e) => setTechnicalsAccordionOpen((e.target as HTMLDetailsElement).open)} className="group rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900/60">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+          {technicalsAccordionOpen ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+          Technicals
+        </summary>
+        <div className="border-t border-zinc-200 dark:border-zinc-700 px-4 pb-4 pt-3 space-y-4">
         <div data-testid="technical-details-panel">
-          <Card>
+          <Card className="w-full">
             <CardHeader title="Technical details" />
           <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
             <LabelKv label="RSI" value={fmt(cv?.rsi ?? comp?.rsi)} onLabelClick={() => setInfoDrawerKey("RSI")} />
@@ -837,83 +825,51 @@ function ExecutionConsole({
             )}
           </Card>
         ) : null}
+        </div>
+      </details>
 
-        {/* R22.4 / R23.4.5: Targets, invalidation, hold-time, target_basis, already-exceeded badge */}
-        {(data.targets || data.invalidation != null || data.hold_time_estimate) ? (
-          <Card>
-            <CardHeader title="Targets & hold-time" />
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              {data.targets && (
+      {/* R23.4.6: Accordion 3 — Risk & Details; collapsed by default */}
+      <details open={riskAccordionOpen} onToggle={(e) => setRiskAccordionOpen((e.target as HTMLDetailsElement).open)} className="group rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900/60">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+          {riskAccordionOpen ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+          Risk & Details
+        </summary>
+        <div className="border-t border-zinc-200 dark:border-zinc-700 px-4 pb-4 pt-3 space-y-4">
+        {(data.score_breakdown || data.score_caps?.applied_caps?.length) ? (
+          <Card data-testid="score-breakdown-panel" className="w-full">
+            <CardHeader title="Score breakdown" />
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
+              {data.score_breakdown?.data_quality_score != null && <Kv label="Data quality" value={fmt(data.score_breakdown.data_quality_score)} />}
+              {data.score_breakdown?.regime_score != null && <Kv label="Regime" value={fmt(data.score_breakdown.regime_score)} />}
+              {data.score_breakdown?.options_liquidity_score != null && <Kv label="Options liquidity" value={fmt(data.score_breakdown.options_liquidity_score)} />}
+              {data.score_breakdown?.strategy_fit_score != null && <Kv label="Strategy fit" value={fmt(data.score_breakdown.strategy_fit_score)} />}
+              {data.score_breakdown?.capital_efficiency_score != null && <Kv label="Capital efficiency" value={fmt(data.score_breakdown.capital_efficiency_score)} />}
+              {data.score_breakdown?.composite_score != null && <Kv label="Composite" value={fmt(data.score_breakdown.composite_score)} />}
+              <Kv label="Raw score" value={fmt(data.raw_score ?? data.score_breakdown?.raw_score)} />
+              <Kv label="Final score" value={fmt(data.final_score ?? data.composite_score ?? data.score_breakdown?.final_score)} />
+            </div>
+            <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700">
+              <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">Capped by</span>
+              {data.score_caps?.applied_caps?.length ? (
                 <>
-                  <Kv label="T1" value={fmt(data.targets.t1)} />
-                  <Kv label="T2" value={fmt(data.targets.t2)} />
-                  <Kv label="T3" value={fmt(data.targets.t3)} />
-                </>
-              )}
-              {data.invalidation != null && <Kv label="Invalidation" value={fmt(data.invalidation)} />}
-              {data.targets && (data.targets.target_basis != null || data.targets.level_source_timeframe != null) && (
-                <div className="col-span-2" data-testid="target-basis-label">
-                  <span className="text-xs text-zinc-500 dark:text-zinc-500">
-                    Basis: {data.targets.target_basis === "SR_LEVEL" ? "SR level used" : data.targets.target_basis === "ATR_FALLBACK" ? "ATR fallback used" : data.targets.target_basis ?? "—"}
-                    {data.targets.level_source_timeframe ? ` · ${data.targets.level_source_timeframe}` : ""}
-                  </span>
-                  <Tooltip content={data.targets.target_basis === "SR_LEVEL" ? "Targets from support/resistance level." : "Targets from ATR when no valid S/R level met distance threshold."} className="ml-1 inline"><span aria-hidden>(?)</span></Tooltip>
-                </div>
-              )}
-              {(data.targets?.targets_already_exceeded === true || ((): boolean => {
-                const spot = data.stock?.price ?? data.stock?.underlying_price;
-                const t1 = data.targets?.t1;
-                return typeof spot === "number" && typeof t1 === "number" && spot >= t1;
-              })()) && (
-                <div className="col-span-2" data-testid="target-already-exceeded-badge">
-                  <Badge variant="warning">Target already exceeded (price above T1)</Badge>
-                </div>
-              )}
-              {data.hold_time_estimate && (
-                <div className="col-span-2">
-                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">
-                    Hold-time estimate
-                    <Tooltip content="Estimated sessions for price to travel 1 ATR toward T1 (heuristic)." className="ml-1 inline"><span aria-hidden>(?)</span></Tooltip>
-                  </span>
-                  <p className="mt-1 text-zinc-700 dark:text-zinc-300">
-                    {data.hold_time_estimate.sessions ?? "—"} sessions · {holdTimeBasisLabel(data.hold_time_estimate.basis_key)}
+                  <p className="text-sm text-zinc-700 dark:text-zinc-300 mb-2" data-testid="capped-by-summary">
+                    {(data.score_caps.applied_caps[0] as { reason_code?: string }).reason_code ?? (data.score_caps.applied_caps[0] as { reason?: string }).reason ?? "Cap"} (cap={fmt((data.score_caps.applied_caps[0] as { cap_value?: number }).cap_value)}): {fmt((data.score_caps.applied_caps[0] as { before?: number }).before)}→{fmt((data.score_caps.applied_caps[0] as { after?: number }).after)}
                   </p>
-                </div>
+                  <ul className="space-y-1 text-xs font-mono text-zinc-600 dark:text-zinc-300">
+                    {data.score_caps.applied_caps.map((cap, i) => (
+                      <li key={i}>
+                        {(cap as { reason_code?: string }).reason_code ?? (cap as { reason?: string }).reason ?? "CAP"}: {fmt((cap as { before?: number }).before)} → {fmt((cap as { after?: number }).after)} (cap={fmt((cap as { cap_value?: number }).cap_value)})
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <p className="text-sm text-zinc-500 dark:text-zinc-400" data-testid="no-caps-applied">No caps applied.</p>
               )}
             </div>
           </Card>
         ) : null}
-
-      </div>
-
-      {/* Right column */}
-      <div className="space-y-4">
-        <Card>
-          <CardHeader title="Exit Plan" />
-          {ep?.status === "NOT_AVAILABLE" && ep?.reason ? (
-            <p className="text-sm text-amber-700 dark:text-amber-400">{ep.reason}</p>
-          ) : null}
-          <div className="flex flex-wrap gap-4 text-sm">
-            <div>
-              <span className="block text-xs text-zinc-500 dark:text-zinc-500">T1</span>
-              <span className="font-mono text-zinc-700 dark:text-zinc-300">{fmt(ep?.t1)}</span>
-            </div>
-            <div>
-              <span className="block text-xs text-zinc-500 dark:text-zinc-500">T2</span>
-              <span className="font-mono text-zinc-700 dark:text-zinc-300">{fmt(ep?.t2)}</span>
-            </div>
-            <div>
-              <span className="block text-xs text-zinc-500 dark:text-zinc-500">T3</span>
-              <span className="font-mono text-zinc-700 dark:text-zinc-300">{fmt(ep?.t3)}</span>
-            </div>
-            <div>
-              <span className="block text-xs text-zinc-500 dark:text-zinc-500">stop</span>
-              <span className="font-mono font-semibold text-red-600 dark:text-red-400">{fmt(ep?.stop)}</span>
-            </div>
-          </div>
-        </Card>
-
-        <Card>
+        <Card className="w-full">
           <CardHeader title="Risk Flags" />
           <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
             <RiskFlag
@@ -975,7 +931,25 @@ function ExecutionConsole({
             </div>
           </div>
         </Card>
-
+        <details className="rounded border border-zinc-200 dark:border-zinc-700 p-3" open={detailsOpen} onToggle={(e) => setDetailsOpen((e.target as HTMLDetailsElement).open)}>
+          <summary className="cursor-pointer text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 list-none">Details (as-of / inputs, debug)</summary>
+          <div className="mt-2 space-y-2">
+            {data.as_of_inputs && (data.as_of_inputs.pipeline_timestamp ?? data.as_of_inputs.evaluation_run_id) && (
+              <div>
+                <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">As-of / Inputs</span>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs font-mono text-zinc-600 dark:text-zinc-300">
+                  {data.as_of_inputs.evaluation_run_id != null && <div><span className="text-zinc-500 dark:text-zinc-500">run_id</span> {String(data.as_of_inputs.evaluation_run_id).slice(0, 8)}…</div>}
+                  {data.as_of_inputs.pipeline_timestamp != null && <div><span className="text-zinc-500 dark:text-zinc-500">pipeline</span> {new Date(data.as_of_inputs.pipeline_timestamp).toLocaleString()}</div>}
+                  {data.as_of_inputs.quote_as_of != null && <div><span className="text-zinc-500 dark:text-zinc-500">quote_as_of</span> {data.as_of_inputs.quote_as_of}</div>}
+                  {data.as_of_inputs.config_hash != null && <div><span className="text-zinc-500 dark:text-zinc-500">config_hash</span> {data.as_of_inputs.config_hash}</div>}
+                </div>
+              </div>
+            )}
+            {data.primary_reason && (
+              <Tooltip content={data.primary_reason} className="max-w-sm"><span className="block text-xs text-zinc-400 dark:text-zinc-500 cursor-help">Debug: raw reason</span></Tooltip>
+            )}
+          </div>
+        </details>
         {infoDrawerKey && (
           <Card className="border-zinc-300 dark:border-zinc-600">
             <div className="flex items-center justify-between border-b border-zinc-200 pb-2 dark:border-zinc-700">
@@ -994,8 +968,10 @@ function ExecutionConsole({
             </p>
           </Card>
         )}
+        </div>
+      </details>
       </div>
-      </> ) : (
+      ) : (
         <SharesTabContent
           data={data}
           accountId={accountId ?? ""}

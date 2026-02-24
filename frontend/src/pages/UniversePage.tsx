@@ -34,7 +34,7 @@ function isOptionsStrategy(s: string | null | undefined): boolean {
   return upper === "CSP" || upper === "CC";
 }
 
-/** Phase 10.1: Raw → Pre-cap → Final and cap reason for Universe row tooltip. Prefer reason_code (code-only). */
+/** Phase 10.1: Cap summary for Universe row tooltip. Wording aligned with Symbol Diagnostics (Capped by / No caps applied). */
 function formatScoreCapTooltip(row: {
   score?: number | null;
   raw_score?: number | null;
@@ -45,10 +45,8 @@ function formatScoreCapTooltip(row: {
   const caps = row.score_caps?.applied_caps;
   if (!caps || caps.length === 0) return null;
   const cap = caps[0];
-  const raw = row.raw_score ?? row.pre_cap_score ?? cap.before;
-  const final = row.final_score ?? row.score ?? cap.after;
-  const label = cap.reason ?? cap.reason_code ?? "—";
-  return `Raw: ${raw} → Final: ${final} (${label})`;
+  const label = cap.reason_code ?? cap.reason ?? "Cap";
+  return `Capped by: ${label} (cap=${cap.cap_value}): ${cap.before}→${cap.after}`;
 }
 
 function formatScoreBreakdown(bd: unknown): string {

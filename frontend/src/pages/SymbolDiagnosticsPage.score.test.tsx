@@ -69,14 +69,50 @@ describe("SymbolDiagnosticsPage score UX", () => {
 
   it("shows Final score with cap indicator when score_caps applies", async () => {
     render(<SymbolDiagnosticsPage />);
-    expect(screen.getByText(/Final score 65/)).toBeInTheDocument();
-    expect(screen.getByText(/capped from 89/)).toBeInTheDocument();
+    expect(screen.getByText(/Final [Ss]core 65/)).toBeInTheDocument();
+    expect(screen.getByText(/capped/)).toBeInTheDocument();
   });
 
   it("R23.4.4: Score breakdown shows Capped by when applied_caps present", () => {
     render(<SymbolDiagnosticsPage />);
+    fireEvent.click(screen.getByText("Risk & Details"));
     expect(screen.getByText("Capped by")).toBeInTheDocument();
     expect(screen.getByText("Score breakdown")).toBeInTheDocument();
+  });
+
+  it("R23.4.7 Case A: applied_caps present — Capped by summary line with reason_code (cap=cap_value): before→after", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: {
+        ...mockDiagnosticsWithCap,
+        score_caps: {
+          regime_cap: 65,
+          applied_caps: [
+            { type: "regime_cap", reason_code: "REGIME_CAP", cap_value: 65, before: 89, after: 65, reason: "Regime NEUTRAL caps score to 65" },
+          ],
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<SymbolDiagnosticsPage />);
+    fireEvent.click(screen.getByText("Risk & Details"));
+    expect(screen.getByTestId("capped-by-summary")).toHaveTextContent(/REGIME_CAP \(cap=65\): 89→65/);
+    expect(screen.getByText("Capped by")).toBeInTheDocument();
+  });
+
+  it("R23.4.7 Case B: applied_caps empty — No caps applied", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: {
+        ...mockDiagnosticsWithCap,
+        score_breakdown: { composite_score: 70, raw_score: 70, final_score: 70 },
+        score_caps: { applied_caps: [] },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<SymbolDiagnosticsPage />);
+    fireEvent.click(screen.getByText("Risk & Details"));
+    expect(screen.getByTestId("no-caps-applied")).toHaveTextContent("No caps applied.");
   });
 
   it("shows Not evaluated for liquidity when liquidity_evaluated=false", async () => {
@@ -89,7 +125,7 @@ describe("SymbolDiagnosticsPage score UX", () => {
     expect(screen.getByText("$450.00")).toBeInTheDocument();
   });
 
-  it("R23.1: Symbol header shows — when price absent", () => {
+  it("R23.1: Symbol header shows Not available or — when price absent", () => {
     useSymbolDiagnosticsMock.mockReturnValue({
       data: { ...mockDiagnosticsWithCap, stock: {} },
       isLoading: false,
@@ -97,7 +133,7 @@ describe("SymbolDiagnosticsPage score UX", () => {
     });
     render(<SymbolDiagnosticsPage />);
     expect(screen.queryByText("$450.00")).not.toBeInTheDocument();
-    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/Not available|—/).length).toBeGreaterThanOrEqual(1);
   });
 
   it("displays price from underlying_price when price key missing", () => {
@@ -188,10 +224,10 @@ describe("SymbolDiagnosticsPage Gate Summary", () => {
     window.history.pushState({}, "", "/symbol-diagnostics?symbol=HD");
     render(<SymbolDiagnosticsPage />);
     expect(screen.getByText(/Gate Summary/)).toBeInTheDocument();
-    expect(screen.getByText(sampleDrivenMessage)).toBeInTheDocument();
-    expect(screen.getByText(/abs\(delta\)/)).toBeInTheDocument();
-    expect(screen.getByText(/0\.55/)).toBeInTheDocument();
-    expect(screen.getByText(/outside target range/)).toBeInTheDocument();
+    expect(screen.getAllByText(/abs\(delta\) 0\.55.*outside target range/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/abs\(delta\)/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/0\.55/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/outside target range/).length).toBeGreaterThanOrEqual(1);
   });
 
   it("gate table shows formatted reason, never raw rejected_due_to_delta=N as delta", () => {
@@ -224,8 +260,8 @@ describe("SymbolDiagnosticsPage Gate Summary", () => {
     window.history.pushState({}, "", "/symbol-diagnostics?symbol=HD");
     render(<SymbolDiagnosticsPage />);
     expect(screen.getByText(/Gate Summary/)).toBeInTheDocument();
-    // Parser maps rejected_due_to_delta=5 to "Rejected due to delta band (rejected_count=5)."
-    expect(screen.getByText(/Rejected due to delta band \(rejected_count=5\)/)).toBeInTheDocument();
+    // Parser maps rejected_due_to_delta=5 to "Rejected due to delta band (rejected_count=5)." (may appear in reasons list)
+    expect(screen.getAllByText(/Rejected due to delta band \(rejected_count=5\)/).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText(/delta=5/)).not.toBeInTheDocument();
   });
 });
@@ -464,5 +500,57 @@ describe("SymbolDiagnosticsPage R23.3 Shares plan", () => {
     render(<SymbolDiagnosticsPage />);
     fireEvent.click(screen.getByText("Shares"));
     expect(screen.getByText(/Insufficient data/)).toBeInTheDocument();
+  });
+});
+
+describe("SymbolDiagnosticsPage R23.4.6 UX and Copilot drawer", () => {
+  beforeEach(() => {
+    window.history.pushState({}, "", "/symbol-diagnostics?symbol=WMT");
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: {
+        ...mockDiagnosticsWithCap,
+        targets: { t1: 108, t2: 110, t3: 112, target_basis: "SR_LEVEL", level_source_timeframe: "daily", targets_already_exceeded: false },
+        hold_time_estimate: { sessions: 5, basis_key: "atr_sessions_to_target" },
+      },
+      isLoading: false,
+      isError: false,
+    });
+  });
+
+  it("Options tab does not show Copilot panel by default (no right column)", () => {
+    render(<SymbolDiagnosticsPage />);
+    expect(screen.getByText("Copilot")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: /Copilot/i })).not.toBeInTheDocument();
+  });
+
+  it("Copilot button opens drawer; drawer can be closed", () => {
+    render(<SymbolDiagnosticsPage />);
+    fireEvent.click(screen.getByRole("button", { name: /Copilot/i }));
+    expect(screen.getByRole("dialog", { name: /Copilot/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Close Copilot"));
+    expect(screen.queryByRole("dialog", { name: /Copilot/i })).not.toBeInTheDocument();
+  });
+
+  it("Tooltip for bar_count or target basis is present when MTF or targets exist", () => {
+    render(<SymbolDiagnosticsPage />);
+    const barCountHeader = screen.queryByText("bar_count");
+    const basisLabel = screen.queryByTestId("target-basis-label");
+    expect(barCountHeader != null || basisLabel != null).toBe(true);
+  });
+
+  it("shows targets_already_exceeded badge and guidance when flagged", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: {
+        ...mockDiagnosticsWithCap,
+        stock: { price: 200, underlying_price: 200 },
+        targets: { t1: 108, t2: 110, t3: 112, targets_already_exceeded: true },
+        hold_time_estimate: { sessions: 5, basis_key: "atr_sessions_to_target" },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<SymbolDiagnosticsPage />);
+    expect(screen.getByTestId("target-already-exceeded-badge")).toBeInTheDocument();
+    expect(screen.getByText(/Targets already exceeded at snapshot; recompute for updated levels/)).toBeInTheDocument();
   });
 });

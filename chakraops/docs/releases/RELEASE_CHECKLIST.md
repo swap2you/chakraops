@@ -260,6 +260,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Release notes** — docs/releases/R23.4.5_release_notes.md
 - [x] **Verification** — out/verification/R23.4.5/notes.md with gate output (715 passed, 147 passed, build pass)
 
+### R23.4.6 — Symbol Diagnostics UX + Explainability Pack
+
+- [x] **Frontend:** Hero header; Options tab 3 accordions (Trade, Technicals, Risk & Details); Copilot as slide-over drawer (default closed); tooltips (RSI, ATR, bar_count, Targets basis, etc.); Targets copy and targets_already_exceeded guidance; Details in Risk accordion
+- [x] **Tests:** R23.4.6 Copilot drawer open/close; Options no Copilot column by default; tooltips; targets_already_exceeded badge; existing tests updated for multiple matches/accordions
+- [x] **Requirements** — docs/releases/R23.4.6_requirements.md
+- [x] **Release notes** — docs/releases/R23.4.6_release_notes.md
+- [x] **Verification** — out/verification/R23.4.6/notes.md (715 passed, 151 passed, build pass)
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 - [ ] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py` (fixture → mock staged result → evaluate_universe → store write → hygiene check + snapshot check + per-symbol summary)

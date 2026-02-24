@@ -32,7 +32,7 @@ describe("useRecomputeSymbolDiagnostics", () => {
     vi.spyOn(client, "apiPost").mockResolvedValue(mockRecomputeResponse);
   });
 
-  it("on success invalidates symbolDiagnostics, universe, and decision", async () => {
+  it("on success invalidates symbolDiagnostics, universe symbols, shares candidates, and decision", async () => {
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
@@ -44,7 +44,10 @@ describe("useRecomputeSymbolDiagnostics", () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ["ui", "symbolDiagnostics", "SPY"],
     });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["ui", "symbolDiagnostics"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["ui", "universe", "symbols"] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["ui", "universe"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["ui", "sharesCandidates"] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["ui", "decision"] });
   });
 });

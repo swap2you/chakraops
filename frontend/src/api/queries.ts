@@ -433,7 +433,10 @@ export function useRecomputeSymbolDiagnostics() {
     },
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["ui", "symbolDiagnostics", result.symbol] });
+      qc.invalidateQueries({ queryKey: ["ui", "symbolDiagnostics"] });
+      qc.invalidateQueries({ queryKey: queryKeys.uiUniverseSymbols() });
       qc.invalidateQueries({ queryKey: queryKeys.universe() });
+      qc.invalidateQueries({ queryKey: queryKeys.sharesCandidates() });
       qc.invalidateQueries({ queryKey: ["ui", "decision"] });
     },
   });
@@ -551,6 +554,9 @@ export function useRunFreezeSnapshot() {
       qc.invalidateQueries({ queryKey: queryKeys.uiSystemHealth() });
       qc.invalidateQueries({ queryKey: ["ui", "decision"] });
       qc.invalidateQueries({ queryKey: queryKeys.universe() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiUniverseSymbols() });
+      qc.invalidateQueries({ queryKey: queryKeys.sharesCandidates() });
+      qc.invalidateQueries({ queryKey: ["ui", "symbolDiagnostics"] });
     },
   });
 }
@@ -1129,6 +1135,9 @@ export function useRunEval() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["ui", "decision"] });
       qc.invalidateQueries({ queryKey: queryKeys.universe() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiUniverseSymbols() });
+      qc.invalidateQueries({ queryKey: queryKeys.sharesCandidates() });
+      qc.invalidateQueries({ queryKey: ["ui", "symbolDiagnostics"] });
       qc.invalidateQueries({ queryKey: queryKeys.uiAlerts() });
       qc.invalidateQueries({ queryKey: queryKeys.uiSystemHealth() });
     },

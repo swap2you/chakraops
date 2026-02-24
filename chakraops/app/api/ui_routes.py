@@ -2786,19 +2786,42 @@ def _build_hold_time_estimate_at_request_time(
     technicals: Dict[str, Any],
     exit_plan: Dict[str, Any],
 ) -> Optional[Dict[str, Any]]:
-    """R22.4: Hold-time estimate at request time. basis_key maps to display text. Not persisted."""
+    """R22.4/R23.4.7: Hold-time estimate at request time. basis_key maps to display text. Not persisted.
+    Returns hold_time_basis, hold_time_atr, hold_time_distance_to_t1, hold_time_sessions; nulls when unavailable."""
     t1 = exit_plan.get("t1")
     atr = technicals.get("atr")
+    spot = technicals.get("spot") or 0
     if t1 is not None and atr is not None and float(atr) > 0:
         try:
-            dist = abs(float(t1) - (technicals.get("spot") or 0))
+            dist = abs(float(t1) - float(spot))
             if dist <= 0:
-                return None
+                return {
+                    "sessions": 5,
+                    "basis_key": "default_estimate",
+                    "hold_time_basis": None,
+                    "hold_time_atr": None,
+                    "hold_time_distance_to_t1": None,
+                    "hold_time_sessions": None,
+                }
             sessions = max(1, int(round(dist / float(atr))))
-            return {"sessions": sessions, "basis_key": "atr_sessions_to_target"}
+            return {
+                "sessions": sessions,
+                "basis_key": "atr_sessions_to_target",
+                "hold_time_basis": "ATR-based",
+                "hold_time_atr": round(float(atr), 4),
+                "hold_time_distance_to_t1": round(dist, 4),
+                "hold_time_sessions": sessions,
+            }
         except (TypeError, ValueError):
             pass
-    return {"sessions": 5, "basis_key": "default_estimate"}
+    return {
+        "sessions": 5,
+        "basis_key": "default_estimate",
+        "hold_time_basis": None,
+        "hold_time_atr": None,
+        "hold_time_distance_to_t1": None,
+        "hold_time_sessions": None,
+    }
 
 
 def _build_shares_plan_at_request_time(

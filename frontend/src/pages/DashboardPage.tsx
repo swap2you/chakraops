@@ -308,25 +308,42 @@ export function DashboardPage() {
               </Link>
             )}
           </Card>
-          {/* R22.5: Shares candidates (recommendation only; no orders) */}
+          {/* R22.5: Shares candidates — top 3 with symbol, eligible, reason, spot, entry zone; link to Symbol Diagnostics Shares tab */}
           <Card>
-            <CardHeader title="Shares candidates" description="BUY SHARES recommendation only; no order placement" />
+            <CardHeader title="Shares candidates" description="BUY SHARES recommendation only; no order placement. Top 3." />
             {sharesCandidates.length === 0 ? (
               <EmptyState title="No shares candidates" message="Symbols with support + regime UP may appear here." />
             ) : (
-              <div className="space-y-1.5">
-                {sharesCandidates.slice(0, 10).map((plan) => (
-                  <Link
-                    key={plan.symbol ?? ""}
-                    to={`/symbol-diagnostics?symbol=${encodeURIComponent(plan.symbol ?? "")}`}
-                    className="flex items-center justify-between text-xs block py-1"
-                  >
-                    <span className="font-mono text-zinc-700 hover:underline dark:text-zinc-300 dark:hover:text-zinc-100">{plan.symbol}</span>
-                    <span className="text-zinc-500 dark:text-zinc-500">Plan</span>
-                  </Link>
-                ))}
-                {sharesCandidates.length > 10 && (
-                  <p className="text-xs text-zinc-500 dark:text-zinc-500">+{sharesCandidates.length - 10} more</p>
+              <div className="space-y-2">
+                {sharesCandidates.slice(0, 3).map((plan) => {
+                  const codes = plan.reason_codes ?? plan.eligibility_codes ?? [];
+                  const primaryReason = codes[0]?.replace(/_/g, " ").toLowerCase() ?? plan.why_recommended ?? "—";
+                  const entryStr =
+                    plan.entry_zone?.low != null && plan.entry_zone?.high != null
+                      ? `${plan.entry_zone.low}–${plan.entry_zone.high}`
+                      : "—";
+                  return (
+                    <Link
+                      key={plan.symbol ?? ""}
+                      to={`/symbol-diagnostics?symbol=${encodeURIComponent(plan.symbol ?? "")}&tab=Shares`}
+                      className="block rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{plan.symbol}</span>
+                        <StatusBadge status={plan.eligible ? "ELIGIBLE" : "NOT_ELIGIBLE"} />
+                      </div>
+                      <div className="mt-1 text-zinc-600 dark:text-zinc-400 truncate" title={primaryReason}>
+                        {primaryReason}
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0 text-zinc-500 dark:text-zinc-500">
+                        {plan.spot != null && <span>Spot {plan.spot}</span>}
+                        {entryStr !== "—" && <span>Entry {entryStr}</span>}
+                      </div>
+                    </Link>
+                  );
+                })}
+                {sharesCandidates.length > 3 && (
+                  <p className="text-xs text-zinc-500 dark:text-zinc-500">+{sharesCandidates.length - 3} more</p>
                 )}
               </div>
             )}

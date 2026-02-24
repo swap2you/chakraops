@@ -707,7 +707,15 @@ export interface SymbolDiagnosticsResponseExtended extends SymbolDiagnosticsResp
   /** R22.4: Invalidation level. */
   invalidation?: number | null;
   /** R22.4: Hold-time estimate (sessions + basis_key for display mapping). */
-  hold_time_estimate?: { sessions?: number; basis_key?: string } | null;
+  /** R23.4.7: hold_time_basis (e.g. 'ATR-based'), hold_time_atr, hold_time_distance_to_t1, hold_time_sessions; nulls when unavailable */
+  hold_time_estimate?: {
+    sessions?: number;
+    basis_key?: string;
+    hold_time_basis?: string | null;
+    hold_time_atr?: number | null;
+    hold_time_distance_to_t1?: number | null;
+    hold_time_sessions?: number | null;
+  } | null;
   /** R22.5: Shares plan when symbol qualifies (recommendation only). */
   shares_plan?: SharesPlan | null;
   /** R23.0: Current share position for this symbol (if any). Request-time only. */
@@ -753,8 +761,9 @@ export interface SharesPlan {
   symbol?: string;
   /** R23.3: code-only; UI maps to safe text. */
   eligible?: boolean;
-  /** R23.3: code-only reason_codes (e.g. SHARES_ELIGIBLE, NOT_NEAR_SUPPORT). */
+  /** R23.3: code-only reason_codes (e.g. SHARES_ELIGIBLE, NOT_NEAR_SUPPORT). Backend may return eligibility_codes. */
   reason_codes?: string[];
+  eligibility_codes?: string[];
   spot?: number | null;
   /** R23.3: basis = DAILY_SUPPORT | WEEKLY_SUPPORT | BOTH. */
   entry_zone?: { low?: number | null; high?: number | null; basis?: string };
@@ -762,7 +771,14 @@ export interface SharesPlan {
   stop?: number | null | { price?: number | null; basis?: string };
   targets?: { t1?: number | null; t2?: number | null; t3?: number | null; basis?: string };
   invalidation?: number | null;
-  hold_time_estimate?: { sessions?: number; basis_key?: string };
+  hold_time_estimate?: {
+    sessions?: number;
+    basis_key?: string;
+    hold_time_basis?: string | null;
+    hold_time_atr?: number | null;
+    hold_time_distance_to_t1?: number | null;
+    hold_time_sessions?: number | null;
+  };
   /** R23.3: hold_time with method (e.g. ATR_DISTANCE). */
   hold_time?: { sessions_to_t1?: number; sessions_to_t2?: number | null; method?: string };
   /** R23.3: sizing block; basis ACCOUNT_RISK | INSUFFICIENT_DATA. */

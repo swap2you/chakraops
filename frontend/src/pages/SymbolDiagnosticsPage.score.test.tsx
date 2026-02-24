@@ -115,6 +115,29 @@ describe("SymbolDiagnosticsPage score UX", () => {
     expect(screen.getByTestId("no-caps-applied")).toHaveTextContent("No caps applied.");
   });
 
+  it("R23.4.7 Hold-time: formula and compact line when hold_time_atr and hold_time_distance_to_t1 present", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: {
+        ...mockDiagnosticsWithCap,
+        targets: { t1: 460, t2: null, t3: null },
+        hold_time_estimate: {
+          sessions: 4,
+          basis_key: "atr_sessions_to_target",
+          hold_time_basis: "ATR-based",
+          hold_time_atr: 2.5,
+          hold_time_distance_to_t1: 10,
+          hold_time_sessions: 4,
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<SymbolDiagnosticsPage />);
+    expect(screen.getByTestId("hold-time-formula")).toHaveTextContent("Sessions to T1 = ceil(|T1-Spot| / ATR)");
+    expect(screen.getByTestId("hold-time-block")).toHaveTextContent("ATR");
+    expect(screen.getByTestId("hold-time-block")).toHaveTextContent("Distance");
+  });
+
   it("shows Not evaluated for liquidity when liquidity_evaluated=false", async () => {
     render(<SymbolDiagnosticsPage />);
     expect(screen.getAllByText("Not evaluated").length).toBeGreaterThanOrEqual(1);

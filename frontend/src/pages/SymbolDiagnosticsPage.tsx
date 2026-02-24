@@ -187,6 +187,7 @@ export function SymbolDiagnosticsPage() {
               onOpenTradeTicket={(c) => setTradeTicketCandidate(c)}
               defaultCapital={getDefaultCapital(accountData?.account)}
               onOpenCopilot={() => setCopilotDrawerOpen(true)}
+              initialTab={searchParams.get("tab") === "Shares" ? "Shares" : "Options"}
             />
           </div>
           {/* R23.4.6: Copilot as slide-over drawer, default closed */}
@@ -251,7 +252,10 @@ const INFO_DRAWER_CONTENT: Record<string, string> = {
   regime: "Market regime: UP, DOWN, or SIDEWAYS/NEUTRAL from evaluation.",
   "Delta band": "Target delta range for CSP (e.g. 0.25–0.35). Contracts outside this may be rejected.",
   "bar_count": "Candles sampled for this timeframe S/R calculation.",
-  "Hold-time estimate": "Estimated sessions for price to travel 1 ATR toward T1 (heuristic; not a promise).",
+  "Hold-time estimate":
+    "Sessions to T1 = ceil(|T1-Spot| / ATR). Estimated sessions for price to travel 1 ATR toward T1 (heuristic; not a promise).",
+  "ATR-based hold time":
+    "Sessions to T1 = ceil(|T1-Spot| / ATR). Uses Spot, T1, and ATR; when available, Distance = |T1-Spot|.",
   "Targets basis": "SR_LEVEL: targets from support/resistance. ATR_FALLBACK: from ATR when no valid S/R met distance.",
   Invalidation: "Price level that invalidates the structure (e.g. stop below support).",
 };
@@ -266,6 +270,7 @@ function ExecutionConsole({
   onOpenCopilot,
   defaultCapital,
   accountId = "default",
+  initialTab = "Options",
 }: {
   data: SymbolDiagnosticsResponseExtended;
   symbol: string;
@@ -277,9 +282,11 @@ function ExecutionConsole({
   onOpenTradeTicket: (c: SymbolDiagnosticsCandidate) => void;
   onOpenCopilot?: () => void;
   defaultCapital?: number | null;
+  /** When tab=Shares in URL, open Shares tab by default. */
+  initialTab?: "Options" | "Shares";
 }) {
   const [infoDrawerKey, setInfoDrawerKey] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"Options" | "Shares">("Options");
+  const [activeTab, setActiveTab] = useState<"Options" | "Shares">(initialTab);
   const [sharesModalOpen, setSharesModalOpen] = useState(false);
   const [sharesForm, setSharesForm] = useState({ quantity: "", avg_cost: "", opened_at: "" });
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -701,9 +708,26 @@ function ExecutionConsole({
               </div>
             )}
             {data.hold_time_estimate && (
-              <div className="col-span-2">
-                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Hold-time estimate <Tooltip content="Estimated sessions for price to travel 1 ATR toward T1 (heuristic)." className="ml-1 inline"><span aria-hidden>(?)</span></Tooltip></span>
-                <p className="mt-1 text-zinc-700 dark:text-zinc-300">{data.hold_time_estimate.sessions != null ? data.hold_time_estimate.sessions : "Not available"} sessions · {holdTimeBasisLabel(data.hold_time_estimate.basis_key)}</p>
+              <div className="col-span-2" data-testid="hold-time-block">
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">
+                  Hold-time estimate{" "}
+                  <button type="button" onClick={() => setInfoDrawerKey(data.hold_time_estimate?.hold_time_atr != null ? "ATR-based hold time" : "Hold-time estimate")} className="inline cursor-help underline decoration-dotted">
+                    (?)
+                  </button>
+                </span>
+                {(data.hold_time_estimate.hold_time_atr != null && data.hold_time_estimate.hold_time_distance_to_t1 != null) && (
+                  <>
+                    <p className="mt-1 text-sm font-medium text-zinc-700 dark:text-zinc-300" data-testid="hold-time-formula">
+                      Sessions to T1 = ceil(|T1-Spot| / ATR)
+                    </p>
+                    <p className="mt-0.5 text-xs text-zinc-600 dark:text-zinc-400">
+                      Spot {fmt(price ?? data.computed?.support_level)} · T1 {fmt(data.targets?.t1)} · ATR {fmt(data.hold_time_estimate.hold_time_atr)} · Distance {fmt(data.hold_time_estimate.hold_time_distance_to_t1)}
+                    </p>
+                  </>
+                )}
+                <p className="mt-1 text-zinc-700 dark:text-zinc-300">
+                  {data.hold_time_estimate.sessions != null ? data.hold_time_estimate.sessions : "Not available"} sessions · {holdTimeBasisLabel(data.hold_time_estimate.basis_key)}
+                </p>
               </div>
             )}
           </div>

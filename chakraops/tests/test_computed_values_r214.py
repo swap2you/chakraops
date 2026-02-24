@@ -106,3 +106,66 @@ def test_symbol_diagnostics_response_includes_computed_values(tmp_path):
     assert cv.get("rsi") == 48.0
     assert cv.get("regime") == "UP"
     assert "rsi_range" in cv and "delta_band" in cv and "rejected_count" in cv
+
+
+def test_symbol_diagnostics_rebuilds_technicals_when_diagnostics_missing(tmp_path):
+    """R23.4.4: When diagnostics_details is None, response has computed_values and targets/exit_plan from rebuild."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from app.core.eval.decision_artifact_v2 import SymbolEvalSummary
+    from app.core.eval.evaluation_store_v2 import set_output_dir
+
+    set_output_dir(Path(tmp_path))
+    summary = SymbolEvalSummary(
+        symbol="NVDA",
+        verdict="HOLD",
+        final_verdict="HOLD",
+        score=65,
+        band="B",
+        primary_reason="OK",
+        stage_status="STAGE2_CHAIN",
+        stage1_status="PASS",
+        stage2_status="PASS",
+        provider_status="OK",
+        data_freshness="2026-02-17T12:00:00Z",
+        evaluated_at=None,
+        strategy="CSP",
+        price=140.0,
+        expiration=None,
+        has_candidates=True,
+        candidate_count=2,
+    )
+    summary.rejected_due_to_delta_count = 3
+    mock_store = MagicMock()
+    mock_store.get_symbol.return_value = (summary, [], [], None, None)
+    mock_store.get_latest.return_value = None
+
+    from app.api.server import app
+
+    rebuilt_technicals = {
+        "rsi": 52.0,
+        "atr": 2.0,
+        "atr_pct": 0.014,
+        "support_level": 135.0,
+        "resistance_level": 148.0,
+        "regime": "UP",
+        "spot": 140.0,
+    }
+
+    with patch("app.core.eval.evaluation_store_v2.get_evaluation_store_v2", return_value=mock_store), patch(
+        "app.api.ui_routes._build_technicals_at_request_time", return_value=rebuilt_technicals
+    ):
+        client = TestClient(app)
+        r = client.get("/api/ui/symbol-diagnostics?symbol=NVDA")
+    assert r.status_code == 200
+    data = r.json()
+    assert data.get("stock") is not None and data["stock"].get("price") == 140.0
+    cv = data.get("computed_values")
+    assert cv is not None
+    assert cv.get("rsi") == 52.0
+    assert cv.get("regime") == "UP"
+    assert cv.get("rejected_count") == 3
+    assert data.get("targets") is not None
+    assert data.get("exit_plan") is not None
+    assert data.get("explanation") is not None and data["explanation"].get("stock_regime_reason") == "UP"

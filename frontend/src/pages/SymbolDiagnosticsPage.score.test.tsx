@@ -73,6 +73,12 @@ describe("SymbolDiagnosticsPage score UX", () => {
     expect(screen.getByText(/capped from 89/)).toBeInTheDocument();
   });
 
+  it("R23.4.4: Score breakdown shows Capped by when applied_caps present", () => {
+    render(<SymbolDiagnosticsPage />);
+    expect(screen.getByText("Capped by")).toBeInTheDocument();
+    expect(screen.getByText("Score breakdown")).toBeInTheDocument();
+  });
+
   it("shows Not evaluated for liquidity when liquidity_evaluated=false", async () => {
     render(<SymbolDiagnosticsPage />);
     expect(screen.getAllByText("Not evaluated").length).toBeGreaterThanOrEqual(1);
@@ -92,6 +98,16 @@ describe("SymbolDiagnosticsPage score UX", () => {
     render(<SymbolDiagnosticsPage />);
     expect(screen.queryByText("$450.00")).not.toBeInTheDocument();
     expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("displays price from underlying_price when price key missing", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: { ...mockDiagnosticsWithCap, stock: { underlying_price: 123.45 } },
+      isLoading: false,
+      isError: false,
+    });
+    render(<SymbolDiagnosticsPage />);
+    expect(screen.getByText("$123.45")).toBeInTheDocument();
   });
 });
 
@@ -301,6 +317,13 @@ describe("SymbolDiagnosticsPage R22.4 MTF levels and hold-time", () => {
     await screen.findByText("Multi-timeframe levels");
     expect(document.body.innerHTML).not.toMatch(/FAIL_[A-Z_0-9]+/);
   });
+
+  it("renders Targets & hold-time when targets and hold_time_estimate present", () => {
+    render(<SymbolDiagnosticsPage />);
+    expect(screen.getByText("Targets & hold-time")).toBeInTheDocument();
+    expect(screen.getByText("108")).toBeInTheDocument();
+    expect(screen.getByText(/5 sessions/)).toBeInTheDocument();
+  });
 });
 
 describe("SymbolDiagnosticsPage R23.2 Delta diagnostics and override", () => {
@@ -385,6 +408,18 @@ describe("SymbolDiagnosticsPage R23.3 Shares plan", () => {
 
   beforeEach(() => {
     window.history.pushState({}, "", "/symbol-diagnostics?symbol=WMT");
+  });
+
+  it("Options tab does not show Shares plan content when shares_plan is present", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: mockWithSharesPlan,
+      isLoading: false,
+      isError: false,
+    });
+    render(<SymbolDiagnosticsPage />);
+    expect(screen.getByRole("button", { name: "Options" })).toBeInTheDocument();
+    expect(screen.queryByText("Shares Plan")).not.toBeInTheDocument();
+    expect(screen.queryByText(/98 – 102/)).not.toBeInTheDocument();
   });
 
   it("Shares tab shows eligibility and reason codes as safe labels", () => {

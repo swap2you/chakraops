@@ -2948,6 +2948,48 @@ def _config_hash_for_diagnostics() -> str:
         return ""
 
 
+def _build_technicals_at_request_time(symbol: str, spot: Optional[float]) -> Dict[str, Any]:
+    """
+    R23.4.4: Rebuild technicals at request time when diagnostics not persisted.
+    Uses eligibility engine (same as evaluation); returns only non-null values so UI does not show dashes for missing.
+    """
+    if not (symbol or "").strip():
+        return {}
+    try:
+        from app.core.eligibility.eligibility_engine import run as eligibility_run
+        _mode, trace = eligibility_run(
+            (symbol or "").strip().upper(),
+            holdings=None,
+            current_price=spot,
+            lookback=255,
+        )
+    except Exception:
+        return {}
+    computed = (trace or {}).get("computed") or {}
+    regime = (trace or {}).get("regime")
+    rsi = computed.get("RSI14") if computed.get("RSI14") is not None else computed.get("rsi14")
+    atr = computed.get("ATR14") if computed.get("ATR14") is not None else computed.get("atr14")
+    atr_pct = computed.get("ATR_pct") if computed.get("ATR_pct") is not None else computed.get("atr_pct")
+    support_level = computed.get("support_level")
+    resistance_level = computed.get("resistance_level")
+    out: Dict[str, Any] = {}
+    if rsi is not None:
+        out["rsi"] = round(float(rsi), 2)
+    if atr is not None:
+        out["atr"] = round(float(atr), 4)
+    if atr_pct is not None:
+        out["atr_pct"] = round(float(atr_pct), 4)
+    if support_level is not None:
+        out["support_level"] = round(float(support_level), 4)
+    if resistance_level is not None:
+        out["resistance_level"] = round(float(resistance_level), 4)
+    if regime:
+        out["regime"] = str(regime).strip().upper()
+    if spot is not None:
+        out["spot"] = round(float(spot), 2)
+    return out
+
+
 def _build_symbol_diagnostics_from_v2_store(
     summary: Any,
     candidates: List[Any],
@@ -2984,6 +3026,44 @@ def _build_symbol_diagnostics_from_v2_store(
     risk_flags = diag.get("risk_flags") or {}
     explanation = diag.get("explanation") or {}
     stock = diag.get("stock") or {}
+    # When diagnostics not persisted (store load), derive minimal stock from summary so UI can show price
+    if not stock and summary:
+        price_val = getattr(summary, "price", None) or getattr(summary, "underlying_price", None)
+        if price_val is not None:
+            p = float(price_val)
+            stock = {
+                "price": p,
+                "underlying_price": p,
+                "quote_as_of": getattr(summary, "data_freshness", None),
+            }
+    # R23.4.4: When technicals missing (e.g. store load), rebuild at request time from eligibility engine
+    spot_for_tech = stock.get("price") or stock.get("underlying_price") if stock else None
+    if spot_for_tech is None and summary:
+        spot_for_tech = getattr(summary, "price", None) or getattr(summary, "underlying_price", None)
+    if not technicals and symbol and spot_for_tech is not None:
+        technicals = _build_technicals_at_request_time(symbol, float(spot_for_tech))
+    elif not technicals and symbol:
+        technicals = _build_technicals_at_request_time(symbol, None)
+    if technicals and exit_plan.get("t1") is None and exit_plan.get("t2") is None and exit_plan.get("stop") is None:
+        try:
+            from app.core.lifecycle.exit_planner import build_exit_plan
+            el_for_ep = {"support_level": technicals.get("support_level"), "resistance_level": technicals.get("resistance_level"), "regime": technicals.get("regime"), "computed": {"ATR14": technicals.get("atr")}}
+            spot_ep = technicals.get("spot") or spot_for_tech
+            ep_result = build_exit_plan(symbol, "CSP", spot_ep, el_for_ep, {}, None)
+            sp = (ep_result.get("structure_plan") or {}) if isinstance(ep_result, dict) else {}
+            if sp:
+                exit_plan = {
+                    "t1": sp.get("T1"),
+                    "t2": sp.get("T2"),
+                    "t3": sp.get("T3"),
+                    "stop": sp.get("stop_hint_price"),
+                    "status": "AVAILABLE",
+                    "reason": None,
+                }
+            elif not exit_plan:
+                exit_plan = {"status": "NOT_AVAILABLE", "reason": "Missing inputs (support_level, resistance_level, or ATR)."}
+        except Exception:
+            pass
     symbol_eligibility = diag.get("symbol_eligibility") or {}
     liquidity = diag.get("liquidity") or {}
     earnings_out = None
@@ -3004,9 +3084,28 @@ def _build_symbol_diagnostics_from_v2_store(
             "earnings_block": getattr(earnings, "earnings_block", None),
             "note": note or "Not evaluated",
         }
-    regime = diag.get("regime") or getattr(summary, "regime", None)
+    regime = diag.get("regime") or getattr(summary, "regime", None) or technicals.get("regime")
     sample_rej = diag.get("sample_rejected_due_to_delta") or []
+    # R23.4.4: Minimal explanation from regime when not persisted (so candidate table can show regime)
+    if not explanation and regime:
+        explanation = {"stock_regime_reason": str(regime)}
+    if isinstance(explanation, dict):
+        if regime and not explanation.get("stock_regime_reason"):
+            explanation = dict(explanation)
+            explanation["stock_regime_reason"] = str(regime)
+        sup = technicals.get("support_level")
+        res = technicals.get("resistance_level")
+        if sup is not None and not explanation.get("support_condition"):
+            explanation = dict(explanation)
+            explanation["support_condition"] = f"Support ${float(sup):.2f}"
+        if res is not None and not explanation.get("resistance_condition"):
+            explanation = dict(explanation)
+            explanation["resistance_condition"] = f"Resistance ${float(res):.2f}"
+    # R23.4.4: When sample not persisted, use summary count so rejected_count is not zero when we have a count
+    rejected_count_from_summary = getattr(summary, "rejected_due_to_delta_count", None)
     computed_values = _build_computed_values_at_request_time(technicals, regime, sample_rej)
+    if rejected_count_from_summary is not None and isinstance(rejected_count_from_summary, int) and computed_values.get("rejected_count") == 0 and rejected_count_from_summary > 0:
+        computed_values["rejected_count"] = rejected_count_from_summary
     try:
         from app.core.config.trade_rules import CSP_TARGET_DELTA_LOW, CSP_TARGET_DELTA_HIGH
         _dlo, _dhi = float(CSP_TARGET_DELTA_LOW), float(CSP_TARGET_DELTA_HIGH)

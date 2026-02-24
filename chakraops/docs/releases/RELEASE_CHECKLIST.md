@@ -242,6 +242,15 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Verification** — out/verification/R23.4.3/notes.md with gate outputs and manual steps
 - [x] **Gate** — Backend pytest (707 passed, 1 skipped), frontend tests (143 passed, 18 skipped), frontend build pass (recorded in notes)
 
+### R23.4.4 — Symbol Diagnostics Options Fix Pack
+
+- [x] **Backend:** _build_technicals_at_request_time; rebuild exit_plan/explanation/rejected_count when diagnostics missing; stock fallback from summary
+- [x] **Frontend:** Collapsible Details (As-of/Inputs, debug); Score breakdown "Capped by"; Options tab no Shares plan
+- [x] **Requirements** — docs/releases/R23.4.4_requirements.md
+- [x] **Release notes** — docs/releases/R23.4.4_release_notes.md
+- [x] **Verification** — out/verification/R23.4.4/notes.md
+- [x] **Gate** — Backend pytest (709 passed), frontend tests (146 passed, 18 skipped), frontend build pass (recorded in notes)
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 - [ ] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py` (fixture → mock staged result → evaluate_universe → store write → hygiene check + snapshot check + per-symbol summary)

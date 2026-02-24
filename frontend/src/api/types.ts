@@ -208,6 +208,10 @@ export interface UniverseSymbolsResponse {
 
 export interface SymbolDiagnosticsStock {
   price: number | null;
+  /** Alias for price when present from API (spot at evaluation). */
+  spot?: number | null;
+  /** Alias for price when present from API. */
+  underlying_price?: number | null;
   bid: number | null;
   ask: number | null;
   volume: number | null;

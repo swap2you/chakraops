@@ -93,13 +93,6 @@ function holdTimeBasisLabel(basisKey: string | null | undefined): string {
   return k || "—";
 }
 
-/** R22.5: why_recommended code → user-facing label (no raw FAIL_* in UI). */
-function sharesWhyLabel(why: string | null | undefined): string {
-  const w = (why ?? "").trim();
-  if (w === "MTF_SUPPORT_REGIME_UP") return "Support level and regime UP";
-  return w || "—";
-}
-
 export function SymbolDiagnosticsPage() {
   const [searchParams] = useSearchParams();
   const symbolFromUrl = searchParams.get("symbol")?.trim().toUpperCase() ?? "";
@@ -250,6 +243,7 @@ function ExecutionConsole({
   const [sharesModalOpen, setSharesModalOpen] = useState(false);
   const [sharesForm, setSharesForm] = useState({ quantity: "", avg_cost: "", opened_at: "" });
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const bandMin = data.delta_diagnostics?.band_min ?? data.computed_values?.delta_band?.[0] ?? 0.25;
   const bandMax = data.delta_diagnostics?.band_max ?? data.computed_values?.delta_band?.[1] ?? 0.35;
   const [deltaOverrideForm, setDeltaOverrideForm] = useState({ delta_lo: data.delta_override?.delta_lo ?? bandMin, delta_hi: data.delta_override?.delta_hi ?? bandMax });
@@ -267,7 +261,10 @@ function ExecutionConsole({
   const liq = data.liquidity;
   const sel = data.symbol_eligibility;
   const expl = data.explanation;
-  const price = data.stock && typeof data.stock === "object" && "price" in data.stock ? (data.stock as { price?: number }).price : null;
+  const stockObj = data.stock && typeof data.stock === "object" ? data.stock as { price?: number | null; spot?: number | null; underlying_price?: number | null; quote_as_of?: string | null } : null;
+  const price = stockObj != null
+    ? (stockObj.spot ?? stockObj.price ?? stockObj.underlying_price ?? null)
+    : null;
   const providerStatus = data.provider_status ?? "OK";
   const totalCapital = defaultCapital ?? null;
 
@@ -298,8 +295,8 @@ function ExecutionConsole({
         {price == null && (
           <p className="text-xs text-zinc-500 dark:text-zinc-400">Price unavailable</p>
         )}
-        {data.stock && typeof data.stock === "object" && "quote_as_of" in data.stock && (data.stock as { quote_as_of?: string }).quote_as_of && (
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">Quote as of {(data.stock as { quote_as_of: string }).quote_as_of}</p>
+        {stockObj?.quote_as_of && (
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">Quote as of {stockObj.quote_as_of}</p>
         )}
         <div className="flex flex-wrap items-center gap-3">
           <StatusBadge status={data.verdict ?? "—"} />
@@ -339,26 +336,42 @@ function ExecutionConsole({
             </button>
           )}
         </div>
-        {/* R22.7: As-of / Inputs — verify Universe eval vs Recompute use same pipeline */}
-        {data.as_of_inputs && (data.as_of_inputs.pipeline_timestamp ?? data.as_of_inputs.evaluation_run_id) && (
-          <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700">
-            <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">As-of / Inputs</span>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs font-mono text-zinc-600 dark:text-zinc-300">
-              {data.as_of_inputs.evaluation_run_id != null && (
-                <div><span className="text-zinc-500 dark:text-zinc-500">run_id</span> {String(data.as_of_inputs.evaluation_run_id).slice(0, 8)}…</div>
-              )}
-              {data.as_of_inputs.pipeline_timestamp != null && (
-                <div><span className="text-zinc-500 dark:text-zinc-500">pipeline</span> {new Date(data.as_of_inputs.pipeline_timestamp).toLocaleString()}</div>
-              )}
-              {data.as_of_inputs.quote_as_of != null && (
-                <div><span className="text-zinc-500 dark:text-zinc-500">quote_as_of</span> {data.as_of_inputs.quote_as_of}</div>
-              )}
-              {data.as_of_inputs.config_hash != null && (
-                <div><span className="text-zinc-500 dark:text-zinc-500">config_hash</span> {data.as_of_inputs.config_hash}</div>
-              )}
-            </div>
+        {/* R23.4.4: Collapsible Details — As-of/Inputs and debug raw reason */}
+        <details
+          className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700"
+          open={detailsOpen}
+          onToggle={(e) => setDetailsOpen((e.target as HTMLDetailsElement).open)}
+        >
+          <summary className="cursor-pointer text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300 list-none">
+            <span className="inline-block select-none">Details</span>
+          </summary>
+          <div className="mt-2 space-y-2">
+            {data.as_of_inputs && (data.as_of_inputs.pipeline_timestamp ?? data.as_of_inputs.evaluation_run_id) && (
+              <div>
+                <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">As-of / Inputs</span>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs font-mono text-zinc-600 dark:text-zinc-300">
+                  {data.as_of_inputs.evaluation_run_id != null && (
+                    <div><span className="text-zinc-500 dark:text-zinc-500">run_id</span> {String(data.as_of_inputs.evaluation_run_id).slice(0, 8)}…</div>
+                  )}
+                  {data.as_of_inputs.pipeline_timestamp != null && (
+                    <div><span className="text-zinc-500 dark:text-zinc-500">pipeline</span> {new Date(data.as_of_inputs.pipeline_timestamp).toLocaleString()}</div>
+                  )}
+                  {data.as_of_inputs.quote_as_of != null && (
+                    <div><span className="text-zinc-500 dark:text-zinc-500">quote_as_of</span> {data.as_of_inputs.quote_as_of}</div>
+                  )}
+                  {data.as_of_inputs.config_hash != null && (
+                    <div><span className="text-zinc-500 dark:text-zinc-500">config_hash</span> {data.as_of_inputs.config_hash}</div>
+                  )}
+                </div>
+              </div>
+            )}
+            {data.primary_reason && (
+              <Tooltip content={data.primary_reason} className="max-w-sm">
+                <span className="block text-xs text-zinc-400 dark:text-zinc-500 cursor-help">Debug: raw reason</span>
+              </Tooltip>
+            )}
           </div>
-        )}
+        </details>
         {/* R23.0: Options | Shares tab */}
         <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700 flex gap-2">
           <button
@@ -504,7 +517,7 @@ function ExecutionConsole({
             })()}
             {data.primary_reason ? (
               <Tooltip content={data.primary_reason} className="max-w-sm">
-                <span className="mt-1 block text-xs text-zinc-400 dark:text-zinc-500 cursor-help">Debug: raw reason</span>
+                <span className="mt-1 block text-xs text-zinc-400 dark:text-zinc-500 cursor-help">Debug: raw reason (see Details)</span>
               </Tooltip>
             ) : null}
           </div>
@@ -701,6 +714,10 @@ function ExecutionConsole({
             </div>
             {data.score_caps?.applied_caps?.length ? (
               <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700">
+                <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">Capped by</span>
+                <p className="text-sm text-zinc-700 dark:text-zinc-300 mb-2">
+                  {(data.score_caps.applied_caps[0] as { reason_code?: string }).reason_code ?? (data.score_caps.applied_caps[0] as { reason?: string }).reason ?? "Cap"}: {fmt((data.score_caps.applied_caps[0] as { before?: number }).before)} → {fmt((data.score_caps.applied_caps[0] as { after?: number }).after)}
+                </p>
                 <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">Applied caps</span>
                 <ul className="space-y-1 text-xs font-mono text-zinc-600 dark:text-zinc-300">
                   {data.score_caps.applied_caps.map((cap, i) => (
@@ -840,22 +857,6 @@ function ExecutionConsole({
                   </p>
                 </div>
               )}
-            </div>
-          </Card>
-        ) : null}
-
-        {/* R22.5/R23.3: Shares plan (recommendation only) */}
-        {data.shares_plan ? (
-          <Card>
-            <CardHeader title="Shares plan" description="BUY SHARES recommendation only; no order placement" />
-            <div className="space-y-2 text-sm">
-              <p><span className="text-zinc-500 dark:text-zinc-500">Entry zone:</span> {fmt(data.shares_plan.entry_zone?.low)} – {fmt(data.shares_plan.entry_zone?.high)}</p>
-              <p><span className="text-zinc-500 dark:text-zinc-500">Stop:</span> {fmt(typeof data.shares_plan.stop === "object" && data.shares_plan.stop && "price" in data.shares_plan.stop ? (data.shares_plan.stop as { price?: number | null }).price ?? null : typeof data.shares_plan.stop === "number" ? data.shares_plan.stop : null)}</p>
-              <p><span className="text-zinc-500 dark:text-zinc-500">Targets:</span> T1 {fmt(data.shares_plan.targets?.t1)} · T2 {fmt(data.shares_plan.targets?.t2)} · T3 {fmt(data.shares_plan.targets?.t3)}</p>
-              <p><span className="text-zinc-500 dark:text-zinc-500">Invalidation:</span> {fmt(data.shares_plan.invalidation)}</p>
-              <p><span className="text-zinc-500 dark:text-zinc-500">Hold-time:</span> {data.shares_plan.hold_time?.sessions_to_t1 ?? data.shares_plan.hold_time_estimate?.sessions ?? "—"} sessions · {holdTimeBasisLabel(data.shares_plan.hold_time_estimate?.basis_key)}</p>
-              {data.shares_plan.confidence_score != null && <p><span className="text-zinc-500 dark:text-zinc-500">Confidence:</span> {data.shares_plan.confidence_score}</p>}
-              <p><span className="text-zinc-500 dark:text-zinc-500">Why:</span> {(data.shares_plan.reason_codes?.length ? data.shares_plan.reason_codes.map(sharesReasonCodeToLabel).join("; ") : sharesWhyLabel(data.shares_plan.why_recommended)) || "—"}</p>
             </div>
           </Card>
         ) : null}

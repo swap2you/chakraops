@@ -119,6 +119,15 @@ def _get_slack_status_health() -> Dict[str, Any]:
         }
 
 
+def _get_copilot_status_health() -> Dict[str, Any]:
+    """R23.4.2: Copilot status for system-health (enabled, key_present, key_format_ok, model). No secrets."""
+    try:
+        from app.api.copilot import get_copilot_status
+        return get_copilot_status()
+    except Exception:
+        return {"enabled": False, "key_present": False, "key_format_ok": False, "model": ""}
+
+
 def _get_mark_refresh_health() -> Dict[str, Any]:
     """Phase 16.0: Mark refresh state for system health."""
     try:
@@ -278,6 +287,93 @@ def ui_decision_file(
     return {**data, "evaluation_timestamp_utc": eval_ts, "decision_store_mtime_utc": store_mtime}
 
 
+def _build_universe_symbols_list(artifact: Any) -> List[Dict[str, Any]]:
+    """Build the symbols list for universe response. Used by ui_universe and get_universe_row_for_copilot."""
+    symbols_out: List[Dict[str, Any]] = []
+    if not artifact:
+        return symbols_out
+    sel_by_sym: Dict[str, Any] = {}
+    for c in getattr(artifact, "selected_candidates", []) or []:
+        sym_k = (getattr(c, "symbol", "") or "").strip().upper()
+        if sym_k:
+            sel_by_sym[sym_k] = c
+    diag_by_sym = getattr(artifact, "diagnostics_by_symbol", None) or {}
+    for s in getattr(artifact, "symbols", []) or []:
+        sym_key = (s.symbol or "").strip().upper()
+        diag = diag_by_sym.get(sym_key)
+        sel_el = (diag.symbol_eligibility or {}) if diag else {}
+        score_caps = getattr(s, "score_caps", None)
+        raw_score = getattr(s, "raw_score", None)
+        row: Dict[str, Any] = {
+            "symbol": s.symbol,
+            "verdict": s.verdict,
+            "final_verdict": s.final_verdict,
+            "score": s.score,
+            "raw_score": raw_score,
+            "final_score": getattr(s, "final_score", None) or s.score,
+            "pre_cap_score": getattr(s, "pre_cap_score", None) or raw_score,
+            "score_caps": score_caps,
+            "band": s.band,
+            "primary_reason": _primary_reason_display(s),
+            "stage_status": s.stage_status,
+            "provider_status": s.provider_status or "n/a",
+            "data_freshness": s.data_freshness,
+            "strategy": s.strategy,
+            "price": s.price,
+            "expiration": s.expiration,
+            "score_breakdown": getattr(s, "score_breakdown", None),
+            "band_reason": getattr(s, "band_reason", None),
+            "max_loss": getattr(s, "max_loss", None),
+            "underlying_price": getattr(s, "underlying_price", None),
+            "capital_required": getattr(s, "capital_required", None),
+            "expected_credit": getattr(s, "expected_credit", None),
+            "premium_yield_pct": getattr(s, "premium_yield_pct", None),
+            "market_cap": getattr(s, "market_cap", None),
+            "rank_score": getattr(s, "rank_score", None),
+        }
+        row["required_data_missing"] = sel_el.get("required_data_missing") or []
+        row["required_data_stale"] = sel_el.get("required_data_stale") or []
+        row["optional_missing"] = sel_el.get("optional_missing") or []
+        try:
+            from app.core.shares.shares_plan import compute_shares_eligibility
+            tech = (diag.get("technicals") if isinstance(diag, dict) else getattr(diag, "technicals", None)) or {}
+            shares_eligible, _ = compute_shares_eligibility(s, tech, sel_el, mtf_levels=None, symbol=sym_key)
+            row["shares_eligible"] = shares_eligible
+        except Exception:
+            row["shares_eligible"] = False
+        sample = (getattr(diag, "sample_rejected_due_to_delta", None) or (diag.get("sample_rejected_due_to_delta") if isinstance(diag, dict) else None) or []) if diag else []
+        row["reasons_explained"] = _compute_reasons_explained(
+            getattr(s, "primary_reason", None) or "",
+            sel_el,
+            sample,
+        )
+        sel_cand = sel_by_sym.get(sym_key)
+        if sel_cand and (s.verdict or "").upper() == "ELIGIBLE":
+            row["selected_contract_key"] = getattr(sel_cand, "contract_key", None)
+            row["option_symbol"] = getattr(sel_cand, "option_symbol", None)
+            row["strike"] = getattr(sel_cand, "strike", None)
+        symbols_out.append(row)
+    return symbols_out
+
+
+def get_universe_row_for_copilot(symbol: str) -> Optional[Dict[str, Any]]:
+    """R23.4: Return single universe row for symbol (for copilot tools). No auth. Returns None if not found."""
+    sym_upper = (symbol or "").strip().upper()
+    if not sym_upper:
+        return None
+    from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
+    store = get_evaluation_store_v2()
+    store.reload_from_disk()
+    artifact = store.get_latest()
+    if not artifact:
+        return None
+    symbols_out = _build_universe_symbols_list(artifact)
+    for r in symbols_out:
+        if (r.get("symbol") or "").strip().upper() == sym_upper:
+            return r
+    return None
+
+
 @router.get("/universe")
 def ui_universe(
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
@@ -295,70 +391,7 @@ def ui_universe(
         artifact = store.get_latest()
         meta = artifact.metadata or {} if artifact else {}
         ts = meta.get("pipeline_timestamp") or now_iso
-        symbols_out: List[Dict[str, Any]] = []
-        sel_by_sym: Dict[str, Any] = {}
-        for c in getattr(artifact, "selected_candidates", []) or []:
-            sym_k = (getattr(c, "symbol", "") or "").strip().upper()
-            if sym_k:
-                sel_by_sym[sym_k] = c
-        if artifact and artifact.symbols:
-            diag_by_sym = getattr(artifact, "diagnostics_by_symbol", None) or {}
-            for s in artifact.symbols:
-                sym_key = (s.symbol or "").strip().upper()
-                diag = diag_by_sym.get(sym_key)
-                sel_el = (diag.symbol_eligibility or {}) if diag else {}
-                score_caps = getattr(s, "score_caps", None)
-                raw_score = getattr(s, "raw_score", None)
-                row: Dict[str, Any] = {
-                    "symbol": s.symbol,
-                    "verdict": s.verdict,
-                    "final_verdict": s.final_verdict,
-                    "score": s.score,
-                    "raw_score": raw_score,
-                    "final_score": getattr(s, "final_score", None) or s.score,
-                    "pre_cap_score": getattr(s, "pre_cap_score", None) or raw_score,
-                    "score_caps": score_caps,
-                    "band": s.band,
-                    "primary_reason": _primary_reason_display(s),
-                    "stage_status": s.stage_status,
-                    "provider_status": s.provider_status or "n/a",
-                    "data_freshness": s.data_freshness,
-                    "strategy": s.strategy,
-                    "price": s.price,
-                    "expiration": s.expiration,
-                    "score_breakdown": getattr(s, "score_breakdown", None),
-                    "band_reason": getattr(s, "band_reason", None),
-                    "max_loss": getattr(s, "max_loss", None),
-                    "underlying_price": getattr(s, "underlying_price", None),
-                    "capital_required": getattr(s, "capital_required", None),
-                    "expected_credit": getattr(s, "expected_credit", None),
-                    "premium_yield_pct": getattr(s, "premium_yield_pct", None),
-                    "market_cap": getattr(s, "market_cap", None),
-                    "rank_score": getattr(s, "rank_score", None),
-                }
-                row["required_data_missing"] = sel_el.get("required_data_missing") or []
-                row["required_data_stale"] = sel_el.get("required_data_stale") or []
-                row["optional_missing"] = sel_el.get("optional_missing") or []
-                # R23.3: shares_eligible at request time (code-only; not persisted)
-                try:
-                    from app.core.shares.shares_plan import compute_shares_eligibility
-                    tech = (diag.get("technicals") if isinstance(diag, dict) else getattr(diag, "technicals", None)) or {}
-                    shares_eligible, _ = compute_shares_eligibility(s, tech, sel_el, mtf_levels=None, symbol=sym_key)
-                    row["shares_eligible"] = shares_eligible
-                except Exception:
-                    row["shares_eligible"] = False
-                sample = (getattr(diag, "sample_rejected_due_to_delta", None) or (diag.get("sample_rejected_due_to_delta") if isinstance(diag, dict) else None) or []) if diag else []
-                row["reasons_explained"] = _compute_reasons_explained(
-                    getattr(s, "primary_reason", None) or "",
-                    sel_el,
-                    sample,
-                )
-                sel_cand = sel_by_sym.get(sym_key)
-                if sel_cand and (s.verdict or "").upper() == "ELIGIBLE":
-                    row["selected_contract_key"] = getattr(sel_cand, "contract_key", None)
-                    row["option_symbol"] = getattr(sel_cand, "option_symbol", None)
-                    row["strike"] = getattr(sel_cand, "strike", None)
-                symbols_out.append(row)
+        symbols_out = _build_universe_symbols_list(artifact)
         store_mtime = _get_decision_store_mtime_utc()
         eval_ts = ts if ts else store_mtime
         out_d: Dict[str, Any] = {
@@ -969,6 +1002,7 @@ def ui_system_health(
         "slack": _get_slack_status_health(),
         "eod_freeze": _get_eod_freeze_health(),
         "mark_refresh": _get_mark_refresh_health(),
+        "copilot": _get_copilot_status_health(),
     }
 
 
@@ -3202,6 +3236,42 @@ def ui_symbol_diagnostics(
 
     # Symbol not in store — 404 (no legacy path; use recompute=1 to add symbol)
     raise HTTPException(status_code=404, detail=f"Symbol {sym_upper} not in evaluation store. Use recompute=1 to evaluate.")
+
+
+def get_symbol_diagnostics_for_copilot(symbol: str) -> Optional[Dict[str, Any]]:
+    """
+    R23.4: Return symbol diagnostics from store for copilot tools (read-only, no auth).
+    Returns None if symbol not in store. Caller must not persist result into decision artifacts.
+    """
+    sym_upper = (symbol or "").strip().upper()
+    if not sym_upper:
+        return None
+    from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2, get_eval_snapshot
+    from app.core.accounts.holdings_db import get_share_position, _DEFAULT_ACCOUNT_ID
+    store = get_evaluation_store_v2()
+    store.reload_from_disk()
+    row = store.get_symbol(sym_upper)
+    if row is None:
+        return None
+    summary, candidates, gates, earnings, diagnostics_details = row
+    artifact = store.get_latest()
+    sel_c = next(
+        (c for c in (getattr(artifact, "selected_candidates", []) or [])
+        if (getattr(c, "symbol", "") or "").strip().upper() == sym_upper
+    ), None) if artifact else None
+    _sel_key = getattr(sel_c, "contract_key", None) if sel_c else None
+    _opt_sym = getattr(sel_c, "option_symbol", None) if sel_c else None
+    pipeline_ts = (artifact.metadata or {}).get("pipeline_timestamp") if artifact else None
+    run_id_val = (artifact.metadata or {}).get("run_id") if artifact else None
+    _snap = get_eval_snapshot()
+    _share_pos = get_share_position(_DEFAULT_ACCOUNT_ID, sym_upper)
+    return _build_symbol_diagnostics_from_v2_store(
+        summary, candidates, gates, earnings, diagnostics_details, sym_upper,
+        selected_contract_key=_sel_key, option_symbol=_opt_sym, pipeline_timestamp=pipeline_ts,
+        run_id=run_id_val,
+        eval_snapshot=_snap,
+        shares_position=_share_pos,
+    )
 
 
 @router.get("/shares-candidates")

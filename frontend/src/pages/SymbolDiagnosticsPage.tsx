@@ -6,6 +6,7 @@ import { useSymbolDiagnostics, useRecomputeSymbolDiagnostics, useDefaultAccount,
 import type { SymbolDiagnosticsResponseExtended } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { TradeTicketDrawer } from "@/components/TradeTicketDrawer";
+import { CopilotPanel } from "@/components/CopilotPanel";
 import { Card, CardHeader, Badge, StatusBadge, Button, Tooltip } from "@/components/ui";
 import type { SymbolDiagnosticsCandidate } from "@/api/types";
 import { buildReasonsFromPrimary, formatGateReason } from "@/reasons/parsePrimaryReason";
@@ -180,17 +181,24 @@ export function SymbolDiagnosticsPage() {
       )}
 
       {data && !isLoading && (
-        <ExecutionConsole
-          data={data}
-          symbol={activeSymbol ?? ""}
-          accountId={(accountData?.account as { account_id?: string } | undefined)?.account_id ?? "default"}
-          onRecompute={() => activeSymbol && recompute.mutate(activeSymbol)}
-          isRecomputing={recompute.isPending}
-          isRecomputeDisabled={marketClosed}
-          recomputeDisabledTooltip="Market closed: evaluation disabled to protect canonical decision. Use System Diagnostics or force to override."
-          onOpenTradeTicket={(c) => setTradeTicketCandidate(c)}
-          defaultCapital={getDefaultCapital(accountData?.account)}
-        />
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4">
+          <ExecutionConsole
+            data={data}
+            symbol={activeSymbol ?? ""}
+            accountId={(accountData?.account as { account_id?: string } | undefined)?.account_id ?? "default"}
+            onRecompute={() => activeSymbol && recompute.mutate(activeSymbol)}
+            isRecomputing={recompute.isPending}
+            isRecomputeDisabled={marketClosed}
+            recomputeDisabledTooltip="Market closed: evaluation disabled to protect canonical decision. Use System Diagnostics or force to override."
+            onOpenTradeTicket={(c) => setTradeTicketCandidate(c)}
+            defaultCapital={getDefaultCapital(accountData?.account)}
+          />
+          <CopilotPanel
+            symbol={activeSymbol ?? ""}
+            conversationId={`copilot-${activeSymbol ?? "general"}`}
+            systemHealth={health ?? undefined}
+          />
+        </div>
       )}
 
       {tradeTicketCandidate && activeSymbol && (

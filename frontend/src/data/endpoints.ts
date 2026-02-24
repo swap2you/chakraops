@@ -173,4 +173,8 @@ export const ENDPOINTS = {
   decisionQualityBandOutcome: `${BASE}/api/decision-quality/band-outcome`,
   /** Abort effectiveness */
   decisionQualityAbortEffectiveness: `${BASE}/api/decision-quality/abort-effectiveness`,
+
+  // R23.4: Ticker Copilot (read-only Q&A)
+  /** POST { symbol, question, conversation_id?, mode? } → answer_markdown, citations, followups, used_tools */
+  copilotAsk: `${BASE}/api/ui/copilot/ask`,
 } as const;

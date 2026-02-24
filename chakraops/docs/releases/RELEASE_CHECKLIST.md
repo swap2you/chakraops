@@ -205,6 +205,33 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Verification** — out/verification/R23.3/notes.md with gate outputs and UAT checklist
 - [x] **Gate** — Backend pytest (670 passed), frontend tests (137 passed), frontend build pass (recorded in notes)
 
+### R23.4 — Ticker Copilot v1 (read-only, evidence-grounded Q&A)
+
+- [x] **Backend:** POST /api/ui/copilot/ask; OpenAI server-side; read-only tools; output safety filter; search_docs allowlist
+- [x] **Frontend:** Copilot panel on Symbol page (chips, input, messages, copy answer)
+- [x] **Tests:** test_r234_copilot_contract.py, test_r234_copilot_safety.py, test_r234_docs_search_allowlist.py; CopilotPanel.test.tsx
+- [x] **Requirements** — docs/releases/R23.4_requirements.md
+- [x] **Release notes** — docs/releases/R23.4_release_notes.md
+- [x] **Verification** — out/verification/R23.4/notes.md with gate outputs and UAT checklist
+- [x] **Gate** — Backend pytest (684 passed, 1 skipped), frontend tests (141 passed, 18 skipped), frontend build pass (recorded in notes)
+
+### R23.4.1 — Copilot auth + error handling (patch)
+
+- [x] **Backend:** 503 COPILOT_KEY_MISSING when no key; 502 COPILOT_AUTH_FAILED on OpenAI 401; startup log; no secrets in logs
+- [x] **Frontend:** Error banner with fix hint for error_code
+- [x] **Tests:** test_r2341_copilot_auth.py; CopilotPanel error banner test
+- [x] **Verification** — out/verification/R23.4.1/notes.md
+
+### R23.4.2 — Copilot key parsing + auth diagnostics + non-500 failures
+
+- [x] **Backend:** Robust key parsing (strip, quotes, VAR= prefix); _validate_key_format; COPILOT_KEY_MALFORMED (503); startup log key_format_ok; system-health copilot block
+- [x] **Frontend:** COPILOT_KEY_MALFORMED fix hint in Copilot panel
+- [x] **Tests:** test_r2342_copilot_key_parsing.py (normalize, validate, 503 MISSING/MALFORMED)
+- [x] **Requirements** — docs/releases/R23.4.2_requirements.md
+- [x] **Release notes** — docs/releases/R23.4.2_release_notes.md
+- [x] **Verification** — out/verification/R23.4.2/notes.md with gate outputs and manual steps
+- [x] **Gate** — Backend pytest (697 passed, 1 skipped), frontend tests (142 passed, 18 skipped), frontend build pass (recorded in notes)
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 - [ ] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py` (fixture → mock staged result → evaluate_universe → store write → hygiene check + snapshot check + per-symbol summary)

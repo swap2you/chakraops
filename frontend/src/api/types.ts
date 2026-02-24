@@ -359,6 +359,8 @@ export interface UiSystemHealthResponse {
   eod_freeze?: UiSystemHealthEodFreeze;
   /** Phase 16.0 */
   mark_refresh?: UiSystemHealthMarkRefresh;
+  /** R23.4.2 — Copilot status (enabled, key_present, key_format_ok, model); no secrets */
+  copilot?: { enabled?: boolean; key_present?: boolean; key_format_ok?: boolean; model?: string };
 }
 
 // =============================================================================

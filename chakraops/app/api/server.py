@@ -914,7 +914,9 @@ _UI_CORS_ORIGINS = (os.getenv("UI_CORS_ORIGINS") or "http://localhost:5173").str
 _CORS_ORIGINS = [o.strip() for o in _UI_CORS_ORIGINS if o.strip()] or ["http://localhost:5173"]
 
 from app.api.ui_routes import router as ui_router
+from app.api.copilot import router as copilot_router
 app.include_router(ui_router)
+app.include_router(copilot_router, prefix="/api/ui")
 
 app.add_middleware(
     CORSMiddleware,

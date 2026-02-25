@@ -90,6 +90,11 @@ function sharesCandidatesPath(): string {
   return `/api/ui/shares-candidates`;
 }
 
+/** R24.1: Action Needed — top options + top shares for Dashboard. */
+function actionNeededPath(): string {
+  return `/api/ui/action-needed`;
+}
+
 function uiTrackedPositionsPath(): string {
   return `/api/ui/positions/tracked`;
 }
@@ -301,6 +306,7 @@ export const queryKeys = {
     (["ui", "symbolDiagnostics", symbol, runId ?? ""] as const),
   uiSystemHealth: () => ["ui", "systemHealth"] as const,
   sharesCandidates: () => ["ui", "sharesCandidates"] as const,
+  actionNeeded: () => ["ui", "actionNeeded"] as const,
   uiPositions: () => ["ui", "positions"] as const,
   uiTrackedPositions: () => ["ui", "positions", "tracked"] as const,
   uiAccountsDefault: () => ["ui", "accounts", "default"] as const,
@@ -503,6 +509,31 @@ export function useSharesCandidates() {
   return useQuery({
     queryKey: queryKeys.sharesCandidates(),
     queryFn: () => apiGet<SharesCandidatesResponse>(sharesCandidatesPath()),
+  });
+}
+
+/** R24.1: Action Needed — top_options, top_shares, recently_changed. */
+export interface ActionNeededItem {
+  symbol: string;
+  strategy: string;
+  next_action_code: string;
+  rationale_lines: string[];
+  key_number: string | null;
+  tab: string;
+  accordion: string;
+  accordion_id?: string;
+}
+export interface ActionNeededResponse {
+  top_options: ActionNeededItem[];
+  top_shares: ActionNeededItem[];
+  options?: ActionNeededItem[];
+  shares?: ActionNeededItem[];
+  recently_changed: unknown[];
+}
+export function useActionNeeded() {
+  return useQuery({
+    queryKey: queryKeys.actionNeeded(),
+    queryFn: () => apiGet<ActionNeededResponse>(actionNeededPath()),
   });
 }
 

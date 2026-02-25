@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { formatTimestampEt } from "@/utils/formatTimestamp";
 import { Link } from "react-router-dom";
 import { ExternalLink, Activity, Droplets, Zap, Info, Settings } from "lucide-react";
-import { useArtifactList, useDecision, useUniverse, useUiSystemHealth, useUiTrackedPositions, usePortfolioMtm, useDefaultAccount, useRunEval, useSharesCandidates } from "@/api/queries";
+import { useArtifactList, useDecision, useUniverse, useUiSystemHealth, useUiTrackedPositions, usePortfolioMtm, useDefaultAccount, useRunEval, useSharesCandidates, useActionNeeded } from "@/api/queries";
 import type { DecisionMode, SymbolEvalSummary, UniverseSymbol } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import {
@@ -96,6 +96,7 @@ export function DashboardPage() {
   const runEval = useRunEval();
   const { data: sharesCandidatesData } = useSharesCandidates();
   const sharesCandidates = sharesCandidatesData?.shares_candidates ?? [];
+  const { data: actionNeeded } = useActionNeeded();
 
   const { universeSymbols, selectedSignals } = useMemo(() => {
     const artifact = decision?.artifact;
@@ -308,55 +309,69 @@ export function DashboardPage() {
               </Link>
             )}
           </Card>
-          {/* R24.0: Action Needed — top 3 options + top 3 shares; link to symbol page with tab + accordion */}
+          {/* R24.1: Action Needed — GET /api/ui/action-needed; top 5 options + top 5 shares; deep-link tab + accordion */}
           <Card data-testid="action-needed-card">
             <CardHeader title="Action Needed" description="Top options and shares actions; link to symbol diagnostics." />
             <div className="space-y-4">
               <div>
                 <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-500 mb-2">Options</span>
-                {(selectedSignals.length === 0 && openPositions.length === 0) ? (
+                {(!actionNeeded?.top_options?.length) ? (
                   <p className="text-xs text-zinc-500 dark:text-zinc-500">No options actions.</p>
                 ) : (
                   <div className="space-y-1.5">
-                    {selectedSignals.slice(0, 3).map((s) => (
-                      <Link
-                        key={s.symbol}
-                        to={`/symbol-diagnostics?symbol=${encodeURIComponent(s.symbol ?? "")}&tab=Options`}
-                        className="block rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-                      >
-                        <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{s.symbol}</span>
-                        <span className="ml-2 text-zinc-500 dark:text-zinc-400">Entry</span>
-                      </Link>
-                    ))}
-                    {openPositions.slice(0, Math.max(0, 3 - selectedSignals.length)).map((p, i) => (
-                      <Link
-                        key={`pos-${p.symbol}-${i}`}
-                        to={`/symbol-diagnostics?symbol=${encodeURIComponent(p.symbol)}&tab=Options`}
-                        className="block rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-                      >
-                        <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{p.symbol}</span>
-                        <span className="ml-2 text-zinc-500 dark:text-zinc-400">Review</span>
-                      </Link>
-                    ))}
+                    {(actionNeeded.top_options.slice(0, 5)).map((item) => {
+                      const href = `/symbol-diagnostics?symbol=${encodeURIComponent(item.symbol)}&tab=Options${item.accordion_id ? `&accordion=${encodeURIComponent(item.accordion_id)}` : ""}`;
+                      return (
+                        <Link
+                          key={`opt-${item.symbol}`}
+                          to={href}
+                          className="block rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                          data-testid={`action-needed-options-row-${item.symbol}`}
+                        >
+                          <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{item.symbol}</span>
+                          <Badge variant={item.next_action_code === "ENTRY" ? "success" : item.next_action_code === "CLOSE" ? "danger" : "neutral"} className="ml-2">
+                            {item.next_action_code === "ENTRY" ? "Entry" : item.next_action_code === "CLOSE" ? "Close" : item.next_action_code}
+                          </Badge>
+                          {(item.rationale_lines?.[0]) && (
+                            <p className="mt-1 text-zinc-600 dark:text-zinc-400 truncate">{item.rationale_lines[0]}</p>
+                          )}
+                          {item.key_number != null && (
+                            <p className="mt-0.5 text-zinc-500 dark:text-zinc-500">Key: {item.key_number}</p>
+                          )}
+                        </Link>
+                      );
+                    })}
                   </div>
                 )}
               </div>
               <div>
                 <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-500 mb-2">Shares</span>
-                {sharesCandidates.length === 0 ? (
+                {(!actionNeeded?.top_shares?.length) ? (
                   <p className="text-xs text-zinc-500 dark:text-zinc-500">No shares actions.</p>
                 ) : (
                   <div className="space-y-1.5">
-                    {sharesCandidates.slice(0, 3).map((plan) => (
-                      <Link
-                        key={plan.symbol ?? ""}
-                        to={`/symbol-diagnostics?symbol=${encodeURIComponent(plan.symbol ?? "")}&tab=Shares`}
-                        className="block rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-                      >
-                        <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{plan.symbol}</span>
-                        <span className="ml-2 text-zinc-500 dark:text-zinc-400">{plan.eligible ? "Entry" : "Review"}</span>
-                      </Link>
-                    ))}
+                    {(actionNeeded.top_shares.slice(0, 5)).map((item) => {
+                      const href = `/symbol-diagnostics?symbol=${encodeURIComponent(item.symbol)}&tab=Shares${item.accordion_id ? `&accordion=${encodeURIComponent(item.accordion_id)}` : ""}`;
+                      return (
+                        <Link
+                          key={`shr-${item.symbol}`}
+                          to={href}
+                          className="block rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                          data-testid={`action-needed-shares-row-${item.symbol}`}
+                        >
+                          <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{item.symbol}</span>
+                          <Badge variant={item.next_action_code === "ENTRY" ? "success" : item.next_action_code === "CLOSE" ? "danger" : "neutral"} className="ml-2">
+                            {item.next_action_code === "ENTRY" ? "Entry" : item.next_action_code === "CLOSE" ? "Close" : item.next_action_code}
+                          </Badge>
+                          {(item.rationale_lines?.[0]) && (
+                            <p className="mt-1 text-zinc-600 dark:text-zinc-400 truncate">{item.rationale_lines[0]}</p>
+                          )}
+                          {item.key_number != null && (
+                            <p className="mt-0.5 text-zinc-500 dark:text-zinc-500">Key: {item.key_number}</p>
+                          )}
+                        </Link>
+                      );
+                    })}
                   </div>
                 )}
               </div>

@@ -20,6 +20,7 @@ const mockPositions = { positions: [] };
 
 const mockUseUiSystemHealth = vi.fn(() => ({ data: mockHealth }));
 const mockUsePortfolioMtm = vi.fn(() => ({ data: null }));
+const mockUseActionNeeded = vi.fn(() => ({ data: { top_options: [], top_shares: [], recently_changed: [] } }));
 vi.mock("@/api/queries", () => ({
   useArtifactList: () => ({ data: mockFiles }),
   useDecision: () => ({ data: mockDecision }),
@@ -29,6 +30,7 @@ vi.mock("@/api/queries", () => ({
   useDefaultAccount: () => ({ data: { account: { account_id: "acct_1" } } }),
   usePortfolioMtm: (...args: unknown[]) => mockUsePortfolioMtm(...args),
   useSharesCandidates: () => ({ data: null }),
+  useActionNeeded: (...args: unknown[]) => mockUseActionNeeded(...args),
   useRunEval: () => ({
     mutate: vi.fn(),
     mutateAsync: vi.fn(),
@@ -93,5 +95,32 @@ describe("DashboardPage", () => {
     const btn = await screen.findByRole("button", { name: /run evaluation/i });
     expect(btn).toBeDisabled();
     mockUseUiSystemHealth.mockReturnValue({ data: mockHealth });
+  });
+
+  it("R24.1: Action Needed card renders options and shares rows from API", async () => {
+    mockUseActionNeeded.mockReturnValue({
+      data: {
+        top_options: [
+          { symbol: "AAPL", next_action_code: "ENTRY", rationale_lines: ["Near support."], key_number: "delta 0.28", tab: "Options", accordion: "Trade", accordion_id: "trade" },
+        ],
+        top_shares: [
+          { symbol: "WMT", next_action_code: "HOLD", rationale_lines: ["In position."], key_number: "spot 165", tab: "Shares", accordion: "Trade Plan", accordion_id: "trade-plan" },
+        ],
+        recently_changed: [],
+      },
+    });
+    render(<DashboardPage />);
+    const card = await screen.findByTestId("action-needed-card");
+    expect(card).toBeInTheDocument();
+    expect(screen.getByTestId("action-needed-options-row-AAPL")).toBeInTheDocument();
+    expect(screen.getByTestId("action-needed-shares-row-WMT")).toBeInTheDocument();
+    const optLink = screen.getByTestId("action-needed-options-row-AAPL");
+    expect(optLink).toHaveAttribute("href", expect.stringContaining("symbol=AAPL"));
+    expect(optLink).toHaveAttribute("href", expect.stringContaining("tab=Options"));
+    expect(optLink).toHaveAttribute("href", expect.stringContaining("accordion=trade"));
+    const shrLink = screen.getByTestId("action-needed-shares-row-WMT");
+    expect(shrLink).toHaveAttribute("href", expect.stringContaining("symbol=WMT"));
+    expect(shrLink).toHaveAttribute("href", expect.stringContaining("tab=Shares"));
+    expect(shrLink).toHaveAttribute("href", expect.stringContaining("accordion=trade-plan"));
   });
 });

@@ -19,11 +19,16 @@ ENV_WEBHOOK_HEALTH = "SLACK_WEBHOOK_HEALTH"
 ENV_WEBHOOK_DAILY = "SLACK_WEBHOOK_DAILY"
 
 DEFAULT_STATE_PATH = "artifacts/alerts/last_sent_state.json"
+# R24.1: Actionable dedupe state (chakraops/data to avoid new out/ artifacts)
+def _default_actionable_state_path() -> Path:
+    return Path(__file__).resolve().parents[3] / "data" / "slack_actionable_dedupe.json"
 
-# R24.0: Slack messages must never contain these (no raw codes, no secrets)
-FORBIDDEN_IN_SLACK = ("FAIL_", "WARN_", "api_key", "token")
+# R24.0/R24.1: Slack messages must never contain these (no raw codes, no secrets, no paths/tracebacks)
+FORBIDDEN_IN_SLACK = ("FAIL_", "WARN_", "api_key", "token", "traceback", "Traceback", "File \"")
 CRITICAL_ALERT_TYPES = frozenset({"CRITICAL", "POSITION_EXIT", "STOP", "INVALIDATION"})
 ALERT_THROTTLE_MINUTES = 15  # Same alert type + symbol at most once per N minutes (critical exempt)
+# R24.1: Actionable dedupe — same (symbol, strategy, action, contract, size) within N minutes unless severity changes
+ACTIONABLE_DEDUPE_MINUTES = int(os.getenv("SLACK_ACTIONABLE_DEDUPE_MINUTES", "15"))
 
 
 def is_slack_configured() -> bool:
@@ -106,7 +111,7 @@ def _state_hash(payload: Dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def _load_state(state_path: Union[str, Path]) -> Dict[str, str]:
+def _load_state(state_path: Union[str, Path]) -> Dict[str, Any]:
     path = Path(state_path)
     if not path.exists():
         return {}
@@ -118,7 +123,7 @@ def _load_state(state_path: Union[str, Path]) -> Dict[str, str]:
         return {}
 
 
-def _save_state(state: Dict[str, str], state_path: Union[str, Path]) -> None:
+def _save_state(state: Dict[str, Any], state_path: Union[str, Path]) -> None:
     path = Path(state_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
@@ -338,6 +343,128 @@ def build_actionable_message_r240(payload: Dict[str, Any]) -> str:
                 lines.append("• %s" % r)
     raw = "\n".join(lines)
     return _sanitize_slack_text(raw)
+
+
+def build_actionable_message_r241(payload: Dict[str, Any]) -> str:
+    """
+    R24.1: Per-symbol Action block using next_action_details. OPTIONS: strategy, next_action,
+    rationale, sizing, key levels (spot, T1, stop), contract_key/option_symbol, delta_best, DTE,
+    bid/ask/spread_pct. SHARES: next_action, rationale, spot, entry zone, stop, T1, suggested
+    shares/cost, risk %. All copy safe/plain-English; no FAIL_/WARN_/paths.
+    """
+    lines = [
+        "*Action: %s*" % (payload.get("symbol") or "?"),
+        "Strategy: %s" % (payload.get("strategy") or payload.get("mode") or "?"),
+        "Next action: %s" % (payload.get("next_action_code") or payload.get("action") or "NONE"),
+    ]
+    rationale = payload.get("rationale_lines") or payload.get("rationale") or []
+    if isinstance(rationale, list):
+        for r in rationale[:2]:
+            if isinstance(r, str) and r and not any(f in r for f in FORBIDDEN_IN_SLACK):
+                lines.append("• %s" % r)
+    elif isinstance(rationale, str) and rationale and not any(f in rationale for f in FORBIDDEN_IN_SLACK):
+        lines.append("• %s" % rationale)
+    details = payload.get("next_action_details") or {}
+    key_num = details.get("key_numbers") or payload.get("key_numbers") or {}
+    if key_num.get("spot") is not None:
+        lines.append("Spot: %s" % _str_num(key_num.get("spot")))
+    if key_num.get("t1") is not None:
+        lines.append("T1: %s" % _str_num(key_num.get("t1")))
+    if key_num.get("delta_best") is not None:
+        lines.append("Delta: %s" % _str_num(key_num.get("delta_best")))
+    if key_num.get("dte") is not None:
+        lines.append("DTE: %s" % _str_num(key_num.get("dte")))
+    strategy = (payload.get("strategy") or payload.get("mode") or "").upper()
+    if strategy in ("CSP", "CC", "OPTIONS"):
+        if payload.get("contract_key"):
+            lines.append("Contract: %s" % (payload.get("contract_key") or ""))
+        if payload.get("option_symbol"):
+            lines.append("Option: %s" % (payload.get("option_symbol") or ""))
+        bid, ask = payload.get("bid"), payload.get("ask")
+        if bid is not None or ask is not None:
+            lines.append("Bid/Ask: %s / %s" % (_str_num(bid), _str_num(ask)))
+        spread = payload.get("spread_pct")
+        if spread is not None:
+            lines.append("Spread: %s" % (_str_num(spread) + "%"))
+        if payload.get("suggested_contracts") is not None:
+            lines.append("Suggested contracts: %s" % payload.get("suggested_contracts"))
+        if payload.get("required_cash") is not None:
+            lines.append("Required cash: %s" % _str_capital(payload.get("required_cash")))
+        if key_num.get("premium_est") is not None:
+            lines.append("Credit est: %s" % _str_capital(key_num.get("premium_est")))
+    else:
+        entry = payload.get("entry_zone") or key_num.get("entry_zone")
+        if isinstance(entry, dict) and entry.get("low") is not None and entry.get("high") is not None:
+            lines.append("Entry zone: %s – %s" % (_str_num(entry.get("low")), _str_num(entry.get("high"))))
+        elif key_num.get("stop") is not None:
+            lines.append("Stop: %s" % _str_num(key_num.get("stop")))
+        if payload.get("suggested_shares") is not None:
+            lines.append("Suggested shares: %s" % payload.get("suggested_shares"))
+        if payload.get("suggested_cost") is not None:
+            lines.append("Est cost: %s" % _str_capital(payload.get("suggested_cost")))
+        if payload.get("risk_pct_used") is not None:
+            lines.append("Risk %%: %s" % _str_pct(payload.get("risk_pct_used")))
+    raw = "\n".join(lines)
+    return _sanitize_slack_text(raw)
+
+
+def _actionable_dedupe_key(
+    symbol: str,
+    strategy: str,
+    action: str,
+    contract_key: Optional[str],
+    size: Optional[str],
+) -> str:
+    """R24.1: Deterministic key for actionable dedupe (symbol, strategy, action, contract, size)."""
+    c = (contract_key or "").strip() or "_"
+    s = (size or "").strip() or "_"
+    return "actionable|%s|%s|%s|%s|%s" % (
+        (symbol or "").strip().upper(),
+        (strategy or "").strip().upper(),
+        (action or "").strip().upper(),
+        c,
+        s,
+    )
+
+
+def should_send_actionable_message(
+    symbol: str,
+    strategy: str,
+    action: str,
+    contract_key: Optional[str],
+    size: Optional[str],
+    severity: str = "normal",
+    state_path: Union[str, Path, None] = None,
+    throttle_minutes: Optional[int] = None,
+) -> bool:
+    """
+    R24.1: Dedupe actionable Slack: do not resend same (symbol, strategy, action, contract, size)
+    within throttle_minutes unless severity changed. Returns True if send allowed, False to suppress.
+    Uses chakraops/data/slack_actionable_dedupe.json by default.
+    """
+    if state_path is None:
+        state_path = _default_actionable_state_path()
+    if throttle_minutes is None:
+        throttle_minutes = ACTIONABLE_DEDUPE_MINUTES
+    key = _actionable_dedupe_key(symbol, strategy, action, contract_key, size)
+    state = _load_state(state_path)
+    entry = state.get(key)
+    if isinstance(entry, dict):
+        ts = entry.get("ts") or 0
+        sev = entry.get("severity") or "normal"
+        import time
+        now = time.time()
+        if (now - ts) < throttle_minutes * 60.0 and sev == severity:
+            return False
+    elif isinstance(entry, str):
+        import time
+        now = time.time()
+        if (now - float(entry or 0)) < throttle_minutes * 60.0:
+            return False
+    import time
+    state[key] = {"ts": time.time(), "severity": severity}
+    _save_state(state, state_path)
+    return True
 
 
 def _format_message(event_type: str, payload: Dict[str, Any], exit_priority_fire: Optional[str] = None) -> str:

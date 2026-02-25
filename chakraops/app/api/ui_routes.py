@@ -3465,7 +3465,7 @@ def _build_symbol_diagnostics_from_v2_store(
 
 
 def _action_needed_item_from_diagnostics(d: Dict[str, Any], strategy: str) -> Dict[str, Any]:
-    """R24.1: Extract action-needed row from full diagnostics response."""
+    """R24.1: Extract action-needed row from full diagnostics response. Includes tab + accordion id for deep-link."""
     details = d.get("next_action_details") or {}
     rationale = details.get("rationale_lines") or []
     key_num = details.get("key_numbers") or {}
@@ -3473,19 +3473,29 @@ def _action_needed_item_from_diagnostics(d: Dict[str, Any], strategy: str) -> Di
     symbol = d.get("symbol") or ""
     tab = "Options" if strategy == "OPTIONS" else "Shares"
     accordion = "Trade" if strategy == "OPTIONS" else "Trade Plan"
-    key_display = None
+    accordion_id = "trade" if strategy == "OPTIONS" else "trade-plan"
+    key_number_label = None
+    key_number_value = None
     if key_num.get("delta_best") is not None:
-        key_display = "delta %s" % (_fmt_num(key_num["delta_best"]) if hasattr(_fmt_num, "__call__") else str(key_num["delta_best"]))
+        key_number_label = "delta"
+        key_number_value = key_num["delta_best"]
     elif key_num.get("spot") is not None:
-        key_display = "spot %s" % str(key_num["spot"])
+        key_number_label = "spot"
+        key_number_value = key_num["spot"]
+    key_display = None
+    if key_number_label and key_number_value is not None:
+        key_display = "%s %s" % (key_number_label, _fmt_num(key_number_value) if key_number_label == "delta" else str(key_number_value))
     return {
         "symbol": symbol,
         "strategy": strategy,
         "next_action_code": code,
         "rationale_lines": rationale[:2],
         "key_number": key_display,
+        "key_number_label": key_number_label,
+        "key_number_value": key_number_value,
         "tab": tab,
         "accordion": accordion,
+        "accordion_id": accordion_id,
     }
 
 
@@ -3596,6 +3606,8 @@ def ui_action_needed(
     shares_out = shares_out[:5]
 
     return {
+        "top_options": options_out,
+        "top_shares": shares_out,
         "options": options_out,
         "shares": shares_out,
         "recently_changed": _recent_transitions(),

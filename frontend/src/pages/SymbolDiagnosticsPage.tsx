@@ -90,6 +90,8 @@ export function SymbolDiagnosticsPage({ initialTabForTest }: { initialTabForTest
   const [searchParams] = useSearchParams();
   const symbolFromUrl = searchParams.get("symbol")?.trim().toUpperCase() ?? "";
   const runIdFromUrl = searchParams.get("run_id")?.trim() ?? null;
+  /** R24.1: Deep-link accordion — open this section when present (e.g. trade, trade-plan). */
+  const accordionFromUrl = searchParams.get("accordion")?.trim().toLowerCase() ?? null;
   const [symbol, setSymbol] = useState("");
   const [activeSymbol, setActiveSymbol] = useState<string | null>(null);
   const [touched, setTouched] = useState(false);
@@ -189,6 +191,7 @@ export function SymbolDiagnosticsPage({ initialTabForTest }: { initialTabForTest
               defaultCapital={getDefaultCapital(accountData?.account)}
               onOpenCopilot={() => setCopilotDrawerOpen(true)}
               initialTab={initialTabForTest ?? (searchParams.get("tab") === "Shares" ? "Shares" : "Options")}
+              initialAccordionId={accordionFromUrl}
             />
           </div>
           {/* R23.4.6: Copilot as slide-over drawer, default closed */}
@@ -272,6 +275,7 @@ function ExecutionConsole({
   defaultCapital,
   accountId = "default",
   initialTab = "Options",
+  initialAccordionId,
 }: {
   data: SymbolDiagnosticsResponseExtended;
   symbol: string;
@@ -285,6 +289,8 @@ function ExecutionConsole({
   defaultCapital?: number | null;
   /** When tab=Shares in URL, open Shares tab by default. */
   initialTab?: "Options" | "Shares";
+  /** R24.1: When accordion= in URL, open this section (e.g. trade, trade-plan). */
+  initialAccordionId?: string | null;
 }) {
   const [infoDrawerKey, setInfoDrawerKey] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"Options" | "Shares">(initialTab);
@@ -292,9 +298,10 @@ function ExecutionConsole({
   const [sharesForm, setSharesForm] = useState({ quantity: "", avg_cost: "", opened_at: "" });
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [tradeAccordionOpen, setTradeAccordionOpen] = useState(true);
-  const [technicalsAccordionOpen, setTechnicalsAccordionOpen] = useState(false);
-  const [riskAccordionOpen, setRiskAccordionOpen] = useState(false);
+  const openByAccordionId = initialAccordionId ?? null;
+  const [tradeAccordionOpen, setTradeAccordionOpen] = useState(openByAccordionId === "trade" || !openByAccordionId);
+  const [technicalsAccordionOpen, setTechnicalsAccordionOpen] = useState(openByAccordionId === "technicals");
+  const [riskAccordionOpen, setRiskAccordionOpen] = useState(openByAccordionId === "risk");
   const bandMin = data.delta_diagnostics?.band_min ?? data.computed_values?.delta_band?.[0] ?? 0.25;
   const bandMax = data.delta_diagnostics?.band_max ?? data.computed_values?.delta_band?.[1] ?? 0.35;
   const [deltaOverrideForm, setDeltaOverrideForm] = useState({ delta_lo: data.delta_override?.delta_lo ?? bandMin, delta_hi: data.delta_override?.delta_hi ?? bandMax });
@@ -1061,6 +1068,7 @@ function ExecutionConsole({
           setSharesModalOpen={setSharesModalOpen}
           sharesForm={sharesForm}
           setSharesForm={setSharesForm}
+          initialOpenAccordionId={initialAccordionId}
         />
       )}
     </div>
@@ -1098,6 +1106,7 @@ function SharesTabContent({
   setSharesModalOpen,
   sharesForm,
   setSharesForm,
+  initialOpenAccordionId,
 }: {
   data: SymbolDiagnosticsResponseExtended;
   accountId: string;
@@ -1109,11 +1118,14 @@ function SharesTabContent({
   setSharesModalOpen: (v: boolean) => void;
   sharesForm: { quantity: string; avg_cost: string; opened_at: string };
   setSharesForm: Dispatch<SetStateAction<{ quantity: string; avg_cost: string; opened_at: string }>>;
+  /** R24.1: Open this accordion when present (trade-plan, technicals, risk, position). */
+  initialOpenAccordionId?: string | null;
 }) {
-  const [tradePlanOpen, setTradePlanOpen] = useState(true);
-  const [technicalsOpen, setTechnicalsOpen] = useState(false);
-  const [riskOpen, setRiskOpen] = useState(false);
-  const [positionOpen, setPositionOpen] = useState(true);
+  const aid = (initialOpenAccordionId ?? "").toLowerCase();
+  const [tradePlanOpen, setTradePlanOpen] = useState(aid === "trade-plan" || !aid);
+  const [technicalsOpen, setTechnicalsOpen] = useState(aid === "technicals");
+  const [riskOpen, setRiskOpen] = useState(aid === "risk");
+  const [positionOpen, setPositionOpen] = useState(aid === "position");
   const [closeModalOpen, setCloseModalOpen] = useState(false);
   const [closeForm, setCloseForm] = useState({ exit_price: "", exit_date: new Date().toISOString().slice(0, 10), notes: "" });
 
@@ -1133,8 +1145,8 @@ function SharesTabContent({
 
   return (
     <div className="space-y-4 lg:col-span-2" data-testid="shares-tab-content">
-      {/* Accordion 1: Trade Plan */}
-      <details open={tradePlanOpen} onToggle={(e) => setTradePlanOpen((e.target as HTMLDetailsElement).open)} className="group rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900/60">
+      {/* Accordion 1: Trade Plan — R24.1 deep-link id: trade-plan */}
+      <details open={tradePlanOpen} onToggle={(e) => setTradePlanOpen((e.target as HTMLDetailsElement).open)} className="group rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900/60" data-testid="shares-accordion-trade-plan">
         <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
           {tradePlanOpen ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
           Trade Plan

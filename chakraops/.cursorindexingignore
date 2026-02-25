@@ -1,15 +1,3 @@
-node_modules/
-__pycache__/
-**/__pycache__/
-.pytest_cache/
-venv/
-.venv/
-env/
-frontend/dist/
-frontend/build/
-out/
-.git/
-
 **/node_modules/**
 **/.venv/**
 **/venv/**

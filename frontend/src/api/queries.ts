@@ -23,6 +23,8 @@ import type {
   SharesPlan,
   SharePosition,
   SharesPositionsListResponse,
+  ClosedSharePosition,
+  ClosedSharePositionsListResponse,
 } from "./types";
 import type { DecisionMode, DecisionRef } from "./types";
 export type { DecisionRef };
@@ -183,6 +185,14 @@ function uiSharePositionUpsertPath(symbol: string): string {
 function uiSharePositionDeletePath(symbol: string, accountId: string): string {
   return `/api/ui/shares/positions/${encodeURIComponent(symbol)}?account_id=${encodeURIComponent(accountId)}`;
 }
+/** R23.5.0: Close share position */
+function uiSharePositionClosePath(symbol: string): string {
+  return `/api/ui/shares/positions/${encodeURIComponent(symbol)}/close`;
+}
+/** R23.5.0: List closed share positions */
+function uiSharesPositionsClosedPath(accountId: string): string {
+  return `/api/ui/shares/positions/closed?account_id=${encodeURIComponent(accountId)}`;
+}
 
 function uiEvalRunPath(force?: boolean): string {
   const base = `/api/ui/eval/run`;
@@ -301,6 +311,8 @@ export const queryKeys = {
   /** R23.0 */
   uiSharesPositions: (accountId: string) => ["ui", "shares", "positions", accountId] as const,
   uiSharePosition: (accountId: string, symbol: string) => ["ui", "shares", "positions", accountId, symbol] as const,
+  /** R23.5.0: Closed share positions */
+  uiClosedSharePositions: (accountId: string) => ["ui", "shares", "positions", "closed", accountId] as const,
   uiPortfolioMetrics: (accountId?: string | null) => ["ui", "portfolio", "metrics", accountId ?? ""] as const,
   uiPortfolioRisk: (accountId?: string | null) => ["ui", "portfolio", "risk", accountId ?? ""] as const,
   uiPortfolioMtm: (accountId?: string | null) => ["ui", "portfolio", "mtm", accountId ?? ""] as const,
@@ -820,6 +832,31 @@ export function useDeleteSharePosition() {
       qc.invalidateQueries({ queryKey: queryKeys.uiPortfolio() });
       qc.invalidateQueries({ queryKey: ["ui", "symbolDiagnostics"] });
     },
+  });
+}
+
+/** R23.5.0: POST /api/ui/shares/positions/{symbol}/close — close position (exit_price, exit_date?, notes?). */
+export function useCloseSharePosition(symbol: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { account_id: string; exit_price: number; exit_date?: string | null; notes?: string | null }) =>
+      apiPost<ClosedSharePosition>(uiSharePositionClosePath(symbol!), payload),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ["ui", "shares"] });
+      qc.invalidateQueries({ queryKey: queryKeys.uiSharesPositions(variables.account_id) });
+      qc.invalidateQueries({ queryKey: queryKeys.uiClosedSharePositions(variables.account_id) });
+      qc.invalidateQueries({ queryKey: queryKeys.uiPortfolio() });
+      qc.invalidateQueries({ queryKey: ["ui", "symbolDiagnostics"] });
+    },
+  });
+}
+
+/** R23.5.0: GET /api/ui/shares/positions/closed?account_id= */
+export function useClosedSharePositions(accountId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.uiClosedSharePositions(accountId ?? "default"),
+    queryFn: () => apiGet<ClosedSharePositionsListResponse>(uiSharesPositionsClosedPath(accountId ?? "default")),
+    enabled: !!accountId,
   });
 }
 

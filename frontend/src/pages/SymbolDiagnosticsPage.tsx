@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Calendar, ChevronDown, ChevronRight, Database, Droplets, MessageSquare, X } from "lucide-react";
-import { useSymbolDiagnostics, useRecomputeSymbolDiagnostics, useDefaultAccount, useUiSystemHealth, useUpsertSharePosition, useDeleteSharePosition, useSetDeltaOverride, useDeleteDeltaOverride } from "@/api/queries";
+import { useSymbolDiagnostics, useRecomputeSymbolDiagnostics, useDefaultAccount, useUiSystemHealth, useUpsertSharePosition, useDeleteSharePosition, useCloseSharePosition, useClosedSharePositions, useSetDeltaOverride, useDeleteDeltaOverride } from "@/api/queries";
 import type { SymbolDiagnosticsResponseExtended } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { TradeTicketDrawer } from "@/components/TradeTicketDrawer";
@@ -85,7 +85,8 @@ function holdTimeBasisLabel(basisKey: string | null | undefined): string {
   return k || "—";
 }
 
-export function SymbolDiagnosticsPage() {
+/** Optional prop for tests: force initial tab without relying on URL (e.g. ?tab=Shares). */
+export function SymbolDiagnosticsPage({ initialTabForTest }: { initialTabForTest?: "Options" | "Shares" } = {}) {
   const [searchParams] = useSearchParams();
   const symbolFromUrl = searchParams.get("symbol")?.trim().toUpperCase() ?? "";
   const runIdFromUrl = searchParams.get("run_id")?.trim() ?? null;
@@ -187,7 +188,7 @@ export function SymbolDiagnosticsPage() {
               onOpenTradeTicket={(c) => setTradeTicketCandidate(c)}
               defaultCapital={getDefaultCapital(accountData?.account)}
               onOpenCopilot={() => setCopilotDrawerOpen(true)}
-              initialTab={searchParams.get("tab") === "Shares" ? "Shares" : "Options"}
+              initialTab={initialTabForTest ?? (searchParams.get("tab") === "Shares" ? "Shares" : "Options")}
             />
           </div>
           {/* R23.4.6: Copilot as slide-over drawer, default closed */}
@@ -253,9 +254,9 @@ const INFO_DRAWER_CONTENT: Record<string, string> = {
   "Delta band": "Target delta range for CSP (e.g. 0.25–0.35). Contracts outside this may be rejected.",
   "bar_count": "Candles sampled for this timeframe S/R calculation.",
   "Hold-time estimate":
-    "Sessions to T1 = ceil(|T1-Spot| / ATR). Estimated sessions for price to travel 1 ATR toward T1 (heuristic; not a promise).",
+    "A session means one trading day. Hold-time is a rough estimate of how many trading days it might take for price to reach T1 if it moved about 1 ATR per day (based on distance to T1 and ATR). It is not a promise. Formula: Sessions to T1 = ceil(|T1-Spot| / ATR).",
   "ATR-based hold time":
-    "Sessions to T1 = ceil(|T1-Spot| / ATR). Uses Spot, T1, and ATR; when available, Distance = |T1-Spot|.",
+    "A session means one trading day. Hold-time is a rough estimate of how many trading days to reach T1 if price moves ~1 ATR per day; it is not a promise. Formula: Sessions to T1 = ceil(|T1-Spot| / ATR). Uses Spot, T1, and ATR; when available, Distance = |T1-Spot|.",
   "Targets basis": "SR_LEVEL: targets from support/resistance. ATR_FALLBACK: from ATR when no valid S/R met distance.",
   Invalidation: "Price level that invalidates the structure (e.g. stop below support).",
 };
@@ -302,6 +303,7 @@ function ExecutionConsole({
   }, [data.delta_override?.delta_lo, data.delta_override?.delta_hi, bandMin, bandMax]);
   const upsertSharePosition = useUpsertSharePosition(data.symbol);
   const deleteSharePosition = useDeleteSharePosition();
+  const closeSharePosition = useCloseSharePosition(data.symbol);
   const setDeltaOverride = useSetDeltaOverride(data.symbol);
   const deleteDeltaOverride = useDeleteDeltaOverride(data.symbol);
   const comp = data.computed;
@@ -397,13 +399,14 @@ function ExecutionConsole({
           >
             Options
           </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("Shares")}
-            className={`px-3 py-1.5 rounded text-sm font-medium ${activeTab === "Shares" ? "bg-zinc-700 text-white dark:bg-zinc-500 dark:text-zinc-900" : "bg-zinc-200 text-zinc-700 hover:bg-zinc-300 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600"}`}
-          >
-            Shares
-          </button>
+            <button
+              type="button"
+              data-testid="tab-shares"
+              onClick={() => setActiveTab("Shares")}
+              className={`px-3 py-1.5 rounded text-sm font-medium ${activeTab === "Shares" ? "bg-zinc-700 text-white dark:bg-zinc-500 dark:text-zinc-900" : "bg-zinc-200 text-zinc-700 hover:bg-zinc-300 dark:bg-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-600"}`}
+            >
+              Shares
+            </button>
         </div>
       </Card>
       {activeTab === "Options" ? (
@@ -691,7 +694,7 @@ function ExecutionConsole({
       </Card>
       {(data.targets || data.invalidation != null || data.hold_time_estimate) && (
         <Card className="w-full">
-          <CardHeader title="Targets & hold-time" description="Targets from next resistances above spot (passed levels skipped). Hold-time is ATR-distance based and rough (not a promise)." />
+          <CardHeader title="Targets & hold-time" description="Targets from next resistances above spot (passed levels skipped). Hold-time: rough estimate of how many trading days to T1 if price moves ~1 ATR per day (one session = one trading day); not a promise." />
           <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
             {data.targets && (<>{data.targets.t1 != null && <Kv label="T1" value={fmt(data.targets.t1)} />}{data.targets.t2 != null && <Kv label="T2" value={fmt(data.targets.t2)} />}{data.targets.t3 != null && <Kv label="T3" value={fmt(data.targets.t3)} />}</>)}
             {data.invalidation != null && <Kv label="Invalidation" value={fmt(data.invalidation)} />}
@@ -727,6 +730,9 @@ function ExecutionConsole({
                 )}
                 <p className="mt-1 text-zinc-700 dark:text-zinc-300">
                   {data.hold_time_estimate.sessions != null ? data.hold_time_estimate.sessions : "Not available"} sessions · {holdTimeBasisLabel(data.hold_time_estimate.basis_key)}
+                </p>
+                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400" data-testid="hold-time-plain-english">
+                  One session = one trading day. Rough estimate of days to T1 if price moves ~1 ATR per day; not a promise.
                 </p>
               </div>
             )}
@@ -873,6 +879,16 @@ function ExecutionConsole({
               <Kv label="Final score" value={fmt(data.final_score ?? data.composite_score ?? data.score_breakdown?.final_score)} />
             </div>
             <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700">
+              <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1" data-testid="score-used-line">
+                {data.score_caps?.applied_caps?.length
+                  ? "Score used: Final score (capped)"
+                  : "Score used: Raw score (uncapped)"}
+              </p>
+              <p className="text-xs text-zinc-600 dark:text-zinc-400 mb-3">
+                {data.score_caps?.applied_caps?.length
+                  ? "Regime or other caps limit the final score even when the raw score is high (e.g. from liquidity or strategy fit)."
+                  : "Final score equals raw score; no caps were applied."}
+              </p>
               <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">Capped by</span>
               {data.score_caps?.applied_caps?.length ? (
                 <>
@@ -999,8 +1015,10 @@ function ExecutionConsole({
         <SharesTabContent
           data={data}
           accountId={accountId ?? ""}
+          setInfoDrawerKey={setInfoDrawerKey}
           upsertSharePosition={upsertSharePosition}
           deleteSharePosition={deleteSharePosition}
+          closeSharePosition={closeSharePosition}
           sharesModalOpen={sharesModalOpen}
           setSharesModalOpen={setSharesModalOpen}
           sharesForm={sharesForm}
@@ -1030,12 +1048,14 @@ function sharesReasonCodeToLabel(code: string): string {
   return m[code] ?? code.replace(/_/g, " ").toLowerCase();
 }
 
-/** R23.0/R23.3: Shares tab — Plan view: eligibility badge, Why list, plan card (spot, entry zone, stop, targets, hold-time, sizing), Your Shares Position. */
+/** R23.5.0: Shares tab — Trade Plan view with accordions: Trade Plan, Technicals, Risk & Details, Position. */
 function SharesTabContent({
   data,
   accountId,
+  setInfoDrawerKey,
   upsertSharePosition,
   deleteSharePosition,
+  closeSharePosition,
   sharesModalOpen,
   setSharesModalOpen,
   sharesForm,
@@ -1043,181 +1063,240 @@ function SharesTabContent({
 }: {
   data: SymbolDiagnosticsResponseExtended;
   accountId: string;
+  setInfoDrawerKey: (k: string | null) => void;
   upsertSharePosition: ReturnType<typeof useUpsertSharePosition>;
   deleteSharePosition: ReturnType<typeof useDeleteSharePosition>;
+  closeSharePosition: ReturnType<typeof useCloseSharePosition>;
   sharesModalOpen: boolean;
   setSharesModalOpen: (v: boolean) => void;
   sharesForm: { quantity: string; avg_cost: string; opened_at: string };
   setSharesForm: Dispatch<SetStateAction<{ quantity: string; avg_cost: string; opened_at: string }>>;
 }) {
+  const [tradePlanOpen, setTradePlanOpen] = useState(true);
+  const [technicalsOpen, setTechnicalsOpen] = useState(false);
+  const [riskOpen, setRiskOpen] = useState(false);
+  const [positionOpen, setPositionOpen] = useState(true);
+  const [closeModalOpen, setCloseModalOpen] = useState(false);
+  const [closeForm, setCloseForm] = useState({ exit_price: "", exit_date: new Date().toISOString().slice(0, 10), notes: "" });
+
   const pos = data.shares_position;
   const plan = data.shares_plan;
-  const eligibleLabel = plan?.eligible ? "Eligible" : "Not eligible";
+  const { data: closedData } = useClosedSharePositions(accountId || null);
+  const closedList = closedData?.positions ?? [];
+  const cv = data.computed_values;
+  const comp = data.computed;
   const reasonCodes = plan?.reason_codes ?? plan?.eligibility_codes ?? [];
   const stopObj = plan?.stop && typeof plan.stop === "object" && "price" in plan.stop ? plan.stop : { price: typeof plan?.stop === "number" ? plan.stop : null, basis: "" };
   const stopPrice = stopObj?.price ?? (typeof plan?.stop === "number" ? plan.stop : null);
-  const hasPlan = plan && (plan.spot != null || plan.entry_zone?.low != null || stopPrice != null || plan.targets?.t1 != null || plan.sizing);
+  const invalidation = plan?.invalidation ?? data.invalidation;
+  const holdTimeEst = plan?.hold_time_estimate ?? data.hold_time_estimate;
+  const targets = plan?.targets ?? data.targets;
+  const price = (data.stock && typeof data.stock === "object" && (data.stock as { price?: number; spot?: number }).spot) ?? (data.stock as { price?: number })?.price ?? null;
+
   return (
-    <div className="space-y-4 lg:col-span-2">
-      <Card>
-        <CardHeader title="Shares" description="BUY SHARES recommendation only; no order placement." />
-        <div className="space-y-3 text-sm">
-          <p><span className="text-zinc-500 dark:text-zinc-400">Eligibility:</span> <span className={plan?.eligible ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-zinc-600 dark:text-zinc-400"}>{eligibleLabel}</span>
-            {reasonCodes.includes("SHARES_UAT_FORCED") && (
-              <Badge variant="warning" className="ml-2">UAT forced</Badge>
-            )}
-          </p>
-          {reasonCodes.length > 0 && (
-            <div>
-              <span className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Why</span>
-              <ul className="list-disc pl-4 space-y-0.5 text-zinc-700 dark:text-zinc-300">
-                {reasonCodes.map((c, i) => (
-                  <li key={i}>{sharesReasonCodeToLabel(c)}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {hasPlan && (
-            <div className="pt-2 border-t border-zinc-200 dark:border-zinc-700 space-y-2">
-              <span className="block text-xs font-medium text-zinc-600 dark:text-zinc-300">Shares Plan</span>
-              {plan.spot != null && <p><span className="text-zinc-500 dark:text-zinc-400">Spot:</span> <span className="font-mono">{plan.spot}</span></p>}
-              {plan.entry_zone && (plan.entry_zone.low != null || plan.entry_zone.high != null) && (
-                <p>
-                  <span className="text-zinc-500 dark:text-zinc-400">Entry zone:</span> {fmt(plan.entry_zone.low)} – {fmt(plan.entry_zone.high)}
-                  <Tooltip content={plan.entry_zone.basis ? `Based on ${plan.entry_zone.basis.replace(/_/g, " ").toLowerCase()}` : "Range around support"} className="ml-1 inline">
-                    <span className="cursor-help text-zinc-400 dark:text-zinc-500" aria-label="Entry zone basis">ⓘ</span>
-                  </Tooltip>
-                </p>
-              )}
-              {stopPrice != null && (
-                <p>
-                  <span className="text-zinc-500 dark:text-zinc-400">Stop:</span> <span className="font-mono">{stopPrice}</span>
-                  <Tooltip content="Stop below support (ATR-based)" className="ml-1 inline">
-                    <span className="cursor-help text-zinc-400 dark:text-zinc-500" aria-label="Stop basis">ⓘ</span>
-                  </Tooltip>
-                </p>
-              )}
-              {plan.targets && (plan.targets.t1 != null || plan.targets.t2 != null) && (
-                <p><span className="text-zinc-500 dark:text-zinc-400">Targets:</span> T1 {fmt(plan.targets.t1)} · T2 {fmt(plan.targets.t2)}</p>
-              )}
-              {plan.hold_time?.sessions_to_t1 != null && (
-                <p>
-                  <span className="text-zinc-500 dark:text-zinc-400">Hold-time estimate:</span> {plan.hold_time.sessions_to_t1} sessions
-                  <Tooltip content={plan.hold_time.method === "ATR_DISTANCE" ? "Estimated sessions to T1 using ATR distance" : "Default or ATR-based estimate"} className="ml-1 inline">
-                    <span className="cursor-help text-zinc-400 dark:text-zinc-500" aria-label="Hold-time method">ⓘ</span>
-                  </Tooltip>
-                </p>
-              )}
-              {plan.sizing && (
-                <div className="pt-1">
-                  <span className="block text-xs text-zinc-500 dark:text-zinc-400 mb-0.5">Sizing</span>
-                  {plan.sizing.basis === "INSUFFICIENT_DATA" ? (
-                    <p className="text-zinc-500 dark:text-zinc-400">Insufficient data (set account balances for suggested size)</p>
-                  ) : (
-                    <>
-                      <p><span className="text-zinc-500 dark:text-zinc-400">Suggested shares:</span> <span className="font-mono font-medium">{plan.sizing.suggested_shares ?? "—"}</span></p>
-                      {plan.sizing.suggested_cost != null && <p><span className="text-zinc-500 dark:text-zinc-400">Suggested cost:</span> <span className="font-mono">${plan.sizing.suggested_cost.toFixed(2)}</span></p>}
-                      {plan.sizing.max_loss != null && <p><span className="text-zinc-500 dark:text-zinc-400">Max loss:</span> <span className="font-mono">${plan.sizing.max_loss.toFixed(2)}</span></p>}
-                      <Tooltip content="Risk budget from account value × risk %; size = budget / stop distance" className="inline">
-                        <span className="cursor-help text-zinc-400 dark:text-zinc-500" aria-label="Sizing method">ⓘ</span>
-                      </Tooltip>
-                    </>
+    <div className="space-y-4 lg:col-span-2" data-testid="shares-tab-content">
+      {/* Accordion 1: Trade Plan */}
+      <details open={tradePlanOpen} onToggle={(e) => setTradePlanOpen((e.target as HTMLDetailsElement).open)} className="group rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900/60">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+          {tradePlanOpen ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+          Trade Plan
+        </summary>
+        <div className="border-t border-zinc-200 dark:border-zinc-700 px-4 pb-4 pt-3 space-y-4">
+          <Card data-testid="shares-trade-plan-card">
+            <CardHeader title="Trade Plan" description="BUY SHARES recommendation only; no order placement." />
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
+              {plan?.spot != null && <Kv label="Spot" value={fmt(plan.spot)} />}
+              {plan?.entry_zone?.low != null && plan?.entry_zone?.high != null && (
+                <div className="col-span-2 sm:col-span-1">
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">Entry zone</span>
+                  <span className="font-mono text-zinc-700 dark:text-zinc-300">{fmt(plan.entry_zone.low)} – {fmt(plan.entry_zone.high)}</span>
+                  {plan.entry_zone.basis && (
+                    <button type="button" onClick={() => setInfoDrawerKey("Targets basis")} className="ml-1 cursor-help underline decoration-dotted">(?)</button>
                   )}
                 </div>
               )}
+              {stopPrice != null && <Kv label="Stop" value={fmt(stopPrice)} />}
+              {targets?.t1 != null && <Kv label="T1" value={fmt(targets.t1)} />}
+              {targets?.t2 != null && <Kv label="T2" value={fmt(targets.t2)} />}
+              {targets?.t3 != null && <Kv label="T3" value={fmt(targets.t3)} />}
+              {invalidation != null && <Kv label="Invalidation" value={fmt(invalidation)} />}
             </div>
-          )}
-          {data.mtf_levels && (data.mtf_levels.daily || data.mtf_levels.weekly || data.mtf_levels.monthly) && !hasPlan && (
-            <div>
-              <span className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Multi-timeframe levels</span>
-              <p className="text-zinc-700 dark:text-zinc-300">See Options tab for M/W/D support and resistance.</p>
+            {(holdTimeEst?.hold_time_atr != null && holdTimeEst?.hold_time_distance_to_t1 != null) && (
+              <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700" data-testid="shares-hold-time-block">
+                <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Sessions to T1 = ceil(|T1-Spot| / ATR)</p>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">Spot {fmt(typeof (price ?? comp?.support_level) === "number" ? (price ?? comp?.support_level) as number : null)} · T1 {fmt(typeof targets?.t1 === "number" ? targets.t1 : null)} · ATR {fmt(typeof holdTimeEst.hold_time_atr === "number" ? holdTimeEst.hold_time_atr : null)} · Distance {fmt(typeof holdTimeEst.hold_time_distance_to_t1 === "number" ? holdTimeEst.hold_time_distance_to_t1 : null)}</p>
+                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">One session = one trading day. Rough estimate of days to T1 if price moves ~1 ATR per day; not a promise.</p>
+                <button type="button" onClick={() => setInfoDrawerKey(holdTimeEst.hold_time_atr != null ? "ATR-based hold time" : "Hold-time estimate")} className="mt-1 text-xs cursor-help underline decoration-dotted">(?)</button>
+              </div>
+            )}
+            {holdTimeEst?.sessions != null && (holdTimeEst.hold_time_atr == null || holdTimeEst.hold_time_distance_to_t1 == null) && (
+              <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">{holdTimeEst.sessions} sessions</p>
+            )}
+            {/* Why eligible / Why not checklist */}
+            <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700">
+              <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">{plan?.eligible ? "Why eligible" : "Why not"}</span>
+              <ul className="space-y-1 text-sm" data-testid="shares-why-checklist">
+                {reasonCodes.map((c, i) => (
+                  <li key={i} className="flex items-center gap-2">
+                    {plan?.eligible && c === "SHARES_ELIGIBLE" ? <span className="text-emerald-600" aria-hidden>✓</span> : (plan?.eligible ? null : <span className="text-zinc-400" aria-hidden>✗</span>)}
+                    <span className={plan?.eligible && c === "SHARES_ELIGIBLE" ? "text-emerald-700 dark:text-emerald-400" : "text-zinc-600 dark:text-zinc-400"}>{sharesReasonCodeToLabel(c)}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
+            {plan?.sizing && (
+              <div className="mt-2 text-sm">
+                {plan.sizing.basis === "INSUFFICIENT_DATA" ? (
+                  <p className="text-zinc-500 dark:text-zinc-400">Insufficient data (set account balances for suggested size)</p>
+                ) : (
+                  <>
+                    <span className="text-zinc-500 dark:text-zinc-400">Suggested shares:</span> <span className="font-mono font-medium">{plan.sizing.suggested_shares ?? "—"}</span>
+                  </>
+                )}
+              </div>
+            )}
+          </Card>
+        </div>
+      </details>
+
+      {/* Accordion 2: Technicals (reuse) */}
+      <details open={technicalsOpen} onToggle={(e) => setTechnicalsOpen((e.target as HTMLDetailsElement).open)} className="group rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900/60">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+          {technicalsOpen ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+          Technicals
+        </summary>
+        <div className="border-t border-zinc-200 dark:border-zinc-700 px-4 pb-4 pt-3">
+          <Card>
+            <CardHeader title="Technical details" />
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
+              <Kv label="RSI" value={fmt(cv?.rsi ?? comp?.rsi)} />
+              <Kv label="ATR" value={fmt(cv?.atr ?? comp?.atr)} />
+              <Kv label="Support" value={fmt(cv?.support_level ?? comp?.support_level)} />
+              <Kv label="Resistance" value={fmt(cv?.resistance_level ?? comp?.resistance_level)} />
+            </div>
+          </Card>
+          {data.mtf_levels && (data.mtf_levels.daily || data.mtf_levels.weekly || data.mtf_levels.monthly) && (
+            <Card className="mt-3">
+              <CardHeader title="Multi-timeframe levels" />
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">Daily / Weekly / Monthly support and resistance. See Options tab for full table.</p>
+            </Card>
           )}
         </div>
-      </Card>
-      <Card>
-        <CardHeader title="Your Shares Position" />
-        {pos ? (
-          <div className="space-y-2 text-sm">
-            <p><span className="text-zinc-500 dark:text-zinc-400">Quantity:</span> <span className="font-mono font-medium">{pos.quantity}</span></p>
-            {pos.avg_cost != null && <p><span className="text-zinc-500 dark:text-zinc-400">Avg cost:</span> <span className="font-mono">${pos.avg_cost.toFixed(2)}</span></p>}
-            <p><span className="text-zinc-500 dark:text-zinc-400">Last updated:</span> {pos.updated_at ? new Date(pos.updated_at).toLocaleString() : "—"}</p>
-            <div className="flex gap-2 pt-2">
-              <Button size="sm" variant="secondary" onClick={() => { setSharesForm({ quantity: String(pos.quantity), avg_cost: pos.avg_cost != null ? String(pos.avg_cost) : "", opened_at: "" }); setSharesModalOpen(true); }}>
-                Update
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={deleteSharePosition.isPending}
-                onClick={() => { if (window.confirm(`Remove shares position for ${data.symbol}?`)) deleteSharePosition.mutate({ accountId, symbol: data.symbol }); }}
-              >
-                {deleteSharePosition.isPending ? "Deleting…" : "Delete"}
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <p className="text-zinc-500 dark:text-zinc-400">No shares position recorded.</p>
-        )}
-        {!pos && (
-          <Button size="sm" className="mt-2" onClick={() => { setSharesForm({ quantity: "", avg_cost: "", opened_at: "" }); setSharesModalOpen(true); }}>
-            Add Shares Position
-          </Button>
-        )}
-      </Card>
+      </details>
+
+      {/* Accordion 3: Risk & Details (reuse) */}
+      <details open={riskOpen} onToggle={(e) => setRiskOpen((e.target as HTMLDetailsElement).open)} className="group rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900/60">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+          {riskOpen ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+          Risk & Details
+        </summary>
+        <div className="border-t border-zinc-200 dark:border-zinc-700 px-4 pb-4 pt-3">
+          {(data.score_breakdown || data.score_caps?.applied_caps?.length) ? (
+            <Card className="mb-3">
+              <CardHeader title="Score breakdown" />
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                <Kv label="Raw score" value={fmt(data.raw_score ?? data.score_breakdown?.raw_score)} />
+                <Kv label="Final score" value={fmt(data.final_score ?? data.composite_score)} />
+              </div>
+            </Card>
+          ) : null}
+          <Card>
+            <CardHeader title="Risk flags" />
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">Data status, liquidity, and other risk flags. See Options tab for full Risk & Details.</p>
+          </Card>
+        </div>
+      </details>
+
+      {/* Accordion 4: Position */}
+      <details open={positionOpen} onToggle={(e) => setPositionOpen((e.target as HTMLDetailsElement).open)} className="group rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900/60">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+          {positionOpen ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+          Position
+        </summary>
+        <div className="border-t border-zinc-200 dark:border-zinc-700 px-4 pb-4 pt-3 space-y-4">
+          <Card data-testid="shares-position-card">
+            <CardHeader title="Your Shares Position" />
+            {pos ? (
+              <div className="space-y-2 text-sm">
+                <p><span className="text-zinc-500 dark:text-zinc-400">Quantity:</span> <span className="font-mono font-medium">{pos.quantity}</span></p>
+                {pos.avg_cost != null && <p><span className="text-zinc-500 dark:text-zinc-400">Avg cost:</span> <span className="font-mono">${pos.avg_cost.toFixed(2)}</span></p>}
+                {(pos as { last_price?: number }).last_price != null && (
+                  <p><span className="text-zinc-500 dark:text-zinc-400">Unrealized P/L:</span> <span className={`font-mono font-medium ${((pos as { unrealized_pnl?: number }).unrealized_pnl ?? 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>${((pos as { unrealized_pnl?: number }).unrealized_pnl ?? 0).toFixed(2)}</span></p>
+                )}
+                <p><span className="text-zinc-500 dark:text-zinc-400">Last updated:</span> {pos.updated_at ? new Date(pos.updated_at).toLocaleString() : "—"}</p>
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <Button size="sm" variant="secondary" onClick={() => { setSharesForm({ quantity: String(pos.quantity), avg_cost: pos.avg_cost != null ? String(pos.avg_cost) : "", opened_at: "" }); setSharesModalOpen(true); }}>Update</Button>
+                  <Button size="sm" variant="secondary" disabled={closeSharePosition.isPending} onClick={() => setCloseModalOpen(true)}>Close position</Button>
+                  <Button size="sm" variant="secondary" disabled={deleteSharePosition.isPending} onClick={() => { if (window.confirm(`Remove shares position for ${data.symbol}?`)) deleteSharePosition.mutate({ accountId, symbol: data.symbol }); }}>{deleteSharePosition.isPending ? "Deleting…" : "Delete"}</Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <p className="text-zinc-500 dark:text-zinc-400">No shares position recorded.</p>
+                <Button size="sm" className="mt-2" onClick={() => { setSharesForm({ quantity: "", avg_cost: "", opened_at: "" }); setSharesModalOpen(true); }}>Add Shares Position</Button>
+              </>
+            )}
+          </Card>
+          {closedList.length > 0 && (
+            <Card>
+              <CardHeader title="Closed positions (this symbol)" />
+              <ul className="space-y-2 text-sm">
+                {closedList.filter((c) => c.symbol.toUpperCase() === data.symbol?.toUpperCase()).slice(0, 5).map((c) => (
+                  <li key={c.id} className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-mono font-medium">{c.symbol}</span>
+                    <span className={c.realized_pnl != null && c.realized_pnl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>Realized P/L: ${(c.realized_pnl ?? 0).toFixed(2)}</span>
+                    <span className="text-zinc-500 dark:text-zinc-400 text-xs">Closed {c.closed_at ? new Date(c.closed_at).toLocaleDateString() : ""}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+        </div>
+      </details>
+
       {sharesModalOpen && (
         <Card className="border-zinc-400 dark:border-zinc-500">
           <CardHeader title="Add / Update Shares Position" />
           <div className="grid grid-cols-1 gap-3 max-w-xs">
             <div>
               <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Quantity (required)</label>
-              <input
-                type="number"
-                min="1"
-                className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800"
-                value={sharesForm.quantity}
-                onChange={(e) => setSharesForm((p) => ({ ...p, quantity: e.target.value }))}
-              />
+              <input type="number" min="1" className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={sharesForm.quantity} onChange={(e) => setSharesForm((p) => ({ ...p, quantity: e.target.value }))} />
             </div>
             <div>
               <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Avg cost (optional)</label>
-              <input
-                type="number"
-                step="0.01"
-                className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800"
-                value={sharesForm.avg_cost}
-                onChange={(e) => setSharesForm((p) => ({ ...p, avg_cost: e.target.value }))}
-              />
+              <input type="number" step="0.01" className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={sharesForm.avg_cost} onChange={(e) => setSharesForm((p) => ({ ...p, avg_cost: e.target.value }))} />
             </div>
             <div>
               <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Opened date (optional)</label>
-              <input
-                type="date"
-                className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800"
-                value={sharesForm.opened_at || ""}
-                onChange={(e) => setSharesForm((p) => ({ ...p, opened_at: e.target.value || "" }))}
-              />
+              <input type="date" className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={sharesForm.opened_at || ""} onChange={(e) => setSharesForm((p) => ({ ...p, opened_at: e.target.value || "" }))} />
             </div>
             <div className="flex gap-2">
-              <Button
-                size="sm"
-                onClick={() => {
-                  const qty = parseInt(sharesForm.quantity, 10);
-                  if (!Number.isNaN(qty) && qty >= 0) {
-                    upsertSharePosition.mutate({
-                      account_id: accountId,
-                      quantity: qty,
-                      avg_cost: sharesForm.avg_cost.trim() ? parseFloat(sharesForm.avg_cost) : null,
-                      opened_at: sharesForm.opened_at.trim() || null,
-                    });
-                    setSharesModalOpen(false);
-                  }
-                }}
-                disabled={upsertSharePosition.isPending}
-              >
-                {upsertSharePosition.isPending ? "Saving…" : "Save"}
-              </Button>
+              <Button size="sm" onClick={() => { const qty = parseInt(sharesForm.quantity, 10); if (!Number.isNaN(qty) && qty >= 0) { upsertSharePosition.mutate({ account_id: accountId, quantity: qty, avg_cost: sharesForm.avg_cost.trim() ? parseFloat(sharesForm.avg_cost) : null, opened_at: sharesForm.opened_at.trim() || null }); setSharesModalOpen(false); } }} disabled={upsertSharePosition.isPending}>{upsertSharePosition.isPending ? "Saving…" : "Save"}</Button>
               <Button size="sm" variant="secondary" onClick={() => setSharesModalOpen(false)}>Cancel</Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {closeModalOpen && pos && (
+        <Card className="border-amber-200 dark:border-amber-800" data-testid="close-position-modal">
+          <CardHeader title="Close position" />
+          <div className="grid grid-cols-1 gap-3 max-w-xs">
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Exit price (required)</label>
+              <input type="number" step="0.01" className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={closeForm.exit_price} onChange={(e) => setCloseForm((f) => ({ ...f, exit_price: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Exit date (default today)</label>
+              <input type="date" className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={closeForm.exit_date} onChange={(e) => setCloseForm((f) => ({ ...f, exit_date: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Notes (optional)</label>
+              <input type="text" className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={closeForm.notes} onChange={(e) => setCloseForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" />
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={() => { const ex = parseFloat(closeForm.exit_price); if (!Number.isNaN(ex) && ex > 0) { closeSharePosition.mutate({ account_id: accountId, exit_price: ex, exit_date: closeForm.exit_date ? new Date(closeForm.exit_date).toISOString() : null, notes: closeForm.notes.trim() || null }); setCloseModalOpen(false); setCloseForm({ exit_price: "", exit_date: new Date().toISOString().slice(0, 10), notes: "" }); } }} disabled={closeSharePosition.isPending}>{closeSharePosition.isPending ? "Closing…" : "Close"}</Button>
+              <Button size="sm" variant="secondary" onClick={() => setCloseModalOpen(false)}>Cancel</Button>
             </div>
           </div>
         </Card>

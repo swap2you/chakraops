@@ -34,6 +34,15 @@ function isOptionsStrategy(s: string | null | undefined): boolean {
   return upper === "CSP" || upper === "CC";
 }
 
+/** R23.4.8: First line for score tooltip — which score is used (Final capped vs Raw uncapped). */
+function formatScoreUsedLine(row: {
+  score?: number | null;
+  score_caps?: { applied_caps?: unknown[] } | null;
+}): string {
+  const hasCaps = (row.score_caps?.applied_caps?.length ?? 0) > 0;
+  return hasCaps ? "Score used: Final (capped)" : "Score used: Raw (uncapped)";
+}
+
 /** Phase 10.1: Cap summary for Universe row tooltip. Wording aligned with Symbol Diagnostics (Capped by / No caps applied). */
 function formatScoreCapTooltip(row: {
   score?: number | null;
@@ -381,15 +390,19 @@ export function UniversePage() {
                     <span className="inline-flex items-center gap-1">
                       {row.score != null ? String(row.score) : "n/a"}
                       {(() => {
+                        const scoreUsedLine = formatScoreUsedLine(row);
                         const capTxt = formatScoreCapTooltip(row);
                         const rb = row as { score_breakdown?: unknown };
                         const bdTxt = formatScoreBreakdown(rb.score_breakdown);
-                        const txt = capTxt ? (bdTxt ? `${capTxt} · ${bdTxt}` : capTxt) : bdTxt;
-                        return txt ? (
+                        const parts = [scoreUsedLine];
+                        if (capTxt) parts.push(capTxt);
+                        if (bdTxt) parts.push(bdTxt);
+                        const txt = parts.join(" · ");
+                        return (
                           <Tooltip content={txt} className="max-w-md">
                             <Info className="h-3.5 w-3.5 shrink-0 cursor-help text-zinc-500" />
                           </Tooltip>
-                        ) : null;
+                        );
                       })()}
                     </span>
                   </TableCell>

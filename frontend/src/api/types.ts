@@ -512,6 +512,25 @@ export interface SharesPositionsListResponse {
   positions: SharePosition[];
 }
 
+/** R23.5.0: Closed share position (from close endpoint or list closed). */
+export interface ClosedSharePosition {
+  id: string;
+  account_id: string;
+  symbol: string;
+  quantity: number;
+  avg_cost: number | null;
+  opened_at: string | null;
+  closed_at: string;
+  exit_price: number;
+  realized_pnl: number | null;
+  close_notes: string | null;
+}
+
+export interface ClosedSharePositionsListResponse {
+  account_id: string;
+  positions: ClosedSharePosition[];
+}
+
 // =============================================================================
 // Alerts — GET /api/ui/alerts
 // =============================================================================
@@ -791,7 +810,6 @@ export interface SharesPlan {
   };
   confidence_score?: number | null;
   why_recommended?: string | null;
-  eligibility_codes?: string[];
   support_resistance?: Record<string, { support?: number | null; resistance?: number | null; bar_count?: number | null; as_of?: string; method?: string } | null>;
   indicators_used?: Record<string, unknown>;
   as_of_inputs?: Record<string, unknown>;

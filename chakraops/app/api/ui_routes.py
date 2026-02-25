@@ -2169,6 +2169,23 @@ def ui_shares_positions_list(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/shares/positions/closed")
+def ui_shares_positions_closed_list(
+    account_id: str = Query(..., description="Account ID"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R23.5.0: List closed share positions for account. Must be before /{symbol} route."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.accounts.holdings_db import list_closed_share_positions
+        positions = list_closed_share_positions(account_id)
+        return {"account_id": account_id, "positions": positions}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error listing closed share positions: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/shares/positions/{symbol}")
 def ui_shares_position_get(
     symbol: str = Path(..., min_length=1, max_length=12),
@@ -2259,6 +2276,48 @@ def ui_shares_position_delete(
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Error deleting share position: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/shares/positions/{symbol}/close")
+async def ui_shares_position_close(
+    symbol: str = Path(..., min_length=1, max_length=12),
+    account_id: str | None = Query(default=None),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+    request: Request = None,
+) -> Dict[str, Any]:
+    """R23.5.0: Close share position. Body: { account_id?, exit_price, exit_date?, notes? }. Moves to closed history and returns closed record with realized_pnl."""
+    _require_ui_key(x_ui_key)
+    try:
+        body: Dict[str, Any] = {}
+        if request and request.headers.get("content-type", "").strip().lower().startswith("application/json"):
+            body = await request.json() or {}
+        if not isinstance(body, dict):
+            body = {}
+        aid = (body.get("account_id") or account_id or "").strip() or "default"
+        exit_price = body.get("exit_price")
+        if exit_price is None:
+            raise HTTPException(status_code=400, detail="exit_price is required")
+        try:
+            exit_price_f = float(exit_price)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="exit_price must be a number")
+        exit_date = body.get("exit_date")
+        if exit_date is not None and not isinstance(exit_date, str):
+            exit_date = None
+        notes = body.get("notes")
+        if notes is not None and not isinstance(notes, str):
+            notes = None
+        from app.core.accounts.holdings_db import close_share_position
+        closed = close_share_position(aid, symbol, exit_price_f, exit_date=exit_date, notes=notes)
+        return closed
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error closing share position: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 

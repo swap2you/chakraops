@@ -75,6 +75,20 @@ def init_db() -> None:
         UNIQUE(account_id, symbol),
         FOREIGN KEY (account_id) REFERENCES account_profile(id)
     );
+    CREATE TABLE IF NOT EXISTS share_positions_closed (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        symbol TEXT NOT NULL,
+        quantity INTEGER NOT NULL,
+        avg_cost REAL,
+        opened_at TEXT,
+        closed_at TEXT NOT NULL,
+        exit_price REAL NOT NULL,
+        realized_pnl REAL,
+        close_notes TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (account_id) REFERENCES account_profile(id)
+    );
     """
     with _LOCK:
         conn = _get_conn()
@@ -418,5 +432,117 @@ def delete_share_position(account_id: str, symbol: str) -> bool:
             )
             conn.commit()
             return cur.rowcount > 0
+        finally:
+            conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Share positions closed (R23.5.0)
+# ---------------------------------------------------------------------------
+
+
+def close_share_position(
+    account_id: str,
+    symbol: str,
+    exit_price: float,
+    exit_date: Optional[str] = None,
+    notes: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Close share position: copy to share_positions_closed with realized_pnl, then delete.
+    exit_date: ISO datetime string; default now UTC.
+    Returns closed record with realized_pnl.
+    """
+    init_db()
+    from datetime import datetime, timezone
+    aid = (account_id or "").strip() or _DEFAULT_ACCOUNT_ID
+    sym = (symbol or "").strip().upper()
+    if not sym:
+        raise ValueError("symbol is required")
+    if not isinstance(exit_price, (int, float)):
+        raise ValueError("exit_price is required and must be a number")
+    exit_price_f = float(exit_price)
+    closed_at = exit_date if exit_date else datetime.now(timezone.utc).isoformat()
+    with _LOCK:
+        conn = _get_conn()
+        try:
+            row = conn.execute(
+                """SELECT id, account_id, symbol, quantity, avg_cost, opened_at, notes, created_at, updated_at
+                   FROM share_positions WHERE account_id = ? AND symbol = ?""",
+                (aid, sym),
+            ).fetchone()
+            if not row:
+                raise ValueError(f"No share position for {sym}")
+            qty = int(row["quantity"])
+            avg = float(row["avg_cost"]) if row["avg_cost"] is not None else None
+            realized_pnl = ((exit_price_f - avg) * qty) if (avg is not None and qty > 0) else None
+            closed_id = str(uuid.uuid4())
+            conn.execute(
+                """INSERT INTO share_positions_closed
+                   (id, account_id, symbol, quantity, avg_cost, opened_at, closed_at, exit_price, realized_pnl, close_notes, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    closed_id,
+                    row["account_id"],
+                    row["symbol"],
+                    qty,
+                    row["avg_cost"],
+                    row["opened_at"],
+                    closed_at,
+                    exit_price_f,
+                    realized_pnl,
+                    notes,
+                    row["created_at"],
+                ),
+            )
+            conn.execute(
+                "DELETE FROM share_positions WHERE account_id = ? AND symbol = ?",
+                (aid, sym),
+            )
+            conn.commit()
+            out = {
+                "id": closed_id,
+                "account_id": row["account_id"],
+                "symbol": row["symbol"],
+                "quantity": qty,
+                "avg_cost": avg,
+                "opened_at": row["opened_at"],
+                "closed_at": closed_at,
+                "exit_price": exit_price_f,
+                "realized_pnl": realized_pnl,
+                "close_notes": notes,
+            }
+            return out
+        finally:
+            conn.close()
+
+
+def list_closed_share_positions(account_id: str) -> List[Dict[str, Any]]:
+    """List closed share positions for account, newest first."""
+    init_db()
+    aid = (account_id or "").strip() or _DEFAULT_ACCOUNT_ID
+    with _LOCK:
+        conn = _get_conn()
+        try:
+            rows = conn.execute(
+                """SELECT id, account_id, symbol, quantity, avg_cost, opened_at, closed_at, exit_price, realized_pnl, close_notes, created_at
+                   FROM share_positions_closed WHERE account_id = ? ORDER BY closed_at DESC""",
+                (aid,),
+            ).fetchall()
+            return [
+                {
+                    "id": r["id"],
+                    "account_id": r["account_id"],
+                    "symbol": r["symbol"],
+                    "quantity": int(r["quantity"]),
+                    "avg_cost": float(r["avg_cost"]) if r["avg_cost"] is not None else None,
+                    "opened_at": r["opened_at"],
+                    "closed_at": r["closed_at"],
+                    "exit_price": float(r["exit_price"]),
+                    "realized_pnl": float(r["realized_pnl"]) if r["realized_pnl"] is not None else None,
+                    "close_notes": r["close_notes"],
+                }
+                for r in rows
+            ]
         finally:
             conn.close()

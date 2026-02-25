@@ -141,6 +141,53 @@ describe("SymbolDiagnosticsPage score UX", () => {
     expect(screen.getByTestId("hold-time-block")).toHaveTextContent("Distance");
   });
 
+  it("R24.5: earnings advisory pill when earnings_data_status OK and earnings_next_date", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: {
+        ...mockDiagnosticsWithCap,
+        earnings: {
+          earnings_days: 1,
+          earnings_block: false,
+          note: null,
+          earnings_next_date: "2026-02-26",
+          earnings_annc_tod: "AMC",
+          implied_earnings_move_pct: 6.5,
+          earnings_data_status: "OK",
+          earnings_as_of: "2026-02-25T21:00:00Z",
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<SymbolDiagnosticsPage />);
+    expect(screen.getByText(/Earnings: 1d \(AMC\)/)).toBeInTheDocument();
+  });
+
+  it("R24.5: no FAIL_ or WARN_ in risk flags / earnings UI text", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: {
+        ...mockDiagnosticsWithCap,
+        earnings: {
+          earnings_days: null,
+          earnings_block: false,
+          note: "Unavailable",
+          earnings_next_date: null,
+          earnings_annc_tod: "Unknown",
+          implied_earnings_move_pct: null,
+          earnings_data_status: "Unavailable",
+          earnings_as_of: null,
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    const { container } = render(<SymbolDiagnosticsPage />);
+    fireEvent.click(screen.getByText("Risk & Details"));
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/FAIL_/);
+    expect(text).not.toMatch(/WARN_/);
+  });
+
   it("R23.4.8: when applied_caps present shows Score used: Final score (capped)", () => {
     useSymbolDiagnosticsMock.mockReturnValue({
       data: {

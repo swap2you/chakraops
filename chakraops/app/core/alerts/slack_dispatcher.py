@@ -397,8 +397,25 @@ def build_actionable_message_r241(payload: Dict[str, Any]) -> str:
         if key_num.get("premium_est") is not None:
             lines.append("Credit est: %s" % _str_capital(key_num.get("premium_est")))
         pct_profit = payload.get("pct_max_profit") if payload.get("pct_max_profit") is not None else key_num.get("profit_pct")
+        # R24.4: Mark provenance/freshness + max profit % + recommend (safe labels only)
+        mark_val = payload.get("mark_value")
+        if mark_val is not None:
+            src = payload.get("mark_source")
+            age = payload.get("mark_age_sec")
+            if src or age is not None:
+                extra = []
+                if src:
+                    extra.append(str(src))
+                if age is not None:
+                    extra.append("%ss old" % age)
+                lines.append("Mark: %s (%s)" % (_str_num(mark_val), ", ".join(extra)))
+            else:
+                lines.append("Mark: %s" % _str_num(mark_val))
         if pct_profit is not None:
             lines.append("Max profit %%: %s" % _str_num(pct_profit))
+        rec = payload.get("recommended_action_code")
+        if rec:
+            lines.append("Recommend: %s" % rec)
     else:
         entry = payload.get("entry_zone") or key_num.get("entry_zone")
         if isinstance(entry, dict) and entry.get("low") is not None and entry.get("high") is not None:

@@ -3206,18 +3206,37 @@ def _build_symbol_diagnostics_from_v2_store(
         if not note and getattr(earnings, "status_code", None):
             sc = (earnings.status_code or "").strip()
             if sc == "EARNINGS_NOT_EVALUATED":
-                note = "Not evaluated"
+                note = "Unavailable"
             elif sc == "EARNINGS_BLOCKED":
                 note = "Earnings block"
             elif sc == "EARNINGS_OK":
                 note = None
             else:
-                note = "Not evaluated"
+                note = "Unavailable"
         earnings_out = {
             "earnings_days": getattr(earnings, "earnings_days", None),
             "earnings_block": getattr(earnings, "earnings_block", None),
-            "note": note or "Not evaluated",
+            "note": note or "Unavailable",
+            "earnings_next_date": None,
+            "earnings_annc_tod": "Unknown",
+            "implied_earnings_move_pct": None,
+            "earnings_data_status": "Unavailable",
+            "earnings_as_of": None,
         }
+        # R24.5: Merge snapshot earnings advisory (request-time only; never FAIL_/WARN_)
+        sym_upper = (symbol or "").strip().upper()
+        if eval_snapshot and sym_upper:
+            snap_earnings = (eval_snapshot.get("earnings_by_symbol") or {}).get(sym_upper)
+            if isinstance(snap_earnings, dict):
+                earnings_out["earnings_next_date"] = snap_earnings.get("earnings_next_date")
+                if snap_earnings.get("earnings_days") is not None:
+                    earnings_out["earnings_days"] = snap_earnings.get("earnings_days")
+                earnings_out["earnings_annc_tod"] = snap_earnings.get("earnings_annc_tod", "Unknown")
+                earnings_out["implied_earnings_move_pct"] = snap_earnings.get("implied_earnings_move_pct")
+                earnings_out["earnings_data_status"] = snap_earnings.get("earnings_data_status", "Unavailable")
+                earnings_out["earnings_as_of"] = snap_earnings.get("earnings_as_of")
+                if snap_earnings.get("earnings_data_status") != "OK":
+                    earnings_out["note"] = earnings_out.get("note") or "Unavailable"
     regime = diag.get("regime") or getattr(summary, "regime", None) or technicals.get("regime")
     sample_rej = diag.get("sample_rejected_due_to_delta") or []
     # R23.4.4: Minimal explanation from regime when not persisted (so candidate table can show regime)
@@ -3611,9 +3630,11 @@ def ui_action_needed(
                 shares_position=_share_pos,
             )
             item = _action_needed_item_from_diagnostics(diag, "OPTIONS")
-            # R24.3: Enrich with position lifecycle for tracked option positions (request-time only)
+            # R24.3/R24.4: Enrich with position lifecycle for tracked option positions (request-time only)
             try:
+                import time as _time
                 from app.core.positions.service import list_positions
+                from app.core.positions.quote_resolver import find_contract_quote
                 from app.core.lifecycle.position_lifecycle_r243 import compute_position_lifecycle
                 open_pos = list_positions(status="OPEN", symbol=sym, exclude_test=True)
                 opt_positions = [p for p in open_pos if (getattr(p, "strategy", "") or "").upper() in ("CSP", "CC")]
@@ -3624,13 +3645,49 @@ def ui_action_needed(
                         spot_for_lifecycle = float(stock["price"])
                     if spot_for_lifecycle is None and getattr(summary, "price", None) is not None:
                         spot_for_lifecycle = float(summary.price)
-                    lc = compute_position_lifecycle(opt_positions[0], spot=spot_for_lifecycle)
+                    pos = opt_positions[0]
+                    chain_rows = diag.get("candidates") or []
+                    expiry = getattr(pos, "expiration", None) or getattr(pos, "expiry", None)
+                    strike = getattr(pos, "strike", None)
+                    quote = find_contract_quote(chain_rows, expiry, strike, "PUT") if chain_rows and expiry and strike is not None else None
+                    quote_ts = None
+                    if quote and quote.get("quote_ts"):
+                        quote_ts = str(quote["quote_ts"])
+                    elif _snap and isinstance(_snap, dict):
+                        syms = _snap.get("symbols") or {}
+                        if isinstance(syms, dict) and sym in syms and isinstance(syms[sym], dict):
+                            quote_ts = (syms[sym].get("quote_as_of") or syms[sym].get("quote_date")) or None
+                        if not quote_ts and _snap.get("quote_as_of"):
+                            quote_ts = _snap.get("quote_as_of")
+                    as_of_ts = _time.time()
+                    lc = compute_position_lifecycle(
+                        pos,
+                        spot=spot_for_lifecycle,
+                        bid=quote.get("bid") if quote else None,
+                        ask=quote.get("ask") if quote else None,
+                        last=quote.get("last") if quote else None,
+                        quote_ts=quote_ts,
+                        as_of_ts=as_of_ts,
+                    )
                     item["pct_max_profit"] = lc.get("pct_max_profit")
                     item["mark_proxy"] = lc.get("mark_proxy")
                     item["assignment_risk"] = lc.get("assignment_risk")
                     item["roll_window"] = lc.get("roll_window")
                     item["recommended_action_code"] = lc.get("recommended_action_code")
                     item["recommended_by"] = lc.get("recommended_by", "r243")
+                    # R24.4: Mark provenance/freshness + roll rationale (never persisted to decision artifact)
+                    if lc.get("mark_value") is not None:
+                        item["mark_value"] = lc.get("mark_value")
+                    if lc.get("mark_source") is not None:
+                        item["mark_source"] = lc.get("mark_source")
+                    if lc.get("quote_ts") is not None:
+                        item["quote_ts"] = lc.get("quote_ts")
+                    if lc.get("mark_age_sec") is not None:
+                        item["mark_age_sec"] = lc.get("mark_age_sec")
+                    if lc.get("roll_window_threshold_dte") is not None:
+                        item["roll_window_threshold_dte"] = lc.get("roll_window_threshold_dte")
+                    if lc.get("roll_reason_codes") is not None:
+                        item["roll_reason_codes"] = lc.get("roll_reason_codes")
             except Exception:
                 pass
             if item.get("next_action_code") and item["next_action_code"] != "NONE":

@@ -321,7 +321,9 @@ export function DashboardPage() {
                   <div className="space-y-1.5">
                     {(actionNeeded.top_options.slice(0, 5)).map((item) => {
                       const href = `/symbol-diagnostics?symbol=${encodeURIComponent(item.symbol)}&tab=Options${item.accordion_id ? `&accordion=${encodeURIComponent(item.accordion_id)}` : ""}`;
-                      const actionLabel = item.next_action_code === "ENTRY" ? "Entry" : item.next_action_code === "CLOSE" ? "Close" : item.next_action_code;
+                      const actionLabel = item.next_action_code === "ENTRY" ? "Entry" : item.next_action_code === "CLOSE" ? "Close" : item.next_action_code === "ROLL" ? "Roll" : item.next_action_code === "HOLD" ? "Hold" : item.next_action_code;
+                      const recommendLabel = item.recommended_action_code === "CLOSE" ? "Close" : item.recommended_action_code === "ROLL" ? "Roll" : item.recommended_action_code === "HOLD" ? "Hold" : item.recommended_action_code;
+                      const rollReasonLabel = (item.roll_reason_codes?.includes("DTE_WINDOW") && item.recommended_action_code === "ROLL") ? "DTE window" : null;
                       return (
                         <Link
                           key={`opt-${item.symbol}`}
@@ -351,13 +353,22 @@ export function DashboardPage() {
                           {item.key_number != null && (
                             <p className="mt-0.5 text-zinc-500 dark:text-zinc-500">Key: {item.key_number}</p>
                           )}
+                          {item.mark_value != null && (
+                            <p className="mt-0.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-mark-${item.symbol}`}>
+                              Mark: {item.mark_value}
+                              {item.mark_source && ` (${item.mark_source}${item.mark_age_sec != null ? `, ${item.mark_age_sec}s old` : ""})`}
+                            </p>
+                          )}
                           {item.pct_max_profit != null && (
                             <p className="mt-0.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-pct-profit-${item.symbol}`}>
                               Max profit: {item.pct_max_profit}%
                             </p>
                           )}
-                          {item.recommended_action_code && item.recommended_action_code !== item.next_action_code && (
-                            <p className="mt-0.5 text-zinc-500 dark:text-zinc-500">Recommend: {item.recommended_action_code}</p>
+                          {recommendLabel && (
+                            <p className="mt-0.5 text-zinc-500 dark:text-zinc-500">Recommend: {recommendLabel}</p>
+                          )}
+                          {rollReasonLabel && (
+                            <p className="mt-0.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-roll-reason-${item.symbol}`}>Reason: {rollReasonLabel}</p>
                           )}
                         </Link>
                       );

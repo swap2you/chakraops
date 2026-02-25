@@ -139,4 +139,41 @@ describe("DashboardPage", () => {
     expect(screen.getByTestId("action-needed-severity-NVDA")).toHaveTextContent("high");
     expect(document.body.textContent).not.toMatch(/FAIL_|WARN_/);
   });
+
+  it("R24.4: Action Needed shows mark provenance, Recommend, and roll reason (safe labels only)", async () => {
+    mockUseActionNeeded.mockReturnValue({
+      data: {
+        top_options: [
+          {
+            symbol: "AAPL",
+            next_action_code: "ROLL",
+            rationale_lines: [],
+            key_number: null,
+            tab: "Options",
+            accordion: "Trade",
+            accordion_id: "trade",
+            severity: "medium",
+            dte: 12,
+            strike: 150,
+            mark_value: 1.23,
+            mark_source: "MID",
+            mark_age_sec: 18,
+            pct_max_profit: 52,
+            recommended_action_code: "ROLL",
+            roll_reason_codes: ["DTE_WINDOW"],
+          },
+        ],
+        top_shares: [],
+        recently_changed: [],
+      },
+    });
+    render(<DashboardPage />);
+    await screen.findByTestId("action-needed-card");
+    expect(screen.getByTestId("action-needed-mark-AAPL")).toHaveTextContent(/Mark: 1.23/);
+    expect(screen.getByTestId("action-needed-mark-AAPL")).toHaveTextContent(/MID/);
+    expect(screen.getByTestId("action-needed-mark-AAPL")).toHaveTextContent(/18s old/);
+    expect(screen.getByTestId("action-needed-pct-profit-AAPL")).toHaveTextContent("52%");
+    expect(screen.getByTestId("action-needed-roll-reason-AAPL")).toHaveTextContent("Reason: DTE window");
+    expect(document.body.textContent).not.toMatch(/FAIL_|WARN_/);
+  });
 });

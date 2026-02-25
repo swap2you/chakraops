@@ -337,6 +337,29 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Release notes** — chakraops/docs/releases/R24.3_release_notes.md
 - [x] **Verification** — out/verification/R24.3/notes.md with gate outputs and UAT checklist
 
+### R24.4 — Mark Proxy Provenance/Freshness + Roll Rationale (Operator Trust)
+
+- [ ] **Backend A:** Mark fields (mark_value, mark_source, quote_ts, mark_age_sec) in lifecycle; deterministic selection (MID→LAST→BIDASK_MID→BID→ASK→UNKNOWN); request-time only; not in decision artifact
+- [ ] **Backend B:** Roll rationale (roll_window_threshold_dte, roll_reason_codes) when recommended_action_code == ROLL; safe enums only
+- [ ] **Backend C:** GET /api/ui/action-needed includes mark provenance/freshness and roll rationale; no FAIL_/WARN_
+- [ ] **Backend D:** Slack includes mark provenance/freshness and max profit %; no raw codes
+- [ ] **Frontend E:** Dashboard Action Needed shows Mark + source + age, Max profit %, Recommend (safe), ROLL reason (safe mapping)
+- [ ] **Tests:** Backend: mark selection determinism; mark_age_sec; action-needed no FAIL_/WARN_; lifecycle mark_*/roll_* not in decision JSON. Frontend: mark/source/age safe; no FAIL_|WARN_ in textContent
+- [ ] **Requirements** — chakraops/docs/releases/R24.4_requirements.md
+- [ ] **Release notes** — chakraops/docs/releases/R24.4_release_notes.md
+- [ ] **Verification** — out/verification/R24.4/notes.md with gate outputs and UAT checklist
+
+### R24.5 — Earnings Advisory (Hero Pill + Risk Flags) Using ORATS
+
+- [ ] **Backend A:** ORATS fetch cores (nextErn, daysToNextErn, impliedEarningsMove); optional hist/earnings for anncTod
+- [ ] **Backend B:** Request-time earnings fields (earnings_next_date, earnings_days, earnings_annc_tod, implied_earnings_move_pct, earnings_data_status OK/Unavailable/Stale, earnings_as_of); snapshot semantics; not in decision artifact
+- [ ] **Backend C:** API earnings payload includes new fields; "Not evaluated" → "Unavailable" when status not OK; no FAIL_/WARN_
+- [ ] **Frontend D:** Hero pill (orange) when earnings OK + next date; Risk Flags show date/days/implied move; Unavailable when not OK; "Advisory only" note
+- [ ] **Tests:** Backend: earnings days computation, determinism, no FAIL_/WARN_ in payload, earnings not in decision JSON. Frontend: hero pill + risk flags; no FAIL_|WARN_ in textContent
+- [ ] **Requirements** — chakraops/docs/releases/R24.5_requirements.md
+- [ ] **Release notes** — chakraops/docs/releases/R24.5_release_notes.md
+- [ ] **Verification** — out/verification/R24.5/notes.md with gate outputs and UAT (NVDA earnings, no eligibility block, grep FAIL_|WARN_)
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 - [ ] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py` (fixture → mock staged result → evaluate_universe → store write → hygiene check + snapshot check + per-symbol summary)

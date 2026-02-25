@@ -537,6 +537,13 @@ export interface ActionNeededItem {
   assignment_risk?: { active: boolean; reason_code?: string | null };
   roll_window?: { active: boolean; dte?: number | null };
   recommended_action_code?: string;
+  /** R24.4: mark provenance/freshness + roll rationale (request-time only; safe labels) */
+  mark_value?: number;
+  mark_source?: string;
+  quote_ts?: string | null;
+  mark_age_sec?: number | null;
+  roll_window_threshold_dte?: number | null;
+  roll_reason_codes?: string[] | null;
 }
 export interface ActionNeededResponse {
   top_options: ActionNeededItem[];

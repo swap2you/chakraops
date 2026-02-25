@@ -70,12 +70,15 @@ def find_contract_quote(
             continue
         bid = row.get("bid") if row.get("bid") is not None else row.get("bidPrice")
         ask = row.get("ask") if row.get("ask") is not None else row.get("askPrice")
-        if bid is None and ask is None:
+        last = row.get("last") if row.get("last") is not None else row.get("lastPrice")
+        quote_ts = row.get("quote_date") or row.get("quoteDate")
+        if bid is None and ask is None and last is None:
             continue
         try:
             b = float(bid) if bid is not None else None
             a = float(ask) if ask is not None else None
+            l = float(last) if last is not None else None
         except (TypeError, ValueError):
             continue
-        return {"bid": b, "ask": a}
+        return {"bid": b, "ask": a, "last": l, "quote_ts": quote_ts}
     return None

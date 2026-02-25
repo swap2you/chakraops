@@ -98,7 +98,8 @@ def _eval_snapshot_path() -> Path:
 
 
 def _write_eval_snapshot(artifact: DecisionArtifactV2) -> None:
-    """R22.7 Fix Pack: When eval/run completes, persist snapshot for deterministic recompute."""
+    """R22.7 Fix Pack: When eval/run completes, persist snapshot for deterministic recompute.
+    R24.5: Store earnings_by_symbol from ORATS so per-symbol recompute uses same values."""
     from datetime import datetime, timezone
     meta = getattr(artifact, "metadata", None) or {}
     run_id = meta.get("run_id")
@@ -112,6 +113,30 @@ def _write_eval_snapshot(artifact: DecisionArtifactV2) -> None:
         "candles_as_of": pipeline_ts,
         "orats_as_of": pipeline_ts,
     }
+    # R24.5: Fetch earnings advisory per symbol for snapshot semantics
+    as_of_utc = None
+    if pipeline_ts:
+        try:
+            as_of_utc = datetime.fromisoformat(str(pipeline_ts).replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            as_of_utc = datetime.now(timezone.utc)
+    symbols_list: List[str] = []
+    for s in getattr(artifact, "symbols", []) or []:
+        sym = (getattr(s, "symbol", "") or "").strip().upper()
+        if sym:
+            symbols_list.append(sym)
+    if symbols_list:
+        try:
+            from app.core.config.orats_secrets import ORATS_API_TOKEN
+            from app.core.orats.earnings import fetch_earnings_advisory_batch
+            token = (ORATS_API_TOKEN or "").strip() or None
+            if token:
+                earnings_map = fetch_earnings_advisory_batch(
+                    symbols_list, as_of_utc=as_of_utc, token=token
+                )
+                payload["earnings_by_symbol"] = earnings_map
+        except Exception as e:
+            logger.warning("[EVAL_STORE_V2] Earnings snapshot fetch failed: %s", e)
     path = _eval_snapshot_path()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)

@@ -367,6 +367,11 @@ function ExecutionConsole({
                   {data.next_action_code === "ENTRY" ? "Entry" : data.next_action_code === "CLOSE" ? "Close" : data.next_action_code}
                 </Badge>
               )}
+              {earningsPillLabel(data.earnings) && (
+                <Badge variant="warning" className="border-amber-500/50 bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200" data-testid="earnings-advisory-pill">
+                  {earningsPillLabel(data.earnings)}
+                </Badge>
+              )}
               {providerStatus !== "OK" && (
                 <button
                   type="button"
@@ -960,13 +965,13 @@ function ExecutionConsole({
             <RiskFlag
               icon={<Calendar className="h-4 w-4" />}
               label="earnings days"
-              value={earningsDaysReason(undefined)}
+              value={earningsDaysReason(data.earnings)}
               status="neutral"
             />
             <RiskFlag
               icon={<Calendar className="h-4 w-4" />}
               label="earnings block"
-              value={earningsBlockReason(undefined)}
+              value={earningsBlockReason(data.earnings)}
               status="neutral"
             />
             <RiskFlag
@@ -1000,7 +1005,7 @@ function ExecutionConsole({
             <RiskFlag
               icon={<Database className="h-4 w-4" />}
               label="data status"
-              value={sel?.status ?? "Not evaluated"}
+              value={sel?.status ?? "Unavailable"}
               status={
                 sel?.status === "PASS" ? "ok" : sel?.status === "FAIL" ? "fail" : "neutral"
               }
@@ -1014,6 +1019,20 @@ function ExecutionConsole({
                 </span>
               </div>
             </div>
+            {data.earnings && (data.earnings.earnings_next_date != null || data.earnings.earnings_days != null) && (
+              <div className="col-span-2 flex items-start gap-2">
+                <Calendar className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500 dark:text-zinc-500" />
+                <div>
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">earnings advisory</span>
+                  <span className="font-mono text-zinc-700 dark:text-zinc-300">
+                    {data.earnings.earnings_next_date != null ? `Next: ${data.earnings.earnings_next_date}` : ""}
+                    {data.earnings.earnings_days != null ? ` · ${data.earnings.earnings_days}d` : ""}
+                    {data.earnings.implied_earnings_move_pct != null ? ` · Implied move ${data.earnings.implied_earnings_move_pct.toFixed(2)}%` : ""}
+                  </span>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Advisory only. Earnings do not block options or shares eligibility.</p>
+                </div>
+              </div>
+            )}
           </div>
         </Card>
         <details className="rounded border border-zinc-200 dark:border-zinc-700 p-3" open={detailsOpen} onToggle={(e) => setDetailsOpen((e.target as HTMLDetailsElement).open)}>
@@ -1075,8 +1094,30 @@ function ExecutionConsole({
   );
 }
 
-function earningsDaysReason(_value: unknown): string {
-  return "Not evaluated";
+/** R24.5: Earnings advisory — safe labels only (no FAIL_/WARN_). */
+function earningsPillLabel(earnings: SymbolDiagnosticsResponseExtended["earnings"]): string | null {
+  if (!earnings || earnings.earnings_data_status !== "OK" || !earnings.earnings_next_date) return null;
+  const d = earnings.earnings_next_date;
+  const annc = earnings.earnings_annc_tod && earnings.earnings_annc_tod !== "Unknown" ? ` (${earnings.earnings_annc_tod})` : "";
+  const days = earnings.earnings_days;
+  if (days === 0) return `Earnings: Today${annc}`;
+  if (days === 1) return `Earnings: 1d${annc}`;
+  try {
+    const parts = d.slice(0, 10).split("-");
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const month = monthNames[parseInt(parts[1], 10) - 1] ?? parts[1];
+    return `Earnings: ${month} ${parseInt(parts[2], 10)}${annc}`;
+  } catch {
+    return `Earnings: ${d}${annc}`;
+  }
+}
+
+function earningsDaysReason(earnings: SymbolDiagnosticsResponseExtended["earnings"]): string {
+  if (!earnings) return "Unavailable";
+  if (earnings.earnings_data_status !== "OK") return earnings.note ?? "Unavailable";
+  if (earnings.earnings_days != null) return `${earnings.earnings_days}d`;
+  if (earnings.earnings_next_date) return `Next: ${earnings.earnings_next_date}`;
+  return earnings.note ?? "Unavailable";
 }
 
 /** R23.3: Map shares reason_codes to safe UI labels (no raw FAIL_/WARN_). */
@@ -1355,8 +1396,11 @@ function SharesTabContent({
   );
 }
 
-function earningsBlockReason(_value: unknown): string {
-  return "Not evaluated";
+function earningsBlockReason(earnings: SymbolDiagnosticsResponseExtended["earnings"]): string {
+  if (!earnings) return "Unavailable";
+  if (earnings.earnings_data_status !== "OK") return earnings.note ?? "Unavailable";
+  if (earnings.earnings_block === true) return "Blocked";
+  return "Advisory only (does not block)";
 }
 
 function liqReason(

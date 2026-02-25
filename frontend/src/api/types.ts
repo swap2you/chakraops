@@ -760,6 +760,17 @@ export interface SymbolDiagnosticsResponseExtended extends SymbolDiagnosticsResp
   options_sizing?: OptionsSizing | null;
   /** R24.0: Next action badge: ENTRY | HOLD | CLOSE | ROLL | REDUCE | NONE. Request-time only. */
   next_action_code?: "ENTRY" | "HOLD" | "CLOSE" | "ROLL" | "REDUCE" | "NONE" | null;
+  /** R24.5: Earnings advisory (hero pill + risk flags). Advisory only; never blocks. Safe values only (OK/Unavailable/Stale). */
+  earnings?: {
+    earnings_days?: number | null;
+    earnings_block?: boolean | null;
+    note?: string | null;
+    earnings_next_date?: string | null;
+    earnings_annc_tod?: "AMC" | "BMO" | "Unknown" | string | null;
+    implied_earnings_move_pct?: number | null;
+    earnings_data_status?: "OK" | "Unavailable" | "Stale" | string | null;
+    earnings_as_of?: string | null;
+  } | null;
 }
 
 /** R24.0: Options sizing block (codes only; no FAIL_/WARN_ in notes_codes). */

@@ -159,6 +159,21 @@ def build_next_action_details(
     return details
 
 
+def lifecycle_severity(next_action_code: NextActionCode) -> str:
+    """R24.2: Map next_action_code to severity for ordering (high first). Safe labels only."""
+    c = (next_action_code or "").strip().upper()
+    if c in ("CLOSE", "ROLL"):
+        return "high"
+    if c == "ENTRY":
+        return "medium"
+    return "low"
+
+
+def lifecycle_recommended_by() -> str:
+    """R24.2: Ruleset version for lifecycle recommendations (audit only)."""
+    return "r242"
+
+
 def _recent_transitions() -> List[Dict[str, Any]]:
     """R24.1: Last 5 action transitions for Dashboard 'Recently changed'. In-memory stub; can wire to notifications store."""
     return []

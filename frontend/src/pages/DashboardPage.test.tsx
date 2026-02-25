@@ -123,4 +123,20 @@ describe("DashboardPage", () => {
     expect(shrLink).toHaveAttribute("href", expect.stringContaining("tab=Shares"));
     expect(shrLink).toHaveAttribute("href", expect.stringContaining("accordion=trade-plan"));
   });
+
+  it("R24.2: Action Needed shows severity when present and never raw FAIL_/WARN_", async () => {
+    mockUseActionNeeded.mockReturnValue({
+      data: {
+        top_options: [
+          { symbol: "NVDA", next_action_code: "CLOSE", rationale_lines: ["Target reached."], key_number: "spot 150", tab: "Options", accordion: "Trade", accordion_id: "trade", severity: "high", dte: 10, strike: 145 },
+        ],
+        top_shares: [],
+        recently_changed: [],
+      },
+    });
+    render(<DashboardPage />);
+    await screen.findByTestId("action-needed-card");
+    expect(screen.getByTestId("action-needed-severity-NVDA")).toHaveTextContent("high");
+    expect(document.body.textContent).not.toMatch(/FAIL_|WARN_/);
+  });
 });

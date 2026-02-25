@@ -309,9 +309,9 @@ export function DashboardPage() {
               </Link>
             )}
           </Card>
-          {/* R24.1: Action Needed — GET /api/ui/action-needed; top 5 options + top 5 shares; deep-link tab + accordion */}
+          {/* R24.1/R24.2: Action Needed — GET /api/ui/action-needed; sorted by severity; safe labels only */}
           <Card data-testid="action-needed-card">
-            <CardHeader title="Action Needed" description="Top options and shares actions; link to symbol diagnostics." />
+            <CardHeader title="Action Needed" description="Top options and shares actions (by priority); link to symbol diagnostics." />
             <div className="space-y-4">
               <div>
                 <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-500 mb-2">Options</span>
@@ -321,6 +321,7 @@ export function DashboardPage() {
                   <div className="space-y-1.5">
                     {(actionNeeded.top_options.slice(0, 5)).map((item) => {
                       const href = `/symbol-diagnostics?symbol=${encodeURIComponent(item.symbol)}&tab=Options${item.accordion_id ? `&accordion=${encodeURIComponent(item.accordion_id)}` : ""}`;
+                      const actionLabel = item.next_action_code === "ENTRY" ? "Entry" : item.next_action_code === "CLOSE" ? "Close" : item.next_action_code;
                       return (
                         <Link
                           key={`opt-${item.symbol}`}
@@ -330,8 +331,20 @@ export function DashboardPage() {
                         >
                           <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{item.symbol}</span>
                           <Badge variant={item.next_action_code === "ENTRY" ? "success" : item.next_action_code === "CLOSE" ? "danger" : "neutral"} className="ml-2">
-                            {item.next_action_code === "ENTRY" ? "Entry" : item.next_action_code === "CLOSE" ? "Close" : item.next_action_code}
+                            {actionLabel}
                           </Badge>
+                          {item.severity && item.severity !== "low" && (
+                            <span className="ml-1.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-severity-${item.symbol}`}>
+                              ({item.severity})
+                            </span>
+                          )}
+                          {(item.dte != null || item.strike != null) && (
+                            <span className="ml-1.5 text-zinc-500 dark:text-zinc-500">
+                              {item.dte != null && `DTE ${item.dte}`}
+                              {item.dte != null && item.strike != null && " · "}
+                              {item.strike != null && `$${item.strike}`}
+                            </span>
+                          )}
                           {(item.rationale_lines?.[0]) && (
                             <p className="mt-1 text-zinc-600 dark:text-zinc-400 truncate">{item.rationale_lines[0]}</p>
                           )}
@@ -352,6 +365,7 @@ export function DashboardPage() {
                   <div className="space-y-1.5">
                     {(actionNeeded.top_shares.slice(0, 5)).map((item) => {
                       const href = `/symbol-diagnostics?symbol=${encodeURIComponent(item.symbol)}&tab=Shares${item.accordion_id ? `&accordion=${encodeURIComponent(item.accordion_id)}` : ""}`;
+                      const actionLabel = item.next_action_code === "ENTRY" ? "Entry" : item.next_action_code === "CLOSE" ? "Close" : item.next_action_code;
                       return (
                         <Link
                           key={`shr-${item.symbol}`}
@@ -361,8 +375,11 @@ export function DashboardPage() {
                         >
                           <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{item.symbol}</span>
                           <Badge variant={item.next_action_code === "ENTRY" ? "success" : item.next_action_code === "CLOSE" ? "danger" : "neutral"} className="ml-2">
-                            {item.next_action_code === "ENTRY" ? "Entry" : item.next_action_code === "CLOSE" ? "Close" : item.next_action_code}
+                            {actionLabel}
                           </Badge>
+                          {item.severity && item.severity !== "low" && (
+                            <span className="ml-1.5 text-zinc-500 dark:text-zinc-500">({item.severity})</span>
+                          )}
                           {(item.rationale_lines?.[0]) && (
                             <p className="mt-1 text-zinc-600 dark:text-zinc-400 truncate">{item.rationale_lines[0]}</p>
                           )}

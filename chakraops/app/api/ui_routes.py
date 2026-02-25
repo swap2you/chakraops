@@ -3465,7 +3465,8 @@ def _build_symbol_diagnostics_from_v2_store(
 
 
 def _action_needed_item_from_diagnostics(d: Dict[str, Any], strategy: str) -> Dict[str, Any]:
-    """R24.1: Extract action-needed row from full diagnostics response. Includes tab + accordion id for deep-link."""
+    """R24.1/R24.2: Extract action-needed row from full diagnostics. Includes tab + accordion id, severity, lifecycle fields."""
+    from app.core.next_action_r241 import lifecycle_severity, lifecycle_recommended_by
     details = d.get("next_action_details") or {}
     rationale = details.get("rationale_lines") or []
     key_num = details.get("key_numbers") or {}
@@ -3485,7 +3486,9 @@ def _action_needed_item_from_diagnostics(d: Dict[str, Any], strategy: str) -> Di
     key_display = None
     if key_number_label and key_number_value is not None:
         key_display = "%s %s" % (key_number_label, _fmt_num(key_number_value) if key_number_label == "delta" else str(key_number_value))
-    return {
+    severity = lifecycle_severity(code)
+    recommended_by = lifecycle_recommended_by()
+    out: Dict[str, Any] = {
         "symbol": symbol,
         "strategy": strategy,
         "next_action_code": code,
@@ -3496,7 +3499,34 @@ def _action_needed_item_from_diagnostics(d: Dict[str, Any], strategy: str) -> Di
         "tab": tab,
         "accordion": accordion,
         "accordion_id": accordion_id,
+        "severity": severity,
+        "recommended_by": recommended_by,
     }
+    if strategy == "OPTIONS":
+        sel_key = d.get("selected_contract_key")
+        candidates = d.get("candidates") or []
+        sel_c = None
+        for c in candidates:
+            if isinstance(c, dict) and c.get("contract_key") == sel_key:
+                sel_c = c
+                break
+        if sel_c is None and candidates:
+            sel_c = candidates[0] if isinstance(candidates[0], dict) else None
+        if sel_c:
+            if sel_c.get("expiry") is not None:
+                out["expiry"] = sel_c["expiry"]
+            if sel_c.get("strike") is not None:
+                out["strike"] = sel_c["strike"]
+            if sel_c.get("dte") is not None:
+                out["dte"] = sel_c["dte"]
+        sizing = d.get("options_sizing") or {}
+        if sizing.get("suggested_contracts") is not None:
+            out["size"] = sizing["suggested_contracts"]
+        if sizing.get("required_cash") is not None:
+            out["notional"] = sizing["required_cash"]
+        if key_num.get("profit_pct") is not None:
+            out["pct_max_profit"] = key_num["profit_pct"]
+    return out
 
 
 def _fmt_num(v: Any) -> str:
@@ -3577,6 +3607,8 @@ def ui_action_needed(
                 options_out.append(item)
         except Exception:
             continue
+    _severity_order = {"high": 0, "medium": 1, "low": 2}
+    options_out.sort(key=lambda x: (_severity_order.get((x.get("severity") or "low"), 2), (x.get("symbol") or "")))
     options_out = options_out[:5]
 
     shares_out: List[Dict[str, Any]] = []
@@ -3603,6 +3635,7 @@ def ui_action_needed(
             shares_out.append(item)
         except Exception:
             continue
+    shares_out.sort(key=lambda x: (_severity_order.get((x.get("severity") or "low"), 2), (x.get("symbol") or "")))
     shares_out = shares_out[:5]
 
     return {

@@ -347,8 +347,8 @@ def build_actionable_message_r240(payload: Dict[str, Any]) -> str:
 
 def build_actionable_message_r241(payload: Dict[str, Any]) -> str:
     """
-    R24.1: Per-symbol Action block using next_action_details. OPTIONS: strategy, next_action,
-    rationale, sizing, key levels (spot, T1, stop), contract_key/option_symbol, delta_best, DTE,
+    R24.1/R24.2: Per-symbol Action block using next_action_details. OPTIONS: strategy, expiry, strike,
+    next_action, rationale, sizing, key levels (spot, T1, stop), contract_key/option_symbol, delta_best, DTE,
     bid/ask/spread_pct. SHARES: next_action, rationale, spot, entry zone, stop, T1, suggested
     shares/cost, risk %. All copy safe/plain-English; no FAIL_/WARN_/paths.
     """
@@ -357,6 +357,10 @@ def build_actionable_message_r241(payload: Dict[str, Any]) -> str:
         "Strategy: %s" % (payload.get("strategy") or payload.get("mode") or "?"),
         "Next action: %s" % (payload.get("next_action_code") or payload.get("action") or "NONE"),
     ]
+    if payload.get("expiry") or payload.get("expiration"):
+        lines.append("Expiry: %s" % (payload.get("expiry") or payload.get("expiration")))
+    if payload.get("strike") is not None:
+        lines.append("Strike: %s" % _str_num(payload.get("strike")))
     rationale = payload.get("rationale_lines") or payload.get("rationale") or []
     if isinstance(rationale, list):
         for r in rationale[:2]:

@@ -315,6 +315,18 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Release notes** — docs/releases/R24.1_release_notes.md
 - [x] **Verification** — out/verification/R24.1/notes.md with gate outputs and UAT checklist
 
+### R24.2 — Lifecycle Alerts + Richer Actionable Details + Dashboard Workflow
+
+- [x] **Backend A:** Lifecycle evaluation output (structured, request-time only): severity, options: expiry, strike, dte, size, notional, pct_max_profit; recommended_by; no prose persistence
+- [x] **Backend B:** Lifecycle rules (PROFIT_TARGET_HIT, ROLL_WINDOW, stop/shares target) — conservative; existing next_action logic
+- [x] **Backend C:** GET /api/ui/action-needed extended with severity and enriched contract fields; no FAIL_/WARN_ in response
+- [x] **Backend D:** Slack actionable message includes contract-specific fields (expiry, strike, dte, premium, size); dedupe unchanged
+- [x] **Frontend E:** Dashboard Action Needed sorted by severity (high first); enriched details inline; safe labels only; deep link unchanged
+- [x] **Tests:** Backend: no FAIL_/WARN_ in UI JSON; determinism; next_action_details not in decision JSON. Frontend: Dashboard severity + no raw codes; deep link
+- [x] **Requirements** — chakraops/docs/releases/R24.2_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R24.2_release_notes.md
+- [x] **Verification** — out/verification/R24.2/notes.md with gate outputs and UAT checklist (gate results also in release notes; paste raw tail into notes.md when out/ writable)
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 - [ ] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py` (fixture → mock staged result → evaluate_universe → store write → hygiene check + snapshot check + per-symbol summary)

@@ -512,7 +512,7 @@ export function useSharesCandidates() {
   });
 }
 
-/** R24.1: Action Needed — top_options, top_shares, recently_changed. */
+/** R24.1/R24.2: Action Needed — top_options, top_shares, recently_changed; severity and lifecycle fields. */
 export interface ActionNeededItem {
   symbol: string;
   strategy: string;
@@ -522,6 +522,16 @@ export interface ActionNeededItem {
   tab: string;
   accordion: string;
   accordion_id?: string;
+  /** R24.2: high | medium | low for sort/display */
+  severity?: string;
+  /** R24.2: options — expiry, strike, dte, size, notional, pct_max_profit */
+  expiry?: string;
+  strike?: number;
+  dte?: number;
+  size?: number;
+  notional?: number;
+  pct_max_profit?: number;
+  recommended_by?: string;
 }
 export interface ActionNeededResponse {
   top_options: ActionNeededItem[];

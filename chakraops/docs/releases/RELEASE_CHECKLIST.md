@@ -327,6 +327,16 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Release notes** — chakraops/docs/releases/R24.2_release_notes.md
 - [x] **Verification** — out/verification/R24.2/notes.md with pasted raw gate outputs and UAT checklist (R24.2.1 process patch)
 
+### R24.3 — Position-Aware Lifecycle for Tracked Option Positions + wheel_state Retention
+
+- [x] **Part A:** Request-time lifecycle for tracked option positions (pct_max_profit, dte, mark_proxy, assignment_risk, roll_window, recommended_action_code); recommended_by "r243"; not persisted
+- [x] **Part B:** action-needed + Slack + Dashboard include lifecycle fields; no FAIL_/WARN_
+- [x] **Part C:** wheel_state linked_position_ids retention (cap per symbol); doc in CLEANUP_POLICY; tests
+- [x] **Tests:** action-needed no FAIL_/WARN_; lifecycle not in decision JSON; determinism; wheel_state retention; frontend no raw codes
+- [x] **Requirements** — chakraops/docs/releases/R24.3_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R24.3_release_notes.md
+- [x] **Verification** — out/verification/R24.3/notes.md with gate outputs and UAT checklist
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 - [ ] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py` (fixture → mock staged result → evaluate_universe → store write → hygiene check + snapshot check + per-symbol summary)

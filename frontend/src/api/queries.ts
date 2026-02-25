@@ -532,6 +532,11 @@ export interface ActionNeededItem {
   notional?: number;
   pct_max_profit?: number;
   recommended_by?: string;
+  /** R24.3: position lifecycle (request-time only) */
+  mark_proxy?: number;
+  assignment_risk?: { active: boolean; reason_code?: string | null };
+  roll_window?: { active: boolean; dte?: number | null };
+  recommended_action_code?: string;
 }
 export interface ActionNeededResponse {
   top_options: ActionNeededItem[];

@@ -351,6 +351,14 @@ export function DashboardPage() {
                           {item.key_number != null && (
                             <p className="mt-0.5 text-zinc-500 dark:text-zinc-500">Key: {item.key_number}</p>
                           )}
+                          {item.pct_max_profit != null && (
+                            <p className="mt-0.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-pct-profit-${item.symbol}`}>
+                              Max profit: {item.pct_max_profit}%
+                            </p>
+                          )}
+                          {item.recommended_action_code && item.recommended_action_code !== item.next_action_code && (
+                            <p className="mt-0.5 text-zinc-500 dark:text-zinc-500">Recommend: {item.recommended_action_code}</p>
+                          )}
                         </Link>
                       );
                     })}

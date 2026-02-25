@@ -396,6 +396,9 @@ def build_actionable_message_r241(payload: Dict[str, Any]) -> str:
             lines.append("Required cash: %s" % _str_capital(payload.get("required_cash")))
         if key_num.get("premium_est") is not None:
             lines.append("Credit est: %s" % _str_capital(key_num.get("premium_est")))
+        pct_profit = payload.get("pct_max_profit") if payload.get("pct_max_profit") is not None else key_num.get("profit_pct")
+        if pct_profit is not None:
+            lines.append("Max profit %%: %s" % _str_num(pct_profit))
     else:
         entry = payload.get("entry_zone") or key_num.get("entry_zone")
         if isinstance(entry, dict) and entry.get("low") is not None and entry.get("high") is not None:

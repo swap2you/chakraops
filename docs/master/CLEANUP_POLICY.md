@@ -56,8 +56,9 @@
 
 ## 4. out/ hygiene (reminder)
 
-- **Whitelist (from RELEASE_CHECKLIST):** `decision_latest.json`, `slack_status.json`, `universe_overrides.json`, `eval_snapshot.json`, `verification/<Release>/`, `evaluations/`, `alerts/`, `lifecycle/`, optional `mtf_cache/`.
+- **Whitelist (from RELEASE_CHECKLIST):** `decision_latest.json`, `slack_status.json`, `universe_overrides.json`, `eval_snapshot.json`, `verification/<Release>/`, `evaluations/`, `alerts/`, `lifecycle/`, optional `mtf_cache/`, `wheel_state.json`.
 - **Retention:** Decision history per symbol: keep last K runs (DECISION_ARCHIVE_MAX / DECISION_HISTORY_KEEP). Prune via `prune_decision_archives()` or documented script.
+- **wheel_state retention (R24.3):** Per-symbol `linked_position_ids` in `wheel_state.json` are capped to the last N IDs (default N=50, env `WHEEL_STATE_LINKED_POSITION_IDS_MAX`). Applied on every save in `app.core.wheel.state_store.save_state_atomic`. Prevents unbounded growth from repeated OPEN/CLOSE/ROLL.
 - **Never commit:** Secrets, `.env`, API keys; keep `out/` and secrets in `.gitignore`.
 
 ---

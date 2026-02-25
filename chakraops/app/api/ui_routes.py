@@ -3601,6 +3601,28 @@ def ui_action_needed(
                 shares_position=_share_pos,
             )
             item = _action_needed_item_from_diagnostics(diag, "OPTIONS")
+            # R24.3: Enrich with position lifecycle for tracked option positions (request-time only)
+            try:
+                from app.core.positions.service import list_positions
+                from app.core.lifecycle.position_lifecycle_r243 import compute_position_lifecycle
+                open_pos = list_positions(status="OPEN", symbol=sym, exclude_test=True)
+                opt_positions = [p for p in open_pos if (getattr(p, "strategy", "") or "").upper() in ("CSP", "CC")]
+                if opt_positions:
+                    spot_for_lifecycle = None
+                    stock = diag.get("stock") or {}
+                    if isinstance(stock, dict) and stock.get("price") is not None:
+                        spot_for_lifecycle = float(stock["price"])
+                    if spot_for_lifecycle is None and getattr(summary, "price", None) is not None:
+                        spot_for_lifecycle = float(summary.price)
+                    lc = compute_position_lifecycle(opt_positions[0], spot=spot_for_lifecycle)
+                    item["pct_max_profit"] = lc.get("pct_max_profit")
+                    item["mark_proxy"] = lc.get("mark_proxy")
+                    item["assignment_risk"] = lc.get("assignment_risk")
+                    item["roll_window"] = lc.get("roll_window")
+                    item["recommended_action_code"] = lc.get("recommended_action_code")
+                    item["recommended_by"] = lc.get("recommended_by", "r243")
+            except Exception:
+                pass
             if item.get("next_action_code") and item["next_action_code"] != "NONE":
                 options_out.append(item)
             else:

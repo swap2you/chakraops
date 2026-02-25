@@ -20,6 +20,11 @@ ENV_WEBHOOK_DAILY = "SLACK_WEBHOOK_DAILY"
 
 DEFAULT_STATE_PATH = "artifacts/alerts/last_sent_state.json"
 
+# R24.0: Slack messages must never contain these (no raw codes, no secrets)
+FORBIDDEN_IN_SLACK = ("FAIL_", "WARN_", "api_key", "token")
+CRITICAL_ALERT_TYPES = frozenset({"CRITICAL", "POSITION_EXIT", "STOP", "INVALIDATION"})
+ALERT_THROTTLE_MINUTES = 15  # Same alert type + symbol at most once per N minutes (critical exempt)
+
 
 def is_slack_configured() -> bool:
     """True if any Phase 7.2 webhook is set. Does not require all four."""
@@ -291,20 +296,65 @@ def _str_capital(v: Any) -> str:
         return str(v)
 
 
+def _sanitize_slack_text(text: str) -> str:
+    """R24.0: Remove any forbidden substrings from Slack message (no FAIL_/WARN_/secrets)."""
+    if not text:
+        return text
+    out = text
+    for forbidden in FORBIDDEN_IN_SLACK:
+        out = out.replace(forbidden, "")
+    return out
+
+
+def build_actionable_message_r240(payload: Dict[str, Any]) -> str:
+    """
+    R24.0: Per-symbol actionable Slack message. Includes contract identity, delta, bid/ask,
+    credit estimate, suggested contracts, required cash, top 2 reasons (safe labels only).
+    Never includes FAIL_/WARN_ or secrets.
+    """
+    lines = [
+        "*Actionable: %s*" % (payload.get("symbol") or "?"),
+        "Strategy: %s" % (payload.get("strategy") or payload.get("mode") or "?"),
+    ]
+    if payload.get("expiry") or payload.get("expiration"):
+        lines.append("Expiry: %s" % (payload.get("expiry") or payload.get("expiration")))
+    if payload.get("strike") is not None:
+        lines.append("Strike: %s" % payload.get("strike"))
+    if payload.get("delta") is not None:
+        lines.append("Delta: %s" % payload.get("delta"))
+    bid, ask = payload.get("bid"), payload.get("ask")
+    if bid is not None or ask is not None:
+        lines.append("Bid/Ask: %s / %s" % (_str_num(bid), _str_num(ask)))
+    if payload.get("credit_estimate") is not None:
+        lines.append("Credit estimate: %s" % _str_capital(payload.get("credit_estimate")))
+    if payload.get("suggested_contracts") is not None:
+        lines.append("Suggested contracts: %s" % payload.get("suggested_contracts"))
+    if payload.get("required_cash") is not None:
+        lines.append("Required cash: %s" % _str_capital(payload.get("required_cash")))
+    reasons = payload.get("reasons_safe") or payload.get("top_reasons") or []
+    if isinstance(reasons, list) and reasons:
+        for r in reasons[:2]:
+            if isinstance(r, str) and r and not any(f in r for f in FORBIDDEN_IN_SLACK):
+                lines.append("• %s" % r)
+    raw = "\n".join(lines)
+    return _sanitize_slack_text(raw)
+
+
 def _format_message(event_type: str, payload: Dict[str, Any], exit_priority_fire: Optional[str] = None) -> str:
-    """Phase 7.3: Structured Slack messages. No raw JSON, no secrets."""
+    """Phase 7.3: Structured Slack messages. No raw JSON, no secrets. R24.0: sanitized."""
     t = (event_type or "").strip().upper()
     if t == "SIGNAL":
         return _fmt_signal(payload)
     if t == "CRITICAL":
-        return _fmt_position_exit(payload, exit_priority_fire)
+        return _sanitize_slack_text(_fmt_position_exit(payload, exit_priority_fire))
     if t == "POSITION":
-        return _fmt_position_exit(payload, payload.get("exit_priority") or exit_priority_fire)
+        return _sanitize_slack_text(_fmt_position_exit(payload, payload.get("exit_priority") or exit_priority_fire))
     if t == "HEALTH":
-        return _fmt_health(payload)
+        return _sanitize_slack_text(_fmt_health(payload))
     if t == "DAILY":
-        return _fmt_daily(payload)
-    return "*Alert* %s" % t
+        return _sanitize_slack_text(_fmt_daily(payload))
+    raw = "*Alert* %s" % t
+    return _sanitize_slack_text(raw)
 
 
 def route_alert(

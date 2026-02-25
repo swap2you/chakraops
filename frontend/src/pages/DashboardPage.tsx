@@ -308,6 +308,60 @@ export function DashboardPage() {
               </Link>
             )}
           </Card>
+          {/* R24.0: Action Needed — top 3 options + top 3 shares; link to symbol page with tab + accordion */}
+          <Card data-testid="action-needed-card">
+            <CardHeader title="Action Needed" description="Top options and shares actions; link to symbol diagnostics." />
+            <div className="space-y-4">
+              <div>
+                <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-500 mb-2">Options</span>
+                {(selectedSignals.length === 0 && openPositions.length === 0) ? (
+                  <p className="text-xs text-zinc-500 dark:text-zinc-500">No options actions.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {selectedSignals.slice(0, 3).map((s) => (
+                      <Link
+                        key={s.symbol}
+                        to={`/symbol-diagnostics?symbol=${encodeURIComponent(s.symbol ?? "")}&tab=Options`}
+                        className="block rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                      >
+                        <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{s.symbol}</span>
+                        <span className="ml-2 text-zinc-500 dark:text-zinc-400">Entry</span>
+                      </Link>
+                    ))}
+                    {openPositions.slice(0, Math.max(0, 3 - selectedSignals.length)).map((p, i) => (
+                      <Link
+                        key={`pos-${p.symbol}-${i}`}
+                        to={`/symbol-diagnostics?symbol=${encodeURIComponent(p.symbol)}&tab=Options`}
+                        className="block rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                      >
+                        <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{p.symbol}</span>
+                        <span className="ml-2 text-zinc-500 dark:text-zinc-400">Review</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-500 mb-2">Shares</span>
+                {sharesCandidates.length === 0 ? (
+                  <p className="text-xs text-zinc-500 dark:text-zinc-500">No shares actions.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {sharesCandidates.slice(0, 3).map((plan) => (
+                      <Link
+                        key={plan.symbol ?? ""}
+                        to={`/symbol-diagnostics?symbol=${encodeURIComponent(plan.symbol ?? "")}&tab=Shares`}
+                        className="block rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                      >
+                        <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{plan.symbol}</span>
+                        <span className="ml-2 text-zinc-500 dark:text-zinc-400">{plan.eligible ? "Entry" : "Review"}</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </Card>
           {/* R22.5: Shares candidates — top 3 with symbol, eligible, reason, spot, entry zone; link to Symbol Diagnostics Shares tab */}
           <Card>
             <CardHeader title="Shares candidates" description="BUY SHARES recommendation only; no order placement. Top 3." />

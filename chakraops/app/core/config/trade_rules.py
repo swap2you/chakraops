@@ -112,6 +112,16 @@ MIN_TARGET_DISTANCE_PCT: float = 0.002
 TARGET_EPS_PCT: float = 0.001
 """Epsilon: level is considered 'at or past spot' when within this fraction of spot. 0.001 = 0.10%. Do not use resistance <= spot*(1+eps) or support >= spot*(1-eps)."""
 
+# R24.0: Options position sizing (request-time only; not persisted)
+OPTIONS_RISK_PCT_PER_TRADE_DEFAULT: float = 0.01
+"""Default risk per trade for options sizing (1% of account value)."""
+
+OPTIONS_MAX_CONTRACTS_PER_TRADE: int = 3
+"""Maximum contracts per options trade (CSP/CC)."""
+
+OPTIONS_MAX_NOTIONAL_PCT: float = 0.15
+"""Maximum notional per trade as fraction of account (0.15 = 15%)."""
+
 
 __all__ = [
     "CSP_MIN_DTE",
@@ -133,4 +143,7 @@ __all__ = [
     "SHARES_UAT_FORCE_ELIGIBLE_SYMBOLS",
     "MIN_TARGET_DISTANCE_PCT",
     "TARGET_EPS_PCT",
+    "OPTIONS_RISK_PCT_PER_TRADE_DEFAULT",
+    "OPTIONS_MAX_CONTRACTS_PER_TRADE",
+    "OPTIONS_MAX_NOTIONAL_PCT",
 ]

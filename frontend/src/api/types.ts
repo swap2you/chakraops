@@ -754,6 +754,20 @@ export interface SymbolDiagnosticsResponseExtended extends SymbolDiagnosticsResp
   delta_diagnostics?: DeltaDiagnostics | null;
   /** R23.2: Per-symbol delta band override when present (for "Override active" badge and advanced form). */
   delta_override?: { delta_lo: number; delta_hi: number; updated_at_utc?: string } | null;
+  /** R24.0: Options position sizing (request-time only; not persisted). */
+  options_sizing?: OptionsSizing | null;
+  /** R24.0: Next action badge: ENTRY | HOLD | CLOSE | ROLL | REDUCE | NONE. Request-time only. */
+  next_action_code?: "ENTRY" | "HOLD" | "CLOSE" | "ROLL" | "REDUCE" | "NONE" | null;
+}
+
+/** R24.0: Options sizing block (codes only; no FAIL_/WARN_ in notes_codes). */
+export interface OptionsSizing {
+  basis: "OK" | "INSUFFICIENT_DATA" | "NO_SELECTED_CANDIDATE";
+  suggested_contracts: number | null;
+  required_cash: number | null;
+  credit_estimate: number | null;
+  risk_pct_used: number | null;
+  notes_codes: string[];
 }
 
 /** R23.1/R23.2: Delta reject visibility — best_delta, miss, direction (code-only), best_candidate. Request-time only. */

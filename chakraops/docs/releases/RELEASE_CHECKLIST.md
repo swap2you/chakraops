@@ -285,6 +285,17 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Release notes** — docs/releases/R23.5.0_release_notes.md
 - [x] **Verification** — out/verification/R23.5.0/notes.md with gate outputs and UAT checklist
 
+### R24.0 — Actionable Notifications + Options Position Sizing + Position-Aware Alerts
+
+- [x] **Part A:** options_sizing in GET /api/ui/symbol-diagnostics (request-time only); config OPTIONS_* in trade_rules.py; frontend Options tab sizing block (Suggested contracts, Required cash, Credit estimate, Risk % used; safe message when basis !== OK)
+- [x] **Part B:** Actionable Slack notification builder (build_actionable_message_r240); throttling/dedupe; messages never contain FAIL_/WARN_ or secrets
+- [x] **Part C:** next_action_code in symbol-diagnostics (ENTRY/HOLD/CLOSE/ROLL/REDUCE/NONE); badge in Symbol header
+- [x] **Part D:** Dashboard “Action Needed” card (top 3 options + top 3 shares; links to symbol page with tab + accordion)
+- [x] **Tests:** test_r240_options_sizing.py (CSP/CC sizing, insufficient data, not persisted); test_r240_slack_actionable_messages.py (required fields, no forbidden substrings)
+- [x] **Requirements** — docs/releases/R24.0_requirements.md
+- [x] **Release notes** — docs/releases/R24.0_release_notes.md
+- [x] **Verification** — out/verification/R24.0/notes.md with gate outputs and UAT checklist
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 - [ ] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py` (fixture → mock staged result → evaluate_universe → store write → hygiene check + snapshot check + per-symbol summary)

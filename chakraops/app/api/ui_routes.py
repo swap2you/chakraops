@@ -3301,6 +3301,42 @@ def _build_symbol_diagnostics_from_v2_store(
             delta_override = overrides[sym_upper]
     except Exception:
         pass
+    # R24.0: Options sizing (request-time only; never persisted)
+    spot_for_sizing = None
+    if stock:
+        spot_for_sizing = stock.get("price") or stock.get("underlying_price")
+    if spot_for_sizing is None and summary:
+        spot_for_sizing = getattr(summary, "price", None) or getattr(summary, "underlying_price", None)
+    from app.core.options.options_sizing import build_options_sizing_r240
+    options_sizing = build_options_sizing_r240(
+        c_dicts,
+        selected_contract_key,
+        getattr(summary, "strategy", None),
+        account_summary,
+        shares_position,
+        float(spot_for_sizing) if spot_for_sizing is not None else None,
+    )
+    # R24.0: next_action_code (ENTRY/HOLD/CLOSE/ROLL/REDUCE/NONE) — request-time only
+    next_action_code = "NONE"
+    try:
+        from app.core.positions.service import list_positions
+        open_positions = list_positions(status="OPEN", symbol=(symbol or "").strip().upper(), exclude_test=True)
+        open_options = [p for p in open_positions if (getattr(p, "strategy", "") or "").upper() in ("CSP", "CC")]
+        has_open_option = len(open_options) > 0
+        stop_price = exit_plan.get("stop")
+        t1 = exit_plan.get("t1")
+        targets_already_exceeded = exit_plan.get("targets_already_exceeded")
+        spot_val = float(spot_for_sizing) if spot_for_sizing is not None else None
+        stop_hit = stop_price is not None and spot_val is not None and spot_val <= float(stop_price)
+        target_hit = targets_already_exceeded or (t1 is not None and spot_val is not None and spot_val >= float(t1))
+        if has_open_option and (stop_hit or target_hit):
+            next_action_code = "CLOSE"
+        elif selected_contract_key and not has_open_option:
+            next_action_code = "ENTRY"
+        else:
+            next_action_code = "HOLD"
+    except Exception:
+        pass
     return {
         "symbol": symbol,
         "provider_status": getattr(summary, "provider_status", "OK") or "OK",
@@ -3379,6 +3415,8 @@ def _build_symbol_diagnostics_from_v2_store(
         "hold_time_estimate": hold_time_estimate,
         "shares_plan": shares_plan,
         "shares_position": shares_position,
+        "options_sizing": options_sizing,
+        "next_action_code": next_action_code,
     }
 
 

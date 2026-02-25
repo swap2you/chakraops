@@ -355,6 +355,11 @@ function ExecutionConsole({
               <Badge variant="default" className={regimeColor(data.regime)}>
                 Regime {data.regime ?? "—"}
               </Badge>
+              {data.next_action_code && data.next_action_code !== "NONE" && (
+                <Badge variant={data.next_action_code === "ENTRY" ? "success" : data.next_action_code === "CLOSE" ? "danger" : "neutral"} data-testid="next-action-badge">
+                  {data.next_action_code === "ENTRY" ? "Entry" : data.next_action_code === "CLOSE" ? "Close" : data.next_action_code}
+                </Badge>
+              )}
               {providerStatus !== "OK" && (
                 <button
                   type="button"
@@ -593,6 +598,39 @@ function ExecutionConsole({
           )}
         </div>
       </Card>
+
+      {/* R24.0: Options position sizing (request-time only) */}
+      {data.options_sizing && (
+        <Card className="w-full" data-testid="options-sizing-block">
+          <CardHeader title="Options sizing" description="Conservative cash-secured suggestion; not an order." />
+          {data.options_sizing.basis !== "OK" ? (
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              {data.options_sizing.basis === "INSUFFICIENT_DATA"
+                ? "Account data is not available. Set up default account and balances to see sizing."
+                : "No selected option candidate for this symbol."}
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Suggested contracts</span>
+                <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{data.options_sizing.suggested_contracts ?? "—"}</span>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Required cash</span>
+                <span className="font-mono text-zinc-700 dark:text-zinc-300">{data.options_sizing.required_cash != null ? `$${data.options_sizing.required_cash.toFixed(2)}` : "—"}</span>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Credit estimate</span>
+                <span className="font-mono text-zinc-700 dark:text-zinc-300">{data.options_sizing.credit_estimate != null ? `$${data.options_sizing.credit_estimate.toFixed(2)}` : "—"}</span>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Risk % used</span>
+                <span className="font-mono text-zinc-700 dark:text-zinc-300">{data.options_sizing.risk_pct_used != null ? fmtPct(data.options_sizing.risk_pct_used) : "—"}</span>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Candidates */}
       <Card className="w-full">

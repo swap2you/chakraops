@@ -4,7 +4,8 @@
  * - liquidity_evaluated=false shows "Not evaluated", not "failed".
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, renderWithFreshClient, screen, fireEvent, waitFor, clearTestQueryCache } from "@/test/test-utils";
+import userEvent from "@testing-library/user-event";
+import { render, renderWithFreshClient, renderWithRoute, screen, fireEvent, waitFor, within, clearTestQueryCache } from "@/test/test-utils";
 import { SymbolDiagnosticsPage } from "./SymbolDiagnosticsPage";
 
 const mockDiagnosticsWithCap = {
@@ -556,19 +557,19 @@ describe("SymbolDiagnosticsPage R23.3 Shares plan", () => {
     expect(screen.getByText("Meets all shares eligibility rules")).toBeInTheDocument();
   });
 
-  it.skip("Shares tab shows Trade Plan (spot, entry zone, stop, targets, sizing) when eligible", async () => {
-    window.history.pushState({}, "", "/symbol-diagnostics?symbol=WMT");
-    renderWithFreshClient(<SymbolDiagnosticsPage initialTabForTest="Shares" />);
-    await waitFor(() => expect(screen.getByTestId("shares-tab-content")).toBeInTheDocument(), { timeout: 10000 });
-    expect(screen.getByTestId("shares-trade-plan-card")).toBeInTheDocument();
-    expect(screen.getByText("Trade Plan")).toBeInTheDocument();
-    expect(screen.getByText("100")).toBeInTheDocument();
-    expect(screen.getByText(/98 – 102/)).toBeInTheDocument();
-    expect(screen.getByText("96")).toBeInTheDocument();
-    expect(screen.getByText("40")).toBeInTheDocument();
+  it("Shares tab shows Trade Plan (spot, entry zone, stop, targets, sizing) when eligible", async () => {
+    renderWithRoute(<SymbolDiagnosticsPage />, "/symbol-diagnostics?symbol=WMT&tab=Shares");
+    const tabContent = await screen.findByTestId("shares-tab-content", {}, { timeout: 10000 });
+    const card = within(tabContent).getByTestId("shares-trade-plan-card");
+    const withinCard = within(card);
+    expect(withinCard.getByText("Trade Plan")).toBeInTheDocument();
+    expect(withinCard.getByText("100")).toBeInTheDocument();
+    expect(withinCard.getByText(/98 – 102/)).toBeInTheDocument();
+    expect(withinCard.getByText("96")).toBeInTheDocument();
+    expect(withinCard.getByText("40")).toBeInTheDocument();
   }, 15000);
 
-  it.skip("Shares tab shows insufficient data when sizing basis is INSUFFICIENT_DATA", async () => {
+  it("Shares tab shows insufficient data when sizing basis is INSUFFICIENT_DATA", async () => {
     useSymbolDiagnosticsMock.mockReturnValue({
       data: {
         ...mockWithSharesPlan,
@@ -580,11 +581,11 @@ describe("SymbolDiagnosticsPage R23.3 Shares plan", () => {
       isLoading: false,
       isError: false,
     });
-    renderWithFreshClient(<SymbolDiagnosticsPage initialTabForTest="Shares" />);
-    await waitFor(() => expect(screen.getByTestId("shares-tab-content")).toBeInTheDocument(), { timeout: 5000 });
-    expect(screen.getByTestId("shares-trade-plan-card")).toBeInTheDocument();
-    expect(screen.getByText(/Insufficient data/)).toBeInTheDocument();
-  });
+    renderWithRoute(<SymbolDiagnosticsPage />, "/symbol-diagnostics?symbol=WMT&tab=Shares");
+    const tabContent = await screen.findByTestId("shares-tab-content", {}, { timeout: 10000 });
+    const card = within(tabContent).getByTestId("shares-trade-plan-card");
+    expect(within(card).getByText(/Insufficient data/)).toBeInTheDocument();
+  }, 15000);
 });
 
 describe("SymbolDiagnosticsPage R23.5.0 Shares Trade Plan and lifecycle", () => {
@@ -592,7 +593,7 @@ describe("SymbolDiagnosticsPage R23.5.0 Shares Trade Plan and lifecycle", () => 
     clearTestQueryCache();
   });
 
-  it.skip("Shares tab renders Trade Plan accordion with entry zone, stop, targets when present", async () => {
+  it("Shares tab renders Trade Plan accordion with entry zone, stop, targets when present", async () => {
     useSymbolDiagnosticsMock.mockReturnValue({
       data: {
         ...mockDiagnosticsWithCap,
@@ -610,15 +611,15 @@ describe("SymbolDiagnosticsPage R23.5.0 Shares Trade Plan and lifecycle", () => 
       isLoading: false,
       isError: false,
     });
-    window.history.pushState({}, "", "/symbol-diagnostics?symbol=SPY");
-    renderWithFreshClient(<SymbolDiagnosticsPage initialTabForTest="Shares" />);
-    await waitFor(() => expect(screen.getByTestId("shares-tab-content")).toBeInTheDocument(), { timeout: 5000 });
-    expect(screen.getByTestId("shares-trade-plan-card")).toBeInTheDocument();
-    expect(screen.getByText(/48 – 52/)).toBeInTheDocument();
-    expect(screen.getByText("45")).toBeInTheDocument();
-    expect(screen.getByText("55")).toBeInTheDocument();
-    expect(screen.getByTestId("shares-why-checklist")).toBeInTheDocument();
-  });
+    renderWithRoute(<SymbolDiagnosticsPage />, "/symbol-diagnostics?symbol=SPY&tab=Shares");
+    await screen.findByTestId("shares-tab-content", {}, { timeout: 10000 });
+    const card = await screen.findByTestId("shares-trade-plan-card", {}, { timeout: 5000 });
+    const withinCard = within(card);
+    expect(withinCard.getByText(/48 – 52/)).toBeInTheDocument();
+    expect(withinCard.getByText("45")).toBeInTheDocument();
+    expect(withinCard.getByText("55")).toBeInTheDocument();
+    expect(withinCard.getByTestId("shares-why-checklist")).toBeInTheDocument();
+  }, 15000);
 
   it("Shares tab shows hold-time plain-English when hold_time_estimate has ATR/distance", async () => {
     useSymbolDiagnosticsMock.mockReturnValue({
@@ -646,7 +647,7 @@ describe("SymbolDiagnosticsPage R23.5.0 Shares Trade Plan and lifecycle", () => 
     expect(holdBlock).toHaveTextContent(/not a promise/i);
   });
 
-  it.skip("Close position modal appears when position exists and Close position is clicked", async () => {
+  it("Close position modal appears when position exists and Close position is clicked", async () => {
     useSymbolDiagnosticsMock.mockReturnValue({
       data: {
         ...mockDiagnosticsWithCap,
@@ -656,17 +657,14 @@ describe("SymbolDiagnosticsPage R23.5.0 Shares Trade Plan and lifecycle", () => 
       isLoading: false,
       isError: false,
     });
-    window.history.pushState({}, "", "/symbol-diagnostics?symbol=SPY");
-    renderWithFreshClient(<SymbolDiagnosticsPage initialTabForTest="Shares" />);
-    await waitFor(() => expect(screen.getByTestId("shares-position-card")).toBeInTheDocument(), { timeout: 5000 });
-    const closeBtn = screen.getByRole("button", { name: "Close position" });
-    fireEvent.click(closeBtn);
-    await waitFor(() => {
-      expect(screen.getByTestId("close-position-modal")).toBeInTheDocument();
-    });
-    expect(screen.getByText("Exit price (required)")).toBeInTheDocument();
-    expect(screen.getByText("Exit date (default today)")).toBeInTheDocument();
-  });
+    renderWithRoute(<SymbolDiagnosticsPage initialTabForTest="Shares" />, "/symbol-diagnostics?symbol=SPY&tab=Shares");
+    await screen.findByTestId("shares-tab-content", {}, { timeout: 10000 });
+    const closeBtn = await screen.findByTestId("close-position-open-btn", {}, { timeout: 5000 });
+    await userEvent.click(closeBtn);
+    const modal = await waitFor(() => screen.getByTestId("close-position-modal"), { timeout: 10000 });
+    expect(within(modal).getByText("Exit price (required)")).toBeInTheDocument();
+    expect(within(modal).getByText("Exit date (default today)")).toBeInTheDocument();
+  }, 15000);
 });
 
 describe("SymbolDiagnosticsPage R23.4.6 UX and Copilot drawer", () => {

@@ -3316,25 +3316,68 @@ def _build_symbol_diagnostics_from_v2_store(
         shares_position,
         float(spot_for_sizing) if spot_for_sizing is not None else None,
     )
-    # R24.0: next_action_code (ENTRY/HOLD/CLOSE/ROLL/REDUCE/NONE) — request-time only
+    # R24.1: next_action_code + next_action_details (request-time only; never persisted)
     next_action_code = "NONE"
+    next_action_details: Dict[str, Any] = {}
     try:
         from app.core.positions.service import list_positions
+        from app.core.next_action_r241 import (
+            compute_next_action_options,
+            compute_next_action_shares,
+            build_next_action_details,
+        )
         open_positions = list_positions(status="OPEN", symbol=(symbol or "").strip().upper(), exclude_test=True)
         open_options = [p for p in open_positions if (getattr(p, "strategy", "") or "").upper() in ("CSP", "CC")]
         has_open_option = len(open_options) > 0
-        stop_price = exit_plan.get("stop")
-        t1 = exit_plan.get("t1")
-        targets_already_exceeded = exit_plan.get("targets_already_exceeded")
-        spot_val = float(spot_for_sizing) if spot_for_sizing is not None else None
-        stop_hit = stop_price is not None and spot_val is not None and spot_val <= float(stop_price)
-        target_hit = targets_already_exceeded or (t1 is not None and spot_val is not None and spot_val >= float(t1))
-        if has_open_option and (stop_hit or target_hit):
-            next_action_code = "CLOSE"
-        elif selected_contract_key and not has_open_option:
-            next_action_code = "ENTRY"
+        has_shares_position = shares_position is not None
+        if shares_plan is None:
+            shares_eligible = False
+        elif isinstance(shares_plan, dict):
+            shares_eligible = bool(shares_plan.get("eligible"))
         else:
-            next_action_code = "HOLD"
+            shares_eligible = bool(getattr(shares_plan, "eligible", False))
+        spot_float = float(spot_for_sizing) if spot_for_sizing is not None else None
+        # Selected candidate delta/dte for options
+        delta_best = None
+        dte_val = None
+        for c in c_dicts:
+            if c.get("contract_key") == selected_contract_key:
+                delta_best = c.get("delta")
+                dte_val = c.get("dte")
+                break
+        code_opt, rationale_opt, key_opt = compute_next_action_options(
+            has_open_option=has_open_option,
+            selected_contract_key=selected_contract_key,
+            exit_plan=exit_plan,
+            spot=spot_float,
+            delta_best=delta_best,
+            dte=dte_val,
+            strategy=getattr(summary, "strategy", None),
+        )
+        ep_for_shares = {"t1": exit_plan.get("t1"), "stop": exit_plan.get("stop"), "targets_already_exceeded": exit_plan.get("targets_already_exceeded")}
+        plan_dict = shares_plan.to_dict() if hasattr(shares_plan, "to_dict") else (shares_plan if isinstance(shares_plan, dict) else {})
+        code_shares, rationale_shares, key_shares = compute_next_action_shares(
+            shares_eligible=shares_eligible,
+            has_shares_position=has_shares_position,
+            shares_plan=plan_dict,
+            exit_plan_or_targets=ep_for_shares,
+            spot=spot_float,
+        )
+        # Primary: options if we have option context else shares
+        if has_open_option or selected_contract_key:
+            next_action_code = code_opt
+            premium_est = None
+            if options_sizing and isinstance(options_sizing, dict):
+                premium_est = options_sizing.get("credit_estimate")
+            next_action_details = build_next_action_details(
+                "OPTIONS", code_opt, rationale_opt, key_opt,
+                option_symbol=option_symbol,
+                contract_key=selected_contract_key,
+                premium_est=premium_est,
+            )
+        else:
+            next_action_code = code_shares
+            next_action_details = build_next_action_details("SHARES", code_shares, rationale_shares, key_shares)
     except Exception:
         pass
     return {
@@ -3417,6 +3460,145 @@ def _build_symbol_diagnostics_from_v2_store(
         "shares_position": shares_position,
         "options_sizing": options_sizing,
         "next_action_code": next_action_code,
+        "next_action_details": next_action_details,
+    }
+
+
+def _action_needed_item_from_diagnostics(d: Dict[str, Any], strategy: str) -> Dict[str, Any]:
+    """R24.1: Extract action-needed row from full diagnostics response."""
+    details = d.get("next_action_details") or {}
+    rationale = details.get("rationale_lines") or []
+    key_num = details.get("key_numbers") or {}
+    code = d.get("next_action_code") or "NONE"
+    symbol = d.get("symbol") or ""
+    tab = "Options" if strategy == "OPTIONS" else "Shares"
+    accordion = "Trade" if strategy == "OPTIONS" else "Trade Plan"
+    key_display = None
+    if key_num.get("delta_best") is not None:
+        key_display = "delta %s" % (_fmt_num(key_num["delta_best"]) if hasattr(_fmt_num, "__call__") else str(key_num["delta_best"]))
+    elif key_num.get("spot") is not None:
+        key_display = "spot %s" % str(key_num["spot"])
+    return {
+        "symbol": symbol,
+        "strategy": strategy,
+        "next_action_code": code,
+        "rationale_lines": rationale[:2],
+        "key_number": key_display,
+        "tab": tab,
+        "accordion": accordion,
+    }
+
+
+def _fmt_num(v: Any) -> str:
+    if v is None:
+        return "—"
+    try:
+        f = float(v)
+        return "%.2f" % f if f != int(f) else str(int(f))
+    except (TypeError, ValueError):
+        return str(v) if v is not None else "—"
+
+
+@router.get("/action-needed")
+def ui_action_needed(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R24.1: Top 5 options + top 5 shares actions; recently changed (last 5 transitions). For Dashboard workflow."""
+    _require_ui_key(x_ui_key)
+    from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2, get_eval_snapshot
+    from app.core.accounts.holdings_db import get_share_position, _DEFAULT_ACCOUNT_ID
+    from app.core.next_action_r241 import _recent_transitions
+
+    store = get_evaluation_store_v2()
+    store.reload_from_disk()
+    artifact = store.get_latest()
+    if artifact is None:
+        return {"options": [], "shares": [], "recently_changed": _recent_transitions()}
+
+    option_symbols: List[str] = []
+    for c in (getattr(artifact, "selected_candidates", []) or [])[:5]:
+        sym = (getattr(c, "symbol", "") or "").strip().upper()
+        if sym and sym not in option_symbols:
+            option_symbols.append(sym)
+
+    symbols = getattr(artifact, "symbols", []) or []
+    diag_by = getattr(artifact, "diagnostics_by_symbol", {}) or {}
+    share_plans: List[tuple[str, Any]] = []
+    for s in symbols:
+        sym = (getattr(s, "symbol", "") or "").strip().upper()
+        if not sym:
+            continue
+        diag = diag_by.get(sym)
+        if diag is None:
+            continue
+        diag = diag.to_dict() if hasattr(diag, "to_dict") else (diag if isinstance(diag, dict) else {})
+        technicals = diag.get("technicals") or {}
+        exit_plan = diag.get("exit_plan") or {}
+        hold_time = _build_hold_time_estimate_at_request_time(technicals, exit_plan)
+        plan = _build_shares_plan_at_request_time(s, technicals, exit_plan, hold_time, sym)
+        if plan is not None:
+            share_plans.append((sym, plan))
+    share_symbols = [sym for sym, _ in share_plans[:5]]
+
+    options_out: List[Dict[str, Any]] = []
+    for sym in option_symbols:
+        row = store.get_symbol(sym)
+        if row is None:
+            continue
+        summary, candidates, gates, earnings, diagnostics_details = row
+        sel_c = next((c for c in (getattr(artifact, "selected_candidates", []) or []) if (getattr(c, "symbol", "") or "").strip().upper() == sym), None)
+        _sel_key = getattr(sel_c, "contract_key", None) if sel_c else None
+        _opt_sym = getattr(sel_c, "option_symbol", None) if sel_c else None
+        _snap = get_eval_snapshot()
+        _share_pos = get_share_position(_DEFAULT_ACCOUNT_ID, sym)
+        try:
+            diag = _build_symbol_diagnostics_from_v2_store(
+                summary, candidates, gates, earnings, diagnostics_details, sym,
+                selected_contract_key=_sel_key, option_symbol=_opt_sym,
+                pipeline_timestamp=(artifact.metadata or {}).get("pipeline_timestamp") if artifact else None,
+                run_id=(artifact.metadata or {}).get("run_id") if artifact else None,
+                eval_snapshot=_snap,
+                shares_position=_share_pos,
+            )
+            item = _action_needed_item_from_diagnostics(diag, "OPTIONS")
+            if item.get("next_action_code") and item["next_action_code"] != "NONE":
+                options_out.append(item)
+            else:
+                options_out.append(item)
+        except Exception:
+            continue
+    options_out = options_out[:5]
+
+    shares_out: List[Dict[str, Any]] = []
+    for sym in share_symbols:
+        row = store.get_symbol(sym)
+        if row is None:
+            continue
+        summary, candidates, gates, earnings, diagnostics_details = row
+        sel_c = next((c for c in (getattr(artifact, "selected_candidates", []) or []) if (getattr(c, "symbol", "") or "").strip().upper() == sym), None)
+        _sel_key = getattr(sel_c, "contract_key", None) if sel_c else None
+        _opt_sym = getattr(sel_c, "option_symbol", None) if sel_c else None
+        _snap = get_eval_snapshot()
+        _share_pos = get_share_position(_DEFAULT_ACCOUNT_ID, sym)
+        try:
+            diag = _build_symbol_diagnostics_from_v2_store(
+                summary, candidates, gates, earnings, diagnostics_details, sym,
+                selected_contract_key=_sel_key, option_symbol=_opt_sym,
+                pipeline_timestamp=(artifact.metadata or {}).get("pipeline_timestamp") if artifact else None,
+                run_id=(artifact.metadata or {}).get("run_id") if artifact else None,
+                eval_snapshot=_snap,
+                shares_position=_share_pos,
+            )
+            item = _action_needed_item_from_diagnostics(diag, "SHARES")
+            shares_out.append(item)
+        except Exception:
+            continue
+    shares_out = shares_out[:5]
+
+    return {
+        "options": options_out,
+        "shares": shares_out,
+        "recently_changed": _recent_transitions(),
     }
 
 

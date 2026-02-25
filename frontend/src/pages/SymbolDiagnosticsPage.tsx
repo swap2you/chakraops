@@ -1264,7 +1264,7 @@ function SharesTabContent({
                 <p><span className="text-zinc-500 dark:text-zinc-400">Last updated:</span> {pos.updated_at ? new Date(pos.updated_at).toLocaleString() : "—"}</p>
                 <div className="flex flex-wrap gap-2 pt-2">
                   <Button size="sm" variant="secondary" onClick={() => { setSharesForm({ quantity: String(pos.quantity), avg_cost: pos.avg_cost != null ? String(pos.avg_cost) : "", opened_at: "" }); setSharesModalOpen(true); }}>Update</Button>
-                  <Button size="sm" variant="secondary" disabled={closeSharePosition.isPending} onClick={() => setCloseModalOpen(true)}>Close position</Button>
+                  <Button size="sm" variant="secondary" disabled={closeSharePosition.isPending} onClick={() => setCloseModalOpen(true)} data-testid="close-position-open-btn">Close position</Button>
                   <Button size="sm" variant="secondary" disabled={deleteSharePosition.isPending} onClick={() => { if (window.confirm(`Remove shares position for ${data.symbol}?`)) deleteSharePosition.mutate({ accountId, symbol: data.symbol }); }}>{deleteSharePosition.isPending ? "Deleting…" : "Delete"}</Button>
                 </div>
               </div>

@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 
-interface CardProps {
+interface CardProps extends React.HTMLAttributes<HTMLElement> {
   children: React.ReactNode;
   className?: string;
 }
@@ -13,7 +13,7 @@ interface CardHeaderProps {
   className?: string;
 }
 
-export function Card({ children, className }: CardProps) {
+export function Card({ children, className, ...rest }: CardProps) {
   return (
     <section
       className={clsx(
@@ -21,6 +21,7 @@ export function Card({ children, className }: CardProps) {
         "hover:border-zinc-300 dark:hover:border-zinc-700",
         className
       )}
+      {...rest}
     >
       {children}
     </section>

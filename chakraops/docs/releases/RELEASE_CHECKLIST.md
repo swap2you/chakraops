@@ -270,20 +270,28 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 
 ### R23.4.8 — Score Used + Plain-English Explainability
 
-- [ ] **Frontend:** Score breakdown "Score used" line (Final capped / Raw uncapped) + plain-English explanation; Universe score tooltip first line; Hold-time plain-English (session = one trading day, rough estimate, not a promise) in card + INFO drawer
-- [ ] **Tests:** R23.4.8 Score used when applied_caps present/empty; Hold-time block and drawer include one trading day and not a promise
-- [ ] **Requirements** — docs/releases/R23.4.8_requirements.md
-- [ ] **Release notes** — docs/releases/R23.4.8_release_notes.md
-- [ ] **Verification** — out/verification/R23.4.8/notes.md with gate outputs and UAT checklist
+- [x] **Frontend:** Score breakdown "Score used" line (Final capped / Raw uncapped) + plain-English explanation; Universe score tooltip first line; Hold-time plain-English (session = one trading day, rough estimate, not a promise) in card + INFO drawer
+- [x] **Tests:** R23.4.8 Score used when applied_caps present/empty; Hold-time block and drawer include one trading day and not a promise
+- [x] **Requirements** — docs/releases/R23.4.8_requirements.md
+- [x] **Release notes** — docs/releases/R23.4.8_release_notes.md
+- [x] **Verification** — out/verification/R23.4.8/notes.md with gate outputs and UAT checklist
 
 ### R23.5.0 — Shares page overhaul (Trade Plan + lifecycle)
 
 - [x] **Backend:** share_positions_closed table; close_share_position; list_closed_share_positions; POST /shares/positions/{symbol}/close; GET /shares/positions/closed
 - [x] **Frontend:** Shares tab accordions (Trade Plan, Technicals, Risk & Details, Position); Trade Plan (Spot, Entry zone, Stop, Targets, Invalidation, Hold-time, Why eligible checklist); Close position modal (exit_price, exit_date, notes); closed list with realized P/L; unrealized P/L for active
-- [x] **Tests:** R23.5.0 Shares Trade Plan sections and entry zone/stop/targets; hold-time plain-English; Close position modal; R23.3 tests updated for Trade Plan (4 tests currently .skip due to flakiness in full suite; pass in isolation)
+- [x] **Tests:** R23.5.0 Shares Trade Plan sections and entry zone/stop/targets; hold-time plain-English; Close position modal; R23.3 Shares tests updated for Trade Plan (4 tests enabled and stable as of R23.5.1; no .skip)
 - [x] **Requirements** — docs/releases/R23.5.0_requirements.md
 - [x] **Release notes** — docs/releases/R23.5.0_release_notes.md
 - [x] **Verification** — out/verification/R23.5.0/notes.md with gate outputs and UAT checklist
+
+### R23.5.1 — Process + Test Stability (Release A)
+
+- [x] **R23.4.8 verification:** Checklist and out/verification/R23.4.8/notes.md aligned with gate outputs and UAT placeholders
+- [x] **Shares tests stabilized:** Card forwards data-testid; 4 Shares-tab tests in SymbolDiagnosticsPage.score.test.tsx enabled (no .skip); full frontend suite passes
+- [x] **Release notes** — docs/releases/R23.5.1_release_notes.md
+- [x] **Verification** — out/verification/R23.5.1/notes.md with gate outputs
+- [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (160 passed, 18 skipped), frontend build pass (recorded in notes)
 
 ### R24.0 — Actionable Notifications + Options Position Sizing + Position-Aware Alerts
 
@@ -295,6 +303,17 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Requirements** — docs/releases/R24.0_requirements.md
 - [x] **Release notes** — docs/releases/R24.0_release_notes.md
 - [x] **Verification** — out/verification/R24.0/notes.md with gate outputs and UAT checklist
+
+### R24.1 — Actionable Trading Workflow v1 (notifications + position-aware + dashboard polish)
+
+- [x] **Part 1:** next_action_code + next_action_details (ENTRY/HOLD/CLOSE/ROLL/NONE) for OPTIONS and SHARES; request-time only in symbol-diagnostics; app.core.next_action_r241
+- [x] **Part 2:** Slack message upgrade (per-symbol block, next action, sizing, key levels, contract identity; sanitization; dedupe/throttle)
+- [x] **Part 3:** Dashboard Action Needed — top 5 options + top 5 shares; GET /api/ui/action-needed; rationale + key number; link tab+accordion; recently_changed stub
+- [x] **Part 4:** Retention documented (DECISION_ARCHIVE_MAX / DECISION_HISTORY_KEEP; prune_decision_archives)
+- [x] **Tests:** test_r241_next_action.py (transitions); test_r240_slack (required/forbidden); frontend Action Needed card
+- [x] **Requirements** — docs/releases/R24.1_requirements.md
+- [x] **Release notes** — docs/releases/R24.1_release_notes.md
+- [x] **Verification** — out/verification/R24.1/notes.md with gate outputs and UAT checklist
 
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 

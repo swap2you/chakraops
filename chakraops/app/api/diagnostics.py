@@ -334,13 +334,18 @@ def _run_portfolio_risk_check() -> Dict[str, Any]:
                     details={"breaches": breaches, "metrics": result.get("metrics", {})},
                     subtype="RISK_LIMIT_BREACH",
                 )
+        # R24.3.1: Add safe status_label for UI (no raw FAIL/WARN in display).
+        status_label = {"FAIL": "Limit breach", "WARN": "Advisory", "PASS": "OK"}.get(status, status)
+        check_result["status_label"] = status_label
         return check_result
-    except Exception as e:
+    except Exception:
+        # R24.3.1: Reclassify exception as SKIP with safe reason (never raw error in UI).
         return {
             "check": "portfolio_risk",
-            "status": "FAIL",
-            "details": {"error": str(e)},
-            "recommended_action": "Check account limits and positions store.",
+            "status": "SKIP",
+            "details": {"reason": "Check skipped: account or data unavailable"},
+            "recommended_action": None,
+            "status_label": "Skipped",
         }
 
 

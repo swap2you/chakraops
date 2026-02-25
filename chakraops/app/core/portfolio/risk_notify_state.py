@@ -53,6 +53,11 @@ def _load_state() -> Dict[str, Any]:
         return {}
 
 
+def _status_to_label(status: str) -> str:
+    """R24.3.1: Safe display label (no raw FAIL/WARN in persisted/UI)."""
+    return {"FAIL": "Limit breach", "WARN": "Advisory"}.get(status, "OK")
+
+
 def _save_state(last_signature: str, last_notified_at_utc: str, last_status: str) -> None:
     path = _risk_notify_state_path()
     try:
@@ -61,10 +66,25 @@ def _save_state(last_signature: str, last_notified_at_utc: str, last_status: str
             "last_signature": last_signature,
             "last_notified_at_utc": last_notified_at_utc,
             "last_status": last_status,
+            "last_status_label": _status_to_label(last_status),
         }
         atomic_write_json(path, data, indent=0)
     except Exception as e:
         logger.warning("[RISK_NOTIFY] Failed to write state: %s", e)
+
+
+def get_portfolio_risk_notifier_display() -> Dict[str, Any]:
+    """R24.3.1: Safe status for System Health UI (OK/Degraded/Advisory, no raw FAIL/WARN)."""
+    state = _load_state()
+    raw = (state.get("last_status") or "").strip().upper()
+    label = state.get("last_status_label") or _status_to_label(raw or "PASS")
+    if not raw or raw == "PASS":
+        return {"status": "OK", "label": label}
+    if raw == "FAIL":
+        return {"status": "Degraded", "label": label}
+    if raw == "WARN":
+        return {"status": "Advisory", "label": label}
+    return {"status": "OK", "label": label}
 
 
 def should_emit_portfolio_risk_notification(

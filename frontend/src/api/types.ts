@@ -372,6 +372,8 @@ export interface UiSystemHealthResponse {
     model?: string;
     last_error_code?: string | null;
   };
+  /** R24.3.1 — Portfolio risk notifier; safe status/label only (OK, Degraded, Advisory). */
+  portfolio_risk_notifier?: { status?: string; label?: string };
 }
 
 // =============================================================================

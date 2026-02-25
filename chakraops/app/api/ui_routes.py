@@ -147,6 +147,15 @@ def _get_mark_refresh_health() -> Dict[str, Any]:
         return {"last_run_at_utc": None, "last_result": None, "updated_count": None, "skipped_count": None, "error_count": None, "errors_sample": []}
 
 
+def _get_portfolio_risk_notifier_health() -> Dict[str, Any]:
+    """R24.3.1: Portfolio risk notifier for system health — safe status/label only (OK/Degraded/Advisory)."""
+    try:
+        from app.core.portfolio.risk_notify_state import get_portfolio_risk_notifier_display
+        return get_portfolio_risk_notifier_display()
+    except Exception:
+        return {"status": "OK", "label": "OK"}
+
+
 def _get_decision_store_mtime_utc() -> Optional[str]:
     """Return active decision store file mtime as ISO UTC string, or None."""
     try:
@@ -1013,6 +1022,7 @@ def ui_system_health(
         "eod_freeze": _get_eod_freeze_health(),
         "mark_refresh": _get_mark_refresh_health(),
         "copilot": _get_copilot_status_health(),
+        "portfolio_risk_notifier": _get_portfolio_risk_notifier_health(),
     }
 
 

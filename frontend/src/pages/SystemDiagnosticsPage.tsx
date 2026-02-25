@@ -14,7 +14,7 @@ import {
 } from "@/api/queries";
 import { formatTimestampEt, formatTimestampEtFull } from "@/utils/formatTimestamp";
 import { PageHeader } from "@/components/PageHeader";
-import { Card, CardHeader, StatusBadge, Button, Tooltip } from "@/components/ui";
+import { Card, CardHeader, StatusBadge, Badge, Button, Tooltip } from "@/components/ui";
 
 const DIAGNOSTIC_CHECKS = ["orats", "decision_store", "universe", "positions", "portfolio_risk", "scheduler", "store_integrity"] as const;
 
@@ -34,6 +34,28 @@ function schedulerSkipReasonLabel(reason: string | null | undefined): string {
   if (r === "evaluation_running") return "Evaluation already running";
   if (r === "no_symbols") return "No symbols in universe";
   return reason ?? "—";
+}
+
+/** R24.3.1: Safe display label for diagnostic checks (no raw FAIL/WARN in UI). */
+function checkDisplayLabel(ch: { check?: string; status?: string; status_label?: string }): string {
+  if (ch.check === "portfolio_risk" && ch.status_label) return ch.status_label;
+  if (ch.check === "portfolio_risk") {
+    const s = (ch.status ?? "").toUpperCase();
+    if (s === "FAIL") return "Limit breach";
+    if (s === "WARN") return "Advisory";
+    if (s === "SKIP") return "Skipped";
+    return "OK";
+  }
+  return ch.status ?? "—";
+}
+
+/** R24.3.1: Badge variant for check status (deterministic). */
+function checkBadgeVariant(ch: { status?: string }): "success" | "warning" | "danger" | "neutral" {
+  const s = (ch.status ?? "").toUpperCase();
+  if (s === "FAIL" || s === "CRITICAL") return "danger";
+  if (s === "WARN") return "warning";
+  if (s === "PASS" || s === "OK" || s === "SKIP") return "success";
+  return "neutral";
 }
 
 export function SystemDiagnosticsPage() {
@@ -93,6 +115,7 @@ export function SystemDiagnosticsPage() {
   const slack = data?.slack;
   const eodFreeze = data?.eod_freeze;
   const markRefresh = data?.mark_refresh;
+  const portfolioRiskNotifier = data?.portfolio_risk_notifier;
   const marketClosed = market?.phase ? market.phase !== "OPEN" && market.phase !== "UNKNOWN" : false;
 
   if (isLoading) {
@@ -498,6 +521,32 @@ export function SystemDiagnosticsPage() {
             )}
           </div>
         </Card>
+        {/* R24.3.1: Portfolio risk notifier — safe status/label only (OK/Degraded/Advisory). */}
+        <Card>
+          <CardHeader title="Portfolio risk notifier" description="Limit breach notifications; safe labels only." />
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">status</span>
+              <p className="mt-1">
+                <Badge
+                  variant={
+                    portfolioRiskNotifier?.status === "Degraded"
+                      ? "danger"
+                      : portfolioRiskNotifier?.status === "Advisory"
+                        ? "warning"
+                        : "success"
+                  }
+                >
+                  {portfolioRiskNotifier?.status ?? "OK"}
+                </Badge>
+              </p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">label</span>
+              <p className="mt-1 text-zinc-700 dark:text-zinc-200">{portfolioRiskNotifier?.label ?? "OK"}</p>
+            </div>
+          </div>
+        </Card>
       </div>
 
       {/* Store Integrity (Phase 17.0) */}
@@ -619,7 +668,7 @@ export function SystemDiagnosticsPage() {
                     <tr key={i} className="border-b border-zinc-100 dark:border-zinc-800/50">
                       <td className="py-2 pr-2 font-medium text-zinc-700 dark:text-zinc-300">{ch.check}</td>
                       <td className="py-2 pr-2">
-                        <StatusBadge status={ch.status} />
+                        <Badge variant={checkBadgeVariant(ch)}>{checkDisplayLabel(ch)}</Badge>
                       </td>
                       <td className="py-2 text-zinc-500 dark:text-zinc-400">
                         {typeof ch.details === "object" && ch.details

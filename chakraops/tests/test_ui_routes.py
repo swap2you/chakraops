@@ -1535,6 +1535,53 @@ def test_phase16_portfolio_risk_notification_throttled(tmp_path):
     assert len(risk_lines) == 1, f"Expected 1 PORTFOLIO_RISK notification, got {len(risk_lines)}"
 
 
+def test_r2431_portfolio_risk_check_returns_skip_on_exception(tmp_path):
+    """R24.3.1: When portfolio_risk check raises, return SKIP with safe reason (no raw FAIL/error in UI)."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    store_path = out_dir / "decision_latest.json"
+    store_path.write_text('{"metadata":{}}', encoding="utf-8")
+    app = _get_app()
+    with patch("app.core.eval.evaluation_store_v2.get_decision_store_path", return_value=store_path):
+        with patch("app.core.accounts.store.get_default_account", side_effect=RuntimeError("no account")):
+            client = TestClient(app)
+            r = client.post("/api/ui/diagnostics/run", params={"checks": "portfolio_risk"})
+    assert r.status_code == 200
+    checks = r.json().get("checks") or []
+    pr = next((c for c in checks if c.get("check") == "portfolio_risk"), None)
+    assert pr is not None
+    assert pr.get("status") == "SKIP"
+    assert pr.get("status_label") == "Skipped"
+    assert "reason" in (pr.get("details") or {})
+    assert "error" not in (pr.get("details") or {})
+
+
+def test_r2431_portfolio_risk_notifier_display_safe_labels(tmp_path):
+    """R24.3.1: get_portfolio_risk_notifier_display returns OK/Degraded/Advisory only (no raw FAIL/WARN)."""
+    from app.core.portfolio.risk_notify_state import get_portfolio_risk_notifier_display
+
+    out_dir = tmp_path / "out"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    state_path = out_dir / "portfolio_risk_notify_state.json"
+    with patch("app.core.portfolio.risk_notify_state._risk_notify_state_path", return_value=state_path):
+        # No file -> OK
+        display = get_portfolio_risk_notifier_display()
+        assert display.get("status") in ("OK", "Degraded", "Advisory")
+        assert "FAIL" not in str(display.get("label", ""))
+        assert "WARN" not in str(display.get("label", ""))
+        # With last_status FAIL -> Degraded, label safe
+        state_path.write_text(
+            '{"last_signature":"x","last_notified_at_utc":"2026-01-01T00:00:00Z","last_status":"FAIL","last_status_label":"Limit breach"}',
+            encoding="utf-8",
+        )
+        display = get_portfolio_risk_notifier_display()
+        assert display.get("status") == "Degraded"
+        assert display.get("label") == "Limit breach"
+
+
 def test_phase16_diagnostics_includes_recommended_action(tmp_path):
     """Phase 16.0: Diagnostic check responses include recommended_action."""
     pytest.importorskip("fastapi")

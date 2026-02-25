@@ -325,7 +325,7 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Tests:** Backend: no FAIL_/WARN_ in UI JSON; determinism; next_action_details not in decision JSON. Frontend: Dashboard severity + no raw codes; deep link
 - [x] **Requirements** — chakraops/docs/releases/R24.2_requirements.md
 - [x] **Release notes** — chakraops/docs/releases/R24.2_release_notes.md
-- [x] **Verification** — out/verification/R24.2/notes.md with gate outputs and UAT checklist (gate results also in release notes; paste raw tail into notes.md when out/ writable)
+- [x] **Verification** — out/verification/R24.2/notes.md with pasted raw gate outputs and UAT checklist (R24.2.1 process patch)
 
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 

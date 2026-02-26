@@ -137,7 +137,7 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 
 ### R22.7 — Truth + Consistency + Premium Symbol UX
 
-- [x] Requirements doc (`R22.7_requirements.md`); project status bookmark (`project_status_bookmark_through_R22_7.md`)
+- [x] Requirements doc (`R22.7_requirements.md`); project status bookmark (archived: [project_status_bookmark_through_R22_7.md](../../../../docs/archive/superseded/project_status_bookmark_through_R22_7.md))
 - [x] Part 1 / 1.1 — Decision artifact hygiene: code-only persistence (`primary_reason_codes`, strict regex, no prose, `rejected_due_to_delta_count`); candidate identity (`contract_key` derived); `test_decision_artifact_hygiene_r227.py` (strict codes, no prose, option identity)
 - [x] Part 2 — Run eval vs recompute determinism: same core pipeline; As-of/Inputs in diagnostics; `test_eval_determinism_r227.py`
 - [x] Part 3 — MTF S/R real resampling: weekly/monthly from daily OHLC; S/R per timeframe; bar_count, INSUFFICIENT_HISTORY; UI coincide message
@@ -383,7 +383,27 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Tests:** FE regression: no /\bFAIL\b/ or /\bWARN\b/ in document text; backend no FAIL_/WARN_ unchanged
 - [x] **Requirements** — chakraops/docs/releases/R24.6_requirements.md
 - [x] **Release notes** — chakraops/docs/releases/R24.6_release_notes.md
-- [ ] **Verification** — out/verification/R24.6/notes.md with gate outputs and UAT (WMT Gate "Blocked", no WARN, account reset note, earnings Unavailable when invalid)
+- [x] **Verification** — [out/verification/R24.6/notes.md](out/verification/R24.6/notes.md) with gate outputs and UAT (WMT Gate "Blocked", no WARN, account reset note, earnings Unavailable when invalid)
+
+### R24.7.0 — Repo Inventory + Cleanup Plan (NO deletions)
+
+- [x] **Repo map** — docs/master/REPO_ARCHITECTURE_MAP.md (tree, purposes, must keep, archive/delete candidates, naming, out/ whitelist)
+- [x] **Archive scaffold** — docs/archive/README.md + proposed structure (no moves)
+- [x] **Requirements** — chakraops/docs/releases/R24.7.0_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R24.7.0_release_notes.md
+- [x] **Verification** — [out/verification/R24.7.0/notes.md](out/verification/R24.7.0/notes.md) with gate outputs and UAT checklist
+- [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (169 passed, 18 skipped), frontend build pass (recorded in notes)
+
+### R24.7.1 — Archive pass (moves only; NO deletions)
+
+- [x] **Archive folders** — docs/archive/phase_plans/, audits/, superseded/, releases_supporting_artifacts/
+- [x] **Moves** — All 16 candidates git mv’d per REPO_ARCHITECTURE_MAP; phase0_keep_list after README update
+- [x] **Links** — README, REPO_ARCHITECTURE_MAP, CLEANUP_POLICY, RELEASE_CHECKLIST, R24.3_verification_notes_full self-ref updated
+- [x] **INDEX** — docs/archive/INDEX.md (old path → new path + justification)
+- [x] **Requirements** — chakraops/docs/releases/R24.7.1_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R24.7.1_release_notes.md
+- [x] **Verification** — [out/verification/R24.7.1/notes.md](out/verification/R24.7.1/notes.md) with gate outputs
+- [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (169 passed, 18 skipped), frontend build pass (recorded in notes)
 
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 

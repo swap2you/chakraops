@@ -8,10 +8,10 @@
 
 | Category | Description | Examples |
 |----------|-------------|----------|
-| **Legacy phase/plan docs** | Old phase plans (e.g. phase0_keep_list, phase4_plan, PHASE_8_PLAN) that are superseded by master PRD and roadmap | `chakraops/docs/phase4_plan.md`, `chakraops/docs/PHASE_8_PLAN.md` |
+| **Legacy phase/plan docs** | Old phase plans (e.g. phase0_keep_list, phase4_plan, PHASE_8_PLAN) that are superseded by master PRD and roadmap | Archived R24.7.1: `docs/archive/phase_plans/`, `docs/archive/superseded/` (see [INDEX.md](../archive/INDEX.md)) |
 | **Redundant verification** | Duplicate or obsolete verification files (e.g. same release verified twice with different names) | Only if clearly duplicate; never remove current `out/verification/<Release>/notes.md` for a completed release |
 | **Old fixtures** | Test fixtures or sample JSON no longer referenced by any test | Grep for references before deleting |
-| **One-off reports** | Single-purpose audit or report docs (e.g. DELTA_GATE_FIX_SUMMARY, FRONTEND_BACKEND_WIRING_AUDIT) that are historical only | Move to archive if still useful for reference |
+| **One-off reports** | Single-purpose audit or report docs (e.g. DELTA_GATE_FIX_SUMMARY, FRONTEND_BACKEND_WIRING_AUDIT) that are historical only | Archived R24.7.1: `docs/archive/audits/` (see [INDEX.md](../archive/INDEX.md)) |
 | **Superseded design docs** | Design or enhancement docs replaced by master PRD / roadmap / release requirements | `chakraops/docs/enhancements/` items that are now covered in master docs |
 | **Scratch or temp** | Any file under `out/` that is not on the whitelist (see RELEASE_CHECKLIST) | Remove per whitelist; do not add new artifact types without release note |
 

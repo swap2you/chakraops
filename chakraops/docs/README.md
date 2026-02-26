@@ -17,7 +17,7 @@
 | **How to operate** | [RUNBOOK_EXECUTION.md](./RUNBOOK_EXECUTION.md) — run, verify, debug, validate |
 | **Data rules** | [DATA_CONTRACT.md](./DATA_CONTRACT.md) — required/optional data, staleness, BLOCKED/WARN/PASS, overrides |
 | **ORATS API** | [ORATS_API_Reference.md](./ORATS_API_Reference.md), [orats_endpoint_matrix.md](./orats_endpoint_matrix.md) |
-| **Keep list (cleanup)** | [phase0_keep_list.md](./phase0_keep_list.md) |
+| **Cleanup policy** | [CLEANUP_POLICY.md](../../docs/master/CLEANUP_POLICY.md), [REPO_ARCHITECTURE_MAP.md](../../docs/master/REPO_ARCHITECTURE_MAP.md); legacy keep list archived at [phase0_keep_list.md](../../docs/archive/superseded/phase0_keep_list.md) |
 
 ---
 

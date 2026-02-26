@@ -337,19 +337,21 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Release notes** — chakraops/docs/releases/R24.3_release_notes.md
 - [x] **Verification** — out/verification/R24.3/notes.md with gate outputs and UAT checklist
 
-### R24.4 — Mark Proxy Provenance/Freshness + Roll Rationale (Operator Trust)
+### R24.4 — Mark Proxy Provenance/Freshness + Roll Rationale (Operator Trust) ✅ (R24.4.1)
 
-- [ ] **Backend A:** Mark fields (mark_value, mark_source, quote_ts, mark_age_sec) in lifecycle; deterministic selection (MID→LAST→BIDASK_MID→BID→ASK→UNKNOWN); request-time only; not in decision artifact
-- [ ] **Backend B:** Roll rationale (roll_window_threshold_dte, roll_reason_codes) when recommended_action_code == ROLL; safe enums only
-- [ ] **Backend C:** GET /api/ui/action-needed includes mark provenance/freshness and roll rationale; no FAIL_/WARN_
-- [ ] **Backend D:** Slack includes mark provenance/freshness and max profit %; no raw codes
-- [ ] **Frontend E:** Dashboard Action Needed shows Mark + source + age, Max profit %, Recommend (safe), ROLL reason (safe mapping)
-- [ ] **Tests:** Backend: mark selection determinism; mark_age_sec; action-needed no FAIL_/WARN_; lifecycle mark_*/roll_* not in decision JSON. Frontend: mark/source/age safe; no FAIL_|WARN_ in textContent
-- [ ] **Requirements** — chakraops/docs/releases/R24.4_requirements.md
-- [ ] **Release notes** — chakraops/docs/releases/R24.4_release_notes.md
-- [ ] **Verification** — out/verification/R24.4/notes.md with gate outputs and UAT checklist
+- [x] **Backend A:** Mark fields (mark_value, mark_source, quote_ts, mark_age_sec) in lifecycle; deterministic selection (MID→LAST→BIDASK_MID→BID→ASK→UNKNOWN); request-time only; not in decision artifact
+- [x] **Backend B:** Roll rationale (roll_window_threshold_dte, roll_reason_codes) when recommended_action_code == ROLL; safe enums only
+- [x] **Backend C:** GET /api/ui/action-needed includes mark provenance/freshness and roll rationale; no FAIL_/WARN_
+- [x] **Backend D:** Slack includes mark provenance/freshness and max profit %; no raw codes
+- [x] **Frontend E:** Dashboard Action Needed shows Mark + source + age, Max profit %, Recommend (safe), ROLL reason (safe mapping)
+- [x] **Tests:** Backend: mark selection determinism; mark_age_sec; action-needed no FAIL_/WARN_; lifecycle mark_*/roll_* not in decision JSON. Frontend: mark/source/age safe; no FAIL_|WARN_ in textContent
+- [x] **Requirements** — [chakraops/docs/releases/R24.4_requirements.md](chakraops/docs/releases/R24.4_requirements.md)
+- [x] **Release notes** — [chakraops/docs/releases/R24.4_release_notes.md](chakraops/docs/releases/R24.4_release_notes.md)
+- [x] **Verification** — [out/verification/R24.4/notes.md](out/verification/R24.4/notes.md) with gate outputs and UAT checklist
 
 ### R24.5 — Earnings Advisory (Hero Pill + Risk Flags) Using ORATS
+
+**Superseded by R24.5.1 (invalid ORATS earnings payload handling); do not use R24.5.**
 
 - [ ] **Backend A:** ORATS fetch cores (nextErn, daysToNextErn, impliedEarningsMove); optional hist/earnings for anncTod
 - [ ] **Backend B:** Request-time earnings fields (earnings_next_date, earnings_days, earnings_annc_tod, implied_earnings_move_pct, earnings_data_status OK/Unavailable/Stale, earnings_as_of); snapshot semantics; not in decision artifact
@@ -359,6 +361,29 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [ ] **Requirements** — chakraops/docs/releases/R24.5_requirements.md
 - [ ] **Release notes** — chakraops/docs/releases/R24.5_release_notes.md
 - [ ] **Verification** — out/verification/R24.5/notes.md with gate outputs and UAT (NVDA earnings, no eligibility block, grep FAIL_|WARN_)
+
+### R24.5.1 — Earnings Sanity + Scaling Fix (Patch)
+
+- [x] **Backend A:** nextErn missing/empty/0000-00-00/invalid ⇒ status Unavailable, null all except earnings_as_of
+- [x] **Backend B:** earnings_days from daysToNextErn (int ≥ 0) or calendar days from as_of (America/New_York) to nextErn
+- [x] **Backend C:** impliedEarningsMove scaling: 0 < v ≤ 1 ⇒ pct=value*100; 1 < v ≤ 50 ⇒ pct=value; else null
+- [x] **Backend D:** Status OK only when nextErn valid and earnings_days computed/valid
+- [x] **Frontend E:** Hero pill only when OK + earnings_days not null + valid date; never "Earnings: 00" or 0000-00-00; Risk advisory row only when OK
+- [x] **Tests:** nextErn=0000-00-00 ⇒ Unavailable; implied move 0.072→7.2, 7.2→7.2, 563→null; determinism; FE no pill when Unavailable, no 0000-00-00 in UI
+- [x] **Requirements** — [chakraops/docs/releases/R24.5.1_requirements.md](chakraops/docs/releases/R24.5.1_requirements.md)
+- [x] **Release notes** — [chakraops/docs/releases/R24.5.1_release_notes.md](chakraops/docs/releases/R24.5.1_release_notes.md)
+- [x] **Verification** — [out/verification/R24.5.1/notes.md](out/verification/R24.5.1/notes.md) with gate outputs and UAT checklist
+
+### R24.6 — UI Audit + Safe Labels + Account Reset Clarity
+
+- [x] **Frontend A:** Safe labels: PASS→"Passed", FAIL→"Blocked", WARN→"Degraded"; single helper; no literal FAIL/WARN in UI
+- [x] **Frontend B:** Gate Summary, Risk Flags, Analysis gates table, Portfolio risk, System Status, TickerIntelligencePanel, WheelPage, RankedTable, TopOpportunities use safe labels
+- [x] **Frontend C:** Account reset note when positions empty (holdings/account exist): "Data reset likely" + guidance; pointer to docs
+- [x] **Frontend D:** Earnings Details drawer: optional earnings status + as_of (debug, request-time); hero/risk guardrails per R24.5.1
+- [x] **Tests:** FE regression: no /\bFAIL\b/ or /\bWARN\b/ in document text; backend no FAIL_/WARN_ unchanged
+- [x] **Requirements** — chakraops/docs/releases/R24.6_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R24.6_release_notes.md
+- [ ] **Verification** — out/verification/R24.6/notes.md with gate outputs and UAT (WMT Gate "Blocked", no WARN, account reset note, earnings Unavailable when invalid)
 
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 

@@ -205,7 +205,7 @@ export function DiagnosticsPage() {
                               step.status === "RUNNING" && "text-blue-600 dark:text-blue-400",
                               (step.status === "NOT_RUN" || step.status === "PENDING") && "text-muted-foreground"
                             )}>
-                              {step.status}
+                              {step.status === "WARN" ? "Degraded" : step.status === "OK" ? "OK" : step.status}
                             </span>
                           </div>
                         </td>

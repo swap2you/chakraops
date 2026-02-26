@@ -80,7 +80,7 @@ describe("WheelPage", () => {
     expect(screen.getByText("SPY")).toBeInTheDocument();
     expect(screen.getByText("EMPTY")).toBeInTheDocument();
     expect(screen.getByText("OPEN_TICKET")).toBeInTheDocument();
-    expect(screen.getByText("PASS")).toBeInTheDocument();
+    expect(screen.getByText("Passed")).toBeInTheDocument();
     expect(screen.getByText("75")).toBeInTheDocument();
   });
 

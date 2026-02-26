@@ -405,7 +405,7 @@ export function PortfolioPage() {
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-400">Status</span>
               <Badge variant={riskData.status === "PASS" ? "success" : riskData.status === "WARN" ? "warning" : "danger"}>
-                {riskData.status}
+                {riskData.status === "PASS" ? "Passed" : riskData.status === "WARN" ? "Degraded" : "Blocked"}
               </Badge>
             </div>
             <div>
@@ -453,10 +453,17 @@ export function PortfolioPage() {
           }
         />
         {positions.length === 0 ? (
-          <EmptyState
-            title="No positions"
-            message="Track positions via Trade Ticket (Symbol page) or manual execution."
-          />
+          <>
+            <EmptyState
+              title="No positions"
+              message="Track positions via Trade Ticket (Symbol page) or manual execution."
+            />
+            {(accounts.length > 0 || (accountHoldingsData?.holdings?.length ?? 0) > 0) && (
+              <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400 rounded border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 px-3 py-2">
+                <strong>Data reset likely.</strong> Positions are empty. If you deleted state files, re-add positions via Trade Ticket or import. See docs for cleanup policy.
+              </p>
+            )}
+          </>
         ) : (
           <Table>
             <TableHeader>

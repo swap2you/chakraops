@@ -41,5 +41,12 @@ export function StatusBadge({ status }: { status: string }) {
   if (s === "OK" || s === "PASS" || s === "ELIGIBLE") v = "success";
   else if (s === "WARN" || s === "FAIL" || s === "HOLD") v = "warning";
   else if (s === "DOWN" || s === "BLOCKED" || s === "CRITICAL") v = "danger";
-  return <Badge variant={v}>{status || "—"}</Badge>;
+  const label = (() => {
+    if (!status || !status.trim()) return "—";
+    if (s === "PASS") return "Passed";
+    if (s === "FAIL") return "Blocked";
+    if (s === "WARN") return "Degraded";
+    return status;
+  })();
+  return <Badge variant={v}>{label}</Badge>;
 }

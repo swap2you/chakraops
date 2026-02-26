@@ -9,6 +9,7 @@ import {
 import type { UiNotification } from "@/api/queries";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardHeader, StatusBadge, Button } from "@/components/ui";
+import { sanitizeMessageForDisplay } from "@/lib/safeLabels";
 import { formatTimestampEtFull } from "@/utils/formatTimestamp";
 
 type TabState = "NEW" | "ACKED" | "ARCHIVED" | "ALL";
@@ -145,8 +146,8 @@ export function NotificationsPage() {
                       <td className="py-2 pr-2 font-medium text-zinc-700 dark:text-zinc-300">{n.type ?? "—"}</td>
                       <td className="py-2 pr-2 text-zinc-600 dark:text-zinc-400">{n.subtype ?? "—"}</td>
                       <td className="py-2 pr-2 font-mono text-zinc-600 dark:text-zinc-400">{n.symbol ?? "—"}</td>
-                      <td className="py-2 pr-2 text-zinc-600 dark:text-zinc-400 truncate max-w-xs" title={n.message}>
-                        {n.message ?? "—"}
+                      <td className="py-2 pr-2 text-zinc-600 dark:text-zinc-400 truncate max-w-xs" title={n.message ?? undefined}>
+                        {sanitizeMessageForDisplay(n.message)}
                       </td>
                       <td className="py-2 text-right">
                         <div className="flex justify-end gap-1">
@@ -286,7 +287,7 @@ export function NotificationsPage() {
             </p>
             <p>
               <span className="text-zinc-500 dark:text-zinc-500">Message: </span>
-              {selected.message ?? "—"}
+              {sanitizeMessageForDisplay(selected.message)}
             </p>
             {selected.details && Object.keys(selected.details).length > 0 && (
               <pre className="mt-2 overflow-auto rounded border border-zinc-200 bg-zinc-50 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-900">

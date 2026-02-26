@@ -59,7 +59,7 @@ describe("NotificationsPage", () => {
   it("shows notification row", () => {
     render(<NotificationsPage />);
     expect(screen.getByText(/ORATS_WARN/i)).toBeInTheDocument();
-    expect(screen.getByText(/ORATS status WARN/i)).toBeInTheDocument();
+    expect(screen.getByText(/ORATS status Degraded/i)).toBeInTheDocument();
   });
 
   it("shows subtype in table and filter includes subtype", () => {
@@ -93,7 +93,7 @@ describe("NotificationsPage", () => {
 
   it("shows Ack button in detail when notification state NEW (Phase 10.3)", () => {
     render(<NotificationsPage />);
-    fireEvent.click(screen.getByText(/ORATS status WARN/i));
+    fireEvent.click(screen.getByText(/ORATS status Degraded/i));
     const ackButtons = screen.getAllByRole("button", { name: /^Ack$/i });
     expect(ackButtons.length).toBeGreaterThanOrEqual(1);
   });

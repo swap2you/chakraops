@@ -307,7 +307,7 @@ export function TickerIntelligencePanel({ symbol }: TickerIntelligencePanelProps
                     >
                       {g.status === "PASS" && <CheckCircle2 className="h-3 w-3" />}
                       {g.status === "FAIL" && <XCircle className="h-3 w-3" />}
-                      {g.status}
+                      {g.status === "PASS" ? "Passed" : g.status === "FAIL" ? "Blocked" : g.status === "WARN" ? "Degraded" : g.status}
                     </span>
                     {expandedGates.has(i) ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                   </span>
@@ -329,7 +329,7 @@ export function TickerIntelligencePanel({ symbol }: TickerIntelligencePanelProps
             )}>
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
               <div>
-                <p className="font-medium">Data sufficiency: {dataSufficiency.status}</p>
+                <p className="font-medium">Data sufficiency: {dataSufficiency.status === "FAIL" ? "Blocked" : "Degraded"}</p>
                 {dataSufficiency.required_data_missing?.length ? (
                   <p className="mt-0.5 text-muted-foreground">Required missing: {dataSufficiency.required_data_missing.join(", ")}</p>
                 ) : null}

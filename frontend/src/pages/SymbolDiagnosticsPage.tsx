@@ -1005,7 +1005,7 @@ function ExecutionConsole({
             <RiskFlag
               icon={<Database className="h-4 w-4" />}
               label="data status"
-              value={sel?.status ?? "Unavailable"}
+              value={sel?.status === "PASS" ? "Passed" : sel?.status === "FAIL" ? "Blocked" : sel?.status === "WARN" ? "Degraded" : (sel?.status ?? "Unavailable")}
               status={
                 sel?.status === "PASS" ? "ok" : sel?.status === "FAIL" ? "fail" : "neutral"
               }
@@ -1019,7 +1019,7 @@ function ExecutionConsole({
                 </span>
               </div>
             </div>
-            {data.earnings && (data.earnings.earnings_next_date != null || data.earnings.earnings_days != null) && (
+            {data.earnings && data.earnings.earnings_data_status === "OK" && (data.earnings.earnings_next_date != null || data.earnings.earnings_days != null) && (
               <div className="col-span-2 flex items-start gap-2">
                 <Calendar className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500 dark:text-zinc-500" />
                 <div>
@@ -1051,6 +1051,12 @@ function ExecutionConsole({
             )}
             {data.primary_reason && (
               <Tooltip content={data.primary_reason} className="max-w-sm"><span className="block text-xs text-zinc-400 dark:text-zinc-500 cursor-help">Debug: raw reason</span></Tooltip>
+            )}
+            {data.earnings && (
+              <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                <span className="font-medium text-zinc-600 dark:text-zinc-300">Earnings (debug):</span>{" "}
+                {data.earnings.earnings_data_status ?? "—"} · as_of {data.earnings.earnings_as_of ?? "—"}
+              </div>
             )}
           </div>
         </details>
@@ -1094,21 +1100,24 @@ function ExecutionConsole({
   );
 }
 
-/** R24.5: Earnings advisory — safe labels only (no FAIL_/WARN_). */
+/** R24.5/R24.5.1: Earnings advisory — safe labels only (no FAIL_/WARN_). Never show "Earnings: 00" or 0000-00-00. */
 function earningsPillLabel(earnings: SymbolDiagnosticsResponseExtended["earnings"]): string | null {
-  if (!earnings || earnings.earnings_data_status !== "OK" || !earnings.earnings_next_date) return null;
+  if (!earnings || earnings.earnings_data_status !== "OK" || earnings.earnings_days == null) return null;
   const d = earnings.earnings_next_date;
+  if (!d || d.slice(0, 10) === "0000-00-00") return null;
   const annc = earnings.earnings_annc_tod && earnings.earnings_annc_tod !== "Unknown" ? ` (${earnings.earnings_annc_tod})` : "";
   const days = earnings.earnings_days;
   if (days === 0) return `Earnings: Today${annc}`;
   if (days === 1) return `Earnings: 1d${annc}`;
   try {
     const parts = d.slice(0, 10).split("-");
+    const dayNum = parseInt(parts[2], 10);
+    if (dayNum < 1 || dayNum > 31) return null; // R24.5.1: avoid "Earnings: 00" or bogus day
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const month = monthNames[parseInt(parts[1], 10) - 1] ?? parts[1];
-    return `Earnings: ${month} ${parseInt(parts[2], 10)}${annc}`;
+    return `Earnings: ${month} ${dayNum}${annc}`;
   } catch {
-    return `Earnings: ${d}${annc}`;
+    return null;
   }
 }
 

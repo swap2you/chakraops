@@ -267,7 +267,7 @@ export function WheelPage() {
                       </TableCell>
                       <TableCell>
                         <Badge variant={row.risk_status === "PASS" ? "success" : row.risk_status === "WARN" ? "warning" : "danger"}>
-                          {row.risk_status}
+                          {row.risk_status === "PASS" ? "Passed" : row.risk_status === "WARN" ? "Degraded" : "Blocked"}
                         </Badge>
                       </TableCell>
                       <TableCell>

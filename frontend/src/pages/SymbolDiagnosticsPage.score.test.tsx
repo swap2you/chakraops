@@ -188,6 +188,53 @@ describe("SymbolDiagnosticsPage score UX", () => {
     expect(text).not.toMatch(/WARN_/);
   });
 
+  it("R24.5.1: no hero pill when earnings_data_status is Unavailable", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: {
+        ...mockDiagnosticsWithCap,
+        earnings: {
+          earnings_days: null,
+          earnings_block: false,
+          note: "Unavailable",
+          earnings_next_date: "2026-02-26",
+          earnings_annc_tod: "Unknown",
+          implied_earnings_move_pct: null,
+          earnings_data_status: "Unavailable",
+          earnings_as_of: null,
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<SymbolDiagnosticsPage />);
+    expect(screen.queryByText(/Earnings: 1d/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Earnings: Today/)).not.toBeInTheDocument();
+  });
+
+  it("R24.5.1: no 0000-00-00 appears in UI", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: {
+        ...mockDiagnosticsWithCap,
+        earnings: {
+          earnings_days: null,
+          earnings_block: false,
+          note: "Unavailable",
+          earnings_next_date: "0000-00-00",
+          earnings_annc_tod: "Unknown",
+          implied_earnings_move_pct: null,
+          earnings_data_status: "Unavailable",
+          earnings_as_of: null,
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    const { container } = render(<SymbolDiagnosticsPage />);
+    fireEvent.click(screen.getByText("Risk & Details"));
+    const text = container.textContent ?? "";
+    expect(text).not.toContain("0000-00-00");
+  });
+
   it("R23.4.8: when applied_caps present shows Score used: Final score (capped)", () => {
     useSymbolDiagnosticsMock.mockReturnValue({
       data: {
@@ -377,6 +424,42 @@ describe("SymbolDiagnosticsPage Gate Summary", () => {
     render(<SymbolDiagnosticsPage />);
     expect(screen.getByText(/Rejected due to delta band \(rejected_count=32\)/)).toBeInTheDocument();
     expect(screen.queryByText(/delta=32/)).not.toBeInTheDocument();
+  });
+
+  it("R24.6: Gate Summary shows Blocked not FAIL when gate status is FAIL", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: {
+        ...mockDiagnosticsWithCap,
+        gates: [
+          { name: "Stage2", status: "FAIL", reason: "rejected_due_to_delta=32", pass: false },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    });
+    window.history.pushState({}, "", "/symbol-diagnostics?symbol=WMT");
+    render(<SymbolDiagnosticsPage />);
+    expect(screen.getByText("Blocked")).toBeInTheDocument();
+    expect(screen.queryByText(/\bFAIL\b/)).not.toBeInTheDocument();
+  });
+
+  it("R24.6: document textContent has no word-boundary FAIL or WARN", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: {
+        ...mockDiagnosticsWithCap,
+        gates: [
+          { name: "Stage1", status: "PASS", reason: null, pass: true },
+          { name: "Stage2", status: "FAIL", reason: "rejected_due_to_delta", pass: false },
+        ],
+        symbol_eligibility: { status: "FAIL", required_data_missing: [], required_data_stale: [] },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    const { container } = render(<SymbolDiagnosticsPage />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\bFAIL\b/);
+    expect(text).not.toMatch(/\bWARN\b/);
   });
 
   it("shows parsed English when reasons_explained is empty (rejected_due_to_delta=N → rejected_count)", () => {

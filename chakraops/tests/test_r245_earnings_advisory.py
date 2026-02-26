@@ -1,6 +1,6 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""R24.5: Earnings advisory — ORATS fetch, request-time fields, no FAIL_/WARN_, earnings not in decision artifact."""
+"""R24.5 / R24.5.1: Earnings advisory — ORATS fetch, validation, scaling, no FAIL_/WARN_, earnings not in decision artifact."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from app.core.orats.earnings import (
     STATUS_UNAVAILABLE,
     _as_of_date_ny,
     _calendar_days,
+    _is_valid_next_ern,
     _parse_date,
     fetch_earnings_advisory,
     fetch_earnings_advisory_batch,
@@ -28,6 +29,22 @@ def test_parse_date() -> None:
     assert _parse_date(None) is None
     assert _parse_date("") is None
     assert _parse_date("invalid") is None
+
+
+def test_parse_date_rejects_0000_00_00() -> None:
+    """R24.5.1: Bogus nextErn must be rejected."""
+    assert _parse_date("0000-00-00") is None
+    assert _parse_date("0000-00-00T00:00:00") is None
+    assert _parse_date("  0000-00-00  ") is None
+
+
+def test_is_valid_next_ern() -> None:
+    assert _is_valid_next_ern("2026-02-25") is True
+    assert _is_valid_next_ern("2000-01-15") is True
+    assert _is_valid_next_ern("0000-00-00") is False
+    assert _is_valid_next_ern("") is False
+    assert _is_valid_next_ern("2026-00-01") is False  # month 0 invalid
+    assert _is_valid_next_ern("2026-01-00") is False  # day 0 invalid
 
 
 def test_calendar_days() -> None:
@@ -83,6 +100,39 @@ def test_earnings_advisory_batch() -> None:
     assert "AAPL" in out
     assert "MSFT" in out
     assert out["AAPL"]["earnings_data_status"] == STATUS_UNAVAILABLE  # empty core -> no next_ern
+
+
+def test_next_ern_0000_00_00_returns_unavailable_and_nulls() -> None:
+    """R24.5.1: nextErn=0000-00-00 => status Unavailable, all earnings fields null except earnings_as_of."""
+    mock_core = {
+        "ticker": "BOGUS",
+        "nextErn": "0000-00-00",
+        "daysToNextErn": 0,
+        "impliedEarningsMove": 0.5,
+        "quoteDate": "2026-02-25T21:00:00Z",
+    }
+    with patch("app.core.orats.earnings.fetch_core_snapshot", return_value=mock_core):
+        out = fetch_earnings_advisory("BOGUS", as_of_utc=datetime(2026, 2, 25, 12, 0, 0, tzinfo=timezone.utc), token="x")
+    assert out["earnings_data_status"] == STATUS_UNAVAILABLE
+    assert out["earnings_next_date"] is None
+    assert out["earnings_days"] is None
+    assert out["implied_earnings_move_pct"] is None
+    assert out["earnings_as_of"] == "2026-02-25T21:00:00Z"
+
+
+def test_implied_move_scaling_r2451() -> None:
+    """R24.5.1: 0 < v <= 1 => fraction (pct=value*100); 1 < v <= 50 => percent; else null."""
+    as_of = datetime(2026, 2, 25, 12, 0, 0, tzinfo=timezone.utc)
+    base = {"ticker": "X", "nextErn": "2026-03-01", "daysToNextErn": 4, "quoteDate": "2026-02-25T21:00:00Z"}
+    with patch("app.core.orats.earnings.fetch_core_snapshot", return_value={**base, "impliedEarningsMove": 0.072}):
+        out = fetch_earnings_advisory("X", as_of_utc=as_of, token="x")
+    assert out["implied_earnings_move_pct"] == pytest.approx(7.2)
+    with patch("app.core.orats.earnings.fetch_core_snapshot", return_value={**base, "impliedEarningsMove": 7.2}):
+        out = fetch_earnings_advisory("X", as_of_utc=as_of, token="x")
+    assert out["implied_earnings_move_pct"] == 7.2
+    with patch("app.core.orats.earnings.fetch_core_snapshot", return_value={**base, "impliedEarningsMove": 563}):
+        out = fetch_earnings_advisory("X", as_of_utc=as_of, token="x")
+    assert out["implied_earnings_move_pct"] is None
 
 
 def test_decision_artifact_earnings_not_persisted() -> None:

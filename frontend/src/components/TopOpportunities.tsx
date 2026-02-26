@@ -43,8 +43,10 @@ function formatPct(val: number | null): string {
 }
 
 function riskLabel(status: string | null | undefined): string {
-  if (status === "OK" || status === "WARN" || status === "BLOCKED") return status;
-  return "UNKNOWN";
+  if (status === "OK") return "OK";
+  if (status === "WARN") return "Degraded";
+  if (status === "BLOCKED") return "Blocked";
+  return "Unknown";
 }
 
 interface TopOpportunitiesProps {
@@ -229,7 +231,7 @@ export function TopOpportunities({ pollTick, defaultLimit = 7 }: TopOpportunitie
             >
               <option value="ALL">All risk</option>
               <option value="OK">OK</option>
-              <option value="WARN">WARN</option>
+              <option value="WARN">Degraded</option>
               <option value="BLOCKED">BLOCKED</option>
               <option value="UNKNOWN">UNKNOWN</option>
             </select>

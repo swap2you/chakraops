@@ -36,16 +36,14 @@ function schedulerSkipReasonLabel(reason: string | null | undefined): string {
   return reason ?? "—";
 }
 
-/** R24.3.1: Safe display label for diagnostic checks (no raw FAIL/WARN in UI). */
+/** R24.3.1 / R24.6: Safe display label for diagnostic checks (no raw FAIL/WARN in UI). */
 function checkDisplayLabel(ch: { check?: string; status?: string; status_label?: string }): string {
   if (ch.check === "portfolio_risk" && ch.status_label) return ch.status_label;
-  if (ch.check === "portfolio_risk") {
-    const s = (ch.status ?? "").toUpperCase();
-    if (s === "FAIL") return "Limit breach";
-    if (s === "WARN") return "Advisory";
-    if (s === "SKIP") return "Skipped";
-    return "OK";
-  }
+  const s = (ch.status ?? "").toUpperCase();
+  if (s === "PASS" || s === "OK") return s === "PASS" ? "Passed" : "OK";
+  if (s === "FAIL") return "Blocked";
+  if (s === "WARN") return "Degraded";
+  if (s === "SKIP") return "Skipped";
   return ch.status ?? "—";
 }
 

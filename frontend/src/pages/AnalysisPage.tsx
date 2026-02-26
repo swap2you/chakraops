@@ -665,7 +665,7 @@ export function AnalysisPage() {
             <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
               <Activity className="h-4 w-4" /> Gates
             </h2>
-            <p className="text-xs text-muted-foreground">All gates must PASS for eligibility</p>
+            <p className="text-xs text-muted-foreground">All gates must pass for eligibility</p>
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -689,7 +689,7 @@ export function AnalysisPage() {
                             (!g.pass && g.status !== "PASS") && "bg-destructive/20 text-destructive"
                           )}>
                             {(g.pass || g.status === "PASS") ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                            {g.status ?? (g.pass ? "PASS" : "FAIL")}
+                            {g.pass || g.status === "PASS" ? "Passed" : "Blocked"}
                           </span>
                         </td>
                         <td className="py-2 text-muted-foreground">{g.reason ?? g.detail ?? "No details"}</td>

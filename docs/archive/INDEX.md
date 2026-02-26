@@ -38,12 +38,12 @@ Moved files: old path → new path, with a one-line justification. No deletions;
 
 ## releases_supporting_artifacts/
 
-Duplicate verification / gate-output docs; canonical evidence remains in `out/verification/<Release>/notes.md`. Kept for reference only.
+Duplicate verification / gate-output docs; canonical evidence remains in `out/verification/<Release>/notes.md`. **Deleted in R24.7.2** (redundant; canonical evidence in out/verification/<Release>/notes.md).
 
-| Old path | New path | Justification |
-|----------|----------|---------------|
-| `chakraops/docs/releases/R24.2_verification_notes_full.md` | `docs/archive/releases_supporting_artifacts/R24.2_verification_notes_full.md` | Duplicate; canonical in out/verification/R24.2/notes.md. |
-| `chakraops/docs/releases/R24.2_verification_gate_outputs.md` | `docs/archive/releases_supporting_artifacts/R24.2_verification_gate_outputs.md` | Duplicate gate outputs; canonical in out/verification/R24.2/notes.md. |
-| `chakraops/docs/releases/R24.3_verification_notes_full.md` | `docs/archive/releases_supporting_artifacts/R24.3_verification_notes_full.md` | Duplicate; canonical in out/verification/R24.3/notes.md. |
-| `chakraops/docs/releases/R24.4_verification_notes.md` | `docs/archive/releases_supporting_artifacts/R24.4_verification_notes.md` | Duplicate; canonical in out/verification/R24.4/notes.md. |
-| `chakraops/docs/releases/R24.5_verification_notes.md` | `docs/archive/releases_supporting_artifacts/R24.5_verification_notes.md` | Duplicate; R24.5 superseded by R24.5.1; kept for reference. |
+| Old path | New path (then deleted) | Justification |
+|----------|------------------------|---------------|
+| `chakraops/docs/releases/R24.2_verification_notes_full.md` | `docs/archive/releases_supporting_artifacts/R24.2_verification_notes_full.md` | Deleted in R24.7.2 (redundant; canonical in out/verification/R24.2/notes.md). |
+| `chakraops/docs/releases/R24.2_verification_gate_outputs.md` | `docs/archive/releases_supporting_artifacts/R24.2_verification_gate_outputs.md` | Deleted in R24.7.2 (redundant; canonical in out/verification/R24.2/notes.md). |
+| `chakraops/docs/releases/R24.3_verification_notes_full.md` | `docs/archive/releases_supporting_artifacts/R24.3_verification_notes_full.md` | Deleted in R24.7.2 (redundant; canonical in out/verification/R24.3/notes.md). |
+| `chakraops/docs/releases/R24.4_verification_notes.md` | `docs/archive/releases_supporting_artifacts/R24.4_verification_notes.md` | Deleted in R24.7.2 (redundant; canonical in out/verification/R24.4/notes.md). |
+| `chakraops/docs/releases/R24.5_verification_notes.md` | `docs/archive/releases_supporting_artifacts/R24.5_verification_notes.md` | Deleted in R24.7.2 (redundant; R24.5 superseded by R24.5.1; canonical in out/verification). |

@@ -405,6 +405,17 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Verification** — [out/verification/R24.7.1/notes.md](out/verification/R24.7.1/notes.md) with gate outputs
 - [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (169 passed, 18 skipped), frontend build pass (recorded in notes)
 
+### R24.7.2 — Cleanup pass 2 (delete redundant doc duplicates only)
+
+- [x] **Canonical evidence** — RELEASE_CHECKLIST points to out/verification/<Release>/notes.md for R24.2–R24.7.1
+- [x] **Grep proof** — Recorded in out/verification/R24.7.2/notes.md; 0 inbound links to the 5 files
+- [x] **Deleted** — 5 files in docs/archive/releases_supporting_artifacts/ (R24.2/R24.3/R24.4/R24.5 verification duplicates)
+- [x] **INDEX/README/REPO_ARCHITECTURE_MAP** — Updated to mark deleted items
+- [x] **Requirements** — chakraops/docs/releases/R24.7.2_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R24.7.2_release_notes.md
+- [x] **Verification** — [out/verification/R24.7.2/notes.md](out/verification/R24.7.2/notes.md) with grep proof + gate outputs + UAT
+- [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (169 passed, 18 skipped), frontend build pass (recorded in notes)
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 - [ ] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py` (fixture → mock staged result → evaluate_universe → store write → hygiene check + snapshot check + per-symbol summary)

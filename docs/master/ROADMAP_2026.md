@@ -7,6 +7,19 @@
 
 ---
 
+## Current execution status
+
+- **Phase 0 (cleanup / deploy / ops):** Completed — R24.7.x, R24.8, R24.9, R25.0, R25.1 (Docker, Caddy, healthz, backup, offline proof harness).
+- **Next phase in sequence:** **Phase 2 — Shares workflow completion** (targets/stops lifecycle, close recommendation, notification trigger). Execute phases in order; no random work. Parallel work only when it unblocks the current phase.
+
+---
+
+## Phase sequencing rule
+
+We execute phases **in order**. Parallel work is allowed only when it **unblocks** the current phase. Do not jump phases (e.g. do not start Phase 4 or Phase 8+ work before Phase 2 exit criteria are met).
+
+---
+
 ## Phase status (summary)
 
 | Phase | Scope | Status | Releases completed | Next release |

@@ -5,6 +5,18 @@
 
 ---
 
+## Now Next — Phase 2 (Shares workflow completion), R25.2
+
+We will implement the following in **R25.2** (Phase 2):
+
+1. **Targets/stops lifecycle** — Persist and evaluate targets/stops for shares positions; next_action CLOSE when target/stop hit; rationale in details (align with BACKLOG 2.2).
+2. **Close recommendation** — Clear close recommendation and UX when plan or lifecycle indicates exit; safe labels only (no raw codes).
+3. **Notification trigger** — Actionable notification when shares target/stop hit; no raw FAIL_/WARN_ (align with BACKLOG 2.3).
+
+**Explicitly not in Phase 2 (future phases):** Spreads/condors/butterflies (Phase 8+ / defer). Broker bot / broker automation (final phase). Strategy expansion and broker work are backlog only until Wheel (CSP/CC/shares) is proven.
+
+---
+
 ## Epic 1 — Actionable workflow & dashboard (Phase 1)
 
 | ID | Item | Type | Value | Risk | Deps | Acceptance criteria | Test notes | Priority |

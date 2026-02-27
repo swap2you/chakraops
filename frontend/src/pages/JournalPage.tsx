@@ -1,328 +1,386 @@
 /**
- * Trade Journal: list trades, add/edit/delete, fills, PnL, CSV export.
- * LIVE only: uses /api/trades endpoints.
+ * R25.5: Trade journal — SQLite-backed manual executions.
+ * Uses /api/ui/journal (GET/POST/PATCH) and export. Safe labels only.
  */
-import { useEffect, useState, useCallback } from "react";
-import { useDataMode } from "@/context/DataModeContext";
-import { usePolling } from "@/context/PollingContext";
-import { apiGet, apiPost, ApiError, getResolvedUrl } from "@/data/apiClient";
-import { ENDPOINTS } from "@/data/endpoints";
+import { useState, useMemo } from "react";
+import {
+  useJournal,
+  useJournalCreate,
+  useJournalUpdate,
+  useJournalExport,
+} from "@/api/queries";
+import type { JournalEntry } from "@/api/queries";
 import { PageHeader } from "@/components/PageHeader";
-import { EmptyState } from "@/components/EmptyState";
-import { TradeDetailDrawer } from "@/components/TradeDetailDrawer";
-import { pushSystemNotification } from "@/lib/notifications";
-import type { JournalTrade, TradesListResponse, TradePayload } from "@/types/journal";
-import { cn } from "@/lib/utils";
-import { Plus, Download, Loader2 } from "lucide-react";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+  EmptyState,
+  Button,
+} from "@/components/ui";
+import { Plus, Download, Loader2, Pencil, Check, X } from "lucide-react";
 
 function formatCurrency(val: number | null | undefined): string {
-  if (val == null) return "—";
-  return `$${Number(val).toFixed(2)}`;
+  if (val == null || Number.isNaN(val)) return "—";
+  return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
 }
 
-function formatDate(iso: string): string {
+function formatDate(s: string): string {
+  if (!s) return "—";
   try {
-    const d = new Date(iso);
-    return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString(undefined, { dateStyle: "short" });
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? s : d.toLocaleDateString(undefined, { dateStyle: "short" });
   } catch {
-    return iso;
+    return s;
   }
 }
+
+function currentMonth(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthToRange(month: string): { from_date: string; to_date: string } {
+  const [y, m] = month.split("-").map(Number);
+  const from_date = `${month}-01`;
+  const last = new Date(y, m, 0).getDate();
+  const to_date = `${month}-${String(last).padStart(2, "0")}`;
+  return { from_date, to_date };
+}
+
+const STRATEGIES = ["", "SHARES", "CSP", "CC"] as const;
+const ACTIONS = ["BUY", "SELL", "OPEN_CSP", "CLOSE_CSP", "OPEN_CC", "CLOSE_CC", "ROLL"] as const;
 
 export function JournalPage() {
-  const { mode } = useDataMode();
-  const polling = usePolling();
-  const pollTick = polling?.pollTick ?? 0;
-  const [trades, setTrades] = useState<JournalTrade[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedTrade, setSelectedTrade] = useState<JournalTrade | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [addTradeOpen, setAddTradeOpen] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [month, setMonth] = useState(currentMonth());
+  const [symbolFilter, setSymbolFilter] = useState("");
+  const [strategyFilter, setStrategyFilter] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editNotes, setEditNotes] = useState("");
+  const [editTags, setEditTags] = useState("");
 
-  const fetchTrades = useCallback(async () => {
-    if (mode !== "LIVE") return;
-    setError(null);
+  const { from_date, to_date } = useMemo(() => monthToRange(month), [month]);
+  const { data, isLoading, isError, error } = useJournal({
+    from_date,
+    to_date,
+    symbol: symbolFilter.trim() || undefined,
+    strategy: strategyFilter.trim() || undefined,
+    limit: 200,
+  });
+  const createMutation = useJournalCreate();
+  const updateMutation = useJournalUpdate();
+  const exportMutation = useJournalExport();
+
+  const entries = data?.entries ?? [];
+
+  const handleExport = async () => {
     try {
-      const res = await apiGet<TradesListResponse>(ENDPOINTS.tradesList);
-      setTrades(res.trades ?? []);
-    } catch (e) {
-      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e);
-      setError(msg);
-      setTrades([]);
-      pushSystemNotification({
-        source: "system",
-        severity: "error",
-        title: "Journal fetch failed",
-        message: msg,
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [mode]);
-
-  useEffect(() => {
-    if (mode === "MOCK") {
-      setLoading(false);
-      setTrades([]);
-      setError(null);
-      return;
-    }
-    if (mode !== "LIVE") return;
-    fetchTrades();
-  }, [mode, fetchTrades, mode === "LIVE" ? pollTick : 0]);
-
-  const handleExportAllCsv = async () => {
-    setExporting(true);
-    try {
-      const url = getResolvedUrl(ENDPOINTS.tradesExportCsv);
-      const res = await fetch(url, { method: "GET" });
-      if (!res.ok) throw new Error(`${res.status}`);
-      const blob = await res.blob();
+      const csv = await exportMutation.mutateAsync({ from_date, to_date });
+      const blob = new Blob([csv], { type: "text/csv" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = "trades_export.csv";
+      a.download = `journal_${from_date}_${to_date}.csv`;
       a.click();
       URL.revokeObjectURL(a.href);
-      pushSystemNotification({
-        source: "system",
-        severity: "info",
-        title: "Exported",
-        message: "All trades CSV downloaded.",
-      });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      pushSystemNotification({
-        source: "system",
-        severity: "error",
-        title: "Export failed",
-        message: msg,
-      });
-    } finally {
-      setExporting(false);
+    } catch {
+      // Error surfaced by mutation
     }
   };
 
-  const openTrade = (t: JournalTrade) => {
-    setSelectedTrade(t);
-    setDrawerOpen(true);
+  const startEdit = (e: JournalEntry) => {
+    setEditingId(e.id);
+    setEditNotes(e.notes ?? "");
+    setEditTags(e.tags ?? "");
   };
-
-  const handleTradeUpdated = (updatedTrade?: JournalTrade) => {
-    fetchTrades();
-    if (updatedTrade) {
-      setSelectedTrade(updatedTrade);
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditNotes("");
+    setEditTags("");
+  };
+  const saveEdit = async () => {
+    if (!editingId) return;
+    try {
+      await updateMutation.mutateAsync({
+        id: editingId,
+        payload: { notes: editNotes || null, tags: editTags || null },
+      });
+      cancelEdit();
+    } catch {
+      // Error surfaced by mutation
     }
   };
-
-  const handleTradeDeleted = () => {
-    setSelectedTrade(null);
-    setDrawerOpen(false);
-    fetchTrades();
-  };
-
-  if (mode === "MOCK") {
-    return (
-      <div className="space-y-6 p-6">
-        <PageHeader
-          title="Journal"
-          subtext="Trade journal and execution tracking. Switch to LIVE to use."
-        />
-        <EmptyState
-          title="Journal is LIVE only"
-          message="Switch to LIVE mode to record trades, add fills, and export CSV."
-        />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6 p-6">
       <PageHeader
         title="Journal"
-        subtext="Track trades, fills, PnL, and export to CSV."
+        subtext="Record manual executions (shares and options). Export to CSV."
         actions={
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleExportAllCsv}
-              disabled={exporting || trades.length === 0}
-              className="flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50"
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExport}
+              disabled={exportMutation.isPending || entries.length === 0}
             >
-              {exporting ? (
+              {exportMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Download className="h-4 w-4" />
               )}
               Export CSV
-            </button>
-            <button
-              type="button"
-              onClick={() => setAddTradeOpen(true)}
-              className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:bg-primary/90"
-            >
+            </Button>
+            <Button size="sm" onClick={() => setAddOpen(true)}>
               <Plus className="h-4 w-4" />
-              Add trade
-            </button>
+              Add entry
+            </Button>
           </div>
         }
       />
 
-      {error && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
-          {error}
+      <div className="flex flex-wrap items-center gap-4">
+        <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+          Month
+          <input
+            type="month"
+            value={month}
+            onChange={(e) => setMonth(e.target.value || currentMonth())}
+            className="rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+          />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+          Symbol
+          <input
+            type="text"
+            value={symbolFilter}
+            onChange={(e) => setSymbolFilter(e.target.value)}
+            placeholder="e.g. SPY"
+            className="w-24 rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+          />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+          Strategy
+          <select
+            value={strategyFilter}
+            onChange={(e) => setStrategyFilter(e.target.value)}
+            className="rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+          >
+            <option value="">All</option>
+            {STRATEGIES.filter(Boolean).map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {isError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
+          {error instanceof Error ? error.message : "Unable to load journal."}
         </div>
       )}
 
-      <section className="rounded-lg border border-border bg-card overflow-hidden">
-        {loading ? (
-          <div className="flex items-center justify-center gap-2 p-12 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            Loading…
-          </div>
-        ) : trades.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground">
-            No trades yet. Add a trade to start your journal.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/30 text-left text-muted-foreground">
-                  <th className="p-3 font-medium">Symbol</th>
-                  <th className="p-3 font-medium">Strategy</th>
-                  <th className="p-3 font-medium">Opened</th>
-                  <th className="p-3 font-medium">Contracts</th>
-                  <th className="p-3 font-medium">Remaining</th>
-                  <th className="p-3 font-medium">Avg entry</th>
-                  <th className="p-3 font-medium">Realized PnL</th>
-                  <th className="p-3 font-medium">Next action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {trades.map((t) => (
-                  <tr
-                    key={t.trade_id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => openTrade(t)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        openTrade(t);
-                      }
-                    }}
-                    className={cn(
-                      "border-b border-border transition-colors cursor-pointer",
-                      "hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-inset"
+      {isLoading && (
+        <div className="flex items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50/50 p-12 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          Loading…
+        </div>
+      )}
+
+      {!isLoading && !isError && entries.length === 0 && (
+        <EmptyState
+          title="No entries this month"
+          message="Add an entry to record a manual trade (shares or options)."
+        />
+      )}
+
+      {!isLoading && !isError && entries.length > 0 && (
+        <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Symbol</TableHead>
+                <TableHead>Strategy</TableHead>
+                <TableHead>Action</TableHead>
+                <TableHead className="text-right">Qty</TableHead>
+                <TableHead className="text-right">Price</TableHead>
+                <TableHead className="text-right">Premium</TableHead>
+                <TableHead className="text-right">Fees</TableHead>
+                <TableHead className="text-right">Realized P/L</TableHead>
+                <TableHead>Notes</TableHead>
+                <TableHead>Tags</TableHead>
+                <TableHead className="w-20">Edit</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {entries.map((e) => (
+                <TableRow key={e.id}>
+                  <TableCell>{formatDate(e.trade_date)}</TableCell>
+                  <TableCell className="font-medium">{e.symbol}</TableCell>
+                  <TableCell>{e.strategy}</TableCell>
+                  <TableCell>{e.action}</TableCell>
+                  <TableCell className="text-right">{e.qty}</TableCell>
+                  <TableCell className="text-right">{e.price != null ? formatCurrency(e.price) : "—"}</TableCell>
+                  <TableCell className="text-right">{e.premium != null ? formatCurrency(e.premium) : "—"}</TableCell>
+                  <TableCell className="text-right">{e.fees != null ? formatCurrency(e.fees) : "—"}</TableCell>
+                  <TableCell className={`text-right font-medium ${(e.realized_pl ?? 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                    {e.realized_pl != null ? formatCurrency(e.realized_pl) : "—"}
+                  </TableCell>
+                  <TableCell className="max-w-[140px]">
+                    {editingId === e.id ? (
+                      <input
+                        value={editNotes}
+                        onChange={(ev) => setEditNotes(ev.target.value)}
+                        className="w-full rounded border border-zinc-300 px-1.5 py-0.5 text-sm dark:border-zinc-600 dark:bg-zinc-800"
+                        placeholder="Notes"
+                      />
+                    ) : (
+                      <span className="truncate text-zinc-600 dark:text-zinc-400">{e.notes ?? "—"}</span>
                     )}
-                  >
-                    <td className="p-3 font-medium">{t.symbol}</td>
-                    <td className="p-3">{t.strategy}</td>
-                    <td className="p-3">{formatDate(t.opened_at)}</td>
-                    <td className="p-3">{t.contracts}</td>
-                    <td className="p-3">{t.remaining_qty}</td>
-                    <td className="p-3">{t.avg_entry != null ? formatCurrency(t.avg_entry) : "—"}</td>
-                    <td
-                      className={cn(
-                        "p-3 font-medium",
-                        (t.realized_pnl ?? 0) >= 0 ? "text-emerald-600" : "text-red-600"
-                      )}
-                    >
-                      {t.realized_pnl != null ? formatCurrency(t.realized_pnl) : "—"}
-                    </td>
-                    <td className="p-3 text-muted-foreground">
-                      {t.next_action?.message ?? (t.next_action?.action ? t.next_action.action : "—")}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+                  </TableCell>
+                  <TableCell className="max-w-[120px]">
+                    {editingId === e.id ? (
+                      <input
+                        value={editTags}
+                        onChange={(ev) => setEditTags(ev.target.value)}
+                        className="w-full rounded border border-zinc-300 px-1.5 py-0.5 text-sm dark:border-zinc-600 dark:bg-zinc-800"
+                        placeholder="Tags"
+                      />
+                    ) : (
+                      <span className="truncate text-zinc-600 dark:text-zinc-400">{e.tags ?? "—"}</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {editingId === e.id ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={saveEdit}
+                          disabled={updateMutation.isPending}
+                          className="rounded p-1 text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/30"
+                          aria-label="Save"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEdit}
+                          className="rounded p-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                          aria-label="Cancel"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => startEdit(e)}
+                        className="rounded p-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                        aria-label="Edit notes and tags"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
-      <TradeDetailDrawer
-        trade={selectedTrade}
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        onUpdated={handleTradeUpdated}
-        onDeleted={handleTradeDeleted}
-      />
-
-      {addTradeOpen && (
-        <AddTradeModal
-          onClose={() => setAddTradeOpen(false)}
+      {addOpen && (
+        <AddEntryModal
+          defaultDate={from_date}
+          onClose={() => setAddOpen(false)}
           onAdded={() => {
-            setAddTradeOpen(false);
-            fetchTrades();
+            setAddOpen(false);
+            createMutation.reset();
           }}
+          onCreate={createMutation.mutateAsync}
+          isPending={createMutation.isPending}
         />
       )}
     </div>
   );
 }
 
-function AddTradeModal({
+function AddEntryModal({
+  defaultDate,
   onClose,
   onAdded,
+  onCreate,
+  isPending,
 }: {
+  defaultDate: string;
   onClose: () => void;
   onAdded: () => void;
+  onCreate: (p: Record<string, unknown>) => Promise<JournalEntry>;
+  isPending: boolean;
 }) {
-  const [saving, setSaving] = useState(false);
+  const [trade_date, setTradeDate] = useState(defaultDate);
   const [symbol, setSymbol] = useState("");
-  const [strategy, setStrategy] = useState("CSP");
-  const [openedAt, setOpenedAt] = useState(() => new Date().toISOString().slice(0, 16));
+  const [strategy, setStrategy] = useState("SHARES");
+  const [action, setAction] = useState("BUY");
+  const [qty, setQty] = useState(1);
+  const [price, setPrice] = useState("");
+  const [premium, setPremium] = useState("");
+  const [fees, setFees] = useState("");
+  const [contract_key, setContractKey] = useState("");
   const [expiry, setExpiry] = useState("");
   const [strike, setStrike] = useState("");
-  const [contracts, setContracts] = useState(1);
-  const [entryMidEst, setEntryMidEst] = useState("");
+  const [right, setRight] = useState("");
   const [notes, setNotes] = useState("");
-  const [stopLevel, setStopLevel] = useState("");
-  const [targetLevels, setTargetLevels] = useState("");
+  const [tags, setTags] = useState("");
+  const [realized_pl, setRealizedPl] = useState("");
+  const [link_id, setLinkId] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaving(true);
+    setError(null);
+    const payload: Record<string, unknown> = {
+      trade_date: trade_date.slice(0, 10),
+      symbol: symbol.trim().toUpperCase(),
+      strategy: strategy.trim().toUpperCase(),
+      action: action.trim().toUpperCase(),
+      qty: Number(qty) || 0,
+    };
+    if (price !== "") {
+      const p = parseFloat(price);
+      if (!Number.isNaN(p)) payload.price = p;
+    }
+    if (premium !== "") {
+      const p = parseFloat(premium);
+      if (!Number.isNaN(p)) payload.premium = p;
+    }
+    if (fees !== "") {
+      const f = parseFloat(fees);
+      if (!Number.isNaN(f)) payload.fees = f;
+    }
+    if (contract_key.trim()) payload.contract_key = contract_key.trim();
+    if (expiry.trim()) payload.expiry = expiry.trim().slice(0, 10);
+    if (strike !== "") {
+      const s = parseFloat(strike);
+      if (!Number.isNaN(s)) payload.strike = s;
+    }
+    if (right.trim()) payload.right = right.trim();
+    if (notes.trim()) payload.notes = notes.trim();
+    if (tags.trim()) payload.tags = tags.trim();
+    if (realized_pl !== "") {
+      const r = parseFloat(realized_pl);
+      if (!Number.isNaN(r)) payload.realized_pl = r;
+    }
+    if (link_id.trim()) payload.link_id = link_id.trim();
     try {
-      const payload: TradePayload = {
-        symbol: symbol.trim(),
-        strategy: strategy.trim(),
-        opened_at: new Date(openedAt).toISOString(),
-        expiry: expiry.trim() || null,
-        strike: strike === "" ? null : parseFloat(strike),
-        contracts,
-        entry_mid_est: entryMidEst === "" ? null : parseFloat(entryMidEst),
-        notes: notes.trim() || null,
-        stop_level: stopLevel === "" ? null : parseFloat(stopLevel),
-        target_levels: targetLevels
-          ? targetLevels
-              .split(/[\s,]+/)
-              .map((s) => parseFloat(s.trim()))
-              .filter((n) => !Number.isNaN(n))
-          : [],
-      };
-      await apiPost<JournalTrade>(ENDPOINTS.tradesCreate, payload);
-      pushSystemNotification({
-        source: "system",
-        severity: "info",
-        title: "Trade added",
-        message: `${symbol} ${strategy}`,
-      });
+      await onCreate(payload);
       onAdded();
     } catch (err) {
-      const msg =
-        err instanceof ApiError ? err.message : err instanceof Error ? err.message : String(err);
-      pushSystemNotification({
-        source: "system",
-        severity: "error",
-        title: "Create failed",
-        message: msg,
-      });
-    } finally {
-      setSaving(false);
+      setError(err instanceof Error ? err.message : "Unable to create entry.");
     }
   };
 
@@ -331,136 +389,204 @@ function AddTradeModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="add-trade-title"
+      aria-labelledby="add-entry-title"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className="max-h-[90vh] w-full max-w-md overflow-auto rounded-lg border border-border bg-card p-4 shadow-lg"
+        className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-lg border border-zinc-200 bg-white p-4 shadow-lg dark:border-zinc-800 dark:bg-zinc-900"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="add-trade-title" className="text-lg font-semibold text-foreground">
-          Add trade
+        <h2 id="add-entry-title" className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+          Add journal entry
         </h2>
         <form onSubmit={handleSubmit} className="mt-4 space-y-3">
-          <div>
-            <label className="block text-xs text-muted-foreground">Symbol</label>
-            <input
-              type="text"
-              value={symbol}
-              onChange={(e) => setSymbol(e.target.value)}
-              placeholder="SPY"
-              className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-muted-foreground">Strategy</label>
-            <select
-              value={strategy}
-              onChange={(e) => setStrategy(e.target.value)}
-              className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
-            >
-              <option value="CSP">CSP</option>
-              <option value="CC">CC</option>
-              <option value="OTHER">Other</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-muted-foreground">Opened at</label>
-            <input
-              type="datetime-local"
-              value={openedAt}
-              onChange={(e) => setOpenedAt(e.target.value)}
-              className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
-              required
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
+          {error && (
+            <div className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
+              {error}
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-muted-foreground">Expiry</label>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400">Trade date *</label>
+              <input
+                type="date"
+                value={trade_date}
+                onChange={(e) => setTradeDate(e.target.value)}
+                required
+                className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400">Symbol *</label>
               <input
                 type="text"
-                value={expiry}
-                onChange={(e) => setExpiry(e.target.value)}
-                placeholder="YYYY-MM-DD"
-                className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
+                value={symbol}
+                onChange={(e) => setSymbol(e.target.value)}
+                placeholder="SPY"
+                required
+                className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400">Strategy</label>
+              <select
+                value={strategy}
+                onChange={(e) => setStrategy(e.target.value)}
+                className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+              >
+                <option value="SHARES">SHARES</option>
+                <option value="CSP">CSP</option>
+                <option value="CC">CC</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400">Action *</label>
+              <select
+                value={action}
+                onChange={(e) => setAction(e.target.value)}
+                required
+                className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+              >
+                {ACTIONS.map((a) => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400">Qty *</label>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={qty}
+                onChange={(e) => setQty(Number(e.target.value) || 0)}
+                className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
               />
             </div>
             <div>
-              <label className="block text-xs text-muted-foreground">Strike</label>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400">Price (shares)</label>
               <input
                 type="number"
-                step="0.01"
+                step={0.01}
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400">Premium (options)</label>
+              <input
+                type="number"
+                step={0.01}
+                value={premium}
+                onChange={(e) => setPremium(e.target.value)}
+                className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400">Fees</label>
+              <input
+                type="number"
+                step={0.01}
+                value={fees}
+                onChange={(e) => setFees(e.target.value)}
+                className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400">Realized P/L (on close)</label>
+              <input
+                type="number"
+                step={0.01}
+                value={realized_pl}
+                onChange={(e) => setRealizedPl(e.target.value)}
+                className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400">Contract key</label>
+              <input
+                type="text"
+                value={contract_key}
+                onChange={(e) => setContractKey(e.target.value)}
+                placeholder="Option identifier"
+                className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400">Expiry</label>
+              <input
+                type="date"
+                value={expiry}
+                onChange={(e) => setExpiry(e.target.value)}
+                className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400">Strike</label>
+              <input
+                type="number"
+                step={0.01}
                 value={strike}
                 onChange={(e) => setStrike(e.target.value)}
-                className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
+                className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400">Right (P/C)</label>
+              <input
+                type="text"
+                value={right}
+                onChange={(e) => setRight(e.target.value)}
+                placeholder="P or C"
+                className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
               />
             </div>
           </div>
           <div>
-            <label className="block text-xs text-muted-foreground">Contracts</label>
-            <input
-              type="number"
-              min={1}
-              value={contracts}
-              onChange={(e) => setContracts(parseInt(e.target.value, 10) || 1)}
-              className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-muted-foreground">Entry mid (est)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={entryMidEst}
-              onChange={(e) => setEntryMidEst(e.target.value)}
-              className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-muted-foreground">Stop level</label>
-            <input
-              type="number"
-              step="0.01"
-              value={stopLevel}
-              onChange={(e) => setStopLevel(e.target.value)}
-              className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-muted-foreground">Target levels (comma-separated)</label>
+            <label className="block text-xs text-zinc-500 dark:text-zinc-400">Link ID (group open/close)</label>
             <input
               type="text"
-              value={targetLevels}
-              onChange={(e) => setTargetLevels(e.target.value)}
-              placeholder="0.5, 0.25"
-              className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
+              value={link_id}
+              onChange={(e) => setLinkId(e.target.value)}
+              className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
             />
           </div>
           <div>
-            <label className="block text-xs text-muted-foreground">Notes</label>
+            <label className="block text-xs text-zinc-500 dark:text-zinc-400">Notes</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
-              className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 text-sm"
+              className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-zinc-500 dark:text-zinc-400">Tags (comma-separated)</label>
+            <input
+              type="text"
+              value={tags}
+              onChange={(e) => setTags(e.target.value)}
+              className="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
             />
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-border px-3 py-1.5 text-sm"
-            >
+            <Button type="button" variant="outline" size="sm" onClick={onClose}>
               Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground disabled:opacity-50"
-            >
-              {saving ? "Saving…" : "Add"}
-            </button>
+            </Button>
+            <Button type="submit" size="sm" disabled={isPending}>
+              {isPending ? "Saving…" : "Add"}
+            </Button>
           </div>
         </form>
       </div>

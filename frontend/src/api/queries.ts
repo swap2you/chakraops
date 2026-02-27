@@ -4,7 +4,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiDelete, apiGet, apiPost } from "./client";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPostText } from "./client";
 import type {
   ArtifactListResponse,
   DecisionArtifactV2,
@@ -288,6 +288,29 @@ function uiNotificationsAckBulkPath(): string {
 function uiNotificationsArchiveBulkPath(): string {
   return `/api/ui/notifications/archive-bulk`;
 }
+
+/** R25.5: Journal */
+function uiJournalPath(params: { from_date?: string; to_date?: string; symbol?: string; strategy?: string; limit?: number; offset?: number }): string {
+  const p = new URLSearchParams();
+  if (params.from_date) p.set("from_date", params.from_date);
+  if (params.to_date) p.set("to_date", params.to_date);
+  if (params.symbol) p.set("symbol", params.symbol);
+  if (params.strategy) p.set("strategy", params.strategy);
+  if (params.limit != null) p.set("limit", String(params.limit));
+  if (params.offset != null) p.set("offset", String(params.offset));
+  const q = p.toString();
+  return q ? `/api/ui/journal?${q}` : "/api/ui/journal";
+}
+function uiJournalExportPath(from_date: string, to_date: string): string {
+  return `/api/ui/journal/export?from_date=${encodeURIComponent(from_date)}&to_date=${encodeURIComponent(to_date)}`;
+}
+function uiJournalEntryPath(id: string): string {
+  return `/api/ui/journal/${encodeURIComponent(id)}`;
+}
+/** R25.5: Reports monthly */
+function uiReportsMonthlyPath(month: string): string {
+  return `/api/ui/reports/monthly?month=${encodeURIComponent(month)}`;
+}
 function uiAdminSlackTestPath(channel?: string): string {
   const base = `/api/ui/admin/slack/test`;
   if (channel && channel.trim()) {
@@ -345,6 +368,9 @@ export const queryKeys = {
   uiSnapshotsLatest: () => ["ui", "snapshots", "latest"] as const,
   /** R23.2 */
   uiDeltaOverrides: () => ["ui", "deltaOverrides"] as const,
+  /** R25.5 */
+  uiJournal: (params?: Record<string, unknown>) => ["ui", "journal", params ?? ""] as const,
+  uiReportsMonthly: (month: string) => ["ui", "reports", "monthly", month] as const,
 };
 
 // =============================================================================
@@ -1453,6 +1479,99 @@ export function useArchiveBulkNotifications() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["ui", "notifications"] });
     },
+  });
+}
+
+/** R25.5: Journal entry (SQLite-backed). */
+export interface JournalEntry {
+  id: string;
+  created_ts: string;
+  trade_date: string;
+  as_of_ts?: string | null;
+  symbol: string;
+  strategy: string;
+  action: string;
+  qty: number;
+  price?: number | null;
+  premium?: number | null;
+  fees?: number | null;
+  contract_key?: string | null;
+  expiry?: string | null;
+  strike?: number | null;
+  right?: string | null;
+  notes?: string | null;
+  tags?: string | null;
+  realized_pl?: number | null;
+  link_id?: string | null;
+}
+export interface JournalListResponse {
+  entries: JournalEntry[];
+}
+export interface JournalCreateResponse {
+  entry: JournalEntry;
+}
+export interface MonthlyReportResponse {
+  month: string;
+  total_realized_pl: number;
+  by_strategy: Record<string, number>;
+  trade_count: number;
+  win_count: number;
+  loss_count: number;
+  win_rate: number;
+  avg_hold_days: number | null;
+  top_winners: { symbol: string; realized_pl: number | null; strategy: string }[];
+  top_losers: { symbol: string; realized_pl: number | null; strategy: string }[];
+  fees_total: number;
+}
+
+export function useJournal(params: {
+  from_date?: string;
+  to_date?: string;
+  symbol?: string;
+  strategy?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  return useQuery({
+    queryKey: queryKeys.uiJournal(params),
+    queryFn: () => apiGet<JournalListResponse>(uiJournalPath(params)),
+  });
+}
+
+export function useJournalCreate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      apiPost<JournalCreateResponse>(uiJournalPath({}), payload).then((r) => r.entry),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "journal"] });
+    },
+  });
+}
+
+export function useJournalUpdate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Record<string, unknown> }) =>
+      apiPatch<JournalCreateResponse>(uiJournalEntryPath(id), payload).then((r) => r.entry),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "journal"] });
+    },
+  });
+}
+
+export function useJournalExport() {
+  return useMutation({
+    mutationFn: ({ from_date, to_date }: { from_date: string; to_date: string }) =>
+      apiPostText(uiJournalExportPath(from_date, to_date)),
+  });
+}
+
+export function useReportsMonthly(month: string) {
+  return useQuery({
+    queryKey: queryKeys.uiReportsMonthly(month),
+    queryFn: () => apiGet<MonthlyReportResponse>(uiReportsMonthlyPath(month)),
+    enabled: !!month && month.length === 7 && month[4] === "-",
   });
 }
 

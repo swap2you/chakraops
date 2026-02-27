@@ -1437,6 +1437,197 @@ def ui_notification_delete(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ---------------------------------------------------------------------------
+# R25.5: Journal + Monthly Reports (SQLite-backed; no FAIL/WARN in responses)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/journal")
+def ui_journal_list(
+    from_date: str | None = Query(None, description="YYYY-MM-DD"),
+    to_date: str | None = Query(None, description="YYYY-MM-DD"),
+    symbol: str | None = Query(None),
+    strategy: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.5: List journal entries (ordered by created_ts desc). Safe response only."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.journal.journal_store import journal_list
+        entries = journal_list(from_date=from_date, to_date=to_date, symbol=symbol, strategy=strategy, limit=limit, offset=offset)
+        return {"entries": entries}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Journal list error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to load journal entries")
+
+
+@router.post("/journal")
+async def ui_journal_create(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.5: Create journal entry. Body: trade_date, symbol, strategy, action, qty, price|premium, fees?, contract_key?, notes?, tags?, link_id?."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    trade_date = (body.get("trade_date") or "").strip()[:10]
+    symbol = (body.get("symbol") or "").strip().upper()
+    strategy = (body.get("strategy") or "SHARES").strip().upper()
+    action = (body.get("action") or "").strip().upper()
+    if not trade_date or not symbol or not action:
+        raise HTTPException(status_code=400, detail="trade_date, symbol, and action required")
+    try:
+        qty = float(body.get("qty", 0))
+    except (TypeError, ValueError):
+        qty = 0.0
+    price = body.get("price")
+    premium = body.get("premium")
+    if price is not None:
+        try:
+            price = float(price)
+        except (TypeError, ValueError):
+            price = None
+    if premium is not None:
+        try:
+            premium = float(premium)
+        except (TypeError, ValueError):
+            premium = None
+    fees = body.get("fees")
+    if fees is not None:
+        try:
+            fees = float(fees)
+        except (TypeError, ValueError):
+            fees = None
+    strike_val = None
+    if body.get("strike") is not None:
+        try:
+            strike_val = float(body["strike"])
+        except (TypeError, ValueError):
+            pass
+    realized_val = None
+    if body.get("realized_pl") is not None:
+        try:
+            realized_val = float(body["realized_pl"])
+        except (TypeError, ValueError):
+            pass
+    try:
+        from app.core.journal.journal_store import journal_create
+        entry = journal_create(
+            trade_date=trade_date,
+            symbol=symbol,
+            strategy=strategy,
+            action=action,
+            qty=qty,
+            price=price,
+            premium=premium,
+            fees=fees,
+            contract_key=(body.get("contract_key") or "").strip() or None,
+            expiry=(body.get("expiry") or "").strip()[:10] or None,
+            strike=strike_val,
+            right=(body.get("right") or "").strip() or None,
+            notes=(body.get("notes") or "").strip()[:2000] or None,
+            tags=(body.get("tags") or "").strip()[:500] or None,
+            realized_pl=realized_val,
+            link_id=(body.get("link_id") or "").strip() or None,
+        )
+        return {"entry": entry}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Journal create error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to create entry")
+
+
+@router.patch("/journal/{entry_id}")
+async def ui_journal_update(
+    entry_id: str,
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.5: Update journal entry (notes, tags, fees, trade_date, qty, price, premium)."""
+    _require_ui_key(x_ui_key)
+    if not entry_id or not entry_id.strip():
+        raise HTTPException(status_code=400, detail="entry_id required")
+    try:
+        body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    def _opt_float(v):
+        if v is None:
+            return None
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+    try:
+        from app.core.journal.journal_store import journal_update
+        updated = journal_update(
+            entry_id.strip(),
+            notes=body.get("notes"),
+            tags=body.get("tags"),
+            fees=_opt_float(body.get("fees")),
+            trade_date=(body.get("trade_date") or "").strip()[:10] or None,
+            qty=_opt_float(body.get("qty")),
+            price=_opt_float(body.get("price")),
+            premium=_opt_float(body.get("premium")),
+        )
+        if updated is None:
+            raise HTTPException(status_code=404, detail="Entry not found")
+        return {"entry": updated}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Journal update error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to update entry")
+
+
+@router.post("/journal/export")
+def ui_journal_export(
+    from_date: str = Query(..., description="YYYY-MM-DD"),
+    to_date: str = Query(..., description="YYYY-MM-DD"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+):
+    """R25.5: Export journal as CSV."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.journal.journal_store import journal_export_csv
+        csv_str = journal_export_csv(from_date=from_date.strip()[:10], to_date=to_date.strip()[:10])
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(csv_str, media_type="text/csv")
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Journal export error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to export")
+
+
+@router.get("/reports/monthly")
+def ui_reports_monthly(
+    month: str = Query(..., description="YYYY-MM"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.5: Monthly report aggregate (realized P/L, counts, winners/losers). Safe response only."""
+    _require_ui_key(x_ui_key)
+    month = (month or "").strip()[:7]
+    if len(month) != 7 or month[4] != "-":
+        raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+    try:
+        from app.core.journal.journal_store import journal_monthly_aggregate
+        return journal_monthly_aggregate(month)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Monthly report error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to load report")
+
+
 @router.get("/accounts/default")
 def ui_accounts_default(
     x_ui_key: str | None = Header(None, alias="x-ui-key"),

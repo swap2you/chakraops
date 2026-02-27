@@ -487,6 +487,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend pytest (541 passed), frontend tests (171 passed), frontend build pass (recorded in notes)
 - **Scope:** NEW→ACKED→ARCHIVED workflow; bulk ack/archive; transition-aware dedupe; GET symbol/type/offset; Notifications Health in System Diagnostics; deep links; no FAIL/WARN. Branch: release/R25.4.
 
+### R25.5 — Phase 5 Journaling + Monthly Reporting baseline (SQLite, single-user)
+
+- [ ] **Requirements** — [chakraops/docs/releases/R25.5_requirements.md](R25.5_requirements.md)
+- [ ] **Release notes** — [chakraops/docs/releases/R25.5_release_notes.md](R25.5_release_notes.md)
+- [ ] **Verification** — out/verification/R25.5/notes.md (gate tails + UAT checklist)
+- [ ] **Gate** — Backend pytest, frontend tests, frontend build pass (record in notes before sign-off)
+- **Scope:** Journal store (data/journal.db); GET/POST/PATCH journal, export CSV, GET reports/monthly; Journal + Reports pages; no auto execution; no FAIL/WARN. Branch: release/R25.5.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

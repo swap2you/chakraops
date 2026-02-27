@@ -9,6 +9,8 @@ import { SystemDiagnosticsPage } from "@/pages/SystemDiagnosticsPage";
 import { NotificationsPage } from "@/pages/NotificationsPage";
 import { PortfolioPage } from "@/pages/PortfolioPage";
 import { WheelPage } from "@/pages/WheelPage";
+import { JournalPage } from "@/pages/JournalPage";
+import { ReportsPage } from "@/pages/ReportsPage";
 import { getWheelPageMode } from "@/config/features";
 
 const queryClient = new QueryClient({
@@ -32,6 +34,8 @@ export function App() {
               <Route path="/symbol-diagnostics" element={<SymbolDiagnosticsPage />} />
               <Route path="/system" element={<SystemDiagnosticsPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/journal" element={<JournalPage />} />
+              <Route path="/reports" element={<ReportsPage />} />
               <Route path="/portfolio" element={<PortfolioPage />} />
               {getWheelPageMode() !== "hidden" ? (
                 <Route path="/wheel" element={<WheelPage />} />

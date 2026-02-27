@@ -416,6 +416,30 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Verification** — [out/verification/R24.7.2/notes.md](out/verification/R24.7.2/notes.md) with grep proof + gate outputs + UAT
 - [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (169 passed, 18 skipped), frontend build pass (recorded in notes)
 
+### R24.8 — Docker packaging baseline (backend + frontend)
+
+- [x] **Backend Dockerfile** — chakraops/Dockerfile (python slim, uvicorn 0.0.0.0:8000, no .env in image)
+- [x] **Frontend Dockerfile** — frontend/Dockerfile (build + serve dist; VITE_API_BASE_URL documented)
+- [x] **docker-compose.yml** — backend + frontend; out/ bind mount; env_file .env
+- [x] **.dockerignore** — out/, .venv/, node_modules/, dist/, .env excluded
+- [x] **README** — Docker Quickstart, troubleshooting, state persistence
+- [x] **Requirements** — chakraops/docs/releases/R24.8_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R24.8_release_notes.md
+- [x] **Verification** — [out/verification/R24.8/notes.md](out/verification/R24.8/notes.md) with gate outputs + docker smoke UAT
+- [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (169 passed, 18 skipped), frontend build pass (recorded in notes)
+
+### R24.9 — Internet-safe deployment baseline (HTTPS + basic auth + same-origin)
+
+- [x] **Same-origin** — Prod frontend uses relative /api; VITE_API_BASE_URL empty in docker-compose.prod.yml
+- [x] **Compose profiles** — dev (default, ports 8000/3000) and prod (docker-compose.prod.yml; Caddy 80/443, backend/frontend internal)
+- [x] **Caddy** — Reverse proxy / → frontend, /api/* → backend; basic auth from env; optional TLS (DOMAIN)
+- [x] **Security** — CORS via UI_CORS_ORIGINS; all behind Caddy auth in prod; tokens in env_file only
+- [x] **README** — Production Quickstart, Caddy hash generation, ports 80/443 only in prod
+- [x] **Requirements** — chakraops/docs/releases/R24.9_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R24.9_release_notes.md
+- [x] **Verification** — [out/verification/R24.9/notes.md](out/verification/R24.9/notes.md) with gate outputs + UAT
+- [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (169 passed, 18 skipped), frontend build pass (recorded in notes)
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 - [ ] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py` (fixture → mock staged result → evaluate_universe → store write → hygiene check + snapshot check + per-symbol summary)

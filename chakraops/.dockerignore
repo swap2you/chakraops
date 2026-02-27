@@ -1,0 +1,9 @@
+# Backend image: exclude local runtime artifacts and secrets.
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+out
+.env
+*.db

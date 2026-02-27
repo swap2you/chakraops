@@ -1,0 +1,49 @@
+# R24.8/R24.9: Docker packaging and internet-safe deployment.
+# Dev (default): docker compose up --build  → frontend :3000, backend :8000
+# Prod:          docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod up -d --build
+#               → only Caddy :80/:443; backend and frontend internal. Same-origin /api via Caddy.
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: chakraops/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./out:/workspace/out
+    env_file:
+      - .env
+    # In prod, use docker-compose.prod.yml to remove ports (backend not exposed to host).
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_BASE_URL: "http://localhost:8000"
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    # In prod, use docker-compose.prod.yml to set VITE_API_BASE_URL="" and remove ports.
+
+  caddy:
+    build:
+      context: .
+      dockerfile: docker/caddy/Dockerfile
+    profiles:
+      - prod
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER?BASIC_AUTH_USER required for prod}
+      BASIC_AUTH_HASH: ${BASIC_AUTH_HASH?BASIC_AUTH_HASH required for prod}
+      DOMAIN: ${DOMAIN:-}
+    env_file:
+      - .env
+    depends_on:
+      - backend
+      - frontend
+    # Proxies / → frontend, /api/* → backend; basic auth on all routes. TLS if DOMAIN set.

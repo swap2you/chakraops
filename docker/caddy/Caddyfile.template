@@ -1,0 +1,14 @@
+# R24.9: Caddy reverse proxy. __SITE__ replaced at runtime (:80 or $DOMAIN for TLS).
+# BASIC_AUTH_USER and BASIC_AUTH_HASH required (set in server .env). Rate limit: future.
+
+__SITE__ {
+	basicauth * {
+		__BASIC_AUTH_USER__ __BASIC_AUTH_HASH__
+	}
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+	handle {
+		reverse_proxy frontend:80
+	}
+}

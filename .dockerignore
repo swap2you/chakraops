@@ -1,0 +1,20 @@
+# R24.8: Keep images small; no secrets or generated artifacts.
+.git
+.env
+*.env
+*.key
+out/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+frontend/node_modules/
+frontend/dist/
+chakraops/dist/
+*.db
+.DS_Store
+.cursorignore
+.idea
+.vscode

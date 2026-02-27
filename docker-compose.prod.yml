@@ -1,0 +1,15 @@
+# R24.9: Production overrides. Use with: docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod up -d --build
+# - Backend and frontend not published (only Caddy 80/443).
+# - Frontend built with empty VITE_API_BASE_URL so browser uses same-origin /api (proxied by Caddy).
+
+services:
+  backend:
+    ports: []
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_BASE_URL: ""
+    ports: []

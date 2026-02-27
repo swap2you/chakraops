@@ -1,0 +1,5 @@
+# Frontend image: exclude deps and build output (we rebuild in container).
+node_modules
+dist
+.env
+*.local

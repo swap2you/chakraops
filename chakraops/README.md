@@ -44,6 +44,55 @@ For daily operation, validation, and troubleshooting without reading code:
 
 ## Run
 
+### Docker Quickstart (R24.8)
+
+From the **repository root** (parent of `chakraops/`):
+
+```bash
+docker compose up --build
+```
+
+- **Frontend:** http://localhost:3000  
+- **Backend API:** http://localhost:8000  
+- **State persistence:** `out/` is bind-mounted so `decision_latest.json` and verification artifacts persist on the host. Do not delete `out/` if you need existing state.
+
+**Env:** Create `.env` at repo root from `.env.example` if you need ORATS/Slack; optional for a minimal smoke (system-health and dashboard load without it).
+
+**Troubleshooting:**
+- **Port in use:** Change `8000:8000` or `3000:80` in `docker-compose.yml` if 8000 or 3000 is taken.
+- **Rebuild after code change:** `docker compose up --build` (or `docker compose build --no-cache` then `docker compose up`).
+- **Clear volumes:** `docker compose down` does not remove `out/` (bind mount). To reset container state only: `docker compose down` then `docker compose up --build`.
+
+### Production (VM) Quickstart (R24.9)
+
+For internet-safe deployment with HTTPS and basic auth (Caddy reverse proxy, same-origin /api):
+
+1. **On the server**, from the repository root, create `.env` from `.env.example` and set at least:
+   - `BASIC_AUTH_USER` — username for HTTP basic auth (e.g. `admin`).
+   - `BASIC_AUTH_HASH` — bcrypt hash of the password (see below). **Never commit this.**
+   - Optionally `DOMAIN` — e.g. `app.example.com`; if set, Caddy obtains TLS via Let's Encrypt (HTTPS).
+   - Optionally `ORATS_API_TOKEN`, Slack vars, etc., for full features.
+
+2. **Generate Caddy password hash** (on any machine with Caddy or Docker):
+   ```bash
+   docker run --rm caddy:2-alpine caddy hash-password --plaintext 'your_password'
+   ```
+   Copy the hash into `.env` as `BASIC_AUTH_HASH=...`.
+
+3. **Start in prod:**
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod up -d --build
+   ```
+   - Only **ports 80 and 443** are exposed to the internet. Backend (8000) and frontend (3000) are **not** published; all traffic goes through Caddy with basic auth.
+   - Open `http://<server>` (or `https://<server>` if DOMAIN is set); log in with BASIC_AUTH_USER and your password.
+   - Frontend uses relative `/api`; Caddy proxies `/api/*` to the backend (same-origin routing).
+
+4. **CORS (optional):** In prod `.env`, set `UI_CORS_ORIGINS=https://your-domain.com` if you need explicit allowlist (same-origin behind Caddy usually does not require it).
+
+**Dev vs prod:**
+- **Dev:** `docker compose up --build` — frontend :3000, backend :8000 (for local debugging).
+- **Prod:** `docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod up -d --build` — only 80/443 open; backend not exposed.
+
 ### Phase 7: Decision Intelligence Pipeline (Recommended)
 
 **Generate Decision Snapshot (One-time):**

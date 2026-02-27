@@ -489,10 +489,10 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 
 ### R25.5 — Phase 5 Journaling + Monthly Reporting baseline (SQLite, single-user)
 
-- [ ] **Requirements** — [chakraops/docs/releases/R25.5_requirements.md](R25.5_requirements.md)
-- [ ] **Release notes** — [chakraops/docs/releases/R25.5_release_notes.md](R25.5_release_notes.md)
-- [ ] **Verification** — out/verification/R25.5/notes.md (gate tails + UAT checklist)
-- [ ] **Gate** — Backend pytest, frontend tests, frontend build pass (record in notes before sign-off)
+- [x] **Requirements** — [chakraops/docs/releases/R25.5_requirements.md](R25.5_requirements.md)
+- [x] **Release notes** — [chakraops/docs/releases/R25.5_release_notes.md](R25.5_release_notes.md)
+- [x] **Verification** — out/verification/R25.5/notes.md (gate tails + UAT; path relative to repo root) (gate tails + UAT checklist)
+- [x] **Gate** — Backend pytest, frontend tests, frontend build pass (recorded in notes.md)
 - **Scope:** Journal store (data/journal.db); GET/POST/PATCH journal, export CSV, GET reports/monthly; Journal + Reports pages; no auto execution; no FAIL/WARN. Branch: release/R25.5.
 
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification

@@ -178,7 +178,7 @@ def journal_list(
     if strategy:
         conditions.append("strategy = ?")
         params.append(strategy.strip().upper())
-    where = (" AND " + " AND ".join(conditions)) if conditions else ""
+    where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
     params.extend([limit, offset])
     with _LOCK:
         conn = _get_conn()

@@ -235,6 +235,32 @@ describe("SymbolDiagnosticsPage score UX", () => {
     expect(text).not.toContain("0000-00-00");
   });
 
+  it("R25.7: implied move shows sensible percent and no bad strings (Earnings: 00, 0000-00-00)", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: {
+        ...mockDiagnosticsWithCap,
+        earnings: {
+          earnings_days: 14,
+          earnings_block: false,
+          note: null,
+          earnings_next_date: "2026-03-15",
+          earnings_annc_tod: "AMC",
+          implied_earnings_move_pct: 7.2,
+          earnings_data_status: "OK",
+          earnings_as_of: "2026-02-27T12:00:00Z",
+        },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<SymbolDiagnosticsPage />);
+    fireEvent.click(screen.getByText("Risk & Details"));
+    expect(screen.getByText(/Implied move 7\.20%/)).toBeInTheDocument();
+    const text = document.body.textContent ?? "";
+    expect(text).not.toContain("0000-00-00");
+    expect(text).not.toMatch(/Earnings: 00\b/);
+  });
+
   it("R23.4.8: when applied_caps present shows Score used: Final score (capped)", () => {
     useSymbolDiagnosticsMock.mockReturnValue({
       data: {

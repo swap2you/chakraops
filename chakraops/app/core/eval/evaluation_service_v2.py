@@ -62,6 +62,48 @@ def evaluate_universe(
         if sym:
             by_symbol[sym] = s
 
+    # R25.7: Fetch earnings advisory once for all symbols so decision artifact never has EARNINGS_NOT_EVALUATED
+    earnings_advisory_by_symbol: Dict[str, Dict[str, Any]] = {}
+    try:
+        from app.core.config.orats_secrets import ORATS_API_TOKEN
+        from app.core.orats.earnings import fetch_earnings_advisory_batch
+        token = (ORATS_API_TOKEN or "").strip() or None
+        if token:
+            as_of_utc = None
+            try:
+                as_of_utc = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
+            earnings_advisory_by_symbol = fetch_earnings_advisory_batch(
+                symbols, as_of_utc=as_of_utc, token=token
+            )
+    except Exception as e:
+        logger.warning("[EVAL_SVC_V2] Earnings advisory batch fetch failed: %s", e)
+    # Default per-symbol when missing from advisory (R25.7: never EARNINGS_NOT_EVALUATED)
+    _default_adv: Dict[str, Any] = {"earnings_days": None, "earnings_data_status": "Unavailable"}
+    def _earnings_from_advisory(sym_upper: str, sr: Any) -> EarningsInfo:
+        adv = earnings_advisory_by_symbol.get(sym_upper) or _default_adv.copy()
+        if not adv.get("earnings_data_status"):
+            adv["earnings_data_status"] = "Unavailable"
+        status = str(adv.get("earnings_data_status") or "Unavailable").strip()
+        if status not in ("OK", "Unavailable", "Stale"):
+            status = "Unavailable"
+        days = adv.get("earnings_days")
+        try:
+            from app.core.config.wheel_strategy_config import WHEEL_CONFIG, EARNINGS_WINDOW_DAYS
+            window = (WHEEL_CONFIG or {}).get(EARNINGS_WINDOW_DAYS, 7)
+        except Exception:
+            window = 7
+        block = bool(sr and getattr(sr, "earnings_blocked", None)) or (
+            days is not None and isinstance(days, int) and days <= window
+        )
+        return EarningsInfo(
+            earnings_days=days if isinstance(days, int) else None,
+            earnings_block=block,
+            note=None,
+            status_code=status,
+        )
+
     # ONE ROW PER UNIVERSE SYMBOL (fill NOT_EVALUATED for missing)
     symbols_out: List[SymbolEvalSummary] = []
     selected_candidates: List[CandidateRow] = []
@@ -99,7 +141,7 @@ def evaluate_universe(
                 has_candidates=False,
                 candidate_count=0,
             ))
-            earnings_by_symbol[sym_upper] = EarningsInfo(None, None, "Not evaluated")
+            earnings_by_symbol[sym_upper] = _earnings_from_advisory(sym_upper, None)
             _empty: Dict[str, Any] = {}
             diagnostics_by_symbol[sym_upper] = SymbolDiagnosticsDetails(
                 technicals=_empty,
@@ -211,11 +253,7 @@ def evaluate_universe(
                 ))
         gates_by_symbol[sym_upper] = gates
 
-        earnings_by_symbol[sym_upper] = EarningsInfo(
-            earnings_days=getattr(sr, "earnings_days", None),
-            earnings_block=getattr(sr, "earnings_blocked", None),
-            note="Not evaluated" if not getattr(sr, "earnings_days", None) and not getattr(sr, "earnings_blocked", None) else None,
-        )
+        earnings_by_symbol[sym_upper] = _earnings_from_advisory(sym_upper, sr)
 
         stage1_status = "PASS" if stage_reached_val in ("STAGE1_ONLY", "STAGE2_CHAIN") else "FAIL"
         stage2_status = "PASS" if (stage2_ran and getattr(sr, "liquidity_ok", False)) else ("FAIL" if stage2_ran else "NOT_RUN")
@@ -610,10 +648,69 @@ def _build_symbol_data_from_staged(
     return summary, cand_list, gates, earnings
 
 
+def _earnings_for_recompute(symbol: str, sr: Any) -> EarningsInfo:
+    """R25.7: Build EarningsInfo from snapshot or fetch; never EARNINGS_NOT_EVALUATED."""
+    sym_upper = (symbol or "").strip().upper()
+    try:
+        from app.core.eval.evaluation_store_v2 import get_eval_snapshot
+        snapshot = get_eval_snapshot()
+        if snapshot:
+            snap_eb = (snapshot.get("earnings_by_symbol") or {}).get(sym_upper)
+            if isinstance(snap_eb, dict):
+                status = str(snap_eb.get("earnings_data_status") or "Unavailable").strip()
+                if status not in ("OK", "Unavailable", "Stale"):
+                    status = "Unavailable"
+                days = snap_eb.get("earnings_days")
+                try:
+                    from app.core.config.wheel_strategy_config import WHEEL_CONFIG, EARNINGS_WINDOW_DAYS
+                    window = (WHEEL_CONFIG or {}).get(EARNINGS_WINDOW_DAYS, 7)
+                except Exception:
+                    window = 7
+                block = bool(sr and getattr(sr, "earnings_blocked", None)) or (
+                    days is not None and isinstance(days, int) and days <= window
+                )
+                return EarningsInfo(
+                    earnings_days=days if isinstance(days, int) else None,
+                    earnings_block=block,
+                    note=None,
+                    status_code=status,
+                )
+    except Exception:
+        pass
+    try:
+        from app.core.config.orats_secrets import ORATS_API_TOKEN
+        from app.core.orats.earnings import fetch_earnings_advisory
+        token = (ORATS_API_TOKEN or "").strip() or None
+        if token:
+            adv = fetch_earnings_advisory(sym_upper, token=token)
+            status = str(adv.get("earnings_data_status") or "Unavailable").strip()
+            if status not in ("OK", "Unavailable", "Stale"):
+                status = "Unavailable"
+            days = adv.get("earnings_days")
+            try:
+                from app.core.config.wheel_strategy_config import WHEEL_CONFIG, EARNINGS_WINDOW_DAYS
+                window = (WHEEL_CONFIG or {}).get(EARNINGS_WINDOW_DAYS, 7)
+            except Exception:
+                window = 7
+            block = bool(sr and getattr(sr, "earnings_blocked", None)) or (
+                days is not None and isinstance(days, int) and days <= window
+            )
+            return EarningsInfo(
+                earnings_days=days if isinstance(days, int) else None,
+                earnings_block=block,
+                note=None,
+                status_code=status,
+            )
+    except Exception:
+        pass
+    return EarningsInfo(earnings_days=None, earnings_block=False, note=None, status_code="Unavailable")
+
+
 def evaluate_single_symbol_and_merge(symbol: str, mode: str = "LIVE") -> DecisionArtifactV2:
     """
     Run staged evaluation for one symbol and merge into the current store artifact.
     Updates store, returns the merged artifact.
+    R25.7: Earnings from snapshot or fetch; never EARNINGS_NOT_EVALUATED.
     """
     from app.core.eval.universe_evaluator import run_universe_evaluation_staged
     from app.market.market_hours import get_market_phase
@@ -654,7 +751,7 @@ def evaluate_single_symbol_and_merge(symbol: str, mode: str = "LIVE") -> Decisio
         )
         cand_list: List[CandidateRow] = []
         gates: List[GateEvaluation] = []
-        earnings = EarningsInfo(None, None, "Not evaluated")
+        earnings = _earnings_for_recompute(sym_upper, None)
         diagnostics_details = SymbolDiagnosticsDetails(
             technicals=_empty,
             exit_plan={"t1": None, "t2": None, "t3": None, "stop": None},
@@ -665,7 +762,8 @@ def evaluate_single_symbol_and_merge(symbol: str, mode: str = "LIVE") -> Decisio
             liquidity=_empty,
         )
     else:
-        summary, cand_list, gates, earnings = _build_symbol_data_from_staged(sr, sym_upper, ts)
+        summary, cand_list, gates, _ = _build_symbol_data_from_staged(sr, sym_upper, ts)
+        earnings = _earnings_for_recompute(sym_upper, sr)
         diagnostics_details = _build_diagnostics_details(sr, sym_upper, ts)
 
     if current is None:

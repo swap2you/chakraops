@@ -503,6 +503,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend pytest (541 passed), frontend tests (180 passed, 18 skipped), frontend build pass
 - **Scope:** Universe governance docs; Universe Admin (propose/apply, SQLite audit); deterministic overlay; Universe Health page + API; no FAIL/WARN. Branch: release/R25.6.
 
+### R25.7 — Earnings advisory correctness + consistency (stabilization)
+
+- [x] **Requirements** — [R25.7_requirements.md](R25.7_requirements.md)
+- [x] **Release notes** — [R25.7_release_notes.md](R25.7_release_notes.md)
+- [x] **Verification** — out/verification/R25.7/notes.md (gate tails + UAT)
+- [x] **Gate** — Backend pytest (541 passed), frontend tests (181 passed, 18 skipped), frontend build pass
+- **Scope:** No EARNINGS_NOT_EVALUATED in decision artifact; eval populates earnings (OK/Unavailable/Stale); recompute uses snapshot; implied move single source; UI no 00/0000-00-00. Branch: release/R25.7.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

@@ -1063,9 +1063,9 @@ function ExecutionConsole({
                 <div>
                   <span className="block text-xs text-zinc-500 dark:text-zinc-500">earnings advisory</span>
                   <span className="font-mono text-zinc-700 dark:text-zinc-300">
-                    {data.earnings.earnings_next_date != null ? `Next: ${data.earnings.earnings_next_date}` : ""}
-                    {data.earnings.earnings_days != null ? ` · ${data.earnings.earnings_days}d` : ""}
-                    {data.earnings.implied_earnings_move_pct != null ? ` · Implied move ${data.earnings.implied_earnings_move_pct.toFixed(2)}%` : ""}
+                    {data.earnings.earnings_next_date != null && String(data.earnings.earnings_next_date).slice(0, 10) !== "0000-00-00" ? `Next: ${data.earnings.earnings_next_date}` : ""}
+                    {data.earnings.earnings_days != null && Number.isInteger(data.earnings.earnings_days) ? ` · ${data.earnings.earnings_days}d` : ""}
+                    {data.earnings.implied_earnings_move_pct != null && typeof data.earnings.implied_earnings_move_pct === "number" ? ` · Implied move ${data.earnings.implied_earnings_move_pct.toFixed(2)}%` : ""}
                   </span>
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Advisory only. Earnings do not block options or shares eligibility.</p>
                 </div>

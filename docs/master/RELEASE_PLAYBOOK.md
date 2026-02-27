@@ -3,6 +3,8 @@
 **Purpose:** Exact steps for releasing a version: SDLC gates, verification recording, UAT, rollback, and Definition of Done.  
 **Companion:** `chakraops/docs/releases/RELEASE_CHECKLIST.md` (per-release checklist); `out/verification/<Release>/notes.md` (evidence).
 
+**Phase sequencing:** Releases are executed in phase order per [ROADMAP_2026.md](ROADMAP_2026.md); current phase status is in [PHASE_STATUS.md](PHASE_STATUS.md). Do not start the next phase until the current phase’s exit criteria are met.
+
 ---
 
 ## 1. SDLC gate steps (exact commands)

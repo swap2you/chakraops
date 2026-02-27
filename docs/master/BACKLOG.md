@@ -81,8 +81,87 @@
 
 ---
 
+---
+
+## Epic 8 — Portfolio & position management (Phase 8+ / post-2026) — Must-have future
+
+| ID | Item | Type | Value | Risk | Deps | Acceptance criteria | Test notes | Priority |
+|----|------|------|-------|------|------|---------------------|------------|----------|
+| 8.1 | Unified positions DB (shares + options) with P/L, notes, lifecycle | Story | High | Medium | Phase 2, 3 | Single store for open/closed positions; realized P/L; notes; lifecycle state; no prose in decision artifact | Backend store tests; API CRUD; grep decision_latest | **Must-have (post-2026)** |
+| 8.2 | Contract-level lifecycle alerts: target hit, stop hit, roll/close recommended with rationale | Story | High | Low | 8.1, Phase 4 | Alerts per contract: target hit, stop hit, roll/close with safe rationale; no FAIL_/WARN_ | Notification tests; safe labels only | **Must-have (post-2026)** |
+| 8.3 | CC qualification signals (when to sell CC vs take profit) | Story | Medium | Medium | 8.1, Phase 3 | Signals for “sell CC” vs “take profit” on shares; rules-based; explainable | Backend eligibility/signal tests | **Must-have (post-2026)** |
+
+---
+
+## Epic 9 — Profit allocation “profit parking” (Phase 8+ / post-2026)
+
+| ID | Item | Type | Value | Risk | Deps | Acceptance criteria | Test notes | Priority |
+|----|------|------|-------|------|------|---------------------|------------|----------|
+| 9.1 | Index/ETF allocation strategy module (safe, rules-based) | Story | High | Medium | — | Module: allocation rules (e.g. % cash, % index/ETF); no discretionary picks; configurable | Backend module tests; no secrets in rules | **Nice-to-have (post-2026)** |
+| 9.2 | Monthly rebalancing rules; cash vs invest guidance | Task | Medium | Low | 9.1 | Rebalancing cadence and rules; output = guidance (not orders); “stay in cash” valid | Doc + optional backend tests | **Nice-to-have (post-2026)** |
+
+---
+
+## Epic 10 — Strategy expansion (Phase 8+ / post-2026) — NOT 2026 must-have
+
+| ID | Item | Type | Value | Risk | Deps | Acceptance criteria | Test notes | Priority |
+|----|------|------|-------|------|------|---------------------|------------|----------|
+| 10.1 | Spreads/condors/butterflies as future phase | Story | Medium | High | Phase 3 proven | Explicitly deferred until Wheel (CSP/CC/shares) is proven; design only until then | — | **Defer (post-2026)** |
+
+---
+
+## Epic 11 — Backtesting (Phase 8+ / post-2026)
+
+| ID | Item | Type | Value | Risk | Deps | Acceptance criteria | Test notes | Priority |
+|----|------|------|-------|------|------|---------------------|------------|----------|
+| 11.1 | Research → backtest → paper workflow; deterministic fixtures | Story | High | Medium | Phase 0 offline harness | Deterministic fixtures; same inputs → same outputs; no live market in backtest | Reuse offline_fixture_provider patterns; golden outputs | **Nice-to-have (post-2026)** |
+| 11.2 | Backtest report outputs (metrics, summary) | Task | Medium | Low | 11.1 | Report: metrics, summary; no prose in decision store | Backend report tests | **Nice-to-have (post-2026)** |
+
+---
+
+## Epic 12 — Education / tutorial (Phase 8+ / post-2026)
+
+| ID | Item | Type | Value | Risk | Deps | Acceptance criteria | Test notes | Priority |
+|----|------|------|-------|------|------|---------------------|------------|----------|
+| 12.1 | In-app theory pages + curated links + embedded videos | Story | Medium | Low | — | Static or CMS-backed theory content; curated links; embedded videos (no autoplay abuse); no secrets | Frontend tests; content review | **Nice-to-have (post-2026)** |
+
+---
+
+## Epic 13 — Broker automation (Phase 8+ / final phase)
+
+| ID | Item | Type | Value | Risk | Deps | Acceptance criteria | Test notes | Priority |
+|----|------|------|-------|------|------|---------------------|------------|----------|
+| 13.1 | Broker API integration: opt-in, small account, no intraday churn, strict limits, audit trail | Story | High | High | Phase 2, 3, security | Opt-in only; account size limits; no intraday churn; every order logged; 2FA/consent where applicable | Integration tests in sandbox; audit log tests | **Must-have (final phase)** |
+
+---
+
+## Epic 14 — Security hardening (Phase 8+ / post-2026)
+
+| ID | Item | Type | Value | Risk | Deps | Acceptance criteria | Test notes | Priority |
+|----|------|------|-------|------|------|---------------------|------------|----------|
+| 14.1 | Login, 2FA/OTP/authenticator, role model (even single user), secret management | Story | High | Medium | — | Auth flow; 2FA/OTP or authenticator; role model (single user ok); secrets in env/vault only | Auth tests; no secrets in repo | **Must-have (post-2026)** |
+
+---
+
+## Epic 15 — Reporting / analytics (Phase 8+ / post-2026)
+
+| ID | Item | Type | Value | Risk | Deps | Acceptance criteria | Test notes | Priority |
+|----|------|------|-------|------|------|---------------------|------------|----------|
+| 15.1 | Monthly performance, risk metrics, drawdown, win rate, attribution | Story | High | Low | Epic 5, 8 | Reports from journal/positions; monthly performance; risk metrics; drawdown; win rate; attribution | Backend report tests; no decision artifact prose | **Nice-to-have (post-2026)** |
+
+---
+
+## Epic 16 — Maintenance (ongoing)
+
+| ID | Item | Type | Value | Risk | Deps | Acceptance criteria | Test notes | Priority |
+|----|------|------|-------|------|------|---------------------|------------|----------|
+| 16.1 | Scheduled cleanup/audit cadence; DB migrations policy; versioning | Task | Medium | Low | — | Cadence doc; migration policy; versioning for DB and out/ | Runbook; gates after migration | **Must-have (ongoing)** |
+
+---
+
 ## Summary
 
-- **Must-have:** All Epic 1 items (1.1–1.5); Epic 2 (2.1–2.3); Epic 3 (3.1–3.3); Epic 4 (4.1–4.3); Epic 5 (5.1–5.2); Epic 6 (6.1–6.2); Epic 7 (7.1, 7.3).
-- **Nice-to-have:** 1.6, 2.4, 3.4, 4.4, 5.3, 6.3, 7.2.
-- **Dependencies:** Epic 2/3/4 build on Phase 1 (next_action, action-needed, notifications base). Epic 5 is independent. Epic 6 and 7 can run in parallel with later phases.
+- **Must-have (2026):** All Epic 1 (1.1–1.5); Epic 2 (2.1–2.3); Epic 3 (3.1–3.3); Epic 4 (4.1–4.3); Epic 5 (5.1–5.2); Epic 6 (6.1–6.2); Epic 7 (7.1, 7.3).
+- **Nice-to-have (2026):** 1.6, 2.4, 3.4, 4.4, 5.3, 6.3, 7.2.
+- **Post-2026 / later:** Epic 8 (portfolio & position mgmt), Epic 9 (profit parking), Epic 10 (strategy expansion — defer), Epic 11 (backtesting), Epic 12 (education), Epic 13 (broker automation — final phase), Epic 14 (security), Epic 15 (reporting/analytics), Epic 16 (maintenance).
+- **Dependencies:** Epic 2/3/4 build on Phase 1. Epic 5 independent. Epic 6 and 7 can run in parallel with later phases. Epics 8+ map to ROADMAP_2026 Phase 8+.

@@ -1,6 +1,14 @@
 # ChakraOps Execution Runbook
 
-Human runbook for clean-room startup and troubleshooting.
+Human runbook for clean-room startup and troubleshooting. Reflects current ChakraOps (R24.8–R25.1): Docker, Caddy prod, /api routing, healthz, backup, offline proof harness.
+
+---
+
+## Two-workspace workflow (stable vs dev)
+
+- **ChakraOps-stable** — Runs daily from `main` or a release tag; use for production-like validation and EOD workflows.
+- **ChakraOps-dev** — Used for release branches and feature work; run eval and API from this clone.
+- **Guidance:** Don’t open both workspaces in Cursor at once to reduce RAM; switch as needed.
 
 ---
 
@@ -58,11 +66,73 @@ npm run test
 npm run dev
 
 # Terminal 4: Smoke checks (after backend is up)
+Invoke-WebRequest -Uri "http://localhost:8000/api/healthz" -UseBasicParsing | Select-Object StatusCode
+Invoke-WebRequest -Uri "http://localhost:8000/api/ui/system-health" -UseBasicParsing | Select-Object StatusCode
 Invoke-WebRequest -Uri "http://localhost:8000/api/ui/decision/latest?mode=LIVE" -UseBasicParsing | Select-Object StatusCode
 Invoke-WebRequest -Uri "http://localhost:8000/api/ui/universe" -UseBasicParsing | Select-Object StatusCode
 Invoke-WebRequest -Uri "http://localhost:8000/api/ui/symbol-diagnostics?symbol=SPY" -UseBasicParsing | Select-Object StatusCode
 ```
-Expected: StatusCode 200 for each smoke.
+Expected: StatusCode 200 for each smoke. **GET /api/healthz** is lightweight (no ORATS); **GET /api/ui/system-health** reports store path and frozen state.
+
+---
+
+## Docker Quickstart (dev)
+
+From repo root:
+
+```bash
+docker compose up --build
+```
+
+- Frontend: **localhost:3000** (or 80 if frontend port mapped)
+- Backend: **localhost:8000**
+- `out/` is bind-mounted so artifacts persist. No auth in dev.
+
+---
+
+## Production Quickstart (Caddy + basic auth)
+
+From repo root:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod up -d --build
+```
+
+- Browser hits the same origin (e.g. `https://your-domain/`). All API calls use path **/api**; **Caddy proxies /api/\*** to the backend.
+- Basic auth is required (set `BASIC_AUTH_USER`, `BASIC_AUTH_HASH` in server `.env`). See README for Caddy password hash.
+- Canonical store path in container: `/workspace/out/decision_latest.json` (repo `out/` mounted).
+
+---
+
+## Offline Proof Harness (no network)
+
+R25.1: Run the same evaluation pipeline with deterministic fixtures (no ORATS, no market data). Output is written to a **temp directory by default** (repo `out/` is not used).
+
+From repo root:
+
+```bash
+python chakraops/scripts/offline_eval_proof.py --fixture chakraops/tests/fixtures/r25_1_offline_fixture.json
+```
+
+- Script prints `Output dir: <temp path>`; `decision_latest.json` and `eval_snapshot.json` are written there.
+- Use `--output-dir out` to write into repo `out/` if needed. Use for hygiene/determinism checks and golden verification.
+
+---
+
+## Backup / Restore
+
+- **Backup:** From repo root run `./scripts/backup_out.sh` (or `bash scripts/backup_out.sh`). Archives `out/` into `backups/` with retention (see script / README).
+- **Restore:** Extract the backup tar into repo root so `out/` is restored as documented in README backup/restore steps.
+
+---
+
+## Where to find docs
+
+| Purpose | Location |
+|--------|----------|
+| PRD, roadmap, playbook, backlog, cleanup, architecture | `docs/master/` (e.g. ROADMAP_2026, RELEASE_PLAYBOOK, BACKLOG, CLEANUP_POLICY, REPO_ARCHITECTURE_MAP) |
+| Per-release requirements, notes, checklist | `chakraops/docs/releases/` (e.g. R25.1_requirements.md, R25.1_release_notes.md, RELEASE_CHECKLIST.md) |
+| Verification evidence (gate tails, UAT) | `out/verification/<Release>/notes.md` (e.g. out/verification/R25.1/notes.md) |
 
 ---
 
@@ -174,3 +244,11 @@ The script:
 | `Universe SPY score/band == decision symbols SPY` fail | Universe and decision response disagree | Single store should be source; check ui_routes universe vs decision path |
 | `symbol-diagnostics SPY vs store SPY` fail | Symbol-diagnostics not store-first | Check `_build_symbol_diagnostics_from_v2_store` uses store only |
 | `API: Connection refused` / `Cannot reach API` | Server not running | Start backend on port 8000 before running sanity |
+
+---
+
+## If something looks wrong
+
+- **Stale timestamps between endpoints** — API shows older `pipeline_timestamp` than the file on disk. Restart the server so it reloads the store, or rerun eval (e.g. `run_and_save.py` or `POST /api/ui/eval/run`) and re-check.
+- **Module import errors** (`ModuleNotFoundError: No module named 'app'`) — Backend must run with `PYTHONPATH` set to the `chakraops` directory. From repo root: `cd chakraops` then `$env:PYTHONPATH = (Get-Location).Path` (PowerShell) or `export PYTHONPATH=$(pwd)` (bash) before running uvicorn or scripts.
+- **Store CRITICAL** — `GET /api/ui/system-health` shows `decision_store.status === "CRITICAL"`. Store file missing, artifact not v2, or symbol(s) with null/invalid band. Run `run_and_save.py --symbols SPY,AAPL --output-dir out`, confirm `out/decision_latest.json` exists with `artifact_version` v2 and every symbol has band A/B/C/D and non-empty `band_reason`. See RUNBOOK_MARKET_LIVE.md “Decision store CRITICAL” for full steps.

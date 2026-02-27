@@ -1,6 +1,13 @@
 # Runbook: Market Live Validation
 
-End-to-end validation for **ONE PIPELINE / ONE ARTIFACT / ONE STORE (v2-only)** during live market hours.
+End-to-end validation for **ONE PIPELINE / ONE ARTIFACT / ONE STORE (v2-only)** during live market hours. Reflects current ChakraOps (R24.8–R25.1).
+
+## Daily operator workflow
+
+- [ ] Run **market_live_validation.py** — store-only (`--no-api`) or store+API (server running). Ensures store and optional API responses match v2 invariants.
+- [ ] Confirm **system-health** store path and frozen behavior — `GET /api/ui/system-health`: `decision_store.active_path` and, when EOD freeze is used, `frozen_in_effect: true` after close.
+- [ ] Confirm **action-needed** and **notifications** endpoints return 200 — e.g. `GET /api/ui/action-needed`, `GET /api/ui/notifications` (or equivalent).
+- [ ] Confirm no **Blocked/Degraded** UI status for critical pages — Use safe labels only; no raw FAIL_/WARN_ in UI.
 
 ## Prerequisites
 
@@ -107,13 +114,18 @@ Config: `FREEZE_TIME_ET=15:55`, `FREEZE_TZ=America/New_York`. The scheduler runs
   1. Delete `out/decision_latest.json` and run `run_and_save.py --all --output-dir out` (or eval/run).
   2. Ensure no other code writes to `decision_latest.json` except EvaluationStoreV2.
 
-## EOD snapshot behavior
+## Eval cadence and “as-of” interpretation
 
 - **Interval scheduler:** Runs every **30 minutes** (configurable via `UNIVERSE_EVAL_MINUTES`) when market is open. Refreshes evaluation and updates canonical store.
+- **This is not an intraday strategy.** Treat signals and scores as **as-of snapshots** (e.g. “as of last 30‑min run”), not as intraday trade triggers. Use for EOD bias: act on decisions after a run completes and you’ve confirmed timestamps; prefer acting on frozen/EOD snapshot when available.
+- **As-of timestamp:** `pipeline_timestamp` (and store/API timestamps) indicate when the last evaluation completed. “When to act” is operator-defined; typical guidance is EOD or after a scheduled run, not on every tick.
+
+## EOD snapshot behavior
+
 - **EOD chain scheduler:** Runs at **16:05 America/New_York** on trading days. Writes chain metadata to `artifacts/runs/YYYY-MM-DD/eod_chain/` (per-symbol JSON). It does **not** update `decision_latest.json`.
 - **Nightly scheduler:** Runs at **19:00 America/New_York** (configurable via `NIGHTLY_EVAL_TIME`). Runs full evaluation and updates canonical store.
 
-**EOD “freeze then use snapshot for after-hours contract lookups”:** **NOT IMPLEMENTED**. The EOD job only fetches and stores chain metadata; it does not freeze the decision artifact or switch the UI to an “EOD snapshot” artifact. That behavior will be implemented later.
+**EOD “freeze then use snapshot for after-hours contract lookups”:** When implemented, freeze runs (e.g. `freeze_snapshot.py`) and UI uses `decision_frozen.json` when available; see RUNBOOK_EXECUTION.md and system-health for current behavior.
 
 ## Scheduler configuration (reference)
 
@@ -124,3 +136,11 @@ Config: `FREEZE_TIME_ET=15:55`, `FREEZE_TZ=America/New_York`. The scheduler runs
 | `EOD_CHAIN_TZ` | America/New_York | |
 | `NIGHTLY_EVAL_TIME` | 19:00 | Nightly evaluation time (ET) |
 | `NIGHTLY_EVAL_TZ` | America/New_York | |
+
+---
+
+## If something looks wrong
+
+- **Stale timestamps between endpoints** — `decision/latest` or universe shows an older `pipeline_timestamp` than the store file. Restart the server so it reloads from disk, or rerun eval and re-check.
+- **Module import errors** — Ensure `PYTHONPATH` is set to the `chakraops` directory when running scripts or the server (see RUNBOOK_EXECUTION.md).
+- **Store CRITICAL** — `system-health` shows `decision_store.status === "CRITICAL"`. Store file missing, artifact not v2, or symbol(s) with null/invalid band. Run `run_and_save.py --symbols SPY,AAPL --output-dir out`, confirm `out/decision_latest.json` exists with v2 and valid bands; see “Decision store CRITICAL” in Troubleshooting above for full steps.

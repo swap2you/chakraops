@@ -114,6 +114,17 @@ Feature ideas inferred from premium tools; **not copied** — translated into ou
 - Tooltips and info drawers: Explain score, caps, hold-time, delta band, etc., in plain English.
 - Acceptance: All user-facing text uses safe labels; no FAIL_/WARN_; tooltips/explanations documented in UAT.
 
+### Future scope (pillars — not in initial 2026 must-have)
+
+The following are **future pillars** captured in BACKLOG and ROADMAP_2026 Phase 8+; scope and order may change.
+
+- **Portfolio & position management:** Unified positions DB (shares + options) with P/L, notes, lifecycle; contract-level alerts (target/stop, roll/close with rationale); CC qualification signals (when to sell CC vs take profit).
+- **Profit allocation (“profit parking”):** Index/ETF allocation module (rules-based); monthly rebalancing; cash vs invest guidance.
+- **Education / tutorial:** In-app theory pages, curated links, embedded videos.
+- **Backtesting:** Research → backtest → paper workflow; deterministic fixtures; report outputs.
+- **Broker automation (final phase):** Broker API integration — opt-in, small account, no intraday churn, strict limits, audit trail.
+- **Strategy expansion (defer):** Spreads/condors/butterflies explicitly **NOT** 2026 must-have; defer until Wheel is proven.
+
 ---
 
 ## "No gambling" guardrails and what UI must prevent

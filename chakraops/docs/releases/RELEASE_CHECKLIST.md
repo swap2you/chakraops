@@ -2,6 +2,8 @@
 
 Use this checklist for each R21.x / R22.x sub-phase. Update after each release.
 
+**Phase status:** [docs/master/PHASE_STATUS.md](../../../docs/master/PHASE_STATUS.md) | **Roadmap phases:** [docs/master/ROADMAP_2026.md](../../../docs/master/ROADMAP_2026.md)
+
 ---
 
 ## Release gate (required for all releases going forward)

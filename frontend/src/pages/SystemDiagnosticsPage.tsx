@@ -114,6 +114,7 @@ export function SystemDiagnosticsPage() {
   const eodFreeze = data?.eod_freeze;
   const markRefresh = data?.mark_refresh;
   const portfolioRiskNotifier = data?.portfolio_risk_notifier;
+  const notificationsHealth = data?.notifications;
   const marketClosed = market?.phase ? market.phase !== "OPEN" && market.phase !== "UNKNOWN" : false;
 
   if (isLoading) {
@@ -542,6 +543,30 @@ export function SystemDiagnosticsPage() {
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">label</span>
               <p className="mt-1 text-zinc-700 dark:text-zinc-200">{portfolioRiskNotifier?.label ?? "OK"}</p>
+            </div>
+          </div>
+        </Card>
+        {/* R25.4: Notifications health — counts and last emitted (safe labels only). */}
+        <Card>
+          <CardHeader title="Notifications" description="Inbox counts and last emitted; safe labels only." />
+          <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">New</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{notificationsHealth?.count_new ?? 0}</p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Acked</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{notificationsHealth?.count_acked ?? 0}</p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Archived</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{notificationsHealth?.count_archived ?? 0}</p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Last emitted (ET)</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">
+                {notificationsHealth?.last_emitted_ts ? formatTimestampEt(notificationsHealth.last_emitted_ts) : "—"}
+              </p>
             </div>
           </div>
         </Card>

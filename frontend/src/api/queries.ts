@@ -258,11 +258,14 @@ function uiWheelRepairPath(): string {
   return `/api/ui/wheel/repair`;
 }
 
-function uiNotificationsPath(limit?: number, state?: string | null): string {
+function uiNotificationsPath(limit?: number, state?: string | null, symbol?: string | null, type?: string | null, offset?: number): string {
   const base = `/api/ui/notifications`;
   const params = new URLSearchParams();
   if (limit != null) params.set("limit", String(limit));
   if (state && state.trim()) params.set("state", state.trim());
+  if (symbol && symbol.trim()) params.set("symbol", symbol.trim());
+  if (type && type.trim()) params.set("type", type.trim());
+  if (offset != null && offset > 0) params.set("offset", String(offset));
   const q = params.toString();
   return q ? `${base}?${q}` : base;
 }
@@ -278,6 +281,12 @@ function uiNotificationDeletePath(notificationId: string): string {
 }
 function uiNotificationsArchiveAllPath(): string {
   return `/api/ui/notifications/archive_all`;
+}
+function uiNotificationsAckBulkPath(): string {
+  return `/api/ui/notifications/ack-bulk`;
+}
+function uiNotificationsArchiveBulkPath(): string {
+  return `/api/ui/notifications/archive-bulk`;
 }
 function uiAdminSlackTestPath(channel?: string): string {
   const base = `/api/ui/admin/slack/test`;
@@ -1323,9 +1332,11 @@ export function useRepairStore() {
 export interface UiNotification {
   id?: string;
   timestamp_utc: string;
+  /** R25.4: Alias for timestamp_utc */
+  created_ts?: string | null;
   severity: string;
   type: string;
-  /** Phase 8.6: Subtype (RUN_ERRORS, LOW_COMPLETENESS, ORATS_STALE, ORATS_DEGRADED, SCHEDULER_MISSED, RECOMPUTE_FAILED, etc.) */
+  /** Phase 8.6: Subtype (RUN_ERRORS, LOW_COMPLETENESS, ORATS_STALE, etc.) */
   subtype?: string | null;
   symbol?: string | null;
   message: string;
@@ -1333,6 +1344,9 @@ export interface UiNotification {
   /** Phase 10.3: Acknowledgment fields */
   ack_at_utc?: string | null;
   ack_by?: string | null;
+  /** R25.4: When acked/archived */
+  acked_ts?: string | null;
+  archived_ts?: string | null;
   /** Phase 21.5: Lifecycle state */
   state?: "NEW" | "ACKED" | "ARCHIVED" | "DELETED";
   updated_at?: string | null;
@@ -1342,10 +1356,17 @@ export interface UiNotificationsResponse {
   notifications: UiNotification[];
 }
 
-export function useNotifications(limit = 100, state?: string | null) {
+export function useNotifications(
+  limit = 100,
+  state?: string | null,
+  symbol?: string | null,
+  type?: string | null,
+  offset?: number
+) {
   return useQuery({
     queryKey: queryKeys.uiNotifications(limit, state),
-    queryFn: () => apiGet<UiNotificationsResponse>(uiNotificationsPath(limit, state)),
+    queryFn: () =>
+      apiGet<UiNotificationsResponse>(uiNotificationsPath(limit, state, symbol, type, offset)),
   });
 }
 
@@ -1400,6 +1421,33 @@ export function useArchiveAllNotifications() {
     mutationFn: () =>
       apiPost<{ status: string; archived_count: number }>(
         uiNotificationsArchiveAllPath(),
+        {}
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "notifications"] });
+    },
+  });
+}
+
+/** R25.4: Ack all NEW notifications. */
+export function useAckBulkNotifications() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiPost<{ status: string; acked_count: number }>(uiNotificationsAckBulkPath(), {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "notifications"] });
+    },
+  });
+}
+
+/** R25.4: Archive all ACKED notifications. */
+export function useArchiveBulkNotifications() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiPost<{ status: string; archived_count: number }>(
+        uiNotificationsArchiveBulkPath(),
         {}
       ),
     onSuccess: () => {

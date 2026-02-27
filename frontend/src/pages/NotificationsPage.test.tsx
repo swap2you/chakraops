@@ -24,6 +24,11 @@ const mockArchive = { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false };
 const mockDelete = { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false };
 const mockArchiveAll = { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false };
 
+const { mockAckBulk, mockArchiveBulk } = vi.hoisted(() => ({
+  mockAckBulk: { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false },
+  mockArchiveBulk: { mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false },
+}));
+
 vi.mock("@/api/queries", () => ({
   useNotifications: () => ({
     data: mockNotifications,
@@ -35,6 +40,8 @@ vi.mock("@/api/queries", () => ({
   useArchiveNotification: () => mockArchive,
   useDeleteNotification: () => mockDelete,
   useArchiveAllNotifications: () => mockArchiveAll,
+  useAckBulkNotifications: () => mockAckBulk,
+  useArchiveBulkNotifications: () => mockArchiveBulk,
 }));
 
 describe("NotificationsPage", () => {
@@ -96,5 +103,12 @@ describe("NotificationsPage", () => {
     fireEvent.click(screen.getByText(/ORATS status Degraded/i));
     const ackButtons = screen.getAllByRole("button", { name: /^Ack$/i });
     expect(ackButtons.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("R25.4: does not display raw FAIL or WARN in document (safe labels only)", () => {
+    const { container } = render(<NotificationsPage />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\bFAIL\b/);
+    expect(text).not.toMatch(/\bWARN\b/);
   });
 });

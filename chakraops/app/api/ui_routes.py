@@ -976,6 +976,14 @@ def ui_system_health(
         decision_store_status = "CRITICAL"
         decision_store_reason = str(e)
 
+    # R25.4: Notifications health (counts, last emitted; safe labels only)
+    notifications_health: Dict[str, Any] = {}
+    try:
+        from app.api.notifications_store import get_notifications_health
+        notifications_health = get_notifications_health()
+    except Exception:
+        notifications_health = {"count_new": 0, "count_acked": 0, "count_archived": 0, "last_emitted_ts": None}
+
     return {
         "api": {"status": api_status, "latency_ms": api_latency_ms},
         "decision_store": {
@@ -1023,6 +1031,7 @@ def ui_system_health(
         "mark_refresh": _get_mark_refresh_health(),
         "copilot": _get_copilot_status_health(),
         "portfolio_risk_notifier": _get_portfolio_risk_notifier_health(),
+        "notifications": notifications_health,
     }
 
 
@@ -1265,16 +1274,25 @@ def ui_snapshots_latest(
 def ui_notifications(
     limit: int = Query(default=100, ge=1, le=500),
     state: str | None = Query(default=None, description="Filter by state: NEW, ACKED, ARCHIVED"),
+    symbol: str | None = Query(default=None, description="Filter by symbol (case-insensitive)"),
+    type_filter: str | None = Query(default=None, alias="type", description="Filter by notification type"),
+    offset: int = Query(default=0, ge=0, le=10000),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """Return last N notifications (newest first). Phase 21.5: optional state filter; each item has state, updated_at."""
+    """Return notifications (newest first). R25.4: state, symbol, type, limit, offset; each item has created_ts, acked_ts, archived_ts."""
     _require_ui_key(x_ui_key)
     try:
         from app.api.notifications_store import load_notifications
         state_filter = state.strip() if state and state.strip() else None
         if state_filter and state_filter not in ("NEW", "ACKED", "ARCHIVED"):
             state_filter = None
-        items = load_notifications(limit=limit, state_filter=state_filter)
+        items = load_notifications(
+            limit=limit,
+            state_filter=state_filter,
+            symbol_filter=symbol.strip() if symbol and symbol.strip() else None,
+            type_filter=type_filter.strip() if type_filter and type_filter.strip() else None,
+            offset=offset,
+        )
         return {"notifications": items}
     except Exception as e:
         import logging
@@ -1319,6 +1337,38 @@ def ui_notifications_archive_all(
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Error archiving all notifications: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/notifications/ack-bulk")
+def ui_notifications_ack_bulk(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.4: Ack all NEW notifications. Returns count acked."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.api.notifications_store import ack_bulk
+        count = ack_bulk(state_filter="NEW")
+        return {"status": "OK", "acked_count": count}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error acking notifications: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/notifications/archive-bulk")
+def ui_notifications_archive_bulk(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.4: Archive all ACKED notifications. Returns count archived."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.api.notifications_store import archive_bulk
+        count = archive_bulk(state_filter="ACKED")
+        return {"status": "OK", "archived_count": count}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error archiving notifications: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 

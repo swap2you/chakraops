@@ -479,6 +479,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend pytest (541 passed), frontend tests (170 passed, 18 skipped), frontend build pass (recorded in notes)
 - **References:** RUNBOOK_DEV_EXECUTION, ROADMAP_2026 Phase 3, BACKLOG Epic 3. **R25.3.1:** Options lifecycle notifications decoupled from UI (trigger in eval run path only).
 
+### R25.4 — Phase 4 Notifications overhaul (stateful inbox, filters, dedupe, actionable parity)
+
+- [x] **Requirements** — [chakraops/docs/releases/R25.4_requirements.md](R25.4_requirements.md)
+- [x] **Release notes** — [chakraops/docs/releases/R25.4_release_notes.md](R25.4_release_notes.md)
+- [x] **Verification** — [out/verification/R25.4/notes.md](out/verification/R25.4/notes.md)
+- [x] **Gate** — Backend pytest (541 passed), frontend tests (171 passed), frontend build pass (recorded in notes)
+- **Scope:** NEW→ACKED→ARCHIVED workflow; bulk ack/archive; transition-aware dedupe; GET symbol/type/offset; Notifications Health in System Diagnostics; deep links; no FAIL/WARN. Branch: release/R25.4.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

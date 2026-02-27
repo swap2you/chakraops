@@ -5,7 +5,10 @@ import {
   useArchiveNotification,
   useDeleteNotification,
   useArchiveAllNotifications,
+  useAckBulkNotifications,
+  useArchiveBulkNotifications,
 } from "@/api/queries";
+import { Link } from "react-router-dom";
 import type { UiNotification } from "@/api/queries";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardHeader, StatusBadge, Button } from "@/components/ui";
@@ -23,6 +26,8 @@ export function NotificationsPage() {
   const archiveMutation = useArchiveNotification();
   const deleteMutation = useDeleteNotification();
   const archiveAllMutation = useArchiveAllNotifications();
+  const ackBulkMutation = useAckBulkNotifications();
+  const archiveBulkMutation = useArchiveBulkNotifications();
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState<UiNotification | null>(null);
 
@@ -41,6 +46,8 @@ export function NotificationsPage() {
   }, [notifications, filter]);
 
   const canArchiveAll = activeTab === "NEW" || activeTab === "ACKED" || activeTab === "ALL";
+  const canAckAll = activeTab === "NEW" && notifications.some((n) => n.state === "NEW");
+  const canArchiveBulkAcked = activeTab === "ACKED" && notifications.some((n) => n.state === "ACKED");
 
   if (isLoading) {
     return (
@@ -67,7 +74,27 @@ export function NotificationsPage() {
         <CardHeader
           title="Notifications"
           actions={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {canAckAll && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => ackBulkMutation.mutate()}
+                  disabled={ackBulkMutation.isPending || !notifications.some((n) => n.state === "NEW")}
+                >
+                  {ackBulkMutation.isPending ? "Acking…" : "Ack all NEW"}
+                </Button>
+              )}
+              {canArchiveBulkAcked && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => archiveBulkMutation.mutate()}
+                  disabled={archiveBulkMutation.isPending || !notifications.some((n) => n.state === "ACKED")}
+                >
+                  {archiveBulkMutation.isPending ? "Archiving…" : "Archive all ACKED"}
+                </Button>
+              )}
               {canArchiveAll && (
                 <Button
                   variant="secondary"
@@ -321,6 +348,22 @@ export function NotificationsPage() {
               <pre className="mt-2 overflow-auto rounded border border-zinc-200 bg-zinc-50 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-900">
                 {JSON.stringify(selected.details, null, 2)}
               </pre>
+            )}
+            {selected.symbol && (
+              <p className="mt-3">
+                <Link
+                  to={
+                    selected.type === "SHARES_EXIT_SIGNAL"
+                      ? `/symbol-diagnostics?symbol=${encodeURIComponent(selected.symbol)}&tab=Shares`
+                      : /^OPTIONS_/.test(selected.type ?? "")
+                        ? `/symbol-diagnostics?symbol=${encodeURIComponent(selected.symbol)}&tab=Options`
+                        : `/symbol-diagnostics?symbol=${encodeURIComponent(selected.symbol)}`
+                  }
+                  className="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
+                >
+                  Open {selected.symbol} in Symbol Diagnostics
+                </Link>
+              </p>
             )}
           </div>
         </Card>

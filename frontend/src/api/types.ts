@@ -374,6 +374,13 @@ export interface UiSystemHealthResponse {
   };
   /** R24.3.1 — Portfolio risk notifier; safe status/label only (OK, Degraded, Advisory). */
   portfolio_risk_notifier?: { status?: string; label?: string };
+  /** R25.4 — Notifications health: counts and last emitted (safe labels only). */
+  notifications?: {
+    count_new?: number;
+    count_acked?: number;
+    count_archived?: number;
+    last_emitted_ts?: string | null;
+  };
 }
 
 // =============================================================================

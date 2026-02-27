@@ -430,6 +430,26 @@ def get_options_context_config() -> dict:
     }
 
 
+def get_guardrails_config() -> dict:
+    """R25.9: Return portfolio guardrails config (defaults conservative; user can tune via config.yaml or env).
+
+    Keys: MAX_OPEN_OPTIONS_POSITIONS, MAX_OPEN_SHARES_POSITIONS, MAX_SYMBOLS_EXPOSURE,
+    MAX_NOTIONAL_PER_SYMBOL_PCT, MIN_CASH_RESERVE_PCT, OPTIONS_MAX_RISK_PER_TRADE_PCT,
+    SECTOR_EXPOSURE_ADVISORY_PCT (advisory only).
+    """
+    raw = _load_yaml_config()
+    pg = raw.get("portfolio_guardrails", {}) or raw.get("guardrails", {}).get("portfolio", {}) or {}
+    return {
+        "MAX_OPEN_OPTIONS_POSITIONS": int(os.getenv("GUARDRAILS_MAX_OPEN_OPTIONS", str(pg.get("max_open_options_positions", 6)))),
+        "MAX_OPEN_SHARES_POSITIONS": int(os.getenv("GUARDRAILS_MAX_OPEN_SHARES", str(pg.get("max_open_shares_positions", 10)))),
+        "MAX_SYMBOLS_EXPOSURE": int(os.getenv("GUARDRAILS_MAX_SYMBOLS", str(pg.get("max_symbols_exposure", 12)))),
+        "MAX_NOTIONAL_PER_SYMBOL_PCT": float(os.getenv("GUARDRAILS_MAX_NOTIONAL_PCT", str(pg.get("max_notional_per_symbol_pct", 15.0)))),
+        "MIN_CASH_RESERVE_PCT": float(os.getenv("GUARDRAILS_MIN_CASH_RESERVE_PCT", str(pg.get("min_cash_reserve_pct", 25.0)))),
+        "OPTIONS_MAX_RISK_PER_TRADE_PCT": float(os.getenv("GUARDRAILS_OPTIONS_RISK_PCT", str(pg.get("options_max_risk_per_trade_pct", 2.0)))),
+        "SECTOR_EXPOSURE_ADVISORY_PCT": float(os.getenv("GUARDRAILS_SECTOR_ADVISORY_PCT", str(pg.get("sector_exposure_advisory_pct", 35.0)))),
+    }
+
+
 __all__ = [
     "ChakraOpsConfig",
     "ThetaConfig",
@@ -455,4 +475,5 @@ __all__ = [
     "get_environment_config",
     "get_options_context_config",
     "get_decision_cadence_mode",
+    "get_guardrails_config",
 ]

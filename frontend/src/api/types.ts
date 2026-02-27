@@ -385,6 +385,24 @@ export interface UiSystemHealthResponse {
   cadence?: { mode?: string; eligibility_as_of?: string | null };
   /** R25.8 — Probe symbol for earnings debug card (default SPY). */
   earnings_probe_symbol?: string;
+  /** R25.9 — Portfolio guardrails: status (OK/Advisory/Blocked), metrics, limits. Safe labels only. */
+  guardrails?: {
+    status?: "OK" | "Advisory" | "Blocked";
+    metrics?: {
+      cash_reserve_pct?: number;
+      open_options_count?: number;
+      open_shares_count?: number;
+      symbols_exposure_count?: number;
+      max_symbol_notional_pct?: number;
+    };
+    limits?: {
+      MAX_OPEN_OPTIONS_POSITIONS?: number;
+      MAX_OPEN_SHARES_POSITIONS?: number;
+      MAX_SYMBOLS_EXPOSURE?: number;
+      MAX_NOTIONAL_PER_SYMBOL_PCT?: number;
+      MIN_CASH_RESERVE_PCT?: number;
+    };
+  };
 }
 
 /** R25.8 — GET /api/ui/earnings/debug response (safe fields only). */

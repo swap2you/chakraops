@@ -249,6 +249,55 @@ export function DashboardPage() {
             badge={positions.length > 0 ? <span className="text-xs text-zinc-500 dark:text-zinc-500">{positions.length} total</span> : undefined}
           />
           <StatCard label="Capital deployed" value={`$${capitalDeployed.toLocaleString()}`} />
+          {health?.guardrails != null && (
+            <Card data-testid="guardrails-card">
+              <CardHeader title="Guardrails" />
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">Status</span>
+                  <StatusBadge
+                    status={
+                      health.guardrails.status === "Blocked"
+                        ? "Blocked"
+                        : health.guardrails.status === "Advisory"
+                          ? "Advisory"
+                          : "OK"
+                    }
+                  />
+                </div>
+                <div>
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">Cash reserve %</span>
+                  <span className="font-mono text-zinc-700 dark:text-zinc-300">
+                    {health.guardrails.metrics?.cash_reserve_pct ?? "—"}%
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">Open options</span>
+                  <span className="font-mono text-zinc-700 dark:text-zinc-300">
+                    {health.guardrails.metrics?.open_options_count ?? "—"} / {health.guardrails.limits?.MAX_OPEN_OPTIONS_POSITIONS ?? "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">Open shares</span>
+                  <span className="font-mono text-zinc-700 dark:text-zinc-300">
+                    {health.guardrails.metrics?.open_shares_count ?? "—"} / {health.guardrails.limits?.MAX_OPEN_SHARES_POSITIONS ?? "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">Symbols exposure</span>
+                  <span className="font-mono text-zinc-700 dark:text-zinc-300">
+                    {health.guardrails.metrics?.symbols_exposure_count ?? "—"} / {health.guardrails.limits?.MAX_SYMBOLS_EXPOSURE ?? "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">Max symbol notional %</span>
+                  <span className="font-mono text-zinc-700 dark:text-zinc-300">
+                    {health.guardrails.metrics?.max_symbol_notional_pct ?? "—"}%
+                  </span>
+                </div>
+              </div>
+            </Card>
+          )}
           {mtmData && (
             <Card>
               <CardHeader title="Net PnL (Phase 15.0)" />

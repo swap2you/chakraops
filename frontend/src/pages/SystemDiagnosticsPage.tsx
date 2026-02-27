@@ -607,6 +607,46 @@ export function SystemDiagnosticsPage() {
             </div>
           </div>
         </Card>
+        {/* R25.9: Guardrails — status (OK/Advisory/Blocked), metrics, limits; safe labels only. */}
+        {data?.guardrails != null && (
+          <Card data-testid="guardrails-card">
+            <CardHeader title="Guardrails" description="Portfolio guardrails; safe labels only." />
+            <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Status</span>
+                <p className="mt-1">
+                  <StatusBadge status={data.guardrails.status ?? "OK"} />
+                </p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Cash reserve %</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.guardrails.metrics?.cash_reserve_pct ?? "—"}%</p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Open options</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">
+                  {data.guardrails.metrics?.open_options_count ?? "—"} / {data.guardrails.limits?.MAX_OPEN_OPTIONS_POSITIONS ?? "—"}
+                </p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Open shares</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">
+                  {data.guardrails.metrics?.open_shares_count ?? "—"} / {data.guardrails.limits?.MAX_OPEN_SHARES_POSITIONS ?? "—"}
+                </p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Symbols exposure</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">
+                  {data.guardrails.metrics?.symbols_exposure_count ?? "—"} / {data.guardrails.limits?.MAX_SYMBOLS_EXPOSURE ?? "—"}
+                </p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Max symbol notional %</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.guardrails.metrics?.max_symbol_notional_pct ?? "—"}%</p>
+              </div>
+            </div>
+          </Card>
+        )}
       </div>
 
       {/* Store Integrity (Phase 17.0) */}

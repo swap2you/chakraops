@@ -140,6 +140,26 @@ describe("DashboardPage", () => {
     expect(document.body.textContent).not.toMatch(/FAIL_|WARN_/);
   });
 
+  it("R25.9: Guardrails card renders when system health includes guardrails", async () => {
+    mockUseUiSystemHealth.mockReturnValue({
+      data: {
+        ...mockHealth,
+        guardrails: {
+          status: "OK",
+          metrics: { cash_reserve_pct: 35, open_options_count: 2, open_shares_count: 1, symbols_exposure_count: 3, max_symbol_notional_pct: 8 },
+          limits: { MAX_OPEN_OPTIONS_POSITIONS: 6, MAX_OPEN_SHARES_POSITIONS: 10, MAX_SYMBOLS_EXPOSURE: 12, MAX_NOTIONAL_PER_SYMBOL_PCT: 15, MIN_CASH_RESERVE_PCT: 25 },
+        },
+      },
+    });
+    render(<DashboardPage />);
+    const card = await screen.findByTestId("guardrails-card");
+    expect(card).toBeInTheDocument();
+    expect(screen.getByText("Guardrails")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\bFAIL\b/);
+    expect(document.body.textContent).not.toMatch(/\bWARN\b/);
+    mockUseUiSystemHealth.mockReturnValue({ data: mockHealth });
+  });
+
   it("R24.4: Action Needed shows mark provenance, Recommend, and roll reason (safe labels only)", async () => {
     mockUseActionNeeded.mockReturnValue({
       data: {

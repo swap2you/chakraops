@@ -519,6 +519,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend pytest (540 passed, 1 skipped), frontend tests (183 passed, 18 skipped), frontend build pass
 - **Scope:** Cadence sticky (EOD-biased); eligibility_as_of_ts, eligibility_is_intraday_stale; GET /api/ui/earnings/debug; System Diagnostics earnings probe; cadence banner. Branch: release/R25.8.
 
+### R25.9 — Portfolio guardrails + sizing caps (advisory-first)
+
+- [ ] **Requirements** — [R25.9_requirements.md](R25.9_requirements.md)
+- [ ] **Release notes** — [R25.9_release_notes.md](R25.9_release_notes.md)
+- [ ] **Verification** — out/verification/R25.9/notes.md (gate tails + UAT)
+- [ ] **Gate** — Backend pytest, frontend tests, frontend build pass
+- **Scope:** Guardrails config (defaults); compute_portfolio_metrics + evaluate_guardrails_for_entry; Action Needed suppress ENTRY when blocked; Dashboard + System Diagnostics Guardrails card; safe labels only; no FAIL/WARN. Branch: release/R25.9.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

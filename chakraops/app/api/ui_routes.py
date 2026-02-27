@@ -156,6 +156,19 @@ def _get_portfolio_risk_notifier_health() -> Dict[str, Any]:
         return {"status": "OK", "label": "OK"}
 
 
+def _get_guardrails_health() -> Dict[str, Any]:
+    """R25.9: Guardrails block for system health — status (OK/Advisory/Blocked), metrics, limits. Safe labels only."""
+    try:
+        from app.core.portfolio.guardrails_r259 import get_guardrails_metrics_and_status
+        return get_guardrails_metrics_and_status()
+    except Exception:
+        return {
+            "status": "OK",
+            "metrics": {"cash_reserve_pct": 0, "open_options_count": 0, "open_shares_count": 0, "symbols_exposure_count": 0, "max_symbol_notional_pct": 0},
+            "limits": {},
+        }
+
+
 def _get_decision_store_mtime_utc() -> Optional[str]:
     """Return active decision store file mtime as ISO UTC string, or None."""
     try:
@@ -1266,6 +1279,7 @@ def ui_system_health(
         "notifications": notifications_health,
         "cadence": {"mode": cadence_mode_health, "eligibility_as_of": eligibility_as_of_health},
         "earnings_probe_symbol": earnings_probe_symbol,
+        "guardrails": _get_guardrails_health(),
     }
 
 
@@ -4179,6 +4193,25 @@ def ui_action_needed(
     if artifact is None:
         return {"options": [], "shares": [], "recently_changed": _recent_transitions()}
 
+    # R25.9: Guardrails — compute metrics once for request-time ENTRY suppression
+    guardrails_metrics: Dict[str, Any] = {}
+    try:
+        from app.core.portfolio.guardrails_r259 import (
+            build_guardrails_snapshot,
+            compute_portfolio_metrics,
+            evaluate_guardrails_for_entry,
+        )
+        _guard_snap = build_guardrails_snapshot()
+        _snap_for_prices = get_eval_snapshot()
+        _prices = {}
+        if _snap_for_prices and isinstance(_snap_for_prices, dict):
+            for _sym, _v in (_snap_for_prices.get("symbols") or {}).items():
+                if isinstance(_v, dict) and _v.get("price") is not None:
+                    _prices[_sym] = float(_v["price"])
+        guardrails_metrics = compute_portfolio_metrics(_guard_snap, symbol_prices=_prices)
+    except Exception:
+        pass
+
     option_symbols: List[str] = []
     for c in (getattr(artifact, "selected_candidates", []) or [])[:5]:
         sym = (getattr(c, "symbol", "") or "").strip().upper()
@@ -4290,10 +4323,21 @@ def ui_action_needed(
                     # R25.3.1: Options lifecycle notifications are emitted during/after eval run only (not here).
             except Exception:
                 pass
-            if item.get("next_action_code") and item["next_action_code"] != "NONE":
-                options_out.append(item)
-            else:
-                options_out.append(item)
+            # R25.9: Suppress ENTRY from Action Needed when guardrails block (safe labels only)
+            next_code = item.get("next_action_code") or "NONE"
+            if next_code == "ENTRY" and guardrails_metrics:
+                try:
+                    ev = evaluate_guardrails_for_entry(
+                        guardrails_metrics,
+                        {"symbol": sym, "strategy": "OPTIONS"},
+                    )
+                    if ev.get("status") == "Blocked":
+                        continue
+                    if ev.get("hard_blocks"):
+                        continue
+                except Exception:
+                    pass
+            options_out.append(item)
         except Exception:
             continue
     _severity_order = {"high": 0, "medium": 1, "low": 2}
@@ -4321,6 +4365,20 @@ def ui_action_needed(
                 shares_position=_share_pos,
             )
             item = _action_needed_item_from_diagnostics(diag, "SHARES")
+            # R25.9: Suppress ENTRY when guardrails block
+            next_code = item.get("next_action_code") or "NONE"
+            if next_code == "ENTRY" and guardrails_metrics:
+                try:
+                    ev = evaluate_guardrails_for_entry(
+                        guardrails_metrics,
+                        {"symbol": sym, "strategy": "SHARES"},
+                    )
+                    if ev.get("status") == "Blocked":
+                        continue
+                    if ev.get("hard_blocks"):
+                        continue
+                except Exception:
+                    pass
             shares_out.append(item)
         except Exception:
             continue

@@ -456,7 +456,7 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 
 - [x] **Requirements** — chakraops/docs/releases/R25.1_requirements.md
 - [x] **Release notes** — chakraops/docs/releases/R25.1_release_notes.md
-- [ ] **Verification** — out/verification/R25.1/notes.md (create locally and paste content). Generate notes content via `scripts/print_r251_verification_notes.py` and paste into out/verification/R25.1/notes.md.
+- [x] **Verification** — out/verification/R25.1/notes.md with gate outputs + offline proof tail + UAT [x].
 - [x] **Offline fixture provider** — `app/core/eval/offline_fixture_provider.py`: deterministic OHLC, option chain (stable contract_key), quotes (spot + option + quote_ts), account settings; no network, no ORATS
 - [x] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py`: fixture → pipeline → temp out/ (decision_latest.json, eval_snapshot.json) → hygiene checks → report; default output to temp dir
 - [x] **Golden tests** — `tests/test_r251_offline_proof_harness.py`: run-twice determinism, hygiene (code-only, no FAIL_/WARN_), mark/lifecycle determinism
@@ -465,11 +465,11 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 ### R25.2 — Phase 2 Shares workflow completion (targets/stops lifecycle, close recommendation, notification trigger)
 
 - [x] **Docs-only step** — Runbook, roadmap, backlog, PRD, and release scaffolds added.
-- [ ] **Requirements** — [chakraops/docs/releases/R25.2_requirements.md](R25.2_requirements.md) (Phase 2 scope)
-- [ ] **Release notes** — [chakraops/docs/releases/R25.2_release_notes.md](R25.2_release_notes.md) (filled; summary, changes, behavior, dedupe, how to test)
-- [ ] **Verification** — out/verification/R25.2/notes.md (gate tails + UAT checklist; create locally if needed; out/ is gitignored)
-- [ ] **Gate** — Backend pytest (541 passed), frontend tests (170 passed), frontend build pass. Run locally and paste tails into notes.md before sign-off.
-- **References:** [docs/master/RUNBOOK_DEV_EXECUTION.md](../../../../docs/master/RUNBOOK_DEV_EXECUTION.md), [docs/master/ROADMAP_2026.md](../../../../docs/master/ROADMAP_2026.md), [docs/master/BACKLOG.md](../../../../docs/master/BACKLOG.md). Do not mark R25.2 complete until gate + verification sign-off.
+- [x] **Requirements** — [chakraops/docs/releases/R25.2_requirements.md](R25.2_requirements.md) (Phase 2 scope)
+- [x] **Release notes** — [chakraops/docs/releases/R25.2_release_notes.md](R25.2_release_notes.md) (filled; summary, changes, behavior, dedupe, how to test)
+- [x] **Verification** — out/verification/R25.2/notes.md with gate tails + UAT [x] + grep check (FAIL_/WARN_).
+- [x] **Gate** — Backend pytest (541 passed), frontend tests (170 passed), frontend build pass (recorded in notes).
+- **References:** [docs/master/RUNBOOK_DEV_EXECUTION.md](../../../../docs/master/RUNBOOK_DEV_EXECUTION.md), [docs/master/ROADMAP_2026.md](../../../../docs/master/ROADMAP_2026.md), [docs/master/BACKLOG.md](../../../../docs/master/BACKLOG.md).
 
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 

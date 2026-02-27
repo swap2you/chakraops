@@ -11,6 +11,8 @@ import { PortfolioPage } from "@/pages/PortfolioPage";
 import { WheelPage } from "@/pages/WheelPage";
 import { JournalPage } from "@/pages/JournalPage";
 import { ReportsPage } from "@/pages/ReportsPage";
+import { UniverseAdminPage } from "@/pages/UniverseAdminPage";
+import { UniverseHealthPage } from "@/pages/UniverseHealthPage";
 import { getWheelPageMode } from "@/config/features";
 
 const queryClient = new QueryClient({
@@ -36,6 +38,8 @@ export function App() {
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/journal" element={<JournalPage />} />
               <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/universe-admin" element={<UniverseAdminPage />} />
+              <Route path="/universe-health" element={<UniverseHealthPage />} />
               <Route path="/portfolio" element={<PortfolioPage />} />
               {getWheelPageMode() !== "hidden" ? (
                 <Route path="/wheel" element={<WheelPage />} />

@@ -55,12 +55,14 @@ def _load_overlay() -> Dict[str, Any]:
 
 
 def _save_overlay(overlay: Dict[str, Any]) -> None:
-    """Write overlay to file. Caller holds _LOCK if needed."""
+    """Write overlay to file. Deterministic: added and removed sorted A-Z. Caller holds _LOCK if needed."""
     path = _overlay_path()
     now = datetime.now(timezone.utc).isoformat()
-    overlay = {**overlay, "updated_at": now}
+    added = sorted(set(s for s in (overlay.get("added") or []) if str(s).strip()))
+    removed = sorted(set(s for s in (overlay.get("removed") or []) if str(s).strip()))
+    payload = {"added": added, "removed": removed, "updated_at": now}
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(overlay, f, indent=2)
+        json.dump(payload, f, indent=2)
 
 
 def validate_symbol(symbol: str) -> Tuple[bool, str]:

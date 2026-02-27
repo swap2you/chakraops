@@ -542,6 +542,193 @@ def ui_universe_reset(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ---------------------------------------------------------------------------
+# R25.6: Universe Admin (propose/apply, audit log) + Universe Health
+# ---------------------------------------------------------------------------
+
+@router.get("/universe/admin")
+def ui_universe_admin(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    status: str | None = Query(None),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.6: Current universe list + recent change history."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.api.data_health import get_base_universe_symbols
+        from app.core.universe.universe_overrides import get_effective_symbols, get_overlay_counts
+        from app.core.universe.universe_admin_store import list_history
+        base = get_base_universe_symbols()
+        symbols = get_effective_symbols(base)
+        added_count, removed_count = get_overlay_counts()
+        history = list_history(limit=limit, offset=offset, status=(status or "").strip() or None)
+        return {
+            "symbols": symbols,
+            "base_count": len(base),
+            "overlay_added_count": added_count,
+            "overlay_removed_count": removed_count,
+            "history": history,
+        }
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Universe admin list error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to load universe admin data")
+
+
+@router.post("/universe/propose-add")
+async def ui_universe_propose_add(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.6: Propose adding a symbol. Body: symbol, reason_code?, notes?."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    symbol = (body.get("symbol") or "").strip()
+    if not symbol:
+        raise HTTPException(status_code=400, detail="symbol required")
+    reason_code = (body.get("reason_code") or "").strip() or None
+    notes = (body.get("notes") or "").strip()[:1000] or None
+    try:
+        from app.core.universe.universe_admin_store import create_proposal
+        from app.core.universe.universe_overrides import validate_symbol
+        ok, err = validate_symbol(symbol)
+        if not ok:
+            raise HTTPException(status_code=400, detail=err or "Invalid symbol")
+        record = create_proposal("PROPOSE_ADD", symbol, reason_code=reason_code, notes=notes)
+        return {"proposal": record}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Propose add error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to create proposal")
+
+
+@router.post("/universe/propose-remove")
+async def ui_universe_propose_remove(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.6: Propose removing a symbol. Body: symbol, reason_code?, notes?."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    symbol = (body.get("symbol") or "").strip()
+    if not symbol:
+        raise HTTPException(status_code=400, detail="symbol required")
+    reason_code = (body.get("reason_code") or "").strip() or None
+    notes = (body.get("notes") or "").strip()[:1000] or None
+    try:
+        from app.core.universe.universe_admin_store import create_proposal
+        record = create_proposal("PROPOSE_REMOVE", symbol, reason_code=reason_code, notes=notes)
+        return {"proposal": record}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Propose remove error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to create proposal")
+
+
+@router.post("/universe/apply")
+async def ui_universe_apply(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.6: Apply add or remove. Body: proposal_id (to apply proposal) or symbol + action (add|remove)."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    proposal_id = (body.get("proposal_id") or "").strip() or None
+    symbol = (body.get("symbol") or "").strip().upper()
+    action = (body.get("action") or "").strip().lower()
+
+    if proposal_id:
+        from app.core.universe.universe_admin_store import get_proposal, mark_applied
+        from app.core.universe.universe_overrides import add_symbol, remove_symbol, get_effective_symbols
+        from app.api.data_health import get_base_universe_symbols
+        prop = get_proposal(proposal_id)
+        if not prop or prop.get("status") != "OPEN":
+            raise HTTPException(status_code=404, detail="Proposal not found or already applied")
+        sym = (prop.get("symbol") or "").strip().upper()
+        act = prop.get("action", "")
+        if act == "PROPOSE_ADD":
+            ok, err = add_symbol(sym)
+            if not ok:
+                raise HTTPException(status_code=400, detail=err or "Invalid symbol")
+            mark_applied(proposal_id)
+            from app.core.universe.universe_admin_store import log_apply
+            log_apply("APPLY_ADD", sym, prop.get("reason_code"), prop.get("notes"))
+        elif act == "PROPOSE_REMOVE":
+            ok, err = remove_symbol(sym)
+            if not ok:
+                raise HTTPException(status_code=400, detail=err or "Invalid symbol")
+            mark_applied(proposal_id)
+            from app.core.universe.universe_admin_store import log_apply
+            log_apply("APPLY_REMOVE", sym, prop.get("reason_code"), prop.get("notes"))
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported proposal action")
+        base = get_base_universe_symbols()
+        effective = get_effective_symbols(base)
+        return {"applied": True, "symbol": sym, "action": act.replace("PROPOSE_", "APPLY_"), "symbols": effective}
+    if symbol and action in ("add", "remove"):
+        from app.core.universe.universe_overrides import add_symbol, remove_symbol, get_effective_symbols
+        from app.api.data_health import get_base_universe_symbols
+        from app.core.universe.universe_admin_store import log_apply
+        if action == "add":
+            ok, err = add_symbol(symbol)
+            if not ok:
+                raise HTTPException(status_code=400, detail=err or "Invalid symbol")
+            log_apply("APPLY_ADD", symbol)
+        else:
+            ok, err = remove_symbol(symbol)
+            if not ok:
+                raise HTTPException(status_code=400, detail=err or "Invalid symbol")
+            log_apply("APPLY_REMOVE", symbol)
+        base = get_base_universe_symbols()
+        effective = get_effective_symbols(base)
+        return {"applied": True, "symbol": symbol, "action": f"APPLY_{action.upper()}", "symbols": effective}
+    raise HTTPException(status_code=400, detail="Provide proposal_id or symbol and action (add|remove)")
+
+
+@router.get("/universe/health")
+def ui_universe_health(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.6: Universe health summary: total, recently added/removed, warnings count (safe labels)."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.api.data_health import get_base_universe_symbols
+        from app.core.universe.universe_overrides import get_effective_symbols
+        from app.core.universe.universe_admin_store import recent_changes_days
+        base = get_base_universe_symbols()
+        symbols = get_effective_symbols(base)
+        added_30, removed_30 = recent_changes_days(30)
+        # Warnings: data unavailable count (placeholder; can hook into data health later)
+        warnings_count = 0
+        earnings_upcoming = None  # Optional: hook into earnings advisory when available
+        return {
+            "total_symbols": len(symbols),
+            "base_count": len(base),
+            "recently_added": added_30[:20],
+            "recently_removed": removed_30[:20],
+            "warnings_count": warnings_count,
+            "earnings_upcoming": earnings_upcoming,
+        }
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Universe health error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to load universe health")
+
+
 # R23.2: Delta band overrides (advanced) — chakraops/data/delta_overrides.json; NOT in out/
 @router.get("/delta-overrides")
 def ui_delta_overrides_list(

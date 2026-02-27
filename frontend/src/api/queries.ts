@@ -311,6 +311,19 @@ function uiJournalEntryPath(id: string): string {
 function uiReportsMonthlyPath(month: string): string {
   return `/api/ui/reports/monthly?month=${encodeURIComponent(month)}`;
 }
+/** R25.6: Universe Admin */
+function uiUniverseAdminPath(params: { limit?: number; offset?: number; status?: string }): string {
+  const p = new URLSearchParams();
+  if (params.limit != null) p.set("limit", String(params.limit));
+  if (params.offset != null) p.set("offset", String(params.offset));
+  if (params.status) p.set("status", params.status);
+  const q = p.toString();
+  return q ? `/api/ui/universe/admin?${q}` : "/api/ui/universe/admin";
+}
+/** R25.6: Universe Health */
+function uiUniverseHealthPath(): string {
+  return "/api/ui/universe/health";
+}
 function uiAdminSlackTestPath(channel?: string): string {
   const base = `/api/ui/admin/slack/test`;
   if (channel && channel.trim()) {
@@ -371,6 +384,9 @@ export const queryKeys = {
   /** R25.5 */
   uiJournal: (params?: Record<string, unknown>) => ["ui", "journal", params ?? ""] as const,
   uiReportsMonthly: (month: string) => ["ui", "reports", "monthly", month] as const,
+  /** R25.6 */
+  uiUniverseAdmin: (params?: Record<string, unknown>) => ["ui", "universe", "admin", params ?? ""] as const,
+  uiUniverseHealth: () => ["ui", "universe", "health"] as const,
 };
 
 // =============================================================================
@@ -1572,6 +1588,70 @@ export function useReportsMonthly(month: string) {
     queryKey: queryKeys.uiReportsMonthly(month),
     queryFn: () => apiGet<MonthlyReportResponse>(uiReportsMonthlyPath(month)),
     enabled: !!month && month.length === 7 && month[4] === "-",
+  });
+}
+
+/** R25.6: Universe Admin — current list + history */
+export interface UniverseAdminResponse {
+  symbols: string[];
+  base_count: number;
+  overlay_added_count: number;
+  overlay_removed_count: number;
+  history: { id: string; ts: string; action: string; symbol: string; reason_code?: string | null; notes?: string | null; status: string }[];
+}
+export function useUniverseAdmin(params?: { limit?: number; offset?: number; status?: string }) {
+  return useQuery({
+    queryKey: queryKeys.uiUniverseAdmin(params ?? {}),
+    queryFn: () => apiGet<UniverseAdminResponse>(uiUniverseAdminPath(params ?? {})),
+  });
+}
+
+/** R25.6: Universe Health */
+export interface UniverseHealthResponse {
+  total_symbols: number;
+  base_count: number;
+  recently_added: string[];
+  recently_removed: string[];
+  warnings_count: number;
+  earnings_upcoming?: number | null;
+}
+export function useUniverseHealth() {
+  return useQuery({
+    queryKey: queryKeys.uiUniverseHealth(),
+    queryFn: () => apiGet<UniverseHealthResponse>(uiUniverseHealthPath()),
+  });
+}
+
+export function useUniverseProposeAdd() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { symbol: string; reason_code?: string; notes?: string }) =>
+      apiPost<{ proposal: Record<string, unknown> }>("/api/ui/universe/propose-add", payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "universe", "admin"] });
+    },
+  });
+}
+export function useUniverseProposeRemove() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { symbol: string; reason_code?: string; notes?: string }) =>
+      apiPost<{ proposal: Record<string, unknown> }>("/api/ui/universe/propose-remove", payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "universe", "admin"] });
+    },
+  });
+}
+export function useUniverseApply() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { proposal_id?: string; symbol?: string; action?: string }) =>
+      apiPost<{ applied: boolean; symbol: string; symbols: string[] }>("/api/ui/universe/apply", payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "universe", "admin"] });
+      qc.invalidateQueries({ queryKey: ["ui", "universe", "health"] });
+      qc.invalidateQueries({ queryKey: ["ui", "universe", "symbols"] });
+    },
   });
 }
 

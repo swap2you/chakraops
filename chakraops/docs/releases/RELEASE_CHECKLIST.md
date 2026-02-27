@@ -495,6 +495,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend pytest, frontend tests, frontend build pass (recorded in notes.md)
 - **Scope:** Journal store (data/journal.db); GET/POST/PATCH journal, export CSV, GET reports/monthly; Journal + Reports pages; no auto execution; no FAIL/WARN. Branch: release/R25.5.
 
+### R25.6 — Phase 6 Universe expansion process + quarterly review
+
+- [x] **Requirements** — [R25.6_requirements.md](R25.6_requirements.md)
+- [x] **Release notes** — [R25.6_release_notes.md](R25.6_release_notes.md)
+- [x] **Verification** — out/verification/R25.6/notes.md (gate tails + UAT)
+- [x] **Gate** — Backend pytest (541 passed), frontend tests (180 passed, 18 skipped), frontend build pass
+- **Scope:** Universe governance docs; Universe Admin (propose/apply, SQLite audit); deterministic overlay; Universe Health page + API; no FAIL/WARN. Branch: release/R25.6.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

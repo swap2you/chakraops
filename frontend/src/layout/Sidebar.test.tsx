@@ -25,7 +25,7 @@ describe("Sidebar", () => {
   it("renders nav with Dashboard, Universe, Symbol, Wheel, Portfolio, Notifications, System", () => {
     render(<Sidebar />);
     expect(screen.getByRole("link", { name: /dashboard/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /universe/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^Universe$/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /symbol/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /wheel/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /account & portfolio/i })).toBeInTheDocument();

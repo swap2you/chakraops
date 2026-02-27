@@ -11,8 +11,9 @@ from typing import Any, Dict, Optional, Tuple
 # Conservative defaults (no gambling)
 PROFIT_TARGET_PCT_DEFAULT = 50.0
 ROLL_WINDOW_DTE_DEFAULT = 14
-ASSIGNMENT_RISK_DTE_MAX = 3
+ASSIGNMENT_RISK_DTE_MAX = 7  # R25.3: user-facing default; ITM + dte <= this -> assignment risk
 RECOMMENDED_BY = "r243"
+RECOMMENDED_BY_R253 = "r253"
 
 # R24.4: Mark source enum (safe for UI; never persisted to decision artifacts)
 MARK_SOURCE_MID = "MID"
@@ -122,6 +123,7 @@ def compute_position_lifecycle(
     profit_target_pct: float = PROFIT_TARGET_PCT_DEFAULT,
     roll_window_dte: int = ROLL_WINDOW_DTE_DEFAULT,
     assignment_risk_dte_max: int = ASSIGNMENT_RISK_DTE_MAX,
+    recommended_by: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Request-time lifecycle for a single tracked option position (CSP/CC).
@@ -129,6 +131,7 @@ def compute_position_lifecycle(
     Same inputs -> same outputs (deterministic).
     R24.4: Optional bid/ask/last/quote_ts/as_of_ts for mark provenance and freshness.
     """
+    rec_by = (recommended_by or RECOMMENDED_BY).strip() or RECOMMENDED_BY
     out: Dict[str, Any] = {
         "pct_max_profit": None,
         "dte": None,
@@ -140,7 +143,7 @@ def compute_position_lifecycle(
         "assignment_risk": {"active": False, "reason_code": None},
         "roll_window": {"active": False, "dte": None},
         "recommended_action_code": "HOLD",
-        "recommended_by": RECOMMENDED_BY,
+        "recommended_by": rec_by,
         "roll_window_threshold_dte": None,
         "roll_reason_codes": None,
     }

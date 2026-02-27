@@ -308,3 +308,64 @@ def maybe_append_shares_exit_notification(
     }
     append_notification("INFO", "SHARES_EXIT_SIGNAL", message, symbol=symbol, details=details, subtype=hit_type)
     return True
+
+
+# R25.3: Options lifecycle notification types
+OPTIONS_PROFIT_TARGET_HIT = "OPTIONS_PROFIT_TARGET_HIT"
+OPTIONS_ROLL_WINDOW = "OPTIONS_ROLL_WINDOW"
+OPTIONS_ASSIGNMENT_RISK = "OPTIONS_ASSIGNMENT_RISK"
+
+
+def maybe_append_options_lifecycle_notification(
+    symbol: str,
+    contract_key: str,
+    event_type: str,
+    payload: Dict[str, Any],
+) -> bool:
+    """
+    R25.3: Append options lifecycle notification only if not already present for same contract_key+event_type
+    within 24h (NEW/ACKED). Returns True if appended, False if deduped.
+    event_type: OPTIONS_PROFIT_TARGET_HIT | OPTIONS_ROLL_WINDOW | OPTIONS_ASSIGNMENT_RISK.
+    payload: symbol, contract_key, expiry, strike, right, dte, profit_pct, mark_value, as_of_ts (minimal).
+    Message and details use safe labels only (no FAIL/WARN).
+    """
+    symbol = (symbol or "").strip().upper()
+    contract_key = (contract_key or "").strip()
+    if not symbol or not contract_key or event_type not in (
+        OPTIONS_PROFIT_TARGET_HIT,
+        OPTIONS_ROLL_WINDOW,
+        OPTIONS_ASSIGNMENT_RISK,
+    ):
+        return False
+    from datetime import datetime, timezone, timedelta
+    window_start = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    recent = load_notifications(limit=500, state_filter=None)
+    for rec in recent:
+        if rec.get("type") != event_type:
+            continue
+        if (rec.get("symbol") or "").strip().upper() != symbol:
+            continue
+        details = rec.get("details") or {}
+        if (details.get("contract_key") or "").strip() != contract_key:
+            continue
+        state = rec.get("state", "NEW")
+        if state in ("NEW", "ACKED"):
+            ts = rec.get("timestamp_utc") or rec.get("updated_at") or ""
+            if ts and ts >= window_start:
+                return False
+    # Safe labels only
+    if event_type == OPTIONS_PROFIT_TARGET_HIT:
+        message = f"Options: {symbol} — Profit target hit. Consider closing."
+    elif event_type == OPTIONS_ROLL_WINDOW:
+        message = f"Options: {symbol} — Roll window. Consider rolling."
+    else:
+        message = f"Options: {symbol} — Assignment risk. Consider closing or rolling."
+    details = {k: v for k, v in (payload or {}).items() if k in (
+        "symbol", "contract_key", "expiry", "strike", "right", "dte",
+        "profit_pct", "mark_value", "as_of_ts", "recommended_action_code",
+    )}
+    details["contract_key"] = contract_key
+    if symbol and "symbol" not in details:
+        details["symbol"] = symbol
+    append_notification("INFO", event_type, message, symbol=symbol, details=details, subtype=event_type)
+    return True

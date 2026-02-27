@@ -471,6 +471,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend pytest (541 passed), frontend tests (170 passed), frontend build pass (recorded in notes).
 - **References:** [docs/master/RUNBOOK_DEV_EXECUTION.md](../../../../docs/master/RUNBOOK_DEV_EXECUTION.md), [docs/master/ROADMAP_2026.md](../../../../docs/master/ROADMAP_2026.md), [docs/master/BACKLOG.md](../../../../docs/master/BACKLOG.md).
 
+### R25.3 — Phase 3 Options workflow completion (EOD-biased eligibility + options lifecycle + notifications + UX)
+
+- [ ] **Requirements** — [chakraops/docs/releases/R25.3_requirements.md](R25.3_requirements.md)
+- [ ] **Release notes** — [chakraops/docs/releases/R25.3_release_notes.md](R25.3_release_notes.md)
+- [ ] **Verification** — out/verification/R25.3/notes.md (gate tails + UAT checklist; out/ is gitignored)
+- [ ] **Gate** — Backend pytest, frontend tests, frontend build pass (record in notes before sign-off)
+- **References:** RUNBOOK_DEV_EXECUTION, ROADMAP_2026 Phase 3, BACKLOG Epic 3. Do not mark complete until gate + verification sign-off.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

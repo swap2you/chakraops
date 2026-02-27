@@ -394,6 +394,17 @@ def get_run_mode():
     return RunMode.DRY_RUN
 
 
+def get_decision_cadence_mode() -> str:
+    """R25.3: Return decision cadence mode. EOD_BIASED = eligibility uses last completed daily candle (default).
+    Env DECISION_CADENCE_MODE overrides config. Values: EOD_BIASED | LIVE."""
+    raw = _load_yaml_config()
+    decision = raw.get("decision", {}) or {}
+    mode = (os.getenv("DECISION_CADENCE_MODE") or decision.get("cadence_mode") or "EOD_BIASED").strip().upper()
+    if mode not in ("EOD_BIASED", "LIVE"):
+        mode = "EOD_BIASED"
+    return mode
+
+
 def get_options_context_config() -> dict:
     """Return options context gating config from config.yaml (Phase 3.2).
 
@@ -443,4 +454,5 @@ __all__ = [
     "get_portfolio_config",
     "get_environment_config",
     "get_options_context_config",
+    "get_decision_cadence_mode",
 ]

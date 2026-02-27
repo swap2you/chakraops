@@ -3160,6 +3160,31 @@ def _build_symbol_diagnostics_from_v2_store(
     spot_for_tech = stock.get("price") or stock.get("underlying_price") if stock else None
     if spot_for_tech is None and summary:
         spot_for_tech = getattr(summary, "price", None) or getattr(summary, "underlying_price", None)
+    # R25.3: EOD_BIASED — use last completed daily candle close for eligibility so it doesn't flip intraday
+    eligibility_as_of_ts: Optional[str] = None
+    cadence_mode = "LIVE"
+    try:
+        from app.core.settings import get_decision_cadence_mode
+        cadence_mode = get_decision_cadence_mode()
+        if cadence_mode == "EOD_BIASED" and (symbol or "").strip():
+            from app.core.eligibility.candles import get_candles
+            daily_candles = get_candles((symbol or "").strip().upper(), "daily", 30)
+            if daily_candles and len(daily_candles) >= 1:
+                last_bar = daily_candles[-1]
+                if isinstance(last_bar, dict):
+                    close_val = last_bar.get("close") or last_bar.get("c")
+                    if close_val is not None:
+                        spot_for_tech = float(close_val)
+                        eligibility_as_of_ts = last_bar.get("ts") or last_bar.get("date") or last_bar.get("t") or last_bar.get("timestamp")
+                        if eligibility_as_of_ts is not None and not isinstance(eligibility_as_of_ts, str):
+                            eligibility_as_of_ts = str(eligibility_as_of_ts)
+                elif hasattr(last_bar, "close"):
+                    spot_for_tech = float(last_bar.close)
+                    eligibility_as_of_ts = getattr(last_bar, "ts", None) or getattr(last_bar, "date", None) or getattr(last_bar, "t", None)
+                    if eligibility_as_of_ts is not None:
+                        eligibility_as_of_ts = str(eligibility_as_of_ts)
+    except Exception:
+        pass
     if not technicals and symbol and spot_for_tech is not None:
         technicals = _build_technicals_at_request_time(symbol, float(spot_for_tech))
     if not technicals and symbol:
@@ -3549,6 +3574,9 @@ def _build_symbol_diagnostics_from_v2_store(
         "shares_exit_last_price": shares_exit_last_price,
         "shares_exit_as_of_ts": shares_exit_as_of_ts,
         "shares_exit_reason_safe": shares_exit_reason_safe,
+        # R25.3: EOD_BIASED eligibility; request-time only
+        "cadence_mode": cadence_mode,
+        "eligibility_as_of_ts": eligibility_as_of_ts,
     }
 
 
@@ -3708,7 +3736,16 @@ def ui_action_needed(
                 import time as _time
                 from app.core.positions.service import list_positions
                 from app.core.positions.quote_resolver import find_contract_quote
-                from app.core.lifecycle.position_lifecycle_r243 import compute_position_lifecycle
+                from app.core.lifecycle.position_lifecycle_r243 import (
+                    compute_position_lifecycle,
+                    RECOMMENDED_BY_R253,
+                )
+                from app.api.notifications_store import (
+                    maybe_append_options_lifecycle_notification,
+                    OPTIONS_PROFIT_TARGET_HIT,
+                    OPTIONS_ROLL_WINDOW,
+                    OPTIONS_ASSIGNMENT_RISK,
+                )
                 open_pos = list_positions(status="OPEN", symbol=sym, exclude_test=True)
                 opt_positions = [p for p in open_pos if (getattr(p, "strategy", "") or "").upper() in ("CSP", "CC")]
                 if opt_positions:
@@ -3741,6 +3778,7 @@ def ui_action_needed(
                         last=quote.get("last") if quote else None,
                         quote_ts=quote_ts,
                         as_of_ts=as_of_ts,
+                        recommended_by=RECOMMENDED_BY_R253,
                     )
                     item["pct_max_profit"] = lc.get("pct_max_profit")
                     item["mark_proxy"] = lc.get("mark_proxy")
@@ -3761,6 +3799,33 @@ def ui_action_needed(
                         item["roll_window_threshold_dte"] = lc.get("roll_window_threshold_dte")
                     if lc.get("roll_reason_codes") is not None:
                         item["roll_reason_codes"] = lc.get("roll_reason_codes")
+                    # R25.3: Options lifecycle notifications (transition-only; deduped)
+                    try:
+                        from datetime import datetime as _dt, timezone as _tz
+                        ckey = getattr(pos, "contract_key", None) or getattr(pos, "position_id", "")
+                        if ckey:
+                            as_of_str = quote_ts or _dt.now(_tz.utc).isoformat()
+                            payload = {
+                                "symbol": sym,
+                                "contract_key": ckey,
+                                "expiry": expiry,
+                                "strike": strike,
+                                "right": "PUT" if (getattr(pos, "strategy", "") or "").upper() == "CSP" else "CALL",
+                                "dte": lc.get("dte"),
+                                "profit_pct": lc.get("pct_max_profit"),
+                                "mark_value": lc.get("mark_value"),
+                                "as_of_ts": as_of_str,
+                                "recommended_action_code": lc.get("recommended_action_code"),
+                            }
+                            rec_code = lc.get("recommended_action_code")
+                            if rec_code == "CLOSE" and (lc.get("pct_max_profit") or 0) >= 50:
+                                maybe_append_options_lifecycle_notification(sym, ckey, OPTIONS_PROFIT_TARGET_HIT, payload)
+                            elif rec_code == "CLOSE" and (lc.get("assignment_risk") or {}).get("active"):
+                                maybe_append_options_lifecycle_notification(sym, ckey, OPTIONS_ASSIGNMENT_RISK, payload)
+                            elif rec_code == "ROLL":
+                                maybe_append_options_lifecycle_notification(sym, ckey, OPTIONS_ROLL_WINDOW, payload)
+                    except Exception:
+                        pass
             except Exception:
                 pass
             if item.get("next_action_code") and item["next_action_code"] != "NONE":
@@ -3807,6 +3872,42 @@ def ui_action_needed(
         "shares": shares_out,
         "recently_changed": _recent_transitions(),
     }
+
+
+def _enrich_diagnostics_with_options_lifecycle(out: Dict[str, Any], symbol: str) -> None:
+    """R25.3: Add options_lifecycle to diagnostics when symbol has an open CSP/CC position (request-time only)."""
+    try:
+        from app.core.positions.service import list_positions
+        from app.core.positions.quote_resolver import find_contract_quote
+        from app.core.lifecycle.position_lifecycle_r243 import compute_position_lifecycle, RECOMMENDED_BY_R253
+        import time as _time
+        open_pos = list_positions(status="OPEN", symbol=symbol, exclude_test=True)
+        opt_positions = [p for p in open_pos if (getattr(p, "strategy", "") or "").upper() in ("CSP", "CC")]
+        if not opt_positions:
+            return
+        pos = opt_positions[0]
+        chain_rows = out.get("candidates") or []
+        expiry = getattr(pos, "expiration", None) or getattr(pos, "expiry", None)
+        strike = getattr(pos, "strike", None)
+        opt_type = "PUT" if (getattr(pos, "strategy", "") or "").upper() == "CSP" else "CALL"
+        quote = find_contract_quote(chain_rows, expiry, strike, opt_type) if chain_rows and expiry and strike is not None else None
+        quote_ts = str(quote["quote_ts"]) if quote and quote.get("quote_ts") else None
+        stock = out.get("stock") or {}
+        spot = float(stock["price"]) if isinstance(stock, dict) and stock.get("price") is not None else None
+        as_of_ts = _time.time()
+        lc = compute_position_lifecycle(
+            pos,
+            spot=spot,
+            bid=quote.get("bid") if quote else None,
+            ask=quote.get("ask") if quote else None,
+            last=quote.get("last") if quote else None,
+            quote_ts=quote_ts,
+            as_of_ts=as_of_ts,
+            recommended_by=RECOMMENDED_BY_R253,
+        )
+        out["options_lifecycle"] = lc
+    except Exception:
+        pass
 
 
 @router.get("/symbol-diagnostics")
@@ -3866,6 +3967,7 @@ def ui_symbol_diagnostics(
                 )
                 result["exact_run"] = True
                 result["run_id"] = (artifact.metadata or {}).get("run_id")
+                _enrich_diagnostics_with_options_lifecycle(result, sym_upper)
                 return result
 
     from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
@@ -3894,6 +3996,7 @@ def ui_symbol_diagnostics(
         if run_id and run_id.strip():
             out["exact_run"] = False
             out["run_id"] = None
+        _enrich_diagnostics_with_options_lifecycle(out, sym_upper)
         return out
 
     # Symbol not in store — 404 (no legacy path; use recompute=1 to add symbol)

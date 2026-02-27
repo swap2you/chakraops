@@ -770,6 +770,23 @@ export interface SymbolDiagnosticsResponseExtended extends SymbolDiagnosticsResp
   shares_exit_target_price?: number | null;
   shares_exit_stop_price?: number | null;
   shares_exit_as_of_ts?: string | null;
+  /** R25.3: EOD-biased eligibility; request-time only. */
+  cadence_mode?: string | null;
+  eligibility_as_of_ts?: string | null;
+  /** R25.3: Options position lifecycle (tracked CSP/CC); request-time only. */
+  options_lifecycle?: {
+    pct_max_profit?: number | null;
+    dte?: number | null;
+    mark_value?: number | null;
+    mark_source?: string | null;
+    mark_age_sec?: number | null;
+    assignment_risk?: { active?: boolean; reason_code?: string | null };
+    roll_window?: { active?: boolean; dte?: number | null };
+    recommended_action_code?: "CLOSE" | "ROLL" | "HOLD" | null;
+    recommended_by?: string | null;
+    roll_window_threshold_dte?: number | null;
+    roll_reason_codes?: string[] | null;
+  } | null;
   /** R24.5: Earnings advisory (hero pill + risk flags). Advisory only; never blocks. Safe values only (OK/Unavailable/Stale). */
   earnings?: {
     earnings_days?: number | null;

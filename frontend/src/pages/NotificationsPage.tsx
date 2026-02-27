@@ -283,7 +283,15 @@ export function NotificationsPage() {
             </p>
             <p>
               <span className="text-zinc-500 dark:text-zinc-500">Type: </span>
-              {selected.type === "SHARES_EXIT_SIGNAL" ? "Shares exit" : (selected.type ?? "—")}
+              {selected.type === "SHARES_EXIT_SIGNAL"
+                ? "Shares exit"
+                : selected.type === "OPTIONS_PROFIT_TARGET_HIT"
+                  ? "Options: Profit target"
+                  : selected.type === "OPTIONS_ROLL_WINDOW"
+                    ? "Options: Roll window"
+                    : selected.type === "OPTIONS_ASSIGNMENT_RISK"
+                      ? "Options: Assignment risk"
+                      : (selected.type ?? "—")}
             </p>
             <p>
               <span className="text-zinc-500 dark:text-zinc-500">Message: </span>
@@ -296,6 +304,16 @@ export function NotificationsPage() {
                   {(selected.details as { last_price?: number }).last_price != null && ` · Last: $${Number((selected.details as { last_price?: number }).last_price).toFixed(2)}`}
                   {(selected.details as { target_price?: number }).target_price != null && ` · Target: $${Number((selected.details as { target_price?: number }).target_price).toFixed(2)}`}
                   {(selected.details as { stop_price?: number }).stop_price != null && ` · Stop: $${Number((selected.details as { stop_price?: number }).stop_price).toFixed(2)}`}
+                </p>
+              </div>
+            )}
+            {(selected.type === "OPTIONS_PROFIT_TARGET_HIT" || selected.type === "OPTIONS_ROLL_WINDOW" || selected.type === "OPTIONS_ASSIGNMENT_RISK") && selected.details && typeof selected.details === "object" && (
+              <div className="mt-2 rounded border border-zinc-200 bg-zinc-50 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900">
+                <p className="text-zinc-700 dark:text-zinc-300">
+                  {(selected.details as { symbol?: string }).symbol && `${(selected.details as { symbol?: string }).symbol}`}
+                  {(selected.details as { profit_pct?: number }).profit_pct != null && ` · Profit: ${Number((selected.details as { profit_pct?: number }).profit_pct).toFixed(1)}%`}
+                  {(selected.details as { dte?: number }).dte != null && ` · DTE: ${(selected.details as { dte?: number }).dte}`}
+                  {(selected.details as { mark_value?: number }).mark_value != null && ` · Mark: $${Number((selected.details as { mark_value?: number }).mark_value).toFixed(2)}`}
                 </p>
               </div>
             )}

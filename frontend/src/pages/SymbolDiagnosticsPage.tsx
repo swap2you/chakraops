@@ -428,6 +428,44 @@ function ExecutionConsole({
       </Card>
       {activeTab === "Options" ? (
       <div className="w-full space-y-2">
+      {/* R25.3: Options lifecycle strip (tracked position) — concise; safe labels only */}
+      {data.options_lifecycle && (
+        <Card className="w-full" data-testid="options-lifecycle-strip">
+          <CardHeader title="Position lifecycle" description="Request-time only; not persisted." />
+          <div className="space-y-2 text-sm">
+            <p>
+              <span className="text-zinc-500 dark:text-zinc-400">Recommend: </span>
+              <span className="font-medium text-zinc-800 dark:text-zinc-200">
+                {data.options_lifecycle.recommended_action_code === "CLOSE" ? "Close" : data.options_lifecycle.recommended_action_code === "ROLL" ? "Roll" : data.options_lifecycle.recommended_action_code === "HOLD" ? "Hold" : data.options_lifecycle.recommended_action_code ?? "—"}
+              </span>
+            </p>
+            {data.options_lifecycle.pct_max_profit != null && (
+              <p><span className="text-zinc-500 dark:text-zinc-400">Profit: </span>{data.options_lifecycle.pct_max_profit}%</p>
+            )}
+            {data.options_lifecycle.dte != null && (
+              <p><span className="text-zinc-500 dark:text-zinc-400">DTE: </span>{data.options_lifecycle.dte}</p>
+            )}
+            {data.options_lifecycle.mark_value != null && (
+              <p>
+                <span className="text-zinc-500 dark:text-zinc-400">Mark: </span>
+                ${data.options_lifecycle.mark_value.toFixed(2)}
+                {(data.options_lifecycle.mark_source || data.options_lifecycle.mark_age_sec != null) && (
+                  <span className="text-zinc-500 dark:text-zinc-400">
+                    {" "}({[data.options_lifecycle.mark_source, data.options_lifecycle.mark_age_sec != null ? `${data.options_lifecycle.mark_age_sec}s ago` : null].filter(Boolean).join(", ")})
+                  </span>
+                )}
+              </p>
+            )}
+            {data.options_lifecycle.recommended_action_code === "ROLL" && data.options_lifecycle.roll_reason_codes?.length ? (
+              <p><span className="text-zinc-500 dark:text-zinc-400">Reason: </span>DTE window</p>
+            ) : data.options_lifecycle.recommended_action_code === "CLOSE" && (data.options_lifecycle.pct_max_profit ?? 0) >= 50 ? (
+              <p><span className="text-zinc-500 dark:text-zinc-400">Reason: </span>Profit target hit</p>
+            ) : data.options_lifecycle.assignment_risk?.active ? (
+              <p><span className="text-zinc-500 dark:text-zinc-400">Reason: </span>Assignment risk</p>
+            ) : null}
+          </div>
+        </Card>
+      )}
       {/* R23.4.6: Accordion 1 — Trade (Candidates, Exit Plan, Targets); default open */}
       <details open={tradeAccordionOpen} onToggle={(e) => setTradeAccordionOpen((e.target as HTMLDetailsElement).open)} className="group rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900/60">
         <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50">

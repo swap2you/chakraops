@@ -297,6 +297,11 @@ def trigger_evaluation(
                     process_run_completed(run)
                 except Exception as alert_err:
                     logger.warning("[EVAL] Alert processing failed (non-fatal): %s", alert_err)
+                try:
+                    from app.core.alerts.options_lifecycle_notifications import emit_options_lifecycle_notifications_from_run
+                    emit_options_lifecycle_notifications_from_run(run)
+                except Exception as opt_err:
+                    logger.warning("[EVAL] Options lifecycle notifications failed (non-fatal): %s", opt_err)
             except Exception as e:
                 logger.exception("[EVAL] Failed to persist run %s: %s", run_id, e)
                 save_failed_run(run_id, str(e), e, started_at)

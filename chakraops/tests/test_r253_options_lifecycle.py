@@ -112,3 +112,82 @@ def test_action_needed_no_fail_warn_r253():
     for s in _strings_in_obj(data):
         assert "FAIL_" not in s
         assert "WARN_" not in s
+
+
+def test_notifications_emitted_from_eval_path_not_action_needed():
+    """R25.3.1: Notifications are emitted during eval run (emit_from_artifact), not from GET action-needed."""
+    with tempfile.TemporaryDirectory() as d:
+        out = Path(d) / "out"
+        out.mkdir(parents=True, exist_ok=True)
+        notifications_file = out / "notifications.jsonl"
+        with patch.dict(os.environ, {"CHAKRAOPS_OUT": str(out)}):
+            from app.api import notifications_store
+            with patch.object(notifications_store, "_notifications_path", return_value=notifications_file):
+                from app.api.notifications_store import load_notifications, OPTIONS_PROFIT_TARGET_HIT
+                from app.core.alerts.options_lifecycle_notifications import emit_options_lifecycle_notifications_from_artifact
+
+                class _FakeSummary:
+                    symbol = "EVAL_SYM"
+                    price = 105.0
+                artifact = type("Artifact", (), {
+                    "symbols": [_FakeSummary()],
+                    "candidates_by_symbol": {"EVAL_SYM": []},
+                })()
+                pos = _MockPos(strike=100.0, expiration="2026-04-18", open_credit=2.0)
+                pos.symbol = "EVAL_SYM"
+                pos.contract_key = "100-2026-04-18-PUT"
+
+                with patch("app.core.positions.service.list_positions", return_value=[pos]):
+                    with patch(
+                        "app.core.lifecycle.position_lifecycle_r243.compute_position_lifecycle",
+                        return_value={
+                            "recommended_action_code": "CLOSE",
+                            "pct_max_profit": 55.0,
+                            "dte": 50,
+                            "mark_value": 1.1,
+                            "assignment_risk": {},
+                        },
+                    ):
+                        emit_options_lifecycle_notifications_from_artifact(artifact)
+
+                recs = [r for r in load_notifications(limit=50) if r.get("type") == OPTIONS_PROFIT_TARGET_HIT and r.get("symbol") == "EVAL_SYM"]
+                assert len(recs) >= 1, "Notification must be emitted from eval path without calling action-needed"
+
+
+def test_notification_payload_no_fail_warn_substrings():
+    """R25.3.1: No FAIL_/WARN_ substrings in options lifecycle notification payload (details/message)."""
+    with tempfile.TemporaryDirectory() as d:
+        out = Path(d) / "out"
+        out.mkdir(parents=True, exist_ok=True)
+        notifications_file = out / "notifications.jsonl"
+        with patch.dict(os.environ, {"CHAKRAOPS_OUT": str(out)}):
+            from app.api import notifications_store
+            with patch.object(notifications_store, "_notifications_path", return_value=notifications_file):
+                from app.api.notifications_store import (
+                    load_notifications,
+                    maybe_append_options_lifecycle_notification,
+                    OPTIONS_ROLL_WINDOW,
+                )
+                symbol = "R2531_SAFE"
+                ckey = "100-2026-05-18-PUT"
+                payload = {
+                    "symbol": symbol,
+                    "contract_key": ckey,
+                    "expiry": "2026-05-18",
+                    "strike": 100,
+                    "right": "PUT",
+                    "dte": 30,
+                    "profit_pct": 40,
+                    "mark_value": 1.0,
+                    "as_of_ts": "2026-02-27T12:00:00Z",
+                    "recommended_action_code": "ROLL",
+                }
+                maybe_append_options_lifecycle_notification(symbol, ckey, OPTIONS_ROLL_WINDOW, payload)
+                recs = [r for r in load_notifications(limit=50) if r.get("symbol") == symbol]
+                assert len(recs) == 1
+                r = recs[0]
+                msg = (r.get("message") or "")
+                details = r.get("details") or {}
+                detail_str = " ".join(str(v) for v in details.values())
+                assert "FAIL_" not in msg and "WARN_" not in msg
+                assert "FAIL_" not in detail_str and "WARN_" not in detail_str

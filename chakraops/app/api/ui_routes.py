@@ -3740,12 +3740,6 @@ def ui_action_needed(
                     compute_position_lifecycle,
                     RECOMMENDED_BY_R253,
                 )
-                from app.api.notifications_store import (
-                    maybe_append_options_lifecycle_notification,
-                    OPTIONS_PROFIT_TARGET_HIT,
-                    OPTIONS_ROLL_WINDOW,
-                    OPTIONS_ASSIGNMENT_RISK,
-                )
                 open_pos = list_positions(status="OPEN", symbol=sym, exclude_test=True)
                 opt_positions = [p for p in open_pos if (getattr(p, "strategy", "") or "").upper() in ("CSP", "CC")]
                 if opt_positions:
@@ -3799,33 +3793,7 @@ def ui_action_needed(
                         item["roll_window_threshold_dte"] = lc.get("roll_window_threshold_dte")
                     if lc.get("roll_reason_codes") is not None:
                         item["roll_reason_codes"] = lc.get("roll_reason_codes")
-                    # R25.3: Options lifecycle notifications (transition-only; deduped)
-                    try:
-                        from datetime import datetime as _dt, timezone as _tz
-                        ckey = getattr(pos, "contract_key", None) or getattr(pos, "position_id", "")
-                        if ckey:
-                            as_of_str = quote_ts or _dt.now(_tz.utc).isoformat()
-                            payload = {
-                                "symbol": sym,
-                                "contract_key": ckey,
-                                "expiry": expiry,
-                                "strike": strike,
-                                "right": "PUT" if (getattr(pos, "strategy", "") or "").upper() == "CSP" else "CALL",
-                                "dte": lc.get("dte"),
-                                "profit_pct": lc.get("pct_max_profit"),
-                                "mark_value": lc.get("mark_value"),
-                                "as_of_ts": as_of_str,
-                                "recommended_action_code": lc.get("recommended_action_code"),
-                            }
-                            rec_code = lc.get("recommended_action_code")
-                            if rec_code == "CLOSE" and (lc.get("pct_max_profit") or 0) >= 50:
-                                maybe_append_options_lifecycle_notification(sym, ckey, OPTIONS_PROFIT_TARGET_HIT, payload)
-                            elif rec_code == "CLOSE" and (lc.get("assignment_risk") or {}).get("active"):
-                                maybe_append_options_lifecycle_notification(sym, ckey, OPTIONS_ASSIGNMENT_RISK, payload)
-                            elif rec_code == "ROLL":
-                                maybe_append_options_lifecycle_notification(sym, ckey, OPTIONS_ROLL_WINDOW, payload)
-                    except Exception:
-                        pass
+                    # R25.3.1: Options lifecycle notifications are emitted during/after eval run only (not here).
             except Exception:
                 pass
             if item.get("next_action_code") and item["next_action_code"] != "NONE":

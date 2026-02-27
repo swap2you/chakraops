@@ -326,6 +326,13 @@ def evaluate_universe(
     store = get_evaluation_store_v2()
     store.set_latest(artifact)
 
+    # R25.3.1: Emit options lifecycle notifications during eval run (decoupled from action-needed)
+    try:
+        from app.core.alerts.options_lifecycle_notifications import emit_options_lifecycle_notifications_from_artifact
+        emit_options_lifecycle_notifications_from_artifact(artifact)
+    except Exception as e:
+        logger.warning("[EVAL_SVC_V2] Options lifecycle notifications failed (non-fatal): %s", e)
+
     logger.info("[EVAL_SVC_V2] evaluate_universe: %d symbols, %d stage2, %d eligible", len(symbols), stage2_count, eligible_count)
     return artifact
 

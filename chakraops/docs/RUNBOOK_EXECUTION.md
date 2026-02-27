@@ -136,6 +136,53 @@ python chakraops/scripts/offline_eval_proof.py --fixture chakraops/tests/fixture
 
 ---
 
+## Baseline freeze and stable/dev workflow
+
+Use this when cutting a baseline (e.g. after R25.1) so **ChakraOps-stable** can run from a tag; **ChakraOps-dev** continues on a release branch or `main`.
+
+### Pre-freeze
+
+- [ ] **Git clean** — `git status` shows nothing to commit, working tree clean; all completed releases committed.
+- [ ] **Gates** — Backend pytest, frontend test, frontend build passed for the releases being frozen (evidence in `out/verification/<Release>/notes.md` as needed).
+
+### Operator checklist
+
+- [ ] Merge current release branch into `main` (if using a release branch).
+- [ ] Tag the baseline (e.g. `v25.1-baseline` or `v2026-baseline-01`).
+- [ ] Push `main` and the tag to `origin`.
+
+### Exact git commands (remote: origin, branch: main)
+
+**Option A — Freeze current `main` (no merge):**
+
+```bash
+git checkout main
+git pull origin main
+git tag -a v25.1-baseline -m "Baseline freeze R25.1"
+git push origin main
+git push origin v25.1-baseline
+```
+
+**Option B — Merge release branch into `main`, then tag and push:**
+
+```bash
+git checkout main
+git pull origin main
+git merge release/r25.1 --no-ff -m "Merge release/r25.1 for baseline"
+git tag -a v25.1-baseline -m "Baseline freeze R25.1"
+git push origin main
+git push origin v25.1-baseline
+```
+
+*(Replace `release/r25.1` with your release branch name and `v25.1-baseline` with your chosen tag.)*
+
+### Stable vs dev after freeze
+
+- **Stable clone:** Check out the baseline tag (e.g. `git checkout v25.1-baseline`) for production-like runs and EOD; do not pull latest `main` until the next baseline.
+- **Dev clone:** Continue on `main` or a release branch for the next phase; avoid opening both workspaces in Cursor at once.
+
+---
+
 ## Sanity Check
 
 After running evaluation and starting the backend:

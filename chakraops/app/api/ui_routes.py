@@ -729,6 +729,40 @@ def ui_universe_health(
         raise HTTPException(status_code=500, detail="Unable to load universe health")
 
 
+# R25.8: Earnings feed validation — diagnostics only; safe fields; no raw ORATS; no persist
+@router.get("/earnings/debug")
+def ui_earnings_debug(
+    symbol: str = Query(..., description="Ticker to probe (e.g. NVDA, SPY)"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    Diagnostics-only endpoint. Returns safe fields: status, next_date, days, implied_move_pct, as_of.
+    Does not return raw ORATS payload; does not log secrets; does not persist to decision artifacts.
+    """
+    _require_ui_key(x_ui_key)
+    sym = (symbol or "").strip().upper()
+    if not sym:
+        return {"status": "Unavailable", "next_date": None, "days": None, "implied_move_pct": None, "as_of": None}
+    try:
+        from app.core.config.orats_secrets import ORATS_API_TOKEN
+        from app.core.orats.earnings import fetch_earnings_advisory
+        token = (ORATS_API_TOKEN or "").strip() or None
+        out = fetch_earnings_advisory(sym, token=token)
+        # Map to safe field names only; never raw codes
+        status = (out.get("earnings_data_status") or "Unavailable").strip()
+        if status not in ("OK", "Unavailable", "Stale"):
+            status = "Unavailable"
+        return {
+            "status": status,
+            "next_date": out.get("earnings_next_date"),
+            "days": out.get("earnings_days"),
+            "implied_move_pct": out.get("implied_earnings_move_pct"),
+            "as_of": out.get("earnings_as_of"),
+        }
+    except Exception:
+        return {"status": "Unavailable", "next_date": None, "days": None, "implied_move_pct": None, "as_of": None}
+
+
 # R23.2: Delta band overrides (advanced) — chakraops/data/delta_overrides.json; NOT in out/
 @router.get("/delta-overrides")
 def ui_delta_overrides_list(
@@ -1171,6 +1205,17 @@ def ui_system_health(
     except Exception:
         notifications_health = {"count_new": 0, "count_acked": 0, "count_archived": 0, "last_emitted_ts": None}
 
+    # R25.8: Cadence for banner (safe labels only)
+    cadence_mode_health = "EOD_BIASED"
+    eligibility_as_of_health: str | None = decision_eval_ts
+    try:
+        from app.core.settings import get_decision_cadence_mode
+        cadence_mode_health = get_decision_cadence_mode()
+    except Exception:
+        pass
+    # R25.8: Earnings probe symbol (default SPY) for System Diagnostics card
+    earnings_probe_symbol = (__import__("os").environ.get("EARNINGS_PROBE_SYMBOL") or "SPY").strip().upper() or "SPY"
+
     return {
         "api": {"status": api_status, "latency_ms": api_latency_ms},
         "decision_store": {
@@ -1219,6 +1264,8 @@ def ui_system_health(
         "copilot": _get_copilot_status_health(),
         "portfolio_risk_notifier": _get_portfolio_risk_notifier_health(),
         "notifications": notifications_health,
+        "cadence": {"mode": cadence_mode_health, "eligibility_as_of": eligibility_as_of_health},
+        "earnings_probe_symbol": earnings_probe_symbol,
     }
 
 
@@ -3613,6 +3660,24 @@ def _build_symbol_diagnostics_from_v2_store(
                         eligibility_as_of_ts = str(eligibility_as_of_ts)
     except Exception:
         pass
+    # R25.8: eligibility_is_intraday_stale — True when EOD_BIASED and last bar date (ET) < today (ET)
+    eligibility_is_intraday_stale: bool = False
+    if cadence_mode == "EOD_BIASED" and eligibility_as_of_ts:
+        try:
+            import zoneinfo
+            ny = zoneinfo.ZoneInfo("America/New_York")
+        except ImportError:
+            try:
+                from backports.zoneinfo import ZoneInfo
+                ny = ZoneInfo("America/New_York")
+            except ImportError:
+                ny = None
+        if ny:
+            now_et = datetime.now(ny).date()
+            ts_str = str(eligibility_as_of_ts)[:10]
+            if len(ts_str) == 10 and ts_str[4] == "-":
+                bar_date = datetime.strptime(ts_str, "%Y-%m-%d").date()
+                eligibility_is_intraday_stale = bar_date < now_et
     if not technicals and symbol and spot_for_tech is not None:
         technicals = _build_technicals_at_request_time(symbol, float(spot_for_tech))
     if not technicals and symbol:
@@ -4002,9 +4067,10 @@ def _build_symbol_diagnostics_from_v2_store(
         "shares_exit_last_price": shares_exit_last_price,
         "shares_exit_as_of_ts": shares_exit_as_of_ts,
         "shares_exit_reason_safe": shares_exit_reason_safe,
-        # R25.3: EOD_BIASED eligibility; request-time only
+        # R25.3/R25.8: EOD_BIASED eligibility; request-time only
         "cadence_mode": cadence_mode,
         "eligibility_as_of_ts": eligibility_as_of_ts,
+        "eligibility_is_intraday_stale": eligibility_is_intraday_stale,
     }
 
 

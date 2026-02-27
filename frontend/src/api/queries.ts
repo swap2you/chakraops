@@ -12,6 +12,7 @@ import type {
   UniverseResponse,
   SymbolDiagnosticsResponseExtended,
   UiSystemHealthResponse,
+  UiEarningsDebugResponse,
   UiTrackedPositionsResponse,
   PortfolioResponse,
   PortfolioMetricsResponse,
@@ -83,6 +84,11 @@ function uiDeltaOverrideSymbolPath(symbol: string): string {
 
 function uiSystemHealthPath(): string {
   return `/api/ui/system-health`;
+}
+
+/** R25.8: Earnings debug (diagnostics only; safe fields). */
+function uiEarningsDebugPath(symbol: string): string {
+  return `/api/ui/earnings/debug?symbol=${encodeURIComponent(symbol)}`;
 }
 
 /** R22.5: Shares candidates (BUY SHARES recommendation only). */
@@ -350,6 +356,7 @@ export const queryKeys = {
   symbolDiagnostics: (symbol: string, runId?: string | null) =>
     (["ui", "symbolDiagnostics", symbol, runId ?? ""] as const),
   uiSystemHealth: () => ["ui", "systemHealth"] as const,
+  uiEarningsDebug: (symbol: string) => ["ui", "earningsDebug", symbol] as const,
   sharesCandidates: () => ["ui", "sharesCandidates"] as const,
   actionNeeded: () => ["ui", "actionNeeded"] as const,
   uiPositions: () => ["ui", "positions"] as const,
@@ -548,6 +555,15 @@ export function useUiSystemHealth() {
   return useQuery({
     queryKey: queryKeys.uiSystemHealth(),
     queryFn: () => apiGet<UiSystemHealthResponse>(uiSystemHealthPath()),
+  });
+}
+
+/** R25.8: Earnings debug for probe symbol (diagnostics only; safe fields). */
+export function useEarningsDebug(symbol: string) {
+  return useQuery({
+    queryKey: queryKeys.uiEarningsDebug(symbol),
+    queryFn: () => apiGet<UiEarningsDebugResponse>(uiEarningsDebugPath(symbol)),
+    enabled: !!symbol?.trim(),
   });
 }
 

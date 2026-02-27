@@ -381,6 +381,19 @@ export interface UiSystemHealthResponse {
     count_archived?: number;
     last_emitted_ts?: string | null;
   };
+  /** R25.8 — Cadence for banner (safe labels only). */
+  cadence?: { mode?: string; eligibility_as_of?: string | null };
+  /** R25.8 — Probe symbol for earnings debug card (default SPY). */
+  earnings_probe_symbol?: string;
+}
+
+/** R25.8 — GET /api/ui/earnings/debug response (safe fields only). */
+export interface UiEarningsDebugResponse {
+  status: "OK" | "Unavailable" | "Stale";
+  next_date?: string | null;
+  days?: number | null;
+  implied_move_pct?: number | null;
+  as_of?: string | null;
 }
 
 // =============================================================================

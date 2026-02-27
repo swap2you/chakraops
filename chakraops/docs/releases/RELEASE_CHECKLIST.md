@@ -511,6 +511,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend pytest (541 passed), frontend tests (181 passed, 18 skipped), frontend build pass
 - **Scope:** No EARNINGS_NOT_EVALUATED in decision artifact; eval populates earnings (OK/Unavailable/Stale); recompute uses snapshot; implied move single source; UI no 00/0000-00-00. Branch: release/R25.7.
 
+### R25.8 — Cadence discipline + earnings feed validation
+
+- [x] **Requirements** — [R25.8_requirements.md](R25.8_requirements.md)
+- [x] **Release notes** — [R25.8_release_notes.md](R25.8_release_notes.md)
+- [x] **Verification** — out/verification/R25.8/notes.md (gate tails + UAT)
+- [x] **Gate** — Backend pytest (540 passed, 1 skipped), frontend tests (183 passed, 18 skipped), frontend build pass
+- **Scope:** Cadence sticky (EOD-biased); eligibility_as_of_ts, eligibility_is_intraday_stale; GET /api/ui/earnings/debug; System Diagnostics earnings probe; cadence banner. Branch: release/R25.8.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

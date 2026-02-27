@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   useUiSystemHealth,
+  useEarningsDebug,
   useDiagnosticsHistory,
   useRunDiagnostics,
   useRunEval,
@@ -58,6 +59,8 @@ function checkBadgeVariant(ch: { status?: string }): "success" | "warning" | "da
 
 export function SystemDiagnosticsPage() {
   const { data, isLoading, isError } = useUiSystemHealth();
+  const probeSymbol = data?.earnings_probe_symbol ?? "SPY";
+  const { data: earningsDebug } = useEarningsDebug(probeSymbol);
   const { data: historyData } = useDiagnosticsHistory(10);
   const { data: latestSnapshot, isError: snapshotError } = useLatestSnapshot();
   const runDiagnostics = useRunDiagnostics();
@@ -144,9 +147,18 @@ export function SystemDiagnosticsPage() {
     );
   }
 
+  const cadence = data?.cadence;
+  const cadenceLabel = (cadence?.mode ?? "EOD_BIASED").replace(/_/g, "-").toLowerCase();
+  const asOfEt = cadence?.eligibility_as_of ? formatTimestampEt(cadence.eligibility_as_of) : null;
+
   return (
     <div className="space-y-4">
       <PageHeader title="System Status" subtext="API, Decision Store, ORATS, market, and scheduler" />
+      {cadence?.mode === "EOD_BIASED" && (
+        <p className="text-sm text-zinc-500 dark:text-zinc-400" data-testid="cadence-banner">
+          Cadence: {cadenceLabel} (as of {asOfEt ?? "—"})
+        </p>
+      )}
       <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
         <Card>
           <CardHeader title="API" />
@@ -198,7 +210,7 @@ export function SystemDiagnosticsPage() {
           </div>
         </Card>
         <Card>
-          <CardHeader title="ORATS" description="R22.2: Freshness OK / DELAYED (within window) / WARN / ERROR" />
+          <CardHeader title="ORATS" description="R22.2: Freshness OK / DELAYED (within window) / Degraded / ERROR" />
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">Freshness</span>
@@ -260,6 +272,31 @@ export function SystemDiagnosticsPage() {
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">timestamp (ET)</span>
               <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{formatTimestampEt(market?.timestamp)}</p>
+            </div>
+          </div>
+        </Card>
+        <Card data-testid="earnings-probe-card">
+          <CardHeader title="Earnings probe" description={`R25.8: Probe symbol ${probeSymbol} (advisory only)`} />
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">status</span>
+              <p className="mt-1 font-medium text-zinc-700 dark:text-zinc-200">{earningsDebug?.status ?? "—"}</p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">next_date</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{earningsDebug?.next_date ?? "—"}</p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">days</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{earningsDebug?.days ?? "—"}</p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">implied_move_pct</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{earningsDebug?.implied_move_pct != null ? `${earningsDebug.implied_move_pct}%` : "—"}</p>
+            </div>
+            <div className="col-span-2">
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">as_of (ET)</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{earningsDebug?.as_of ? formatTimestampEt(earningsDebug.as_of) : "—"}</p>
             </div>
           </div>
         </Card>

@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional  # Literal for compute_shares_exit_signal
 
 NextActionCode = str  # ENTRY | HOLD | CLOSE | ROLL | REDUCE | NONE
 
@@ -79,6 +79,28 @@ def compute_next_action_options(
         return "ENTRY", rationale, key_numbers
 
     return "NONE", [], key_numbers
+
+
+def compute_shares_exit_signal(
+    *,
+    last_price: Optional[float],
+    target_price: Optional[float],
+    stop_price: Optional[float],
+) -> tuple[Optional[Literal["TARGET", "STOP"]], str]:
+    """
+    R25.2: Request-time only. Compute whether shares position hit target or stop.
+    Returns (hit_type, reason_safe). hit_type is TARGET | STOP | None; reason_safe is safe label only (no FAIL/WARN).
+    """
+    last = _float_or_none(last_price)
+    tgt = _float_or_none(target_price)
+    stop = _float_or_none(stop_price)
+    if last is None:
+        return None, ""
+    if tgt is not None and last >= tgt:
+        return "TARGET", "Target hit"
+    if stop is not None and last <= stop:
+        return "STOP", "Stop hit"
+    return None, ""
 
 
 def compute_next_action_shares(

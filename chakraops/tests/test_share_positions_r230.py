@@ -37,6 +37,13 @@ def test_share_positions_crud(tmp_path):
             assert pos["avg_cost"] == 100.0
             assert "id" in pos and "updated_at" in pos
 
+            # R25.2: Upsert with target_price, stop_price
+            pos2 = holdings_db.upsert_share_position(aid, "NVDA", 50, avg_cost=100.0, target_price=120.0, stop_price=90.0)
+            assert pos2.get("target_price") == 120.0
+            assert pos2.get("stop_price") == 90.0
+            got = holdings_db.get_share_position(aid, "NVDA")
+            assert got is not None and got.get("target_price") == 120.0 and got.get("stop_price") == 90.0
+
             # Get
             got = holdings_db.get_share_position(aid, "NVDA")
             assert got is not None

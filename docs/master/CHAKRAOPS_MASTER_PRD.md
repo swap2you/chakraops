@@ -72,6 +72,8 @@ Feature ideas inferred from premium tools; **not copied** — translated into ou
 6. **Monitor** — Notifications (Slack + in-app) for actionable alerts; symbol diagnostics for next action (ENTRY/HOLD/CLOSE/ROLL).
 7. **Exit** — When target/stop or rules indicate exit, operator closes in broker and updates ChakraOps (e.g. close shares position, update tracked state).
 
+**Operator workflow / execution:** Stable/dev workspace split and release-branch workflow are in place (see [RUNBOOK_DEV_EXECUTION.md](RUNBOOK_DEV_EXECUTION.md)); offline proof harness exists (R25.1). Feature work must not regress stable or the harness.
+
 ---
 
 ## Core product pillars

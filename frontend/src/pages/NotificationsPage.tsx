@@ -283,12 +283,22 @@ export function NotificationsPage() {
             </p>
             <p>
               <span className="text-zinc-500 dark:text-zinc-500">Type: </span>
-              {selected.type ?? "—"}
+              {selected.type === "SHARES_EXIT_SIGNAL" ? "Shares exit" : (selected.type ?? "—")}
             </p>
             <p>
               <span className="text-zinc-500 dark:text-zinc-500">Message: </span>
               {sanitizeMessageForDisplay(selected.message)}
             </p>
+            {selected.type === "SHARES_EXIT_SIGNAL" && selected.details && typeof selected.details === "object" && (
+              <div className="mt-2 rounded border border-zinc-200 bg-zinc-50 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900">
+                <p className="text-zinc-700 dark:text-zinc-300">
+                  {(selected.details as { hit_type?: string }).hit_type === "TARGET" ? "Target hit" : (selected.details as { hit_type?: string }).hit_type === "STOP" ? "Stop hit" : "Exit"}
+                  {(selected.details as { last_price?: number }).last_price != null && ` · Last: $${Number((selected.details as { last_price?: number }).last_price).toFixed(2)}`}
+                  {(selected.details as { target_price?: number }).target_price != null && ` · Target: $${Number((selected.details as { target_price?: number }).target_price).toFixed(2)}`}
+                  {(selected.details as { stop_price?: number }).stop_price != null && ` · Stop: $${Number((selected.details as { stop_price?: number }).stop_price).toFixed(2)}`}
+                </p>
+              </div>
+            )}
             {selected.details && Object.keys(selected.details).length > 0 && (
               <pre className="mt-2 overflow-auto rounded border border-zinc-200 bg-zinc-50 p-2 text-xs dark:border-zinc-700 dark:bg-zinc-900">
                 {JSON.stringify(selected.details, null, 2)}

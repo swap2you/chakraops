@@ -443,6 +443,31 @@ describe("SymbolDiagnosticsPage Gate Summary", () => {
     expect(screen.queryByText(/\bFAIL\b/)).not.toBeInTheDocument();
   });
 
+  it("R25.2: Shares exit banner shows Recommend: Close and Reason (Target hit / Stop hit) when shares_exit_hit_type set", async () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: {
+        ...mockDiagnosticsWithCap,
+        shares_position: { id: "p1", account_id: "default", symbol: "SPY", quantity: 100, avg_cost: 140, opened_at: null, notes: null, created_at: "", updated_at: "", target_price: 150, stop_price: 130 },
+        shares_exit_hit_type: "TARGET",
+        shares_exit_reason_safe: "Target hit",
+        shares_exit_last_price: 152,
+        shares_exit_target_price: 150,
+        shares_exit_stop_price: 130,
+      },
+      isLoading: false,
+      isError: false,
+    });
+    window.history.pushState({}, "", "/symbol-diagnostics?symbol=SPY&tab=Shares");
+    render(<SymbolDiagnosticsPage initialTabForTest="Shares" />);
+    const positionSummary = screen.getByText("Position");
+    fireEvent.click(positionSummary);
+    await waitFor(() => {
+      expect(screen.getByTestId("shares-exit-recommend-banner")).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Recommend: Close/)).toBeInTheDocument();
+    expect(screen.getByText(/Reason: Target hit/)).toBeInTheDocument();
+  });
+
   it("R24.6: document textContent has no word-boundary FAIL or WARN", () => {
     useSymbolDiagnosticsMock.mockReturnValue({
       data: {

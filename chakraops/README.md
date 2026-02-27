@@ -93,6 +93,24 @@ For internet-safe deployment with HTTPS and basic auth (Caddy reverse proxy, sam
 - **Dev:** `docker compose up --build` — frontend :3000, backend :8000 (for local debugging).
 - **Prod:** `docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod up -d --build` — only 80/443 open; backend not exposed.
 
+### Backup and restore (R25.0)
+
+**Backup** (from repository root): Archives `./out` to `./backups/out_<timestamp>.tar.gz`; keeps last `BACKUP_KEEP_N` (default 14) and deletes older archives.
+
+```bash
+./scripts/backup_out.sh
+```
+
+Optional env: `OUT_DIR=./out`, `BACKUP_DIR=./backups`, `BACKUP_KEEP_N=14`.
+
+**Restore:** Stop the backend (or any process using `out/`), then extract a backup over `out/`:
+
+```bash
+tar -xzf ./backups/out_YYYYMMDD_HHMMSS.tar.gz -C .
+```
+
+Then restart backend/containers. Do not commit `backups/` or `out/` (add to `.gitignore` if needed).
+
 ### Phase 7: Decision Intelligence Pipeline (Recommended)
 
 **Generate Decision Snapshot (One-time):**

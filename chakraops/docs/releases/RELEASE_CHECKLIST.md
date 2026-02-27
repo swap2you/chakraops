@@ -440,6 +440,26 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Verification** — [out/verification/R24.9/notes.md](out/verification/R24.9/notes.md) with gate outputs + UAT
 - [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (169 passed, 18 skipped), frontend build pass (recorded in notes)
 
+### R25.0 — Ops hardening (restart policy, healthz, logs, backup)
+
+- [x] **Healthz** — GET /api/healthz returns 200 with {status:"ok", ts:<iso>}; no ORATS/heavy state; backend test (test_r250_healthz.py)
+- [x] **Compose** — restart: unless-stopped; logging json-file max-size/max-file; out/ mount on backend
+- [x] **Backup** — scripts/backup_out.sh (tar.gz out → backups/, retain BACKUP_KEEP_N); README backup/restore
+- [x] **Requirements** — chakraops/docs/releases/R25.0_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R25.0_release_notes.md
+- [x] **Verification** — [out/verification/R25.0/notes.md](out/verification/R25.0/notes.md) with gate outputs + UAT
+- [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (169 passed, 18 skipped), frontend build pass (recorded in notes)
+
+### R25.1 — Offline Proof Harness + Golden Verification (determinism + hygiene without ORATS)
+
+- [ ] **Requirements** — chakraops/docs/releases/R25.1_requirements.md
+- [ ] **Release notes** — chakraops/docs/releases/R25.1_release_notes.md
+- [ ] **Verification** — out/verification/R25.1/notes.md (scaffold + UAT checklist; paste gate tails + offline proof output)
+- [ ] **Offline fixture provider** — `app/core/eval/offline_fixture_provider.py`: deterministic OHLC, option chain (stable contract_key), quotes (spot + option + quote_ts), account settings; no network, no ORATS
+- [ ] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py`: fixture → pipeline → temp out/ (decision_latest.json, eval_snapshot.json) → hygiene checks → report; default output to temp dir
+- [ ] **Golden tests** — `tests/test_r251_offline_proof_harness.py`: run-twice determinism, hygiene (code-only, no FAIL_/WARN_), mark/lifecycle determinism
+- [ ] **Gate** — Backend pytest, frontend tests, frontend build pass (recorded in notes)
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 - [ ] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py` (fixture → mock staged result → evaluate_universe → store write → hygiene check + snapshot check + per-symbol summary)

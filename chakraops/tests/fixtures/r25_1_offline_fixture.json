@@ -1,0 +1,31 @@
+{
+  "symbols": ["NVDA", "NKE", "HD"],
+  "quotes": {
+    "NVDA": {"price": 140, "bid": 139.5, "ask": 140.5, "volume": 10000000, "quote_date": "2026-02-17", "quote_ts": "2026-02-17T12:00:00Z", "iv_rank": 45},
+    "NKE": {"price": 98, "bid": 97.8, "ask": 98.2, "volume": 5000000, "quote_date": "2026-02-17", "quote_ts": "2026-02-17T12:00:00Z", "iv_rank": 35},
+    "HD": {"price": 385, "bid": 384, "ask": 386, "volume": 3000000, "quote_date": "2026-02-17", "quote_ts": "2026-02-17T12:00:00Z", "iv_rank": 28}
+  },
+  "ohlc_bars": {
+    "NVDA": [{"date": "2026-02-14", "open": 138, "high": 142, "low": 137, "close": 140}, {"date": "2026-02-17", "open": 139, "high": 141, "low": 138.5, "close": 140}],
+    "NKE": [{"date": "2026-02-14", "open": 97, "high": 99, "low": 96.5, "close": 98}, {"date": "2026-02-17", "open": 97.5, "high": 98.5, "low": 97, "close": 98}],
+    "HD": [{"date": "2026-02-14", "open": 383, "high": 387, "low": 382, "close": 385}, {"date": "2026-02-17", "open": 384, "high": 386, "low": 383.5, "close": 385}]
+  },
+  "option_chain_candidates": {
+    "NVDA": [
+      {"contract_key": "140-2026-03-20-PUT", "strike": 140, "expiry": "2026-03-20", "option_type": "PUT", "option_symbol": "NVDA260320P00140000", "delta": -0.25, "bid": 2.45, "ask": 2.55, "last": 2.50}
+    ],
+    "NKE": [],
+    "HD": []
+  },
+  "option_quotes": {
+    "NVDA": {
+      "140-2026-03-20-PUT": {"bid": 2.45, "ask": 2.55, "last": 2.50, "quote_ts": "2026-02-17T12:00:00Z"}
+    }
+  },
+  "account_settings": {"buying_power": 100000.0, "max_single_notional_pct": 0.05},
+  "eval_overrides": {
+    "NVDA": {"verdict": "ELIGIBLE", "score": 62, "primary_reason": "STOCK_QUALIFIED", "stage_reached": "STAGE2_CHAIN"},
+    "NKE": {"verdict": "HOLD", "score": 55, "primary_reason": "REGIME_NEUTRAL_CAP", "stage_reached": "STAGE1_ONLY"},
+    "HD": {"verdict": "HOLD", "score": 52, "primary_reason": "REGIME_NEUTRAL_CAP", "stage_reached": "STAGE1_ONLY"}
+  }
+}

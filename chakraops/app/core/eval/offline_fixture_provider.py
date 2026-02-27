@@ -1,6 +1,10 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""R22.8: Offline proof harness — build UniverseEvaluationResult from fixture JSON (no live ORATS)."""
+"""R22.8/R25.1: Offline proof harness — build UniverseEvaluationResult from fixture JSON (no live ORATS).
+
+R25.1: Deterministic fixtures for OHLC bars, option chain candidates (stable contract_key),
+quotes (spot + option bid/ask/last + quote_ts), and account settings for sizing. No network calls.
+"""
 
 from __future__ import annotations
 
@@ -14,11 +18,65 @@ from app.core.eval.universe_evaluator import (
     UniverseEvaluationResult,
 )
 
+# Default quote_ts for determinism when not in fixture
+DEFAULT_QUOTE_TS = "2026-02-17T12:00:00Z"
+# Default account settings for sizing when not in fixture
+DEFAULT_ACCOUNT_SETTINGS = {"buying_power": 100000.0, "max_single_notional_pct": 0.05}
+
 
 def load_fixture(fixture_path: Path) -> Dict[str, Any]:
-    """Load R22.8 offline proof fixture JSON."""
+    """Load offline proof fixture JSON (R22.8 / R25.1 schema)."""
     with open(fixture_path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def get_ohlc_bars(data: Dict[str, Any], symbol: str) -> List[Dict[str, Any]]:
+    """Return deterministic OHLC bars for symbol. No network. Empty list if not in fixture."""
+    ohlc = data.get("ohlc_bars") or data.get("candles") or {}
+    sym_upper = (symbol or "").strip().upper()
+    bars = ohlc.get(sym_upper) or []
+    if isinstance(bars, list):
+        return bars
+    return []
+
+
+def get_option_chain_candidates(data: Dict[str, Any], symbol: str) -> List[Dict[str, Any]]:
+    """Return option chain candidates for symbol with stable contract_key. No network."""
+    chains = data.get("option_chain_candidates") or {}
+    sym_upper = (symbol or "").strip().upper()
+    candidates = chains.get(sym_upper) or []
+    if isinstance(candidates, list):
+        return candidates
+    return []
+
+
+def get_quotes(data: Dict[str, Any], symbol: str) -> Dict[str, Any]:
+    """Return quotes for symbol: spot (price, bid, ask, last, volume, quote_ts) + option_quotes by contract_key."""
+    quotes_map = data.get("quotes") or {}
+    sym_upper = (symbol or "").strip().upper()
+    spot = quotes_map.get(sym_upper) or {}
+    if not isinstance(spot, dict):
+        spot = {}
+    out = dict(spot)
+    if "quote_ts" not in out:
+        out["quote_ts"] = DEFAULT_QUOTE_TS
+    option_quotes = data.get("option_quotes") or {}
+    sym_option = option_quotes.get(sym_upper)
+    if isinstance(sym_option, dict):
+        out["option_quotes"] = sym_option
+    else:
+        out["option_quotes"] = {}
+    return out
+
+
+def get_account_settings(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Return account settings for sizing. No network."""
+    acc = data.get("account_settings") or {}
+    if not isinstance(acc, dict):
+        acc = {}
+    out = dict(DEFAULT_ACCOUNT_SETTINGS)
+    out.update(acc)
+    return out
 
 
 def build_universe_result_from_fixture(fixture_path: Path) -> UniverseEvaluationResult:
@@ -28,7 +86,6 @@ def build_universe_result_from_fixture(fixture_path: Path) -> UniverseEvaluation
     """
     data = load_fixture(fixture_path)
     symbols: List[str] = data.get("symbols") or []
-    quotes: Dict[str, Dict[str, Any]] = data.get("quotes") or {}
     overrides: Dict[str, Dict[str, Any]] = data.get("eval_overrides") or {}
 
     symbol_results: List[SymbolEvaluationResult] = []
@@ -36,7 +93,7 @@ def build_universe_result_from_fixture(fixture_path: Path) -> UniverseEvaluation
         sym_upper = (sym or "").strip().upper()
         if not sym_upper:
             continue
-        q = quotes.get(sym_upper) or {}
+        q = get_quotes(data, sym_upper)
         ov = overrides.get(sym_upper) or {}
         verdict = (ov.get("verdict") or "HOLD").upper()
         if verdict not in ("ELIGIBLE", "HOLD", "BLOCKED", "NOT_EVALUATED"):
@@ -73,13 +130,27 @@ def build_universe_result_from_fixture(fixture_path: Path) -> UniverseEvaluation
         candidate_trades_list: List[CandidateTrade] = []
         selected_contract = None
         selected_expiration = None
+        # R25.1: Use option_chain_candidates for stable contract_key when available
+        chain_candidates = get_option_chain_candidates(data, sym_upper)
         if verdict == "ELIGIBLE" and stage_reached == "STAGE2_CHAIN":
+            expiry = "2026-03-20"
+            strike = 140.0
+            delta = -0.25
+            option_symbol = "NVDA260320P00140000"
+            contract_key = "140-2026-03-20-PUT"
+            if chain_candidates:
+                c0 = chain_candidates[0]
+                expiry = c0.get("expiry") or expiry
+                strike = c0.get("strike") if c0.get("strike") is not None else strike
+                delta = c0.get("delta") if c0.get("delta") is not None else delta
+                option_symbol = c0.get("option_symbol") or c0.get("symbol") or option_symbol
+                contract_key = c0.get("contract_key") or f"{int(strike)}-{expiry}-PUT"
             candidate_trades_list = [
                 CandidateTrade(
                     strategy="CSP",
-                    expiry="2026-03-20",
-                    strike=140.0,
-                    delta=-0.25,
+                    expiry=expiry,
+                    strike=strike,
+                    delta=delta,
                     credit_estimate=2.50,
                     max_loss=None,
                     why_this_trade="",
@@ -87,14 +158,15 @@ def build_universe_result_from_fixture(fixture_path: Path) -> UniverseEvaluation
             ]
             selected_contract = {
                 "strategy": "CSP",
-                "expiration": "2026-03-20",
-                "strike": 140.0,
-                "delta": -0.25,
+                "expiration": expiry,
+                "strike": strike,
+                "delta": delta,
                 "credit_estimate": 2.50,
                 "max_loss": None,
-                "contract": {"option_symbol": "NVDA260320P00140000", "strike": 140.0, "delta": -0.25},
+                "contract_key": contract_key,
+                "contract": {"option_symbol": option_symbol, "strike": strike, "delta": delta},
             }
-            selected_expiration = "2026-03-20"
+            selected_expiration = expiry
 
         sr = SymbolEvaluationResult(
             symbol=sym_upper,
@@ -114,7 +186,7 @@ def build_universe_result_from_fixture(fixture_path: Path) -> UniverseEvaluation
             gates=gates,
             blockers=[],
             candidate_trades=candidate_trades_list,
-            fetched_at="2026-02-17T12:00:00Z",
+            fetched_at=q.get("quote_ts") or DEFAULT_QUOTE_TS,
             quote_date=q.get("quote_date") or "2026-02-17",
             data_completeness=1.0,
             missing_fields=[],

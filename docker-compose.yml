@@ -8,12 +8,18 @@ services:
     build:
       context: .
       dockerfile: chakraops/Dockerfile
+    restart: unless-stopped
     ports:
       - "8000:8000"
     volumes:
       - ./out:/workspace/out
     env_file:
       - .env
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     # In prod, use docker-compose.prod.yml to remove ports (backend not exposed to host).
 
   frontend:
@@ -22,21 +28,33 @@ services:
       dockerfile: frontend/Dockerfile
       args:
         VITE_API_BASE_URL: "http://localhost:8000"
+    restart: unless-stopped
     ports:
       - "3000:80"
     depends_on:
       - backend
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     # In prod, use docker-compose.prod.yml to set VITE_API_BASE_URL="" and remove ports.
 
   caddy:
     build:
       context: .
       dockerfile: docker/caddy/Dockerfile
+    restart: unless-stopped
     profiles:
       - prod
     ports:
       - "80:80"
       - "443:443"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       BASIC_AUTH_USER: ${BASIC_AUTH_USER?BASIC_AUTH_USER required for prod}
       BASIC_AUTH_HASH: ${BASIC_AUTH_HASH?BASIC_AUTH_HASH required for prod}

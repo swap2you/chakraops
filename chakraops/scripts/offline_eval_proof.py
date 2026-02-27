@@ -1,17 +1,20 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
 """
-R22.8: Offline proof harness — verify decision artifact hygiene and determinism without live market/ORATS.
+R22.8/R25.1: Offline proof harness — verify decision artifact hygiene and determinism without live market/ORATS.
 
 Runs the same evaluation pipeline (evaluate_universe) with fixture-driven staged results,
-writes artifacts via the same store (decision_latest.json, eval_snapshot.json), then runs
-hygiene checks and prints a per-symbol summary.
+writes artifacts via the same store (decision_latest.json, eval_snapshot.json) into a temp
+out/ directory by default (no pollution of repo out/), then runs hygiene checks and prints
+a per-symbol summary.
 
 Usage (from repo root):
-  python chakraops/scripts/offline_eval_proof.py --fixture chakraops/tests/fixtures/r22_8_offline_proof_fixture.json
+  python chakraops/scripts/offline_eval_proof.py --fixture chakraops/tests/fixtures/r25_1_offline_fixture.json
 
 Or from chakraops dir:
-  python scripts/offline_eval_proof.py --fixture tests/fixtures/r22_8_offline_proof_fixture.json
+  python scripts/offline_eval_proof.py --fixture tests/fixtures/r25_1_offline_fixture.json
+
+R25.1: Default --output-dir is a temp directory. Use --output-dir out to write to repo out/.
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ import argparse
 import json
 import re
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, List
 
@@ -95,18 +99,18 @@ def run_hygiene_check(data: dict) -> List[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="R22.8 Offline proof: run eval from fixture, check hygiene.")
+    parser = argparse.ArgumentParser(description="R25.1 Offline proof: run eval from fixture, check hygiene.")
     parser.add_argument(
         "--fixture",
         type=str,
-        default="tests/fixtures/r22_8_offline_proof_fixture.json",
+        default="tests/fixtures/r25_1_offline_fixture.json",
         help="Path to fixture JSON (repo-relative or absolute)",
     )
     parser.add_argument(
         "--output-dir",
         type=str,
         default=None,
-        help="Output directory for decision_latest.json (default: repo out/)",
+        help="Output directory for decision_latest.json (default: temp dir; use 'out' for repo out/)",
     )
     args = parser.parse_args()
 
@@ -123,9 +127,16 @@ def main() -> int:
         print(f"FAIL: Fixture not found: {fixture_path}")
         return 1
 
-    out_dir = Path(args.output_dir) if args.output_dir else _CHAKRAOPS_ROOT.parent / "out"
-    out_dir = out_dir.resolve()
+    # R25.1: Default to temp dir so repo out/ is not polluted
+    if args.output_dir:
+        out_dir = Path(args.output_dir).resolve()
+        if not out_dir.is_absolute() and not args.output_dir.startswith(("out", "/", "\\")):
+            out_dir = Path.cwd() / args.output_dir
+        out_dir = out_dir.resolve()
+    else:
+        out_dir = Path(tempfile.mkdtemp(prefix="chakraops_offline_proof_"))
     out_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Output dir: {out_dir}")
 
     from app.core.eval.offline_fixture_provider import build_universe_result_from_fixture, load_fixture
     from app.core.eval.evaluation_service_v2 import evaluate_universe

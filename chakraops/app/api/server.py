@@ -975,8 +975,9 @@ def health() -> Dict[str, Any]:
 
 @app.get("/api/healthz")
 def api_healthz() -> Dict[str, Any]:
-    """Quick health check. Phase 10: prefer /api/market-status for full state. No auth when API key is set."""
-    return {"ok": True}
+    """R25.0: Lightweight health check for load balancers and probes. No ORATS or heavy state. No auth when API key is set."""
+    from datetime import datetime, timezone
+    return {"status": "ok", "ts": datetime.now(timezone.utc).isoformat(), "ok": True}
 
 
 @app.get("/api/market-status")

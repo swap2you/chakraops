@@ -295,7 +295,7 @@ function ExecutionConsole({
   const [infoDrawerKey, setInfoDrawerKey] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"Options" | "Shares">(initialTab);
   const [sharesModalOpen, setSharesModalOpen] = useState(false);
-  const [sharesForm, setSharesForm] = useState({ quantity: "", avg_cost: "", opened_at: "" });
+  const [sharesForm, setSharesForm] = useState({ quantity: "", avg_cost: "", opened_at: "", target_price: "", stop_price: "" });
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const openByAccordionId = initialAccordionId ?? null;
@@ -1166,8 +1166,8 @@ function SharesTabContent({
   closeSharePosition: ReturnType<typeof useCloseSharePosition>;
   sharesModalOpen: boolean;
   setSharesModalOpen: (v: boolean) => void;
-  sharesForm: { quantity: string; avg_cost: string; opened_at: string };
-  setSharesForm: Dispatch<SetStateAction<{ quantity: string; avg_cost: string; opened_at: string }>>;
+  sharesForm: { quantity: string; avg_cost: string; opened_at: string; target_price: string; stop_price: string };
+  setSharesForm: Dispatch<SetStateAction<{ quantity: string; avg_cost: string; opened_at: string; target_price: string; stop_price: string }>>;
   /** R24.1: Open this accordion when present (trade-plan, technicals, risk, position). */
   initialOpenAccordionId?: string | null;
 }) {
@@ -1314,18 +1314,40 @@ function SharesTabContent({
           Position
         </summary>
         <div className="border-t border-zinc-200 dark:border-zinc-700 px-4 pb-4 pt-3 space-y-4">
+          {/* R25.2: Close recommendation banner when target/stop hit (safe labels only) */}
+          {(data.shares_exit_hit_type === "TARGET" || data.shares_exit_hit_type === "STOP") && data.shares_exit_reason_safe && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/30 px-4 py-3 text-sm" data-testid="shares-exit-recommend-banner">
+              <p className="font-medium text-amber-800 dark:text-amber-200">Recommend: Close</p>
+              <p className="text-amber-700 dark:text-amber-300">Reason: {data.shares_exit_reason_safe}</p>
+              {data.shares_exit_last_price != null && <p className="mt-1 text-zinc-600 dark:text-zinc-400">Last price: ${data.shares_exit_last_price.toFixed(2)}</p>}
+              {(data.shares_exit_target_price != null || data.shares_exit_stop_price != null) && (
+                <p className="text-zinc-600 dark:text-zinc-400">
+                  {data.shares_exit_target_price != null && `Target: $${data.shares_exit_target_price.toFixed(2)}`}
+                  {data.shares_exit_target_price != null && data.shares_exit_stop_price != null && " · "}
+                  {data.shares_exit_stop_price != null && `Stop: $${data.shares_exit_stop_price.toFixed(2)}`}
+                </p>
+              )}
+            </div>
+          )}
           <Card data-testid="shares-position-card">
             <CardHeader title="Your Shares Position" />
             {pos ? (
               <div className="space-y-2 text-sm">
                 <p><span className="text-zinc-500 dark:text-zinc-400">Quantity:</span> <span className="font-mono font-medium">{pos.quantity}</span></p>
                 {pos.avg_cost != null && <p><span className="text-zinc-500 dark:text-zinc-400">Avg cost:</span> <span className="font-mono">${pos.avg_cost.toFixed(2)}</span></p>}
+                {(pos.target_price != null || pos.stop_price != null) && (
+                  <p className="text-zinc-600 dark:text-zinc-400">
+                    {pos.target_price != null && <>Target: <span className="font-mono">${pos.target_price.toFixed(2)}</span></>}
+                    {pos.target_price != null && pos.stop_price != null && " · "}
+                    {pos.stop_price != null && <>Stop: <span className="font-mono">${pos.stop_price.toFixed(2)}</span></>}
+                  </p>
+                )}
                 {(pos as { last_price?: number }).last_price != null && (
                   <p><span className="text-zinc-500 dark:text-zinc-400">Unrealized P/L:</span> <span className={`font-mono font-medium ${((pos as { unrealized_pnl?: number }).unrealized_pnl ?? 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>${((pos as { unrealized_pnl?: number }).unrealized_pnl ?? 0).toFixed(2)}</span></p>
                 )}
                 <p><span className="text-zinc-500 dark:text-zinc-400">Last updated:</span> {pos.updated_at ? new Date(pos.updated_at).toLocaleString() : "—"}</p>
                 <div className="flex flex-wrap gap-2 pt-2">
-                  <Button size="sm" variant="secondary" onClick={() => { setSharesForm({ quantity: String(pos.quantity), avg_cost: pos.avg_cost != null ? String(pos.avg_cost) : "", opened_at: "" }); setSharesModalOpen(true); }}>Update</Button>
+                  <Button size="sm" variant="secondary" onClick={() => { setSharesForm({ quantity: String(pos.quantity), avg_cost: pos.avg_cost != null ? String(pos.avg_cost) : "", opened_at: pos.opened_at ?? "", target_price: pos.target_price != null ? String(pos.target_price) : "", stop_price: pos.stop_price != null ? String(pos.stop_price) : "" }); setSharesModalOpen(true); }}>Update</Button>
                   <Button size="sm" variant="secondary" disabled={closeSharePosition.isPending} onClick={() => setCloseModalOpen(true)} data-testid="close-position-open-btn">Close position</Button>
                   <Button size="sm" variant="secondary" disabled={deleteSharePosition.isPending} onClick={() => { if (window.confirm(`Remove shares position for ${data.symbol}?`)) deleteSharePosition.mutate({ accountId, symbol: data.symbol }); }}>{deleteSharePosition.isPending ? "Deleting…" : "Delete"}</Button>
                 </div>
@@ -1333,7 +1355,7 @@ function SharesTabContent({
             ) : (
               <>
                 <p className="text-zinc-500 dark:text-zinc-400">No shares position recorded.</p>
-                <Button size="sm" className="mt-2" onClick={() => { setSharesForm({ quantity: "", avg_cost: "", opened_at: "" }); setSharesModalOpen(true); }}>Add Shares Position</Button>
+                <Button size="sm" className="mt-2" onClick={() => { setSharesForm({ quantity: "", avg_cost: "", opened_at: "", target_price: "", stop_price: "" }); setSharesModalOpen(true); }}>Add Shares Position</Button>
               </>
             )}
           </Card>
@@ -1370,8 +1392,16 @@ function SharesTabContent({
               <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Opened date (optional)</label>
               <input type="date" className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={sharesForm.opened_at || ""} onChange={(e) => setSharesForm((p) => ({ ...p, opened_at: e.target.value || "" }))} />
             </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Target price (optional)</label>
+              <input type="number" step="0.01" className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={sharesForm.target_price || ""} onChange={(e) => setSharesForm((p) => ({ ...p, target_price: e.target.value }))} placeholder="e.g. 150" />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Stop price (optional)</label>
+              <input type="number" step="0.01" className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={sharesForm.stop_price || ""} onChange={(e) => setSharesForm((p) => ({ ...p, stop_price: e.target.value }))} placeholder="e.g. 130" />
+            </div>
             <div className="flex gap-2">
-              <Button size="sm" onClick={() => { const qty = parseInt(sharesForm.quantity, 10); if (!Number.isNaN(qty) && qty >= 0) { upsertSharePosition.mutate({ account_id: accountId, quantity: qty, avg_cost: sharesForm.avg_cost.trim() ? parseFloat(sharesForm.avg_cost) : null, opened_at: sharesForm.opened_at.trim() || null }); setSharesModalOpen(false); } }} disabled={upsertSharePosition.isPending}>{upsertSharePosition.isPending ? "Saving…" : "Save"}</Button>
+              <Button size="sm" onClick={() => { const qty = parseInt(sharesForm.quantity, 10); if (!Number.isNaN(qty) && qty >= 0) { upsertSharePosition.mutate({ account_id: accountId, quantity: qty, avg_cost: sharesForm.avg_cost.trim() ? parseFloat(sharesForm.avg_cost) : null, opened_at: sharesForm.opened_at.trim() || null, target_price: sharesForm.target_price.trim() ? parseFloat(sharesForm.target_price) : null, stop_price: sharesForm.stop_price.trim() ? parseFloat(sharesForm.stop_price) : null }); setSharesModalOpen(false); } }} disabled={upsertSharePosition.isPending}>{upsertSharePosition.isPending ? "Saving…" : "Save"}</Button>
               <Button size="sm" variant="secondary" onClick={() => setSharesModalOpen(false)}>Cancel</Button>
             </div>
           </div>

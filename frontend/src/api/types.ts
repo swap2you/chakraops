@@ -496,6 +496,9 @@ export interface SharePosition {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  /** R25.2: Optional target/stop for shares exit lifecycle. */
+  target_price?: number | null;
+  stop_price?: number | null;
 }
 
 /** R23.0: Share position with optional MTM (from portfolio/symbol-diagnostics). */
@@ -760,6 +763,13 @@ export interface SymbolDiagnosticsResponseExtended extends SymbolDiagnosticsResp
   options_sizing?: OptionsSizing | null;
   /** R24.0: Next action badge: ENTRY | HOLD | CLOSE | ROLL | REDUCE | NONE. Request-time only. */
   next_action_code?: "ENTRY" | "HOLD" | "CLOSE" | "ROLL" | "REDUCE" | "NONE" | null;
+  /** R25.2: Shares exit signal (request-time only; never persisted). Safe labels only. */
+  shares_exit_hit_type?: "TARGET" | "STOP" | null;
+  shares_exit_reason_safe?: string | null;
+  shares_exit_last_price?: number | null;
+  shares_exit_target_price?: number | null;
+  shares_exit_stop_price?: number | null;
+  shares_exit_as_of_ts?: string | null;
   /** R24.5: Earnings advisory (hero pill + risk flags). Advisory only; never blocks. Safe values only (OK/Unavailable/Stale). */
   earnings?: {
     earnings_days?: number | null;

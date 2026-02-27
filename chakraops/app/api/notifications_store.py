@@ -262,3 +262,49 @@ def load_notifications(
         if len(out) >= limit:
             break
     return out
+
+
+def maybe_append_shares_exit_notification(
+    symbol: str,
+    hit_type: str,
+    last_price: float,
+    target_price: Optional[float],
+    stop_price: Optional[float],
+    as_of_ts: Optional[str],
+) -> bool:
+    """
+    R25.2: Append SHARES_EXIT_SIGNAL notification only if not already present for same symbol+hit_type
+    within dedupe window (24h). Checks for NEW/ACKED; if found, skip. Creates only on transition to hit.
+    Returns True if notification was appended, False if deduped.
+    Message and details are safe labels only (no FAIL/WARN).
+    """
+    symbol = (symbol or "").strip().upper()
+    if not symbol or hit_type not in ("TARGET", "STOP"):
+        return False
+    from datetime import datetime, timezone, timedelta
+    window_start = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    recent = load_notifications(limit=500, state_filter=None)
+    for rec in recent:
+        if rec.get("type") != "SHARES_EXIT_SIGNAL":
+            continue
+        if (rec.get("symbol") or "").strip().upper() != symbol:
+            continue
+        details = rec.get("details") or {}
+        if details.get("hit_type") != hit_type:
+            continue
+        state = rec.get("state", "NEW")
+        if state in ("NEW", "ACKED"):
+            ts = rec.get("timestamp_utc") or rec.get("updated_at") or ""
+            if ts and ts >= window_start:
+                return False
+    title = "Target hit" if hit_type == "TARGET" else "Stop hit"
+    message = f"Shares exit: {symbol} — {title}. Consider closing position."
+    details = {
+        "hit_type": hit_type,
+        "last_price": last_price,
+        "target_price": target_price,
+        "stop_price": stop_price,
+        "as_of_ts": as_of_ts,
+    }
+    append_notification("INFO", "SHARES_EXIT_SIGNAL", message, symbol=symbol, details=details, subtype=hit_type)
+    return True

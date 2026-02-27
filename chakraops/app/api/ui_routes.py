@@ -2254,8 +2254,20 @@ async def ui_shares_position_upsert(
         opened_at = body.get("opened_at")
         if opened_at is not None and not isinstance(opened_at, str):
             opened_at = None
+        target_price = body.get("target_price")
+        if target_price is not None:
+            try:
+                target_price = float(target_price)
+            except (TypeError, ValueError):
+                target_price = None
+        stop_price = body.get("stop_price")
+        if stop_price is not None:
+            try:
+                stop_price = float(stop_price)
+            except (TypeError, ValueError):
+                stop_price = None
         from app.core.accounts.holdings_db import upsert_share_position
-        pos = upsert_share_position(aid, symbol, qty, avg_cost=avg_cost, opened_at=opened_at)
+        pos = upsert_share_position(aid, symbol, qty, avg_cost=avg_cost, opened_at=opened_at, target_price=target_price, stop_price=stop_price)
         return pos
     except HTTPException:
         raise
@@ -3348,12 +3360,20 @@ def _build_symbol_diagnostics_from_v2_store(
     # R24.1: next_action_code + next_action_details (request-time only; never persisted)
     next_action_code = "NONE"
     next_action_details: Dict[str, Any] = {}
+    # R25.2: shares exit signal (request-time only; never persisted)
+    shares_exit_hit_type: Optional[str] = None
+    shares_exit_target_price: Optional[float] = None
+    shares_exit_stop_price: Optional[float] = None
+    shares_exit_last_price: Optional[float] = None
+    shares_exit_as_of_ts: Optional[str] = None
+    shares_exit_reason_safe: Optional[str] = None
     try:
         from app.core.positions.service import list_positions
         from app.core.next_action_r241 import (
             compute_next_action_options,
             compute_next_action_shares,
             build_next_action_details,
+            compute_shares_exit_signal,
         )
         open_positions = list_positions(status="OPEN", symbol=(symbol or "").strip().upper(), exclude_test=True)
         open_options = [p for p in open_positions if (getattr(p, "strategy", "") or "").upper() in ("CSP", "CC")]
@@ -3366,6 +3386,31 @@ def _build_symbol_diagnostics_from_v2_store(
         else:
             shares_eligible = bool(getattr(shares_plan, "eligible", False))
         spot_float = float(spot_for_sizing) if spot_for_sizing is not None else None
+        # R25.2: shares exit signal from position-level target/stop (request-time only; never persisted)
+        if has_shares_position and isinstance(shares_position, dict) and spot_float is not None:
+            pos_tgt = shares_position.get("target_price") if isinstance(shares_position.get("target_price"), (int, float)) else None
+            pos_stop = shares_position.get("stop_price") if isinstance(shares_position.get("stop_price"), (int, float)) else None
+            if pos_tgt is not None or pos_stop is not None:
+                hit_type, reason_safe = compute_shares_exit_signal(last_price=spot_float, target_price=pos_tgt, stop_price=pos_stop)
+                shares_exit_target_price = float(pos_tgt) if pos_tgt is not None else None
+                shares_exit_stop_price = float(pos_stop) if pos_stop is not None else None
+                shares_exit_last_price = spot_float
+                shares_exit_as_of_ts = datetime.now(timezone.utc).isoformat()
+                shares_exit_reason_safe = reason_safe or None
+                shares_exit_hit_type = hit_type
+                if hit_type in ("TARGET", "STOP"):
+                    try:
+                        from app.api.notifications_store import maybe_append_shares_exit_notification
+                        maybe_append_shares_exit_notification(
+                            symbol=(symbol or "").strip().upper(),
+                            hit_type=hit_type,
+                            last_price=spot_float,
+                            target_price=shares_exit_target_price,
+                            stop_price=shares_exit_stop_price,
+                            as_of_ts=shares_exit_as_of_ts,
+                        )
+                    except Exception:
+                        pass
         # Selected candidate delta/dte for options
         delta_best = None
         dte_val = None
@@ -3405,8 +3450,15 @@ def _build_symbol_diagnostics_from_v2_store(
                 premium_est=premium_est,
             )
         else:
-            next_action_code = code_shares
-            next_action_details = build_next_action_details("SHARES", code_shares, rationale_shares, key_shares)
+            # R25.2: position-level target/stop hit overrides plan-based next_action
+            if shares_exit_hit_type in ("TARGET", "STOP") and shares_exit_reason_safe:
+                next_action_code = "CLOSE"
+                next_action_details = build_next_action_details(
+                    "SHARES", "CLOSE", [shares_exit_reason_safe], key_shares or {"spot": spot_float},
+                )
+            else:
+                next_action_code = code_shares
+                next_action_details = build_next_action_details("SHARES", code_shares, rationale_shares, key_shares)
     except Exception:
         pass
     return {
@@ -3490,6 +3542,13 @@ def _build_symbol_diagnostics_from_v2_store(
         "options_sizing": options_sizing,
         "next_action_code": next_action_code,
         "next_action_details": next_action_details,
+        # R25.2: request-time only; never persisted to decision artifact
+        "shares_exit_hit_type": shares_exit_hit_type,
+        "shares_exit_target_price": shares_exit_target_price,
+        "shares_exit_stop_price": shares_exit_stop_price,
+        "shares_exit_last_price": shares_exit_last_price,
+        "shares_exit_as_of_ts": shares_exit_as_of_ts,
+        "shares_exit_reason_safe": shares_exit_reason_safe,
     }
 
 
@@ -3555,6 +3614,20 @@ def _action_needed_item_from_diagnostics(d: Dict[str, Any], strategy: str) -> Di
             out["notional"] = sizing["required_cash"]
         if key_num.get("profit_pct") is not None:
             out["pct_max_profit"] = key_num["profit_pct"]
+    if strategy == "SHARES":
+        # R25.2: surface shares exit signal for Action Needed (safe labels only)
+        if d.get("shares_exit_hit_type") is not None:
+            out["shares_exit_hit_type"] = d["shares_exit_hit_type"]
+        if d.get("shares_exit_reason_safe") is not None:
+            out["shares_exit_reason_safe"] = d["shares_exit_reason_safe"]
+        if d.get("shares_exit_last_price") is not None:
+            out["shares_exit_last_price"] = d["shares_exit_last_price"]
+        if d.get("shares_exit_target_price") is not None:
+            out["shares_exit_target_price"] = d["shares_exit_target_price"]
+        if d.get("shares_exit_stop_price") is not None:
+            out["shares_exit_stop_price"] = d["shares_exit_stop_price"]
+        if d.get("shares_exit_as_of_ts") is not None:
+            out["shares_exit_as_of_ts"] = d["shares_exit_as_of_ts"]
     return out
 
 

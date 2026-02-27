@@ -462,14 +462,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Golden tests** — `tests/test_r251_offline_proof_harness.py`: run-twice determinism, hygiene (code-only, no FAIL_/WARN_), mark/lifecycle determinism
 - [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (169 passed, 18 skipped), frontend build pass (recorded in notes)
 
-### R25.2 — Phase 2 Shares workflow completion (docs-only step; implementation in separate thread)
+### R25.2 — Phase 2 Shares workflow completion (targets/stops lifecycle, close recommendation, notification trigger)
 
-- [x] **Docs-only step** — Runbook, roadmap, backlog, PRD, and release scaffolds added. No code or verification run yet.
+- [x] **Docs-only step** — Runbook, roadmap, backlog, PRD, and release scaffolds added.
 - [ ] **Requirements** — [chakraops/docs/releases/R25.2_requirements.md](R25.2_requirements.md) (Phase 2 scope)
-- [ ] **Release notes** — [chakraops/docs/releases/R25.2_release_notes.md](R25.2_release_notes.md) (scaffold)
-- [ ] **Verification** — out/verification/R25.2/notes.md (scaffold; paste gate outputs when running gates)
-- [ ] **Gate** — Not run yet (docs-only step)
-- **References:** [docs/master/RUNBOOK_DEV_EXECUTION.md](../../../../docs/master/RUNBOOK_DEV_EXECUTION.md), [docs/master/ROADMAP_2026.md](../../../../docs/master/ROADMAP_2026.md), [docs/master/BACKLOG.md](../../../../docs/master/BACKLOG.md). Do not mark R25.2 complete until Phase 2 features are implemented and gate + verification done.
+- [ ] **Release notes** — [chakraops/docs/releases/R25.2_release_notes.md](R25.2_release_notes.md) (filled; summary, changes, behavior, dedupe, how to test)
+- [ ] **Verification** — out/verification/R25.2/notes.md (gate tails + UAT checklist; create locally if needed; out/ is gitignored)
+- [ ] **Gate** — Backend pytest (541 passed), frontend tests (170 passed), frontend build pass. Run locally and paste tails into notes.md before sign-off.
+- **References:** [docs/master/RUNBOOK_DEV_EXECUTION.md](../../../../docs/master/RUNBOOK_DEV_EXECUTION.md), [docs/master/ROADMAP_2026.md](../../../../docs/master/ROADMAP_2026.md), [docs/master/BACKLOG.md](../../../../docs/master/BACKLOG.md). Do not mark R25.2 complete until gate + verification sign-off.
 
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 

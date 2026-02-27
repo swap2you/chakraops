@@ -72,6 +72,8 @@ def init_db() -> None:
         notes TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        target_price REAL,
+        stop_price REAL,
         UNIQUE(account_id, symbol),
         FOREIGN KEY (account_id) REFERENCES account_profile(id)
     );
@@ -95,6 +97,14 @@ def init_db() -> None:
         try:
             conn.executescript(sql)
             conn.commit()
+            # R25.2: Migrate existing DBs — add target_price, stop_price if missing
+            for col in ("target_price", "stop_price"):
+                try:
+                    conn.execute(f"ALTER TABLE share_positions ADD COLUMN {col} REAL")
+                    conn.commit()
+                except sqlite3.OperationalError as e:
+                    if "duplicate column" not in str(e).lower():
+                        raise
             # Ensure default profile exists
             cur = conn.execute(
                 "SELECT 1 FROM account_profile WHERE id = ?", (_DEFAULT_ACCOUNT_ID,)
@@ -319,7 +329,7 @@ def list_share_positions(account_id: str) -> List[Dict[str, Any]]:
         conn = _get_conn()
         try:
             rows = conn.execute(
-                """SELECT id, account_id, symbol, quantity, avg_cost, opened_at, notes, created_at, updated_at
+                """SELECT id, account_id, symbol, quantity, avg_cost, opened_at, notes, created_at, updated_at, target_price, stop_price
                    FROM share_positions WHERE account_id = ? ORDER BY symbol""",
                 (aid,),
             ).fetchall()
@@ -339,7 +349,7 @@ def get_share_position(account_id: str, symbol: str) -> Optional[Dict[str, Any]]
         conn = _get_conn()
         try:
             row = conn.execute(
-                """SELECT id, account_id, symbol, quantity, avg_cost, opened_at, notes, created_at, updated_at
+                """SELECT id, account_id, symbol, quantity, avg_cost, opened_at, notes, created_at, updated_at, target_price, stop_price
                    FROM share_positions WHERE account_id = ? AND symbol = ?""",
                 (aid, sym),
             ).fetchone()
@@ -351,7 +361,7 @@ def get_share_position(account_id: str, symbol: str) -> Optional[Dict[str, Any]]
 def _row_to_share_position(r: Any) -> Dict[str, Any]:
     if r is None:
         return {}
-    return {
+    out = {
         "id": r["id"],
         "account_id": r["account_id"],
         "symbol": r["symbol"],
@@ -362,6 +372,18 @@ def _row_to_share_position(r: Any) -> Dict[str, Any]:
         "created_at": r["created_at"],
         "updated_at": r["updated_at"],
     }
+    # R25.2: target/stop (sqlite3.Row has no .get; use try/except for compat)
+    try:
+        tp = r["target_price"]
+        out["target_price"] = float(tp) if tp is not None else None
+    except (KeyError, TypeError, ValueError):
+        out["target_price"] = None
+    try:
+        sp = r["stop_price"]
+        out["stop_price"] = float(sp) if sp is not None else None
+    except (KeyError, TypeError, ValueError):
+        out["stop_price"] = None
+    return out
 
 
 def upsert_share_position(
@@ -371,8 +393,10 @@ def upsert_share_position(
     avg_cost: Optional[float] = None,
     opened_at: Optional[str] = None,
     notes: Optional[str] = None,
+    target_price: Optional[float] = None,
+    stop_price: Optional[float] = None,
 ) -> Dict[str, Any]:
-    """Upsert share position. One row per (account_id, symbol). Returns the position row."""
+    """Upsert share position. One row per (account_id, symbol). Returns the position row. R25.2: target_price, stop_price optional."""
     init_db()
     from datetime import datetime, timezone
     aid = (account_id or "").strip() or _DEFAULT_ACCOUNT_ID
@@ -383,6 +407,22 @@ def upsert_share_position(
         raise ValueError("quantity must be a non-negative integer")
     if avg_cost is not None and (not isinstance(avg_cost, (int, float)) or avg_cost < 0):
         raise ValueError("avg_cost must be non-negative if provided")
+    # R25.2: soft validation — stop < entry, target > entry when entry (avg_cost) exists; never hard fail with raw codes
+    entry = float(avg_cost) if avg_cost is not None else None
+    if stop_price is not None:
+        try:
+            stop_f = float(stop_price)
+            if entry is not None and stop_f >= entry:
+                stop_price = None  # ignore invalid stop (above entry)
+        except (TypeError, ValueError):
+            stop_price = None
+    if target_price is not None:
+        try:
+            tgt_f = float(target_price)
+            if entry is not None and tgt_f <= entry:
+                target_price = None  # ignore invalid target (below entry)
+        except (TypeError, ValueError):
+            target_price = None
     now = datetime.now(timezone.utc).isoformat()
     with _LOCK:
         conn = _get_conn()
@@ -393,21 +433,21 @@ def upsert_share_position(
             ).fetchone()
             if existing:
                 conn.execute(
-                    """UPDATE share_positions SET quantity = ?, avg_cost = ?, opened_at = ?, notes = ?, updated_at = ?
+                    """UPDATE share_positions SET quantity = ?, avg_cost = ?, opened_at = ?, notes = ?, updated_at = ?, target_price = ?, stop_price = ?
                        WHERE account_id = ? AND symbol = ?""",
-                    (quantity, avg_cost, opened_at, notes, now, aid, sym),
+                    (quantity, avg_cost, opened_at, notes, now, target_price, stop_price, aid, sym),
                 )
                 conn.commit()
             else:
                 pos_id = str(uuid.uuid4())
                 conn.execute(
-                    """INSERT INTO share_positions (id, account_id, symbol, quantity, avg_cost, opened_at, notes, created_at, updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (pos_id, aid, sym, quantity, avg_cost, opened_at, notes, now, now),
+                    """INSERT INTO share_positions (id, account_id, symbol, quantity, avg_cost, opened_at, notes, created_at, updated_at, target_price, stop_price)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (pos_id, aid, sym, quantity, avg_cost, opened_at, notes, now, now, target_price, stop_price),
                 )
                 conn.commit()
             row = conn.execute(
-                """SELECT id, account_id, symbol, quantity, avg_cost, opened_at, notes, created_at, updated_at
+                """SELECT id, account_id, symbol, quantity, avg_cost, opened_at, notes, created_at, updated_at, target_price, stop_price
                    FROM share_positions WHERE account_id = ? AND symbol = ?""",
                 (aid, sym),
             ).fetchone()

@@ -864,7 +864,7 @@ export function useSharePosition(accountId: string | null, symbol: string | null
 export function useUpsertSharePosition(symbol: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { account_id: string; quantity: number; avg_cost?: number | null; opened_at?: string | null }) =>
+    mutationFn: (payload: { account_id: string; quantity: number; avg_cost?: number | null; opened_at?: string | null; target_price?: number | null; stop_price?: number | null }) =>
       apiPost<SharePosition>(uiSharePositionUpsertPath(symbol!), payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["ui", "shares"] });

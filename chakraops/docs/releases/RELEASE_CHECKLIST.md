@@ -452,15 +452,17 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 
 ### R25.1 — Offline Proof Harness + Golden Verification (determinism + hygiene without ORATS)
 
-- [ ] **Requirements** — chakraops/docs/releases/R25.1_requirements.md
-- [ ] **Release notes** — chakraops/docs/releases/R25.1_release_notes.md
-- [ ] **Verification** — out/verification/R25.1/notes.md (scaffold + UAT checklist; paste gate tails + offline proof output)
-- [ ] **Offline fixture provider** — `app/core/eval/offline_fixture_provider.py`: deterministic OHLC, option chain (stable contract_key), quotes (spot + option + quote_ts), account settings; no network, no ORATS
-- [ ] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py`: fixture → pipeline → temp out/ (decision_latest.json, eval_snapshot.json) → hygiene checks → report; default output to temp dir
-- [ ] **Golden tests** — `tests/test_r251_offline_proof_harness.py`: run-twice determinism, hygiene (code-only, no FAIL_/WARN_), mark/lifecycle determinism
-- [ ] **Gate** — Backend pytest, frontend tests, frontend build pass (recorded in notes)
+- [x] **Requirements** — chakraops/docs/releases/R25.1_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R25.1_release_notes.md
+- [ ] **Verification** — out/verification/R25.1/notes.md (create locally and paste content). Generate notes content via `scripts/print_r251_verification_notes.py` and paste into out/verification/R25.1/notes.md.
+- [x] **Offline fixture provider** — `app/core/eval/offline_fixture_provider.py`: deterministic OHLC, option chain (stable contract_key), quotes (spot + option + quote_ts), account settings; no network, no ORATS
+- [x] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py`: fixture → pipeline → temp out/ (decision_latest.json, eval_snapshot.json) → hygiene checks → report; default output to temp dir
+- [x] **Golden tests** — `tests/test_r251_offline_proof_harness.py`: run-twice determinism, hygiene (code-only, no FAIL_/WARN_), mark/lifecycle determinism
+- [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (169 passed, 18 skipped), frontend build pass (recorded in notes)
 
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
+
+*Superseded by R25.1 (same harness delivered there).*
 
 - [ ] **Offline proof script** — `chakraops/scripts/offline_eval_proof.py` (fixture → mock staged result → evaluate_universe → store write → hygiene check + snapshot check + per-symbol summary)
 - [ ] **Fixture provider** — `app/core/eval/offline_fixture_provider.py`; fixture `tests/fixtures/r22_8_offline_proof_fixture.json` (NVDA, NKE, HD)

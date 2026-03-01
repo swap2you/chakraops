@@ -196,4 +196,77 @@ describe("DashboardPage", () => {
     expect(screen.getByTestId("action-needed-roll-reason-AAPL")).toHaveTextContent("Reason: DTE window");
     expect(document.body.textContent).not.toMatch(/FAIL_|WARN_/);
   });
+
+  it("R26.0: Action Needed shows size, notional, and constraints for ENTRY with r260 sizing", async () => {
+    mockUseActionNeeded.mockReturnValue({
+      data: {
+        top_options: [
+          {
+            symbol: "SPY",
+            next_action_code: "ENTRY",
+            rationale_lines: ["Eligible."],
+            key_number: null,
+            tab: "Options",
+            accordion: "trade",
+            accordion_id: "trade",
+            sizing_recommended_by: "r260",
+            recommended_contracts: 2,
+            recommended_notional_usd: 20000,
+            sizing_constraints_hit: ["CASH_RESERVE"],
+          },
+        ],
+        top_shares: [
+          {
+            symbol: "QQQ",
+            next_action_code: "ENTRY",
+            rationale_lines: ["Support."],
+            key_number: null,
+            tab: "Shares",
+            accordion: "trade-plan",
+            accordion_id: "trade-plan",
+            sizing_recommended_by: "r260",
+            recommended_qty: 50,
+            recommended_notional_usd: 25000,
+            sizing_constraints_hit: [],
+          },
+        ],
+        recently_changed: [],
+      },
+    });
+    render(<DashboardPage />);
+    await screen.findByTestId("action-needed-card");
+    const optSizing = screen.getByTestId("action-needed-sizing-SPY");
+    expect(optSizing).toHaveTextContent(/Size: 2 contracts/);
+    expect(optSizing).toHaveTextContent(/Notional: \$20,000/);
+    expect(optSizing).toHaveTextContent(/Constraints: Cash reserve/);
+    const shrSizing = screen.getByTestId("action-needed-sizing-QQQ");
+    expect(shrSizing).toHaveTextContent(/Size: 50 shares/);
+    expect(shrSizing).toHaveTextContent(/Notional: \$25,000/);
+    expect(document.body.textContent).not.toMatch(/FAIL_|WARN_/);
+  });
+
+  it("R26.0: No FAIL or WARN in DOM when guardrails include available_budget_usd", async () => {
+    mockUseUiSystemHealth.mockReturnValue({
+      data: {
+        ...mockHealth,
+        guardrails: {
+          status: "OK",
+          metrics: {
+            cash_reserve_pct: 30,
+            open_options_count: 1,
+            open_shares_count: 0,
+            symbols_exposure_count: 2,
+            max_symbol_notional_pct: 10,
+            available_budget_usd: 45000,
+          },
+          limits: { MAX_OPEN_OPTIONS_POSITIONS: 6, MAX_OPEN_SHARES_POSITIONS: 10, MAX_SYMBOLS_EXPOSURE: 12 },
+        },
+      },
+    });
+    render(<DashboardPage />);
+    await screen.findByTestId("guardrails-card");
+    expect(screen.getByTestId("guardrails-available-budget")).toHaveTextContent("$45,000");
+    expect(document.body.textContent).not.toMatch(/FAIL_|WARN_/);
+    mockUseUiSystemHealth.mockReturnValue({ data: mockHealth });
+  });
 });

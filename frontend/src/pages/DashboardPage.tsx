@@ -5,6 +5,7 @@ import { ExternalLink, Activity, Droplets, Zap, Info, Settings } from "lucide-re
 import { useArtifactList, useDecision, useUniverse, useUiSystemHealth, useUiTrackedPositions, usePortfolioMtm, useDefaultAccount, useRunEval, useSharesCandidates, useActionNeeded } from "@/api/queries";
 import type { DecisionMode, SymbolEvalSummary, UniverseSymbol } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
+import { constraintToLabel } from "@/utils/sizingConstraints";
 import {
   Card,
   CardHeader,
@@ -295,6 +296,15 @@ export function DashboardPage() {
                     {health.guardrails.metrics?.max_symbol_notional_pct ?? "—"}%
                   </span>
                 </div>
+                {/* R26.0: Available budget (post cash reserve) */}
+                {health.guardrails.metrics?.available_budget_usd != null && (
+                  <div>
+                    <span className="block text-xs text-zinc-500 dark:text-zinc-500">Available budget</span>
+                    <span className="font-mono text-zinc-700 dark:text-zinc-300" data-testid="guardrails-available-budget">
+                      ${health.guardrails.metrics.available_budget_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                )}
               </div>
             </Card>
           )}
@@ -399,6 +409,23 @@ export function DashboardPage() {
                           {(item.rationale_lines?.[0]) && (
                             <p className="mt-1 text-zinc-600 dark:text-zinc-400 truncate">{item.rationale_lines[0]}</p>
                           )}
+                          {/* R26.0: ENTRY sizing — size, notional, constraints (safe labels only) */}
+                          {item.next_action_code === "ENTRY" && item.sizing_recommended_by === "r260" && (
+                            <p className="mt-0.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-sizing-${item.symbol}`}>
+                              {item.recommended_contracts != null && item.recommended_contracts > 0 && (
+                                <>Size: {item.recommended_contracts} contracts</>
+                              )}
+                              {item.recommended_qty != null && item.recommended_qty > 0 && (
+                                <>Size: {item.recommended_qty} shares</>
+                              )}
+                              {item.recommended_notional_usd != null && item.recommended_notional_usd > 0 && (
+                                <> · Notional: ${item.recommended_notional_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</>
+                              )}
+                              {(item.sizing_constraints_hit?.length ?? 0) > 0 && (
+                                <> · Constraints: {item.sizing_constraints_hit!.map((c) => constraintToLabel(c)).join(", ")}</>
+                              )}
+                            </p>
+                          )}
                           {item.key_number != null && (
                             <p className="mt-0.5 text-zinc-500 dark:text-zinc-500">Key: {item.key_number}</p>
                           )}
@@ -450,6 +477,20 @@ export function DashboardPage() {
                           )}
                           {(item.rationale_lines?.[0]) && (
                             <p className="mt-1 text-zinc-600 dark:text-zinc-400 truncate">{item.rationale_lines[0]}</p>
+                          )}
+                          {/* R26.0: ENTRY sizing for shares */}
+                          {item.next_action_code === "ENTRY" && item.sizing_recommended_by === "r260" && (
+                            <p className="mt-0.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-sizing-${item.symbol}`}>
+                              {item.recommended_qty != null && item.recommended_qty > 0 && (
+                                <>Size: {item.recommended_qty} shares</>
+                              )}
+                              {item.recommended_notional_usd != null && item.recommended_notional_usd > 0 && (
+                                <> · Notional: ${item.recommended_notional_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</>
+                              )}
+                              {(item.sizing_constraints_hit?.length ?? 0) > 0 && (
+                                <> · Constraints: {item.sizing_constraints_hit!.map((c) => constraintToLabel(c)).join(", ")}</>
+                              )}
+                            </p>
                           )}
                           {item.key_number != null && (
                             <p className="mt-0.5 text-zinc-500 dark:text-zinc-500">Key: {item.key_number}</p>

@@ -611,6 +611,12 @@ export interface ActionNeededItem {
   mark_age_sec?: number | null;
   roll_window_threshold_dte?: number | null;
   roll_reason_codes?: string[] | null;
+  /** R26.0: Portfolio-aware sizing (request-time only; safe codes). */
+  recommended_qty?: number | null;
+  recommended_contracts?: number | null;
+  recommended_notional_usd?: number | null;
+  sizing_constraints_hit?: string[] | null;
+  sizing_recommended_by?: string | null;
 }
 export interface ActionNeededResponse {
   top_options: ActionNeededItem[];

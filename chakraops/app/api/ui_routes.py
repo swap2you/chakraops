@@ -4194,7 +4194,9 @@ def ui_action_needed(
         return {"options": [], "shares": [], "recently_changed": _recent_transitions()}
 
     # R25.9: Guardrails — compute metrics once for request-time ENTRY suppression
+    # R26.0: Sizing uses same snapshot + metrics for portfolio-aware size
     guardrails_metrics: Dict[str, Any] = {}
+    guardrails_snapshot: Dict[str, Any] = {}
     try:
         from app.core.portfolio.guardrails_r259 import (
             build_guardrails_snapshot,
@@ -4202,6 +4204,7 @@ def ui_action_needed(
             evaluate_guardrails_for_entry,
         )
         _guard_snap = build_guardrails_snapshot()
+        guardrails_snapshot = dict(_guard_snap)
         _snap_for_prices = get_eval_snapshot()
         _prices = {}
         if _snap_for_prices and isinstance(_snap_for_prices, dict):
@@ -4209,6 +4212,8 @@ def ui_action_needed(
                 if isinstance(_v, dict) and _v.get("price") is not None:
                     _prices[_sym] = float(_v["price"])
         guardrails_metrics = compute_portfolio_metrics(_guard_snap, symbol_prices=_prices)
+        guardrails_snapshot["total_equity"] = guardrails_metrics.get("total_equity")
+        guardrails_snapshot["symbol_notionals"] = guardrails_metrics.get("symbol_notionals") or {}
     except Exception:
         pass
 
@@ -4337,6 +4342,39 @@ def ui_action_needed(
                         continue
                 except Exception:
                     pass
+                # R26.0: Portfolio-aware sizing for ENTRY
+                try:
+                    from app.core.portfolio.sizing_r260 import apply_sizing
+                    from app.core.accounts.holdings_db import get_holdings_for_evaluation
+                    opt_strategy = (getattr(sel_c, "strategy", None) or "CSP").strip().upper() if sel_c else "CSP"
+                    strike_val = getattr(sel_c, "strike", None) or (item.get("strike") if isinstance(item.get("strike"), (int, float)) else None)
+                    underlying_price = getattr(summary, "price", None) or getattr(summary, "underlying_price", None)
+                    if underlying_price is None and isinstance(diag.get("stock"), dict):
+                        underlying_price = diag["stock"].get("price") or diag["stock"].get("underlying_price")
+                    try:
+                        underlying_price = float(underlying_price) if underlying_price is not None else None
+                    except (TypeError, ValueError):
+                        underlying_price = None
+                    shares_for_sym = (get_holdings_for_evaluation() or {}).get(sym) or 0
+                    candidate = {
+                        "symbol": sym,
+                        "strategy": opt_strategy,
+                        "strike": strike_val,
+                        "underlying_price": underlying_price,
+                        "price": underlying_price,
+                        "current_shares_qty": shares_for_sym,
+                        "shares": shares_for_sym,
+                    }
+                    sizing_result = apply_sizing(candidate, guardrails_snapshot, guardrails_metrics)
+                    if sizing_result.get("blocked"):
+                        continue
+                    item["recommended_contracts"] = sizing_result.get("recommended_contracts")
+                    item["recommended_notional_usd"] = sizing_result.get("recommended_notional_usd")
+                    item["sizing_constraints_hit"] = sizing_result.get("sizing_constraints_hit") or []
+                    item["sizing_recommended_by"] = sizing_result.get("sizing_recommended_by") or "r260"
+                    item["recommended_qty"] = None
+                except Exception:
+                    pass
             options_out.append(item)
         except Exception:
             continue
@@ -4377,6 +4415,27 @@ def ui_action_needed(
                         continue
                     if ev.get("hard_blocks"):
                         continue
+                except Exception:
+                    pass
+                # R26.0: Portfolio-aware sizing for shares ENTRY
+                try:
+                    from app.core.portfolio.sizing_r260 import apply_sizing
+                    share_price = getattr(summary, "price", None) or getattr(summary, "underlying_price", None)
+                    if share_price is None and isinstance(diag.get("stock"), dict):
+                        share_price = diag["stock"].get("price") or diag["stock"].get("underlying_price")
+                    try:
+                        share_price = float(share_price) if share_price is not None else 0.0
+                    except (TypeError, ValueError):
+                        share_price = 0.0
+                    candidate = {"symbol": sym, "strategy": "SHARES", "price": share_price, "underlying_price": share_price}
+                    sizing_result = apply_sizing(candidate, guardrails_snapshot, guardrails_metrics)
+                    if sizing_result.get("blocked"):
+                        continue
+                    item["recommended_qty"] = sizing_result.get("recommended_qty")
+                    item["recommended_contracts"] = None
+                    item["recommended_notional_usd"] = sizing_result.get("recommended_notional_usd")
+                    item["sizing_constraints_hit"] = sizing_result.get("sizing_constraints_hit") or []
+                    item["sizing_recommended_by"] = sizing_result.get("sizing_recommended_by") or "r260"
                 except Exception:
                     pass
             shares_out.append(item)

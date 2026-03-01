@@ -394,6 +394,10 @@ export interface UiSystemHealthResponse {
       open_shares_count?: number;
       symbols_exposure_count?: number;
       max_symbol_notional_pct?: number;
+      /** R26.0: Available budget after MIN_CASH_RESERVE_PCT */
+      available_budget_usd?: number;
+      /** R26.0: Max additional notional for a selected symbol (when in context) */
+      max_add_per_symbol_usd?: number;
     };
     limits?: {
       MAX_OPEN_OPTIONS_POSITIONS?: number;

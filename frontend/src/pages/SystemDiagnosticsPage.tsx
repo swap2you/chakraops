@@ -644,6 +644,15 @@ export function SystemDiagnosticsPage() {
                 <span className="block text-xs text-zinc-500 dark:text-zinc-500">Max symbol notional %</span>
                 <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.guardrails.metrics?.max_symbol_notional_pct ?? "—"}%</p>
               </div>
+              {/* R26.0: Available budget (post cash reserve) */}
+              {data.guardrails.metrics?.available_budget_usd != null && (
+                <div>
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">Available budget</span>
+                  <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200" data-testid="guardrails-available-budget">
+                    ${data.guardrails.metrics.available_budget_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </p>
+                </div>
+              )}
             </div>
           </Card>
         )}

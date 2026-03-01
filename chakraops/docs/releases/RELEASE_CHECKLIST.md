@@ -527,6 +527,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (185 passed, 18 skipped), frontend build pass
 - **Scope:** Guardrails config (defaults); compute_portfolio_metrics + evaluate_guardrails_for_entry; Action Needed suppress ENTRY when blocked; Dashboard + System Diagnostics Guardrails card; safe labels only; no FAIL/WARN. Branch: release/R25.9.
 
+### R26.0 — Portfolio-aware position sizing (Wheel: CSP/CC + shares)
+
+- [ ] **Requirements** — [R26.0_requirements.md](R26.0_requirements.md)
+- [ ] **Release notes** — [R26.0_release_notes.md](R26.0_release_notes.md)
+- [ ] **Verification** — out/verification/R26.0/notes.md (gate tails + UAT)
+- [ ] **Gate** — Backend pytest, frontend tests, frontend build pass
+- **Scope:** sizing_r260 (available budget, symbol cap, size_shares/size_csp/size_cc, apply_sizing); Action Needed sized ENTRY; recommended_qty/contracts, notional, constraints; UI size + notional + constraints; Guardrails card available budget; manual execution only; no FAIL/WARN. Branch: release/R26.0.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

@@ -1670,17 +1670,23 @@ def test_r2345_universe_shares_eligible_matches_symbol_diagnostics(tmp_path):
         has_candidates=False,
         candidate_count=0,
     )
+    # Minimal diagnostics for SPY so universe and symbol-diagnostics use same inputs (R23.4.5 parity).
+    # diagnostics_by_symbol is not persisted (R22.9); keep in-memory artifact by no-op reload for this test.
+    minimal_spy_diag = {
+        "technicals": {"regime": "UP", "support_level": 99.0, "spot": 100.0},
+        "symbol_eligibility": {},
+    }
     artifact = DecisionArtifactV2(
         metadata={"artifact_version": "v2", "pipeline_timestamp": "2026-02-17T22:00:00Z"},
         symbols=[sym],
         selected_candidates=[],
-        diagnostics_by_symbol={},
+        diagnostics_by_symbol={"SPY": minimal_spy_diag},
     )
     try:
         set_output_dir(tmp_path)
         store = get_evaluation_store_v2()
         store.set_latest(artifact)
-        store.reload_from_disk()
+        store.reload_from_disk = lambda: None  # keep in-memory artifact so diagnostics_by_symbol is visible
         app = _get_app()
         client = TestClient(app)
         uni = client.get("/api/ui/universe")

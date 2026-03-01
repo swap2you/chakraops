@@ -199,7 +199,8 @@ def fetch_earnings_advisory(
                     q = quote_date_raw
                 if q.tzinfo is None:
                     q = q.replace(tzinfo=timezone.utc)
-                age = (datetime.now(timezone.utc) - q).total_seconds()
+                # Use as_of_dt for staleness so same inputs -> same status (deterministic)
+                age = (as_of_dt - q).total_seconds()
                 if age > 86400 * 2:  # > 2 days
                     result["earnings_data_status"] = STATUS_STALE
             except Exception:

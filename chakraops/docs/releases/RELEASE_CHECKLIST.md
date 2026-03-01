@@ -523,8 +523,8 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 
 - [ ] **Requirements** — [R25.9_requirements.md](R25.9_requirements.md)
 - [ ] **Release notes** — [R25.9_release_notes.md](R25.9_release_notes.md)
-- [ ] **Verification** — out/verification/R25.9/notes.md (gate tails + UAT)
-- [ ] **Gate** — Backend pytest, frontend tests, frontend build pass
+- [x] **Verification** — out/verification/R25.9/notes.md (gate tails + UAT; full-suite PASS recorded)
+- [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (185 passed, 18 skipped), frontend build pass
 - **Scope:** Guardrails config (defaults); compute_portfolio_metrics + evaluate_guardrails_for_entry; Action Needed suppress ENTRY when blocked; Dashboard + System Diagnostics Guardrails card; safe labels only; no FAIL/WARN. Branch: release/R25.9.
 
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification

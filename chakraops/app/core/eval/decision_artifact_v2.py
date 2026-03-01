@@ -218,14 +218,18 @@ def _exit_plan_reason_to_code(reason: Optional[str]) -> str:
     return "EXITPLAN_NOT_AVAILABLE"
 
 
+# R25.7: Safe earnings status set for persistence (never persist EARNINGS_NOT_EVALUATED or raw FAIL_/WARN_)
+_EARNINGS_PERSIST_SAFE_STATUS = frozenset({"OK", "Unavailable", "Stale", "EARNINGS_BLOCKED"})
+
+
 def _earnings_note_to_status_code(note: Optional[str], earnings_block: Optional[bool], earnings_days: Optional[int]) -> str:
-    """R22.7 Fix Pack: Persist status_code only; never prose note."""
+    """R22.7 Fix Pack: Persist status_code only; never prose note. R25.7: Never return EARNINGS_NOT_EVALUATED for persist."""
     if earnings_block:
         return "EARNINGS_BLOCKED"
     if earnings_days is not None:
         return "EARNINGS_OK"
     if (note or "").strip().lower() in ("not evaluated", "not evaluated.", ""):
-        return "EARNINGS_NOT_EVALUATED"
+        return "Unavailable"  # R25.7: Never persist EARNINGS_NOT_EVALUATED
     return "EARNINGS_STATUS"
 
 
@@ -471,14 +475,23 @@ class DecisionArtifactV2:
             return {"gate_code": code, "status": g.status}
 
         def earnings_persist(e: EarningsInfo) -> Dict[str, Any]:
-            """R22.7 Fix Pack: Persist status_code only; never prose note."""
+            """R22.7 Fix Pack: Persist status_code only; never prose note. R25.7: Never persist EARNINGS_NOT_EVALUATED."""
             d = asdict(e)
             d.pop("note", None)
-            status = _earnings_note_to_status_code(
-                getattr(e, "note", None),
-                getattr(e, "earnings_block", None),
-                getattr(e, "earnings_days", None),
-            )
+            existing = (getattr(e, "status_code", None) or "").strip()
+            if existing == "EARNINGS_NOT_EVALUATED":
+                status = "Unavailable"
+            elif existing in _EARNINGS_PERSIST_SAFE_STATUS:
+                status = existing
+            else:
+                status = _earnings_note_to_status_code(
+                    getattr(e, "note", None),
+                    getattr(e, "earnings_block", None),
+                    getattr(e, "earnings_days", None),
+                )
+            # R25.7: Only persist safe statuses; never EARNINGS_NOT_EVALUATED
+            if status not in _EARNINGS_PERSIST_SAFE_STATUS:
+                status = "OK" if status == "EARNINGS_OK" else "Unavailable"
             d["status_code"] = status
             return d
 

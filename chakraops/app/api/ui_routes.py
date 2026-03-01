@@ -156,6 +156,19 @@ def _get_portfolio_risk_notifier_health() -> Dict[str, Any]:
         return {"status": "OK", "label": "OK"}
 
 
+def _get_guardrails_health() -> Dict[str, Any]:
+    """R25.9: Guardrails block for system health — status (OK/Advisory/Blocked), metrics, limits. Safe labels only."""
+    try:
+        from app.core.portfolio.guardrails_r259 import get_guardrails_metrics_and_status
+        return get_guardrails_metrics_and_status()
+    except Exception:
+        return {
+            "status": "OK",
+            "metrics": {"cash_reserve_pct": 0, "open_options_count": 0, "open_shares_count": 0, "symbols_exposure_count": 0, "max_symbol_notional_pct": 0},
+            "limits": {},
+        }
+
+
 def _get_decision_store_mtime_utc() -> Optional[str]:
     """Return active decision store file mtime as ISO UTC string, or None."""
     try:
@@ -540,6 +553,227 @@ def ui_universe_reset(
         import logging
         logging.getLogger(__name__).exception("Error resetting universe overlay: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# R25.6: Universe Admin (propose/apply, audit log) + Universe Health
+# ---------------------------------------------------------------------------
+
+@router.get("/universe/admin")
+def ui_universe_admin(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    status: str | None = Query(None),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.6: Current universe list + recent change history."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.api.data_health import get_base_universe_symbols
+        from app.core.universe.universe_overrides import get_effective_symbols, get_overlay_counts
+        from app.core.universe.universe_admin_store import list_history
+        base = get_base_universe_symbols()
+        symbols = get_effective_symbols(base)
+        added_count, removed_count = get_overlay_counts()
+        history = list_history(limit=limit, offset=offset, status=(status or "").strip() or None)
+        return {
+            "symbols": symbols,
+            "base_count": len(base),
+            "overlay_added_count": added_count,
+            "overlay_removed_count": removed_count,
+            "history": history,
+        }
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Universe admin list error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to load universe admin data")
+
+
+@router.post("/universe/propose-add")
+async def ui_universe_propose_add(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.6: Propose adding a symbol. Body: symbol, reason_code?, notes?."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    symbol = (body.get("symbol") or "").strip()
+    if not symbol:
+        raise HTTPException(status_code=400, detail="symbol required")
+    reason_code = (body.get("reason_code") or "").strip() or None
+    notes = (body.get("notes") or "").strip()[:1000] or None
+    try:
+        from app.core.universe.universe_admin_store import create_proposal
+        from app.core.universe.universe_overrides import validate_symbol
+        ok, err = validate_symbol(symbol)
+        if not ok:
+            raise HTTPException(status_code=400, detail=err or "Invalid symbol")
+        record = create_proposal("PROPOSE_ADD", symbol, reason_code=reason_code, notes=notes)
+        return {"proposal": record}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Propose add error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to create proposal")
+
+
+@router.post("/universe/propose-remove")
+async def ui_universe_propose_remove(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.6: Propose removing a symbol. Body: symbol, reason_code?, notes?."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    symbol = (body.get("symbol") or "").strip()
+    if not symbol:
+        raise HTTPException(status_code=400, detail="symbol required")
+    reason_code = (body.get("reason_code") or "").strip() or None
+    notes = (body.get("notes") or "").strip()[:1000] or None
+    try:
+        from app.core.universe.universe_admin_store import create_proposal
+        record = create_proposal("PROPOSE_REMOVE", symbol, reason_code=reason_code, notes=notes)
+        return {"proposal": record}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Propose remove error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to create proposal")
+
+
+@router.post("/universe/apply")
+async def ui_universe_apply(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.6: Apply add or remove. Body: proposal_id (to apply proposal) or symbol + action (add|remove)."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    proposal_id = (body.get("proposal_id") or "").strip() or None
+    symbol = (body.get("symbol") or "").strip().upper()
+    action = (body.get("action") or "").strip().lower()
+
+    if proposal_id:
+        from app.core.universe.universe_admin_store import get_proposal, mark_applied
+        from app.core.universe.universe_overrides import add_symbol, remove_symbol, get_effective_symbols
+        from app.api.data_health import get_base_universe_symbols
+        prop = get_proposal(proposal_id)
+        if not prop or prop.get("status") != "OPEN":
+            raise HTTPException(status_code=404, detail="Proposal not found or already applied")
+        sym = (prop.get("symbol") or "").strip().upper()
+        act = prop.get("action", "")
+        if act == "PROPOSE_ADD":
+            ok, err = add_symbol(sym)
+            if not ok:
+                raise HTTPException(status_code=400, detail=err or "Invalid symbol")
+            mark_applied(proposal_id)
+            from app.core.universe.universe_admin_store import log_apply
+            log_apply("APPLY_ADD", sym, prop.get("reason_code"), prop.get("notes"))
+        elif act == "PROPOSE_REMOVE":
+            ok, err = remove_symbol(sym)
+            if not ok:
+                raise HTTPException(status_code=400, detail=err or "Invalid symbol")
+            mark_applied(proposal_id)
+            from app.core.universe.universe_admin_store import log_apply
+            log_apply("APPLY_REMOVE", sym, prop.get("reason_code"), prop.get("notes"))
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported proposal action")
+        base = get_base_universe_symbols()
+        effective = get_effective_symbols(base)
+        return {"applied": True, "symbol": sym, "action": act.replace("PROPOSE_", "APPLY_"), "symbols": effective}
+    if symbol and action in ("add", "remove"):
+        from app.core.universe.universe_overrides import add_symbol, remove_symbol, get_effective_symbols
+        from app.api.data_health import get_base_universe_symbols
+        from app.core.universe.universe_admin_store import log_apply
+        if action == "add":
+            ok, err = add_symbol(symbol)
+            if not ok:
+                raise HTTPException(status_code=400, detail=err or "Invalid symbol")
+            log_apply("APPLY_ADD", symbol)
+        else:
+            ok, err = remove_symbol(symbol)
+            if not ok:
+                raise HTTPException(status_code=400, detail=err or "Invalid symbol")
+            log_apply("APPLY_REMOVE", symbol)
+        base = get_base_universe_symbols()
+        effective = get_effective_symbols(base)
+        return {"applied": True, "symbol": symbol, "action": f"APPLY_{action.upper()}", "symbols": effective}
+    raise HTTPException(status_code=400, detail="Provide proposal_id or symbol and action (add|remove)")
+
+
+@router.get("/universe/health")
+def ui_universe_health(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.6: Universe health summary: total, recently added/removed, warnings count (safe labels)."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.api.data_health import get_base_universe_symbols
+        from app.core.universe.universe_overrides import get_effective_symbols
+        from app.core.universe.universe_admin_store import recent_changes_days
+        base = get_base_universe_symbols()
+        symbols = get_effective_symbols(base)
+        added_30, removed_30 = recent_changes_days(30)
+        # Warnings: data unavailable count (placeholder; can hook into data health later)
+        warnings_count = 0
+        earnings_upcoming = None  # Optional: hook into earnings advisory when available
+        return {
+            "total_symbols": len(symbols),
+            "base_count": len(base),
+            "recently_added": added_30[:20],
+            "recently_removed": removed_30[:20],
+            "warnings_count": warnings_count,
+            "earnings_upcoming": earnings_upcoming,
+        }
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Universe health error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to load universe health")
+
+
+# R25.8: Earnings feed validation — diagnostics only; safe fields; no raw ORATS; no persist
+@router.get("/earnings/debug")
+def ui_earnings_debug(
+    symbol: str = Query(..., description="Ticker to probe (e.g. NVDA, SPY)"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    Diagnostics-only endpoint. Returns safe fields: status, next_date, days, implied_move_pct, as_of.
+    Does not return raw ORATS payload; does not log secrets; does not persist to decision artifacts.
+    """
+    _require_ui_key(x_ui_key)
+    sym = (symbol or "").strip().upper()
+    if not sym:
+        return {"status": "Unavailable", "next_date": None, "days": None, "implied_move_pct": None, "as_of": None}
+    try:
+        from app.core.config.orats_secrets import ORATS_API_TOKEN
+        from app.core.orats.earnings import fetch_earnings_advisory
+        token = (ORATS_API_TOKEN or "").strip() or None
+        out = fetch_earnings_advisory(sym, token=token)
+        # Map to safe field names only; never raw codes
+        status = (out.get("earnings_data_status") or "Unavailable").strip()
+        if status not in ("OK", "Unavailable", "Stale"):
+            status = "Unavailable"
+        return {
+            "status": status,
+            "next_date": out.get("earnings_next_date"),
+            "days": out.get("earnings_days"),
+            "implied_move_pct": out.get("implied_earnings_move_pct"),
+            "as_of": out.get("earnings_as_of"),
+        }
+    except Exception:
+        return {"status": "Unavailable", "next_date": None, "days": None, "implied_move_pct": None, "as_of": None}
 
 
 # R23.2: Delta band overrides (advanced) — chakraops/data/delta_overrides.json; NOT in out/
@@ -976,6 +1210,25 @@ def ui_system_health(
         decision_store_status = "CRITICAL"
         decision_store_reason = str(e)
 
+    # R25.4: Notifications health (counts, last emitted; safe labels only)
+    notifications_health: Dict[str, Any] = {}
+    try:
+        from app.api.notifications_store import get_notifications_health
+        notifications_health = get_notifications_health()
+    except Exception:
+        notifications_health = {"count_new": 0, "count_acked": 0, "count_archived": 0, "last_emitted_ts": None}
+
+    # R25.8: Cadence for banner (safe labels only)
+    cadence_mode_health = "EOD_BIASED"
+    eligibility_as_of_health: str | None = decision_eval_ts
+    try:
+        from app.core.settings import get_decision_cadence_mode
+        cadence_mode_health = get_decision_cadence_mode()
+    except Exception:
+        pass
+    # R25.8: Earnings probe symbol (default SPY) for System Diagnostics card
+    earnings_probe_symbol = (__import__("os").environ.get("EARNINGS_PROBE_SYMBOL") or "SPY").strip().upper() or "SPY"
+
     return {
         "api": {"status": api_status, "latency_ms": api_latency_ms},
         "decision_store": {
@@ -1023,6 +1276,10 @@ def ui_system_health(
         "mark_refresh": _get_mark_refresh_health(),
         "copilot": _get_copilot_status_health(),
         "portfolio_risk_notifier": _get_portfolio_risk_notifier_health(),
+        "notifications": notifications_health,
+        "cadence": {"mode": cadence_mode_health, "eligibility_as_of": eligibility_as_of_health},
+        "earnings_probe_symbol": earnings_probe_symbol,
+        "guardrails": _get_guardrails_health(),
     }
 
 
@@ -1265,16 +1522,25 @@ def ui_snapshots_latest(
 def ui_notifications(
     limit: int = Query(default=100, ge=1, le=500),
     state: str | None = Query(default=None, description="Filter by state: NEW, ACKED, ARCHIVED"),
+    symbol: str | None = Query(default=None, description="Filter by symbol (case-insensitive)"),
+    type_filter: str | None = Query(default=None, alias="type", description="Filter by notification type"),
+    offset: int = Query(default=0, ge=0, le=10000),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """Return last N notifications (newest first). Phase 21.5: optional state filter; each item has state, updated_at."""
+    """Return notifications (newest first). R25.4: state, symbol, type, limit, offset; each item has created_ts, acked_ts, archived_ts."""
     _require_ui_key(x_ui_key)
     try:
         from app.api.notifications_store import load_notifications
         state_filter = state.strip() if state and state.strip() else None
         if state_filter and state_filter not in ("NEW", "ACKED", "ARCHIVED"):
             state_filter = None
-        items = load_notifications(limit=limit, state_filter=state_filter)
+        items = load_notifications(
+            limit=limit,
+            state_filter=state_filter,
+            symbol_filter=symbol.strip() if symbol and symbol.strip() else None,
+            type_filter=type_filter.strip() if type_filter and type_filter.strip() else None,
+            offset=offset,
+        )
         return {"notifications": items}
     except Exception as e:
         import logging
@@ -1319,6 +1585,38 @@ def ui_notifications_archive_all(
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Error archiving all notifications: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/notifications/ack-bulk")
+def ui_notifications_ack_bulk(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.4: Ack all NEW notifications. Returns count acked."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.api.notifications_store import ack_bulk
+        count = ack_bulk(state_filter="NEW")
+        return {"status": "OK", "acked_count": count}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error acking notifications: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/notifications/archive-bulk")
+def ui_notifications_archive_bulk(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.4: Archive all ACKED notifications. Returns count archived."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.api.notifications_store import archive_bulk
+        count = archive_bulk(state_filter="ACKED")
+        return {"status": "OK", "archived_count": count}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error archiving notifications: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1385,6 +1683,197 @@ def ui_notification_delete(
         import logging
         logging.getLogger(__name__).exception("Error deleting notification: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# R25.5: Journal + Monthly Reports (SQLite-backed; no FAIL/WARN in responses)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/journal")
+def ui_journal_list(
+    from_date: str | None = Query(None, description="YYYY-MM-DD"),
+    to_date: str | None = Query(None, description="YYYY-MM-DD"),
+    symbol: str | None = Query(None),
+    strategy: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.5: List journal entries (ordered by created_ts desc). Safe response only."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.journal.journal_store import journal_list
+        entries = journal_list(from_date=from_date, to_date=to_date, symbol=symbol, strategy=strategy, limit=limit, offset=offset)
+        return {"entries": entries}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Journal list error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to load journal entries")
+
+
+@router.post("/journal")
+async def ui_journal_create(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.5: Create journal entry. Body: trade_date, symbol, strategy, action, qty, price|premium, fees?, contract_key?, notes?, tags?, link_id?."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    trade_date = (body.get("trade_date") or "").strip()[:10]
+    symbol = (body.get("symbol") or "").strip().upper()
+    strategy = (body.get("strategy") or "SHARES").strip().upper()
+    action = (body.get("action") or "").strip().upper()
+    if not trade_date or not symbol or not action:
+        raise HTTPException(status_code=400, detail="trade_date, symbol, and action required")
+    try:
+        qty = float(body.get("qty", 0))
+    except (TypeError, ValueError):
+        qty = 0.0
+    price = body.get("price")
+    premium = body.get("premium")
+    if price is not None:
+        try:
+            price = float(price)
+        except (TypeError, ValueError):
+            price = None
+    if premium is not None:
+        try:
+            premium = float(premium)
+        except (TypeError, ValueError):
+            premium = None
+    fees = body.get("fees")
+    if fees is not None:
+        try:
+            fees = float(fees)
+        except (TypeError, ValueError):
+            fees = None
+    strike_val = None
+    if body.get("strike") is not None:
+        try:
+            strike_val = float(body["strike"])
+        except (TypeError, ValueError):
+            pass
+    realized_val = None
+    if body.get("realized_pl") is not None:
+        try:
+            realized_val = float(body["realized_pl"])
+        except (TypeError, ValueError):
+            pass
+    try:
+        from app.core.journal.journal_store import journal_create
+        entry = journal_create(
+            trade_date=trade_date,
+            symbol=symbol,
+            strategy=strategy,
+            action=action,
+            qty=qty,
+            price=price,
+            premium=premium,
+            fees=fees,
+            contract_key=(body.get("contract_key") or "").strip() or None,
+            expiry=(body.get("expiry") or "").strip()[:10] or None,
+            strike=strike_val,
+            right=(body.get("right") or "").strip() or None,
+            notes=(body.get("notes") or "").strip()[:2000] or None,
+            tags=(body.get("tags") or "").strip()[:500] or None,
+            realized_pl=realized_val,
+            link_id=(body.get("link_id") or "").strip() or None,
+        )
+        return {"entry": entry}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Journal create error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to create entry")
+
+
+@router.patch("/journal/{entry_id}")
+async def ui_journal_update(
+    entry_id: str,
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.5: Update journal entry (notes, tags, fees, trade_date, qty, price, premium)."""
+    _require_ui_key(x_ui_key)
+    if not entry_id or not entry_id.strip():
+        raise HTTPException(status_code=400, detail="entry_id required")
+    try:
+        body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    def _opt_float(v):
+        if v is None:
+            return None
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+    try:
+        from app.core.journal.journal_store import journal_update
+        updated = journal_update(
+            entry_id.strip(),
+            notes=body.get("notes"),
+            tags=body.get("tags"),
+            fees=_opt_float(body.get("fees")),
+            trade_date=(body.get("trade_date") or "").strip()[:10] or None,
+            qty=_opt_float(body.get("qty")),
+            price=_opt_float(body.get("price")),
+            premium=_opt_float(body.get("premium")),
+        )
+        if updated is None:
+            raise HTTPException(status_code=404, detail="Entry not found")
+        return {"entry": updated}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Journal update error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to update entry")
+
+
+@router.post("/journal/export")
+def ui_journal_export(
+    from_date: str = Query(..., description="YYYY-MM-DD"),
+    to_date: str = Query(..., description="YYYY-MM-DD"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+):
+    """R25.5: Export journal as CSV."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.journal.journal_store import journal_export_csv
+        csv_str = journal_export_csv(from_date=from_date.strip()[:10], to_date=to_date.strip()[:10])
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(csv_str, media_type="text/csv")
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Journal export error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to export")
+
+
+@router.get("/reports/monthly")
+def ui_reports_monthly(
+    month: str = Query(..., description="YYYY-MM"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R25.5: Monthly report aggregate (realized P/L, counts, winners/losers). Safe response only."""
+    _require_ui_key(x_ui_key)
+    month = (month or "").strip()[:7]
+    if len(month) != 7 or month[4] != "-":
+        raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+    try:
+        from app.core.journal.journal_store import journal_monthly_aggregate
+        return journal_monthly_aggregate(month)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Monthly report error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to load report")
 
 
 @router.get("/accounts/default")
@@ -3160,6 +3649,49 @@ def _build_symbol_diagnostics_from_v2_store(
     spot_for_tech = stock.get("price") or stock.get("underlying_price") if stock else None
     if spot_for_tech is None and summary:
         spot_for_tech = getattr(summary, "price", None) or getattr(summary, "underlying_price", None)
+    # R25.3: EOD_BIASED — use last completed daily candle close for eligibility so it doesn't flip intraday
+    eligibility_as_of_ts: Optional[str] = None
+    cadence_mode = "LIVE"
+    try:
+        from app.core.settings import get_decision_cadence_mode
+        cadence_mode = get_decision_cadence_mode()
+        if cadence_mode == "EOD_BIASED" and (symbol or "").strip():
+            from app.core.eligibility.candles import get_candles
+            daily_candles = get_candles((symbol or "").strip().upper(), "daily", 30)
+            if daily_candles and len(daily_candles) >= 1:
+                last_bar = daily_candles[-1]
+                if isinstance(last_bar, dict):
+                    close_val = last_bar.get("close") or last_bar.get("c")
+                    if close_val is not None:
+                        spot_for_tech = float(close_val)
+                        eligibility_as_of_ts = last_bar.get("ts") or last_bar.get("date") or last_bar.get("t") or last_bar.get("timestamp")
+                        if eligibility_as_of_ts is not None and not isinstance(eligibility_as_of_ts, str):
+                            eligibility_as_of_ts = str(eligibility_as_of_ts)
+                elif hasattr(last_bar, "close"):
+                    spot_for_tech = float(last_bar.close)
+                    eligibility_as_of_ts = getattr(last_bar, "ts", None) or getattr(last_bar, "date", None) or getattr(last_bar, "t", None)
+                    if eligibility_as_of_ts is not None:
+                        eligibility_as_of_ts = str(eligibility_as_of_ts)
+    except Exception:
+        pass
+    # R25.8: eligibility_is_intraday_stale — True when EOD_BIASED and last bar date (ET) < today (ET)
+    eligibility_is_intraday_stale: bool = False
+    if cadence_mode == "EOD_BIASED" and eligibility_as_of_ts:
+        try:
+            import zoneinfo
+            ny = zoneinfo.ZoneInfo("America/New_York")
+        except ImportError:
+            try:
+                from backports.zoneinfo import ZoneInfo
+                ny = ZoneInfo("America/New_York")
+            except ImportError:
+                ny = None
+        if ny:
+            now_et = datetime.now(ny).date()
+            ts_str = str(eligibility_as_of_ts)[:10]
+            if len(ts_str) == 10 and ts_str[4] == "-":
+                bar_date = datetime.strptime(ts_str, "%Y-%m-%d").date()
+                eligibility_is_intraday_stale = bar_date < now_et
     if not technicals and symbol and spot_for_tech is not None:
         technicals = _build_technicals_at_request_time(symbol, float(spot_for_tech))
     if not technicals and symbol:
@@ -3549,6 +4081,10 @@ def _build_symbol_diagnostics_from_v2_store(
         "shares_exit_last_price": shares_exit_last_price,
         "shares_exit_as_of_ts": shares_exit_as_of_ts,
         "shares_exit_reason_safe": shares_exit_reason_safe,
+        # R25.3/R25.8: EOD_BIASED eligibility; request-time only
+        "cadence_mode": cadence_mode,
+        "eligibility_as_of_ts": eligibility_as_of_ts,
+        "eligibility_is_intraday_stale": eligibility_is_intraday_stale,
     }
 
 
@@ -3657,6 +4193,25 @@ def ui_action_needed(
     if artifact is None:
         return {"options": [], "shares": [], "recently_changed": _recent_transitions()}
 
+    # R25.9: Guardrails — compute metrics once for request-time ENTRY suppression
+    guardrails_metrics: Dict[str, Any] = {}
+    try:
+        from app.core.portfolio.guardrails_r259 import (
+            build_guardrails_snapshot,
+            compute_portfolio_metrics,
+            evaluate_guardrails_for_entry,
+        )
+        _guard_snap = build_guardrails_snapshot()
+        _snap_for_prices = get_eval_snapshot()
+        _prices = {}
+        if _snap_for_prices and isinstance(_snap_for_prices, dict):
+            for _sym, _v in (_snap_for_prices.get("symbols") or {}).items():
+                if isinstance(_v, dict) and _v.get("price") is not None:
+                    _prices[_sym] = float(_v["price"])
+        guardrails_metrics = compute_portfolio_metrics(_guard_snap, symbol_prices=_prices)
+    except Exception:
+        pass
+
     option_symbols: List[str] = []
     for c in (getattr(artifact, "selected_candidates", []) or [])[:5]:
         sym = (getattr(c, "symbol", "") or "").strip().upper()
@@ -3708,7 +4263,10 @@ def ui_action_needed(
                 import time as _time
                 from app.core.positions.service import list_positions
                 from app.core.positions.quote_resolver import find_contract_quote
-                from app.core.lifecycle.position_lifecycle_r243 import compute_position_lifecycle
+                from app.core.lifecycle.position_lifecycle_r243 import (
+                    compute_position_lifecycle,
+                    RECOMMENDED_BY_R253,
+                )
                 open_pos = list_positions(status="OPEN", symbol=sym, exclude_test=True)
                 opt_positions = [p for p in open_pos if (getattr(p, "strategy", "") or "").upper() in ("CSP", "CC")]
                 if opt_positions:
@@ -3741,6 +4299,7 @@ def ui_action_needed(
                         last=quote.get("last") if quote else None,
                         quote_ts=quote_ts,
                         as_of_ts=as_of_ts,
+                        recommended_by=RECOMMENDED_BY_R253,
                     )
                     item["pct_max_profit"] = lc.get("pct_max_profit")
                     item["mark_proxy"] = lc.get("mark_proxy")
@@ -3761,12 +4320,24 @@ def ui_action_needed(
                         item["roll_window_threshold_dte"] = lc.get("roll_window_threshold_dte")
                     if lc.get("roll_reason_codes") is not None:
                         item["roll_reason_codes"] = lc.get("roll_reason_codes")
+                    # R25.3.1: Options lifecycle notifications are emitted during/after eval run only (not here).
             except Exception:
                 pass
-            if item.get("next_action_code") and item["next_action_code"] != "NONE":
-                options_out.append(item)
-            else:
-                options_out.append(item)
+            # R25.9: Suppress ENTRY from Action Needed when guardrails block (safe labels only)
+            next_code = item.get("next_action_code") or "NONE"
+            if next_code == "ENTRY" and guardrails_metrics:
+                try:
+                    ev = evaluate_guardrails_for_entry(
+                        guardrails_metrics,
+                        {"symbol": sym, "strategy": "OPTIONS"},
+                    )
+                    if ev.get("status") == "Blocked":
+                        continue
+                    if ev.get("hard_blocks"):
+                        continue
+                except Exception:
+                    pass
+            options_out.append(item)
         except Exception:
             continue
     _severity_order = {"high": 0, "medium": 1, "low": 2}
@@ -3794,6 +4365,20 @@ def ui_action_needed(
                 shares_position=_share_pos,
             )
             item = _action_needed_item_from_diagnostics(diag, "SHARES")
+            # R25.9: Suppress ENTRY when guardrails block
+            next_code = item.get("next_action_code") or "NONE"
+            if next_code == "ENTRY" and guardrails_metrics:
+                try:
+                    ev = evaluate_guardrails_for_entry(
+                        guardrails_metrics,
+                        {"symbol": sym, "strategy": "SHARES"},
+                    )
+                    if ev.get("status") == "Blocked":
+                        continue
+                    if ev.get("hard_blocks"):
+                        continue
+                except Exception:
+                    pass
             shares_out.append(item)
         except Exception:
             continue
@@ -3807,6 +4392,42 @@ def ui_action_needed(
         "shares": shares_out,
         "recently_changed": _recent_transitions(),
     }
+
+
+def _enrich_diagnostics_with_options_lifecycle(out: Dict[str, Any], symbol: str) -> None:
+    """R25.3: Add options_lifecycle to diagnostics when symbol has an open CSP/CC position (request-time only)."""
+    try:
+        from app.core.positions.service import list_positions
+        from app.core.positions.quote_resolver import find_contract_quote
+        from app.core.lifecycle.position_lifecycle_r243 import compute_position_lifecycle, RECOMMENDED_BY_R253
+        import time as _time
+        open_pos = list_positions(status="OPEN", symbol=symbol, exclude_test=True)
+        opt_positions = [p for p in open_pos if (getattr(p, "strategy", "") or "").upper() in ("CSP", "CC")]
+        if not opt_positions:
+            return
+        pos = opt_positions[0]
+        chain_rows = out.get("candidates") or []
+        expiry = getattr(pos, "expiration", None) or getattr(pos, "expiry", None)
+        strike = getattr(pos, "strike", None)
+        opt_type = "PUT" if (getattr(pos, "strategy", "") or "").upper() == "CSP" else "CALL"
+        quote = find_contract_quote(chain_rows, expiry, strike, opt_type) if chain_rows and expiry and strike is not None else None
+        quote_ts = str(quote["quote_ts"]) if quote and quote.get("quote_ts") else None
+        stock = out.get("stock") or {}
+        spot = float(stock["price"]) if isinstance(stock, dict) and stock.get("price") is not None else None
+        as_of_ts = _time.time()
+        lc = compute_position_lifecycle(
+            pos,
+            spot=spot,
+            bid=quote.get("bid") if quote else None,
+            ask=quote.get("ask") if quote else None,
+            last=quote.get("last") if quote else None,
+            quote_ts=quote_ts,
+            as_of_ts=as_of_ts,
+            recommended_by=RECOMMENDED_BY_R253,
+        )
+        out["options_lifecycle"] = lc
+    except Exception:
+        pass
 
 
 @router.get("/symbol-diagnostics")
@@ -3866,6 +4487,7 @@ def ui_symbol_diagnostics(
                 )
                 result["exact_run"] = True
                 result["run_id"] = (artifact.metadata or {}).get("run_id")
+                _enrich_diagnostics_with_options_lifecycle(result, sym_upper)
                 return result
 
     from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
@@ -3894,6 +4516,7 @@ def ui_symbol_diagnostics(
         if run_id and run_id.strip():
             out["exact_run"] = False
             out["run_id"] = None
+        _enrich_diagnostics_with_options_lifecycle(out, sym_upper)
         return out
 
     # Symbol not in store — 404 (no legacy path; use recompute=1 to add symbol)

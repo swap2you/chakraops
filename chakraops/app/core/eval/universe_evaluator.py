@@ -297,6 +297,11 @@ def trigger_evaluation(
                     process_run_completed(run)
                 except Exception as alert_err:
                     logger.warning("[EVAL] Alert processing failed (non-fatal): %s", alert_err)
+                try:
+                    from app.core.alerts.options_lifecycle_notifications import emit_options_lifecycle_notifications_from_run
+                    emit_options_lifecycle_notifications_from_run(run)
+                except Exception as opt_err:
+                    logger.warning("[EVAL] Options lifecycle notifications failed (non-fatal): %s", opt_err)
             except Exception as e:
                 logger.exception("[EVAL] Failed to persist run %s: %s", run_id, e)
                 save_failed_run(run_id, str(e), e, started_at)
@@ -610,7 +615,21 @@ def _evaluate_single_symbol(symbol: str) -> SymbolEvaluationResult:
             result.bid = bid_fv.value if bid_fv.is_valid else None
             result.ask = ask_fv.value if ask_fv.is_valid else None
             result.volume = volume_fv.value if volume_fv.is_valid else None
-            
+
+            # R25.8: EOD_BIASED — use last completed daily candle close for spot so intraday runs don't flip eligibility
+            try:
+                from app.core.settings import get_decision_cadence_mode
+                if get_decision_cadence_mode() == "EOD_BIASED":
+                    from app.core.eligibility.candles import get_candles
+                    daily_candles = get_candles(symbol, "daily", 30)
+                    if daily_candles and len(daily_candles) >= 1:
+                        last_bar = daily_candles[-1]
+                        close_val = last_bar.get("close") or last_bar.get("c") if isinstance(last_bar, dict) else getattr(last_bar, "close", None)
+                        if close_val is not None:
+                            result.price = float(close_val)
+            except Exception:
+                pass
+
             # Track quality details for API
             for name, fv in field_quality.items():
                 result.data_quality_details[name] = str(fv.quality)

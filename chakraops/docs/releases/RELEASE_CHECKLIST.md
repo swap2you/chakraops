@@ -471,6 +471,62 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend pytest (541 passed), frontend tests (170 passed), frontend build pass (recorded in notes).
 - **References:** [docs/master/RUNBOOK_DEV_EXECUTION.md](../../../../docs/master/RUNBOOK_DEV_EXECUTION.md), [docs/master/ROADMAP_2026.md](../../../../docs/master/ROADMAP_2026.md), [docs/master/BACKLOG.md](../../../../docs/master/BACKLOG.md).
 
+### R25.3 — Phase 3 Options workflow completion (EOD-biased eligibility + options lifecycle + notifications + UX)
+
+- [x] **Requirements** — [chakraops/docs/releases/R25.3_requirements.md](R25.3_requirements.md)
+- [x] **Release notes** — [chakraops/docs/releases/R25.3_release_notes.md](R25.3_release_notes.md)
+- [x] **Verification** — [out/verification/R25.3/notes.md](../../../../out/verification/R25.3/notes.md) (gate tails + UAT checklist; out/ is gitignored)
+- [x] **Gate** — Backend pytest (541 passed), frontend tests (170 passed, 18 skipped), frontend build pass (recorded in notes)
+- **References:** RUNBOOK_DEV_EXECUTION, ROADMAP_2026 Phase 3, BACKLOG Epic 3. **R25.3.1:** Options lifecycle notifications decoupled from UI (trigger in eval run path only).
+
+### R25.4 — Phase 4 Notifications overhaul (stateful inbox, filters, dedupe, actionable parity)
+
+- [x] **Requirements** — [chakraops/docs/releases/R25.4_requirements.md](R25.4_requirements.md)
+- [x] **Release notes** — [chakraops/docs/releases/R25.4_release_notes.md](R25.4_release_notes.md)
+- [x] **Verification** — [out/verification/R25.4/notes.md](out/verification/R25.4/notes.md)
+- [x] **Gate** — Backend pytest (541 passed), frontend tests (171 passed), frontend build pass (recorded in notes)
+- **Scope:** NEW→ACKED→ARCHIVED workflow; bulk ack/archive; transition-aware dedupe; GET symbol/type/offset; Notifications Health in System Diagnostics; deep links; no FAIL/WARN. Branch: release/R25.4.
+
+### R25.5 — Phase 5 Journaling + Monthly Reporting baseline (SQLite, single-user)
+
+- [x] **Requirements** — [chakraops/docs/releases/R25.5_requirements.md](R25.5_requirements.md)
+- [x] **Release notes** — [chakraops/docs/releases/R25.5_release_notes.md](R25.5_release_notes.md)
+- [x] **Verification** — out/verification/R25.5/notes.md (gate tails + UAT; path relative to repo root) (gate tails + UAT checklist)
+- [x] **Gate** — Backend pytest, frontend tests, frontend build pass (recorded in notes.md)
+- **Scope:** Journal store (data/journal.db); GET/POST/PATCH journal, export CSV, GET reports/monthly; Journal + Reports pages; no auto execution; no FAIL/WARN. Branch: release/R25.5.
+
+### R25.6 — Phase 6 Universe expansion process + quarterly review
+
+- [x] **Requirements** — [R25.6_requirements.md](R25.6_requirements.md)
+- [x] **Release notes** — [R25.6_release_notes.md](R25.6_release_notes.md)
+- [x] **Verification** — out/verification/R25.6/notes.md (gate tails + UAT)
+- [x] **Gate** — Backend pytest (541 passed), frontend tests (180 passed, 18 skipped), frontend build pass
+- **Scope:** Universe governance docs; Universe Admin (propose/apply, SQLite audit); deterministic overlay; Universe Health page + API; no FAIL/WARN. Branch: release/R25.6.
+
+### R25.7 — Earnings advisory correctness + consistency (stabilization)
+
+- [x] **Requirements** — [R25.7_requirements.md](R25.7_requirements.md)
+- [x] **Release notes** — [R25.7_release_notes.md](R25.7_release_notes.md)
+- [x] **Verification** — out/verification/R25.7/notes.md (gate tails + UAT)
+- [x] **Gate** — Backend pytest (541 passed), frontend tests (181 passed, 18 skipped), frontend build pass
+- **Scope:** No EARNINGS_NOT_EVALUATED in decision artifact; eval populates earnings (OK/Unavailable/Stale); recompute uses snapshot; implied move single source; UI no 00/0000-00-00. Branch: release/R25.7.
+
+### R25.8 — Cadence discipline + earnings feed validation
+
+- [x] **Requirements** — [R25.8_requirements.md](R25.8_requirements.md)
+- [x] **Release notes** — [R25.8_release_notes.md](R25.8_release_notes.md)
+- [x] **Verification** — out/verification/R25.8/notes.md (gate tails + UAT)
+- [x] **Gate** — Backend pytest (540 passed, 1 skipped), frontend tests (183 passed, 18 skipped), frontend build pass
+- **Scope:** Cadence sticky (EOD-biased); eligibility_as_of_ts, eligibility_is_intraday_stale; GET /api/ui/earnings/debug; System Diagnostics earnings probe; cadence banner. Branch: release/R25.8.
+
+### R25.9 — Portfolio guardrails + sizing caps (advisory-first)
+
+- [ ] **Requirements** — [R25.9_requirements.md](R25.9_requirements.md)
+- [ ] **Release notes** — [R25.9_release_notes.md](R25.9_release_notes.md)
+- [x] **Verification** — out/verification/R25.9/notes.md (gate tails + UAT; full-suite PASS recorded)
+- [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (185 passed, 18 skipped), frontend build pass
+- **Scope:** Guardrails config (defaults); compute_portfolio_metrics + evaluate_guardrails_for_entry; Action Needed suppress ENTRY when blocked; Dashboard + System Diagnostics Guardrails card; safe labels only; no FAIL/WARN. Branch: release/R25.9.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

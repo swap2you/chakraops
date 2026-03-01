@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   useUiSystemHealth,
+  useEarningsDebug,
   useDiagnosticsHistory,
   useRunDiagnostics,
   useRunEval,
@@ -58,6 +59,8 @@ function checkBadgeVariant(ch: { status?: string }): "success" | "warning" | "da
 
 export function SystemDiagnosticsPage() {
   const { data, isLoading, isError } = useUiSystemHealth();
+  const probeSymbol = data?.earnings_probe_symbol ?? "SPY";
+  const { data: earningsDebug } = useEarningsDebug(probeSymbol);
   const { data: historyData } = useDiagnosticsHistory(10);
   const { data: latestSnapshot, isError: snapshotError } = useLatestSnapshot();
   const runDiagnostics = useRunDiagnostics();
@@ -114,6 +117,7 @@ export function SystemDiagnosticsPage() {
   const eodFreeze = data?.eod_freeze;
   const markRefresh = data?.mark_refresh;
   const portfolioRiskNotifier = data?.portfolio_risk_notifier;
+  const notificationsHealth = data?.notifications;
   const marketClosed = market?.phase ? market.phase !== "OPEN" && market.phase !== "UNKNOWN" : false;
 
   if (isLoading) {
@@ -143,9 +147,18 @@ export function SystemDiagnosticsPage() {
     );
   }
 
+  const cadence = data?.cadence;
+  const cadenceLabel = (cadence?.mode ?? "EOD_BIASED").replace(/_/g, "-").toLowerCase();
+  const asOfEt = cadence?.eligibility_as_of ? formatTimestampEt(cadence.eligibility_as_of) : null;
+
   return (
     <div className="space-y-4">
       <PageHeader title="System Status" subtext="API, Decision Store, ORATS, market, and scheduler" />
+      {cadence?.mode === "EOD_BIASED" && (
+        <p className="text-sm text-zinc-500 dark:text-zinc-400" data-testid="cadence-banner">
+          Cadence: {cadenceLabel} (as of {asOfEt ?? "—"})
+        </p>
+      )}
       <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
         <Card>
           <CardHeader title="API" />
@@ -197,7 +210,7 @@ export function SystemDiagnosticsPage() {
           </div>
         </Card>
         <Card>
-          <CardHeader title="ORATS" description="R22.2: Freshness OK / DELAYED (within window) / WARN / ERROR" />
+          <CardHeader title="ORATS" description="R22.2: Freshness OK / DELAYED (within window) / Degraded / ERROR" />
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">Freshness</span>
@@ -259,6 +272,31 @@ export function SystemDiagnosticsPage() {
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">timestamp (ET)</span>
               <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{formatTimestampEt(market?.timestamp)}</p>
+            </div>
+          </div>
+        </Card>
+        <Card data-testid="earnings-probe-card">
+          <CardHeader title="Earnings probe" description={`R25.8: Probe symbol ${probeSymbol} (advisory only)`} />
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">status</span>
+              <p className="mt-1 font-medium text-zinc-700 dark:text-zinc-200">{earningsDebug?.status ?? "—"}</p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">next_date</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{earningsDebug?.next_date ?? "—"}</p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">days</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{earningsDebug?.days ?? "—"}</p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">implied_move_pct</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{earningsDebug?.implied_move_pct != null ? `${earningsDebug.implied_move_pct}%` : "—"}</p>
+            </div>
+            <div className="col-span-2">
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">as_of (ET)</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{earningsDebug?.as_of ? formatTimestampEt(earningsDebug.as_of) : "—"}</p>
             </div>
           </div>
         </Card>
@@ -545,6 +583,70 @@ export function SystemDiagnosticsPage() {
             </div>
           </div>
         </Card>
+        {/* R25.4: Notifications health — counts and last emitted (safe labels only). */}
+        <Card>
+          <CardHeader title="Notifications" description="Inbox counts and last emitted; safe labels only." />
+          <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">New</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{notificationsHealth?.count_new ?? 0}</p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Acked</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{notificationsHealth?.count_acked ?? 0}</p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Archived</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{notificationsHealth?.count_archived ?? 0}</p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Last emitted (ET)</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">
+                {notificationsHealth?.last_emitted_ts ? formatTimestampEt(notificationsHealth.last_emitted_ts) : "—"}
+              </p>
+            </div>
+          </div>
+        </Card>
+        {/* R25.9: Guardrails — status (OK/Advisory/Blocked), metrics, limits; safe labels only. */}
+        {data?.guardrails != null && (
+          <Card data-testid="guardrails-card">
+            <CardHeader title="Guardrails" description="Portfolio guardrails; safe labels only." />
+            <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Status</span>
+                <p className="mt-1">
+                  <StatusBadge status={data.guardrails.status ?? "OK"} />
+                </p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Cash reserve %</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.guardrails.metrics?.cash_reserve_pct ?? "—"}%</p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Open options</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">
+                  {data.guardrails.metrics?.open_options_count ?? "—"} / {data.guardrails.limits?.MAX_OPEN_OPTIONS_POSITIONS ?? "—"}
+                </p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Open shares</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">
+                  {data.guardrails.metrics?.open_shares_count ?? "—"} / {data.guardrails.limits?.MAX_OPEN_SHARES_POSITIONS ?? "—"}
+                </p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Symbols exposure</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">
+                  {data.guardrails.metrics?.symbols_exposure_count ?? "—"} / {data.guardrails.limits?.MAX_SYMBOLS_EXPOSURE ?? "—"}
+                </p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Max symbol notional %</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.guardrails.metrics?.max_symbol_notional_pct ?? "—"}%</p>
+              </div>
+            </div>
+          </Card>
+        )}
       </div>
 
       {/* Store Integrity (Phase 17.0) */}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, Globe, Search, Activity, PieChart, Bell, RotateCcw } from "lucide-react";
+import { LayoutDashboard, Globe, Search, Activity, PieChart, Bell, RotateCcw, BookOpen, BarChart3, Settings, Heart } from "lucide-react";
 import { getWheelPageMode, isWheelLinkVisible, getShowAdvanced, setShowAdvanced } from "@/config/features";
 
 const navBase = [
@@ -10,6 +10,10 @@ const navBase = [
   { path: "/wheel", label: "Wheel", icon: RotateCcw, wheel: true },
   { path: "/portfolio", label: "Account & Portfolio", icon: PieChart },
   { path: "/notifications", label: "Notifications", icon: Bell },
+  { path: "/journal", label: "Journal", icon: BookOpen },
+  { path: "/reports", label: "Reports", icon: BarChart3 },
+  { path: "/universe-admin", label: "Universe Admin", icon: Settings },
+  { path: "/universe-health", label: "Universe Health", icon: Heart },
   { path: "/system", label: "System", icon: Activity },
 ];
 

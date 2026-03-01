@@ -182,13 +182,15 @@ def append_orats_warn(message: str, details: Optional[Dict[str, Any]] = None) ->
 def load_notifications(
     limit: int = 100,
     state_filter: Optional[str] = None,
+    symbol_filter: Optional[str] = None,
+    type_filter: Optional[str] = None,
+    offset: int = 0,
 ) -> List[Dict[str, Any]]:
     """
-    Load last N notifications (newest first).
-    Phase 10.3: Parses ack events, merges ack_at_utc/ack_by into notifications.
-    Phase 21.5: Parses state events (archive/delete), sets state and updated_at; filters by state_filter.
-    state_filter: NEW | ACKED | ARCHIVED | None (None = return all except DELETED).
-    Records without id get a derived stable id for backwards compat.
+    Load notifications (newest first). R25.4: symbol_filter, type_filter, offset.
+    Phase 10.3: Parses ack events, merges ack_at_utc/ack_by.
+    Phase 21.5: state and updated_at from state events.
+    R25.4: Adds created_ts, acked_ts, archived_ts for API parity.
     """
     path = _notifications_path()
     if not path.exists():
@@ -200,10 +202,9 @@ def load_notifications(
             if s:
                 lines.append(s)
 
-    # Collect notifications, ack events, and state events (latest per ref_id)
-    notifications: List[Dict[str, Any]] = []
-    acks: Dict[str, tuple[str, str]] = {}  # ref_id -> (ack_at_utc, ack_by)
-    state_events: Dict[str, tuple[str, str]] = {}  # ref_id -> (state, updated_at)
+    notifications = []
+    acks: Dict[str, tuple[str, str]] = {}
+    state_events: Dict[str, tuple[str, str]] = {}
 
     for s in lines:
         try:
@@ -226,14 +227,14 @@ def load_notifications(
         else:
             notifications.append(obj)
 
-    # Ensure ids, merge acks and state, newest first; exclude DELETED unless state_filter
+    sym_q = (symbol_filter or "").strip().upper()
+    type_q = (type_filter or "").strip() if type_filter else ""
     seen_ids: Set[str] = set()
     out: List[Dict[str, Any]] = []
-    for rec in reversed(notifications[-limit * 3:]):  # read extra to allow filtering
-        nid = rec.get("id")
-        if not nid:
-            nid = _stable_id_for_record(rec)
-            rec["id"] = nid
+    skipped = 0
+    for rec in reversed(notifications[-limit * 5:]):
+        nid = rec.get("id") or _stable_id_for_record(rec)
+        rec["id"] = nid
         if nid in seen_ids:
             continue
         seen_ids.add(nid)
@@ -241,7 +242,6 @@ def load_notifications(
         if ack_data:
             rec["ack_at_utc"] = ack_data[0]
             rec["ack_by"] = ack_data[1]
-        # Phase 21.5: state and updated_at from state events (DELETED > ARCHIVED > ACKED > NEW)
         state = "NEW"
         updated_at = rec.get("timestamp_utc")
         if nid in state_events:
@@ -253,15 +253,73 @@ def load_notifications(
             updated_at = ack_data[0]
         rec["state"] = state
         rec["updated_at"] = updated_at
-        if state == "DELETED":
-            if state_filter != "DELETED":
-                continue
-        elif state_filter and state != state_filter:
+        if state == "DELETED" and state_filter != "DELETED":
+            continue
+        if state_filter and state != state_filter:
+            continue
+        if sym_q and (rec.get("symbol") or "").strip().upper() != sym_q:
+            continue
+        if type_q and (rec.get("type") or "").strip() != type_q:
+            continue
+        rec["created_ts"] = rec.get("timestamp_utc")
+        rec["acked_ts"] = rec.get("ack_at_utc") if ack_data else None
+        rec["archived_ts"] = updated_at if state == "ARCHIVED" else None
+        if offset and skipped < offset:
+            skipped += 1
             continue
         out.append(rec)
         if len(out) >= limit:
             break
     return out
+
+
+def get_notifications_health() -> Dict[str, Any]:
+    """
+    R25.4: Counts by state and last emitted ts for System Health. Safe labels only.
+    """
+    all_recs = load_notifications(limit=5000, state_filter=None)
+    count_new = sum(1 for r in all_recs if r.get("state") == "NEW")
+    count_acked = sum(1 for r in all_recs if r.get("state") == "ACKED")
+    count_archived = sum(1 for r in all_recs if r.get("state") == "ARCHIVED")
+    last_ts: Optional[str] = None
+    for r in all_recs:
+        ts = r.get("timestamp_utc") or r.get("created_ts")
+        if ts and (last_ts is None or ts > last_ts):
+            last_ts = ts
+    return {
+        "count_new": count_new,
+        "count_acked": count_acked,
+        "count_archived": count_archived,
+        "last_emitted_ts": last_ts,
+    }
+
+
+def ack_bulk(state_filter: Optional[str] = "NEW") -> int:
+    """
+    R25.4: Append ack for each notification in state NEW (or optional filter). Returns count acked.
+    """
+    recs = load_notifications(limit=500, state_filter=state_filter or "NEW")
+    count = 0
+    for rec in recs:
+        nid = rec.get("id")
+        if nid and rec.get("state") == "NEW":
+            append_ack(ref_id=nid, ack_by="ui")
+            count += 1
+    return count
+
+
+def archive_bulk(state_filter: Optional[str] = "ACKED") -> int:
+    """
+    R25.4: Append archive for each notification in state ACKED (or optional filter). Returns count archived.
+    """
+    recs = load_notifications(limit=500, state_filter=state_filter or "ACKED")
+    count = 0
+    for rec in recs:
+        nid = rec.get("id")
+        if nid and rec.get("state") == "ACKED":
+            append_archive(nid)
+            count += 1
+    return count
 
 
 def maybe_append_shares_exit_notification(
@@ -273,16 +331,13 @@ def maybe_append_shares_exit_notification(
     as_of_ts: Optional[str],
 ) -> bool:
     """
-    R25.2: Append SHARES_EXIT_SIGNAL notification only if not already present for same symbol+hit_type
-    within dedupe window (24h). Checks for NEW/ACKED; if found, skip. Creates only on transition to hit.
-    Returns True if notification was appended, False if deduped.
-    Message and details are safe labels only (no FAIL/WARN).
+    R25.2/R25.4: Append SHARES_EXIT_SIGNAL only if no active (NEW/ACKED) for same symbol+hit_type.
+    Transition-aware dedupe: one per (symbol, hit_type) until acked/archived; then re-trigger allowed.
+    Returns True if appended, False if deduped. Safe labels only.
     """
     symbol = (symbol or "").strip().upper()
     if not symbol or hit_type not in ("TARGET", "STOP"):
         return False
-    from datetime import datetime, timezone, timedelta
-    window_start = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
     recent = load_notifications(limit=500, state_filter=None)
     for rec in recent:
         if rec.get("type") != "SHARES_EXIT_SIGNAL":
@@ -292,11 +347,8 @@ def maybe_append_shares_exit_notification(
         details = rec.get("details") or {}
         if details.get("hit_type") != hit_type:
             continue
-        state = rec.get("state", "NEW")
-        if state in ("NEW", "ACKED"):
-            ts = rec.get("timestamp_utc") or rec.get("updated_at") or ""
-            if ts and ts >= window_start:
-                return False
+        if rec.get("state") in ("NEW", "ACKED"):
+            return False
     title = "Target hit" if hit_type == "TARGET" else "Stop hit"
     message = f"Shares exit: {symbol} — {title}. Consider closing position."
     details = {
@@ -307,4 +359,58 @@ def maybe_append_shares_exit_notification(
         "as_of_ts": as_of_ts,
     }
     append_notification("INFO", "SHARES_EXIT_SIGNAL", message, symbol=symbol, details=details, subtype=hit_type)
+    return True
+
+
+# R25.3: Options lifecycle notification types
+OPTIONS_PROFIT_TARGET_HIT = "OPTIONS_PROFIT_TARGET_HIT"
+OPTIONS_ROLL_WINDOW = "OPTIONS_ROLL_WINDOW"
+OPTIONS_ASSIGNMENT_RISK = "OPTIONS_ASSIGNMENT_RISK"
+
+
+def maybe_append_options_lifecycle_notification(
+    symbol: str,
+    contract_key: str,
+    event_type: str,
+    payload: Dict[str, Any],
+) -> bool:
+    """
+    R25.3/R25.4: Append options lifecycle notification only if no active (NEW/ACKED) for same
+    contract_key+event_type. Transition-aware dedupe: one per (contract_key, event_type) until
+    acked/archived; then re-trigger allowed. Safe labels only.
+    """
+    symbol = (symbol or "").strip().upper()
+    contract_key = (contract_key or "").strip()
+    if not symbol or not contract_key or event_type not in (
+        OPTIONS_PROFIT_TARGET_HIT,
+        OPTIONS_ROLL_WINDOW,
+        OPTIONS_ASSIGNMENT_RISK,
+    ):
+        return False
+    recent = load_notifications(limit=500, state_filter=None)
+    for rec in recent:
+        if rec.get("type") != event_type:
+            continue
+        if (rec.get("symbol") or "").strip().upper() != symbol:
+            continue
+        details = rec.get("details") or {}
+        if (details.get("contract_key") or "").strip() != contract_key:
+            continue
+        if rec.get("state") in ("NEW", "ACKED"):
+            return False
+    # Safe labels only
+    if event_type == OPTIONS_PROFIT_TARGET_HIT:
+        message = f"Options: {symbol} — Profit target hit. Consider closing."
+    elif event_type == OPTIONS_ROLL_WINDOW:
+        message = f"Options: {symbol} — Roll window. Consider rolling."
+    else:
+        message = f"Options: {symbol} — Assignment risk. Consider closing or rolling."
+    details = {k: v for k, v in (payload or {}).items() if k in (
+        "symbol", "contract_key", "expiry", "strike", "right", "dte",
+        "profit_pct", "mark_value", "as_of_ts", "recommended_action_code",
+    )}
+    details["contract_key"] = contract_key
+    if symbol and "symbol" not in details:
+        details["symbol"] = symbol
+    append_notification("INFO", event_type, message, symbol=symbol, details=details, subtype=event_type)
     return True

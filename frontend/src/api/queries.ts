@@ -4,7 +4,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiDelete, apiGet, apiPost } from "./client";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPostText } from "./client";
 import type {
   ArtifactListResponse,
   DecisionArtifactV2,
@@ -12,6 +12,7 @@ import type {
   UniverseResponse,
   SymbolDiagnosticsResponseExtended,
   UiSystemHealthResponse,
+  UiEarningsDebugResponse,
   UiTrackedPositionsResponse,
   PortfolioResponse,
   PortfolioMetricsResponse,
@@ -83,6 +84,11 @@ function uiDeltaOverrideSymbolPath(symbol: string): string {
 
 function uiSystemHealthPath(): string {
   return `/api/ui/system-health`;
+}
+
+/** R25.8: Earnings debug (diagnostics only; safe fields). */
+function uiEarningsDebugPath(symbol: string): string {
+  return `/api/ui/earnings/debug?symbol=${encodeURIComponent(symbol)}`;
 }
 
 /** R22.5: Shares candidates (BUY SHARES recommendation only). */
@@ -258,11 +264,14 @@ function uiWheelRepairPath(): string {
   return `/api/ui/wheel/repair`;
 }
 
-function uiNotificationsPath(limit?: number, state?: string | null): string {
+function uiNotificationsPath(limit?: number, state?: string | null, symbol?: string | null, type?: string | null, offset?: number): string {
   const base = `/api/ui/notifications`;
   const params = new URLSearchParams();
   if (limit != null) params.set("limit", String(limit));
   if (state && state.trim()) params.set("state", state.trim());
+  if (symbol && symbol.trim()) params.set("symbol", symbol.trim());
+  if (type && type.trim()) params.set("type", type.trim());
+  if (offset != null && offset > 0) params.set("offset", String(offset));
   const q = params.toString();
   return q ? `${base}?${q}` : base;
 }
@@ -278,6 +287,48 @@ function uiNotificationDeletePath(notificationId: string): string {
 }
 function uiNotificationsArchiveAllPath(): string {
   return `/api/ui/notifications/archive_all`;
+}
+function uiNotificationsAckBulkPath(): string {
+  return `/api/ui/notifications/ack-bulk`;
+}
+function uiNotificationsArchiveBulkPath(): string {
+  return `/api/ui/notifications/archive-bulk`;
+}
+
+/** R25.5: Journal */
+function uiJournalPath(params: { from_date?: string; to_date?: string; symbol?: string; strategy?: string; limit?: number; offset?: number }): string {
+  const p = new URLSearchParams();
+  if (params.from_date) p.set("from_date", params.from_date);
+  if (params.to_date) p.set("to_date", params.to_date);
+  if (params.symbol) p.set("symbol", params.symbol);
+  if (params.strategy) p.set("strategy", params.strategy);
+  if (params.limit != null) p.set("limit", String(params.limit));
+  if (params.offset != null) p.set("offset", String(params.offset));
+  const q = p.toString();
+  return q ? `/api/ui/journal?${q}` : "/api/ui/journal";
+}
+function uiJournalExportPath(from_date: string, to_date: string): string {
+  return `/api/ui/journal/export?from_date=${encodeURIComponent(from_date)}&to_date=${encodeURIComponent(to_date)}`;
+}
+function uiJournalEntryPath(id: string): string {
+  return `/api/ui/journal/${encodeURIComponent(id)}`;
+}
+/** R25.5: Reports monthly */
+function uiReportsMonthlyPath(month: string): string {
+  return `/api/ui/reports/monthly?month=${encodeURIComponent(month)}`;
+}
+/** R25.6: Universe Admin */
+function uiUniverseAdminPath(params: { limit?: number; offset?: number; status?: string }): string {
+  const p = new URLSearchParams();
+  if (params.limit != null) p.set("limit", String(params.limit));
+  if (params.offset != null) p.set("offset", String(params.offset));
+  if (params.status) p.set("status", params.status);
+  const q = p.toString();
+  return q ? `/api/ui/universe/admin?${q}` : "/api/ui/universe/admin";
+}
+/** R25.6: Universe Health */
+function uiUniverseHealthPath(): string {
+  return "/api/ui/universe/health";
 }
 function uiAdminSlackTestPath(channel?: string): string {
   const base = `/api/ui/admin/slack/test`;
@@ -305,6 +356,7 @@ export const queryKeys = {
   symbolDiagnostics: (symbol: string, runId?: string | null) =>
     (["ui", "symbolDiagnostics", symbol, runId ?? ""] as const),
   uiSystemHealth: () => ["ui", "systemHealth"] as const,
+  uiEarningsDebug: (symbol: string) => ["ui", "earningsDebug", symbol] as const,
   sharesCandidates: () => ["ui", "sharesCandidates"] as const,
   actionNeeded: () => ["ui", "actionNeeded"] as const,
   uiPositions: () => ["ui", "positions"] as const,
@@ -336,6 +388,12 @@ export const queryKeys = {
   uiSnapshotsLatest: () => ["ui", "snapshots", "latest"] as const,
   /** R23.2 */
   uiDeltaOverrides: () => ["ui", "deltaOverrides"] as const,
+  /** R25.5 */
+  uiJournal: (params?: Record<string, unknown>) => ["ui", "journal", params ?? ""] as const,
+  uiReportsMonthly: (month: string) => ["ui", "reports", "monthly", month] as const,
+  /** R25.6 */
+  uiUniverseAdmin: (params?: Record<string, unknown>) => ["ui", "universe", "admin", params ?? ""] as const,
+  uiUniverseHealth: () => ["ui", "universe", "health"] as const,
 };
 
 // =============================================================================
@@ -497,6 +555,15 @@ export function useUiSystemHealth() {
   return useQuery({
     queryKey: queryKeys.uiSystemHealth(),
     queryFn: () => apiGet<UiSystemHealthResponse>(uiSystemHealthPath()),
+  });
+}
+
+/** R25.8: Earnings debug for probe symbol (diagnostics only; safe fields). */
+export function useEarningsDebug(symbol: string) {
+  return useQuery({
+    queryKey: queryKeys.uiEarningsDebug(symbol),
+    queryFn: () => apiGet<UiEarningsDebugResponse>(uiEarningsDebugPath(symbol)),
+    enabled: !!symbol?.trim(),
   });
 }
 
@@ -1323,9 +1390,11 @@ export function useRepairStore() {
 export interface UiNotification {
   id?: string;
   timestamp_utc: string;
+  /** R25.4: Alias for timestamp_utc */
+  created_ts?: string | null;
   severity: string;
   type: string;
-  /** Phase 8.6: Subtype (RUN_ERRORS, LOW_COMPLETENESS, ORATS_STALE, ORATS_DEGRADED, SCHEDULER_MISSED, RECOMPUTE_FAILED, etc.) */
+  /** Phase 8.6: Subtype (RUN_ERRORS, LOW_COMPLETENESS, ORATS_STALE, etc.) */
   subtype?: string | null;
   symbol?: string | null;
   message: string;
@@ -1333,6 +1402,9 @@ export interface UiNotification {
   /** Phase 10.3: Acknowledgment fields */
   ack_at_utc?: string | null;
   ack_by?: string | null;
+  /** R25.4: When acked/archived */
+  acked_ts?: string | null;
+  archived_ts?: string | null;
   /** Phase 21.5: Lifecycle state */
   state?: "NEW" | "ACKED" | "ARCHIVED" | "DELETED";
   updated_at?: string | null;
@@ -1342,10 +1414,17 @@ export interface UiNotificationsResponse {
   notifications: UiNotification[];
 }
 
-export function useNotifications(limit = 100, state?: string | null) {
+export function useNotifications(
+  limit = 100,
+  state?: string | null,
+  symbol?: string | null,
+  type?: string | null,
+  offset?: number
+) {
   return useQuery({
     queryKey: queryKeys.uiNotifications(limit, state),
-    queryFn: () => apiGet<UiNotificationsResponse>(uiNotificationsPath(limit, state)),
+    queryFn: () =>
+      apiGet<UiNotificationsResponse>(uiNotificationsPath(limit, state, symbol, type, offset)),
   });
 }
 
@@ -1404,6 +1483,190 @@ export function useArchiveAllNotifications() {
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["ui", "notifications"] });
+    },
+  });
+}
+
+/** R25.4: Ack all NEW notifications. */
+export function useAckBulkNotifications() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiPost<{ status: string; acked_count: number }>(uiNotificationsAckBulkPath(), {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "notifications"] });
+    },
+  });
+}
+
+/** R25.4: Archive all ACKED notifications. */
+export function useArchiveBulkNotifications() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiPost<{ status: string; archived_count: number }>(
+        uiNotificationsArchiveBulkPath(),
+        {}
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "notifications"] });
+    },
+  });
+}
+
+/** R25.5: Journal entry (SQLite-backed). */
+export interface JournalEntry {
+  id: string;
+  created_ts: string;
+  trade_date: string;
+  as_of_ts?: string | null;
+  symbol: string;
+  strategy: string;
+  action: string;
+  qty: number;
+  price?: number | null;
+  premium?: number | null;
+  fees?: number | null;
+  contract_key?: string | null;
+  expiry?: string | null;
+  strike?: number | null;
+  right?: string | null;
+  notes?: string | null;
+  tags?: string | null;
+  realized_pl?: number | null;
+  link_id?: string | null;
+}
+export interface JournalListResponse {
+  entries: JournalEntry[];
+}
+export interface JournalCreateResponse {
+  entry: JournalEntry;
+}
+export interface MonthlyReportResponse {
+  month: string;
+  total_realized_pl: number;
+  by_strategy: Record<string, number>;
+  trade_count: number;
+  win_count: number;
+  loss_count: number;
+  win_rate: number;
+  avg_hold_days: number | null;
+  top_winners: { symbol: string; realized_pl: number | null; strategy: string }[];
+  top_losers: { symbol: string; realized_pl: number | null; strategy: string }[];
+  fees_total: number;
+}
+
+export function useJournal(params: {
+  from_date?: string;
+  to_date?: string;
+  symbol?: string;
+  strategy?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  return useQuery({
+    queryKey: queryKeys.uiJournal(params),
+    queryFn: () => apiGet<JournalListResponse>(uiJournalPath(params)),
+  });
+}
+
+export function useJournalCreate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      apiPost<JournalCreateResponse>(uiJournalPath({}), payload).then((r) => r.entry),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "journal"] });
+    },
+  });
+}
+
+export function useJournalUpdate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Record<string, unknown> }) =>
+      apiPatch<JournalCreateResponse>(uiJournalEntryPath(id), payload).then((r) => r.entry),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "journal"] });
+    },
+  });
+}
+
+export function useJournalExport() {
+  return useMutation({
+    mutationFn: ({ from_date, to_date }: { from_date: string; to_date: string }) =>
+      apiPostText(uiJournalExportPath(from_date, to_date)),
+  });
+}
+
+export function useReportsMonthly(month: string) {
+  return useQuery({
+    queryKey: queryKeys.uiReportsMonthly(month),
+    queryFn: () => apiGet<MonthlyReportResponse>(uiReportsMonthlyPath(month)),
+    enabled: !!month && month.length === 7 && month[4] === "-",
+  });
+}
+
+/** R25.6: Universe Admin — current list + history */
+export interface UniverseAdminResponse {
+  symbols: string[];
+  base_count: number;
+  overlay_added_count: number;
+  overlay_removed_count: number;
+  history: { id: string; ts: string; action: string; symbol: string; reason_code?: string | null; notes?: string | null; status: string }[];
+}
+export function useUniverseAdmin(params?: { limit?: number; offset?: number; status?: string }) {
+  return useQuery({
+    queryKey: queryKeys.uiUniverseAdmin(params ?? {}),
+    queryFn: () => apiGet<UniverseAdminResponse>(uiUniverseAdminPath(params ?? {})),
+  });
+}
+
+/** R25.6: Universe Health */
+export interface UniverseHealthResponse {
+  total_symbols: number;
+  base_count: number;
+  recently_added: string[];
+  recently_removed: string[];
+  warnings_count: number;
+  earnings_upcoming?: number | null;
+}
+export function useUniverseHealth() {
+  return useQuery({
+    queryKey: queryKeys.uiUniverseHealth(),
+    queryFn: () => apiGet<UniverseHealthResponse>(uiUniverseHealthPath()),
+  });
+}
+
+export function useUniverseProposeAdd() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { symbol: string; reason_code?: string; notes?: string }) =>
+      apiPost<{ proposal: Record<string, unknown> }>("/api/ui/universe/propose-add", payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "universe", "admin"] });
+    },
+  });
+}
+export function useUniverseProposeRemove() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { symbol: string; reason_code?: string; notes?: string }) =>
+      apiPost<{ proposal: Record<string, unknown> }>("/api/ui/universe/propose-remove", payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "universe", "admin"] });
+    },
+  });
+}
+export function useUniverseApply() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { proposal_id?: string; symbol?: string; action?: string }) =>
+      apiPost<{ applied: boolean; symbol: string; symbols: string[] }>("/api/ui/universe/apply", payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "universe", "admin"] });
+      qc.invalidateQueries({ queryKey: ["ui", "universe", "health"] });
+      qc.invalidateQueries({ queryKey: ["ui", "universe", "symbols"] });
     },
   });
 }

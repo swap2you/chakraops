@@ -79,6 +79,41 @@ export async function apiPost<T>(path: string, payload: unknown): Promise<T> {
   return (body ?? {}) as T;
 }
 
+export async function apiPatch<T>(path: string, payload: unknown): Promise<T> {
+  const url = resolveUrl(path);
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: jsonHeaders(),
+    body: JSON.stringify(payload),
+  });
+  const text = await res.text();
+  let body: unknown;
+  try {
+    body = text ? JSON.parse(text) : undefined;
+  } catch {
+    body = undefined;
+  }
+  if (!res.ok) {
+    throw new ApiError(`API ${res.status}: ${res.statusText}`, res.status, body);
+  }
+  return (body ?? {}) as T;
+}
+
+/** POST to path and return response as text (e.g. CSV export). */
+export async function apiPostText(path: string): Promise<string> {
+  const url = resolveUrl(path);
+  const res = await fetch(url, {
+    method: "POST",
+    headers: getHeaders(),
+    body: undefined,
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new ApiError(`API ${res.status}: ${res.statusText}`, res.status, text);
+  }
+  return text;
+}
+
 export async function apiDelete<T>(path: string): Promise<T> {
   const url = resolveUrl(path);
   const res = await fetch(url, {

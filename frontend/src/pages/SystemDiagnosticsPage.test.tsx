@@ -32,6 +32,13 @@ const mockHealth = {
   },
   eod_freeze: { enabled: true, scheduled_time_et: "15:58", last_run_at_utc: null, last_snapshot_dir: null },
   mark_refresh: { last_run_at_utc: null, last_result: null, updated_count: null, skipped_count: null, error_count: null, errors_sample: [] },
+  cadence: { mode: "EOD_BIASED", eligibility_as_of: "2026-02-27T18:00:00Z" },
+  earnings_probe_symbol: "SPY",
+  guardrails: {
+    status: "OK",
+    metrics: { cash_reserve_pct: 40, open_options_count: 1, open_shares_count: 0, symbols_exposure_count: 2, max_symbol_notional_pct: 10 },
+    limits: { MAX_OPEN_OPTIONS_POSITIONS: 6, MAX_OPEN_SHARES_POSITIONS: 10, MAX_SYMBOLS_EXPOSURE: 12, MAX_NOTIONAL_PER_SYMBOL_PCT: 15, MIN_CASH_RESERVE_PCT: 25 },
+  },
 };
 
 const mockHistory = {
@@ -54,8 +61,12 @@ const mockIntegrityData = {
   },
 };
 
+const mockEarningsDebug = { status: "OK", next_date: "2026-03-15", days: 14, implied_move_pct: 5.2, as_of: "2026-02-27T12:00:00Z" };
+const mockUseEarningsDebug = vi.fn(() => ({ data: mockEarningsDebug }));
+
 vi.mock("@/api/queries", () => ({
   useUiSystemHealth: (...args: unknown[]) => mockUseUiSystemHealth(...args),
+  useEarningsDebug: (symbol: string) => mockUseEarningsDebug(symbol),
   useDiagnosticsHistory: () => ({ data: mockHistory }),
   useRunDiagnostics: () => ({
     mutate: vi.fn(),
@@ -93,6 +104,31 @@ describe("SystemDiagnosticsPage", () => {
   it("shows System Status", () => {
     render(<SystemDiagnosticsPage />);
     expect(screen.getByText(/System Status/i)).toBeInTheDocument();
+  });
+
+  it("R25.8: shows cadence banner when EOD_BIASED", () => {
+    render(<SystemDiagnosticsPage />);
+    expect(screen.getByTestId("cadence-banner")).toBeInTheDocument();
+    expect(screen.getByText(/Cadence: eod-biased/i)).toBeInTheDocument();
+  });
+
+  it("R25.8: shows Earnings probe card with safe labels", () => {
+    render(<SystemDiagnosticsPage />);
+    expect(screen.getByTestId("earnings-probe-card")).toBeInTheDocument();
+    expect(screen.getByText(/Earnings probe/i)).toBeInTheDocument();
+    expect(screen.getByText(/Probe symbol SPY/i)).toBeInTheDocument();
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/\bFAIL\b/);
+    expect(text).not.toMatch(/\bWARN\b/);
+  });
+
+  it("R25.9: Guardrails card renders with safe labels; no FAIL/WARN in DOM", () => {
+    render(<SystemDiagnosticsPage />);
+    expect(screen.getByTestId("guardrails-card")).toBeInTheDocument();
+    expect(screen.getByText(/^Guardrails$/)).toBeInTheDocument();
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/\bFAIL\b/);
+    expect(text).not.toMatch(/\bWARN\b/);
   });
 
   it("shows Sanity Checks section", () => {

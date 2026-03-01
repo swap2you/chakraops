@@ -484,7 +484,8 @@ def test_persisted_artifact_applied_caps_have_reason_code_not_reason() -> None:
     violations = _check_applied_caps_reason_code_only(d)
     assert not violations, f"applied_caps must have reason_code not reason: {violations}"
     assert "note" not in (d.get("earnings_by_symbol") or {}).get("T1", {}), "earnings must not persist note"
-    assert (d.get("earnings_by_symbol") or {}).get("T1", {}).get("status_code") == "EARNINGS_NOT_EVALUATED"
+    # R25.7: Never persist EARNINGS_NOT_EVALUATED; use Unavailable
+    assert (d.get("earnings_by_symbol") or {}).get("T1", {}).get("status_code") == "Unavailable"
     # R22.9: diagnostics_by_symbol is not persisted; only symbols/gates/earnings/candidates are
     assert "diagnostics_by_symbol" not in d, "R22.9: must not persist diagnostics_by_symbol"
     # No prose anywhere in persisted

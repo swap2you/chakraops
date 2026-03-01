@@ -394,6 +394,17 @@ def get_run_mode():
     return RunMode.DRY_RUN
 
 
+def get_decision_cadence_mode() -> str:
+    """R25.3: Return decision cadence mode. EOD_BIASED = eligibility uses last completed daily candle (default).
+    Env DECISION_CADENCE_MODE overrides config. Values: EOD_BIASED | LIVE."""
+    raw = _load_yaml_config()
+    decision = raw.get("decision", {}) or {}
+    mode = (os.getenv("DECISION_CADENCE_MODE") or decision.get("cadence_mode") or "EOD_BIASED").strip().upper()
+    if mode not in ("EOD_BIASED", "LIVE"):
+        mode = "EOD_BIASED"
+    return mode
+
+
 def get_options_context_config() -> dict:
     """Return options context gating config from config.yaml (Phase 3.2).
 
@@ -416,6 +427,26 @@ def get_options_context_config() -> dict:
         "strategy_term_slope_backwardation_min": float(ctx.get("strategy_term_slope_backwardation_min", 0.0)),
         "strategy_term_slope_contango_max": float(ctx.get("strategy_term_slope_contango_max", 0.0)),
         "strategy_preference_weight": float(ctx.get("strategy_preference_weight", 0.15)),
+    }
+
+
+def get_guardrails_config() -> dict:
+    """R25.9: Return portfolio guardrails config (defaults conservative; user can tune via config.yaml or env).
+
+    Keys: MAX_OPEN_OPTIONS_POSITIONS, MAX_OPEN_SHARES_POSITIONS, MAX_SYMBOLS_EXPOSURE,
+    MAX_NOTIONAL_PER_SYMBOL_PCT, MIN_CASH_RESERVE_PCT, OPTIONS_MAX_RISK_PER_TRADE_PCT,
+    SECTOR_EXPOSURE_ADVISORY_PCT (advisory only).
+    """
+    raw = _load_yaml_config()
+    pg = raw.get("portfolio_guardrails", {}) or raw.get("guardrails", {}).get("portfolio", {}) or {}
+    return {
+        "MAX_OPEN_OPTIONS_POSITIONS": int(os.getenv("GUARDRAILS_MAX_OPEN_OPTIONS", str(pg.get("max_open_options_positions", 6)))),
+        "MAX_OPEN_SHARES_POSITIONS": int(os.getenv("GUARDRAILS_MAX_OPEN_SHARES", str(pg.get("max_open_shares_positions", 10)))),
+        "MAX_SYMBOLS_EXPOSURE": int(os.getenv("GUARDRAILS_MAX_SYMBOLS", str(pg.get("max_symbols_exposure", 12)))),
+        "MAX_NOTIONAL_PER_SYMBOL_PCT": float(os.getenv("GUARDRAILS_MAX_NOTIONAL_PCT", str(pg.get("max_notional_per_symbol_pct", 15.0)))),
+        "MIN_CASH_RESERVE_PCT": float(os.getenv("GUARDRAILS_MIN_CASH_RESERVE_PCT", str(pg.get("min_cash_reserve_pct", 25.0)))),
+        "OPTIONS_MAX_RISK_PER_TRADE_PCT": float(os.getenv("GUARDRAILS_OPTIONS_RISK_PCT", str(pg.get("options_max_risk_per_trade_pct", 2.0)))),
+        "SECTOR_EXPOSURE_ADVISORY_PCT": float(os.getenv("GUARDRAILS_SECTOR_ADVISORY_PCT", str(pg.get("sector_exposure_advisory_pct", 35.0)))),
     }
 
 
@@ -443,4 +474,6 @@ __all__ = [
     "get_portfolio_config",
     "get_environment_config",
     "get_options_context_config",
+    "get_decision_cadence_mode",
+    "get_guardrails_config",
 ]

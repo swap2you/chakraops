@@ -653,6 +653,23 @@ export function SystemDiagnosticsPage() {
                   </p>
                 </div>
               )}
+              {/* R26.1: Cash-secured committed and CSP cash available */}
+              {data.guardrails.metrics?.cash_secured_committed_usd != null && (
+                <div>
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">Cash-secured committed</span>
+                  <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200" data-testid="guardrails-cash-secured-committed">
+                    ${data.guardrails.metrics.cash_secured_committed_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </p>
+                </div>
+              )}
+              {data.guardrails.metrics?.csp_cash_available_usd != null && (
+                <div>
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">CSP cash available</span>
+                  <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200" data-testid="guardrails-csp-cash-available">
+                    ${data.guardrails.metrics.csp_cash_available_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </p>
+                </div>
+              )}
             </div>
           </Card>
         )}

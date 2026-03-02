@@ -305,6 +305,23 @@ export function DashboardPage() {
                     </span>
                   </div>
                 )}
+                {/* R26.1: Cash-secured committed and CSP cash available */}
+                {health.guardrails.metrics?.cash_secured_committed_usd != null && (
+                  <div>
+                    <span className="block text-xs text-zinc-500 dark:text-zinc-500">Cash-secured committed</span>
+                    <span className="font-mono text-zinc-700 dark:text-zinc-300" data-testid="guardrails-cash-secured-committed">
+                      ${health.guardrails.metrics.cash_secured_committed_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                )}
+                {health.guardrails.metrics?.csp_cash_available_usd != null && (
+                  <div>
+                    <span className="block text-xs text-zinc-500 dark:text-zinc-500">CSP cash available</span>
+                    <span className="font-mono text-zinc-700 dark:text-zinc-300" data-testid="guardrails-csp-cash-available">
+                      ${health.guardrails.metrics.csp_cash_available_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                )}
               </div>
             </Card>
           )}
@@ -425,6 +442,23 @@ export function DashboardPage() {
                                 <> · Constraints: {item.sizing_constraints_hit!.map((c) => constraintToLabel(c)).join(", ")}</>
                               )}
                             </p>
+                          )}
+                          {/* R26.1: CSP advisory — cash-secured, risk proxy (safe labels only) */}
+                          {item.next_action_code === "ENTRY" && (item.cash_secured_available_usd != null || item.csp_risk_proxy_move_pct != null) && (
+                            <div className="mt-0.5 text-zinc-500 dark:text-zinc-500 text-xs" data-testid={`action-needed-csp-advisory-${item.symbol}`}>
+                              {item.cash_secured_available_usd != null && (
+                                <p>Cash-secured available: ${item.cash_secured_available_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                              )}
+                              {item.csp_risk_proxy_move_pct != null && (
+                                <p>Risk proxy move: {item.csp_risk_proxy_move_pct}%</p>
+                              )}
+                              {item.csp_risk_proxy_loss_per_contract_usd != null && (
+                                <p>Risk proxy loss (per contract): ${item.csp_risk_proxy_loss_per_contract_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                              )}
+                              {item.csp_risk_proxy_cap_contracts != null && (
+                                <p>Risk proxy cap: {item.csp_risk_proxy_cap_contracts} contracts{item.csp_risk_proxy_enforced ? " (enforced)" : ""}</p>
+                              )}
+                            </div>
                           )}
                           {item.key_number != null && (
                             <p className="mt-0.5 text-zinc-500 dark:text-zinc-500">Key: {item.key_number}</p>

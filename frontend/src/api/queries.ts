@@ -617,6 +617,12 @@ export interface ActionNeededItem {
   recommended_notional_usd?: number | null;
   sizing_constraints_hit?: string[] | null;
   sizing_recommended_by?: string | null;
+  /** R26.1: CSP cash-secured + risk proxy (advisory). */
+  cash_secured_available_usd?: number | null;
+  csp_risk_proxy_move_pct?: number | null;
+  csp_risk_proxy_loss_per_contract_usd?: number | null;
+  csp_risk_proxy_cap_contracts?: number | null;
+  csp_risk_proxy_enforced?: boolean | null;
 }
 export interface ActionNeededResponse {
   top_options: ActionNeededItem[];

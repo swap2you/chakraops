@@ -521,19 +521,27 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 
 ### R25.9 — Portfolio guardrails + sizing caps (advisory-first)
 
-- [ ] **Requirements** — [R25.9_requirements.md](R25.9_requirements.md)
-- [ ] **Release notes** — [R25.9_release_notes.md](R25.9_release_notes.md)
+- [x] **Requirements** — [R25.9_requirements.md](R25.9_requirements.md)
+- [x] **Release notes** — [R25.9_release_notes.md](R25.9_release_notes.md)
 - [x] **Verification** — out/verification/R25.9/notes.md (gate tails + UAT; full-suite PASS recorded)
 - [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (185 passed, 18 skipped), frontend build pass
 - **Scope:** Guardrails config (defaults); compute_portfolio_metrics + evaluate_guardrails_for_entry; Action Needed suppress ENTRY when blocked; Dashboard + System Diagnostics Guardrails card; safe labels only; no FAIL/WARN. Branch: release/R25.9.
 
 ### R26.0 — Portfolio-aware position sizing (Wheel: CSP/CC + shares)
 
-- [ ] **Requirements** — [R26.0_requirements.md](R26.0_requirements.md)
-- [ ] **Release notes** — [R26.0_release_notes.md](R26.0_release_notes.md)
-- [ ] **Verification** — out/verification/R26.0/notes.md (gate tails + UAT)
-- [ ] **Gate** — Backend pytest, frontend tests, frontend build pass
+- [x] **Requirements** — [R26.0_requirements.md](R26.0_requirements.md)
+- [x] **Release notes** — [R26.0_release_notes.md](R26.0_release_notes.md)
+- [x] **Verification** — [out/verification/R26.0/notes.md](../../../out/verification/R26.0/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (187 passed, 18 skipped), frontend build pass
 - **Scope:** sizing_r260 (available budget, symbol cap, size_shares/size_csp/size_cc, apply_sizing); Action Needed sized ENTRY; recommended_qty/contracts, notional, constraints; UI size + notional + constraints; Guardrails card available budget; manual execution only; no FAIL/WARN. Branch: release/R26.0.
+
+### R26.1 — Sizing realism: CSP risk proxy + cash-secured reserve (advisory-first)
+
+- [x] **Requirements** — [R26.1_requirements.md](R26.1_requirements.md)
+- [x] **Release notes** — [R26.1_release_notes.md](R26.1_release_notes.md)
+- [x] **Verification** — [out/verification/R26.1/notes.md](../../../out/verification/R26.1/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (188 passed, 18 skipped), frontend build pass
+- **Scope:** risk_proxy_r261 (downside move, loss proxy, cap by risk budget); sizing_r260 cash-secured committed + available_cash_for_new_csp; CONSTRAINT_CASH_SECURED; CSP advisory fields; CSP_RISK_PROXY_ENFORCE; UI cash-secured + risk proxy; Guardrails cash-secured committed + CSP cash available. Branch: release/R26.1.
 
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 

@@ -204,6 +204,23 @@ export function SymbolDiagnosticsPage({ initialTabForTest }: { initialTabForTest
                 {(entrySizingItem.sizing_constraints_hit?.length ?? 0) > 0 && (
                   <p>Constraints: {entrySizingItem.sizing_constraints_hit!.map((c) => constraintToLabel(c)).join(", ")}</p>
                 )}
+                {/* R26.1: CSP advisory */}
+                {(entrySizingItem.cash_secured_available_usd != null || entrySizingItem.csp_risk_proxy_move_pct != null) && (
+                  <div className="mt-1 pt-1 border-t border-zinc-200 dark:border-zinc-700" data-testid="suggested-size-csp-advisory">
+                    {entrySizingItem.cash_secured_available_usd != null && (
+                      <p>Cash-secured available: ${entrySizingItem.cash_secured_available_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                    )}
+                    {entrySizingItem.csp_risk_proxy_move_pct != null && (
+                      <p>Risk proxy move: {entrySizingItem.csp_risk_proxy_move_pct}%</p>
+                    )}
+                    {entrySizingItem.csp_risk_proxy_loss_per_contract_usd != null && (
+                      <p>Risk proxy loss (per contract): ${entrySizingItem.csp_risk_proxy_loss_per_contract_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                    )}
+                    {entrySizingItem.csp_risk_proxy_cap_contracts != null && (
+                      <p>Risk proxy cap: {entrySizingItem.csp_risk_proxy_cap_contracts} contracts{entrySizingItem.csp_risk_proxy_enforced ? " (enforced)" : ""}</p>
+                    )}
+                  </div>
+                )}
               </div>
             </Card>
           )}

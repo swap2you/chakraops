@@ -398,6 +398,10 @@ export interface UiSystemHealthResponse {
       available_budget_usd?: number;
       /** R26.0: Max additional notional for a selected symbol (when in context) */
       max_add_per_symbol_usd?: number;
+      /** R26.1: Cash reserved for existing CSP (strike × 100 × contracts) */
+      cash_secured_committed_usd?: number;
+      /** R26.1: Cash available for new CSP after committed + reserve */
+      csp_cash_available_usd?: number;
     };
     limits?: {
       MAX_OPEN_OPTIONS_POSITIONS?: number;

@@ -245,6 +245,41 @@ describe("DashboardPage", () => {
     expect(document.body.textContent).not.toMatch(/FAIL_|WARN_/);
   });
 
+  it("R26.1: CSP ENTRY shows cash-secured and risk proxy advisory (no FAIL/WARN)", async () => {
+    mockUseActionNeeded.mockReturnValue({
+      data: {
+        top_options: [
+          {
+            symbol: "SPY",
+            next_action_code: "ENTRY",
+            rationale_lines: ["CSP eligible."],
+            key_number: null,
+            tab: "Options",
+            accordion_id: "trade",
+            sizing_recommended_by: "r260",
+            recommended_contracts: 2,
+            recommended_notional_usd: 24000,
+            cash_secured_available_usd: 50000,
+            csp_risk_proxy_move_pct: 7,
+            csp_risk_proxy_loss_per_contract_usd: 840,
+            csp_risk_proxy_cap_contracts: 4,
+            csp_risk_proxy_enforced: false,
+          },
+        ],
+        top_shares: [],
+        recently_changed: [],
+      },
+    });
+    render(<DashboardPage />);
+    await screen.findByTestId("action-needed-card");
+    const advisory = screen.getByTestId("action-needed-csp-advisory-SPY");
+    expect(advisory).toHaveTextContent(/Cash-secured available: \$50,000/);
+    expect(advisory).toHaveTextContent(/Risk proxy move: 7%/);
+    expect(advisory).toHaveTextContent(/Risk proxy loss \(per contract\): \$840/);
+    expect(advisory).toHaveTextContent(/Risk proxy cap: 4 contracts/);
+    expect(document.body.textContent).not.toMatch(/FAIL_|WARN_/);
+  });
+
   it("R26.0: No FAIL or WARN in DOM when guardrails include available_budget_usd", async () => {
     mockUseUiSystemHealth.mockReturnValue({
       data: {

@@ -335,10 +335,19 @@ def get_guardrails_metrics_and_status(
     status = STATUS_BLOCKED if blocked else STATUS_OK
     # R26.0: Available budget for sizing (post cash reserve)
     available_budget_usd: float = 0.0
+    cash_secured_committed_usd: float = 0.0
+    csp_cash_available_usd: float = 0.0
     try:
-        from app.core.portfolio.sizing_r260 import compute_available_budget
+        from app.core.portfolio.sizing_r260 import (
+            compute_available_budget,
+            compute_cash_secured_committed,
+            compute_available_cash_for_new_csp,
+        )
         budget_snap = {"cash": snap.get("cash"), "total_equity": metrics.get("total_equity"), "symbol_notionals": metrics.get("symbol_notionals")}
         available_budget_usd = compute_available_budget(budget_snap, cfg)
+        snap_for_csp = {"cash": snap.get("cash"), "total_equity": metrics.get("total_equity"), "total_capital": snap.get("total_capital"), "option_positions": snap.get("option_positions") or []}
+        cash_secured_committed_usd = compute_cash_secured_committed(snap_for_csp)
+        csp_cash_available_usd = compute_available_cash_for_new_csp(snap_for_csp, cfg)
     except Exception:
         pass
     return {
@@ -350,6 +359,8 @@ def get_guardrails_metrics_and_status(
             "symbols_exposure_count": metrics["symbols_exposure_count"],
             "max_symbol_notional_pct": round(metrics["max_symbol_notional_pct"], 2),
             "available_budget_usd": round(available_budget_usd, 2),
+            "cash_secured_committed_usd": round(cash_secured_committed_usd, 2),
+            "csp_cash_available_usd": round(csp_cash_available_usd, 2),
         },
         "limits": {
             "MAX_OPEN_OPTIONS_POSITIONS": max_options,

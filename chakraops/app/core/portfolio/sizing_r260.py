@@ -17,6 +17,8 @@ CONSTRAINT_SYMBOL_CAP = "SYMBOL_CAP"
 CONSTRAINT_MAX_OPTIONS_POSITIONS = "MAX_OPTIONS_POSITIONS"
 CONSTRAINT_MAX_SHARES_POSITIONS = "MAX_SHARES_POSITIONS"
 CONSTRAINT_MAX_SYMBOLS = "MAX_SYMBOLS"
+# R26.1: Cash reserved for existing CSP obligations
+CONSTRAINT_CASH_SECURED = "CASH_SECURED"
 
 SIZING_RECOMMENDED_BY = "r260"
 
@@ -52,6 +54,48 @@ def compute_available_budget(
     min_reserve_pct = float(guardrails_config.get("MIN_CASH_RESERVE_PCT", 25.0))
     reserve = total_equity * (min_reserve_pct / 100.0)
     return max(0.0, cash - reserve)
+
+
+def compute_cash_secured_committed(snapshot: Dict[str, Any]) -> float:
+    """R26.1: Sum of (strike * 100 * contracts) for open CSP positions. Deterministic."""
+    total = 0.0
+    for op in (snapshot.get("option_positions") or []):
+        if (op.get("strategy") or "").strip().upper() != "CSP":
+            continue
+        contracts = int(op.get("contracts") or 0)
+        strike = op.get("strike")
+        if contracts <= 0 or strike is None:
+            continue
+        try:
+            total += 100.0 * contracts * float(strike)
+        except (TypeError, ValueError):
+            continue
+    return total
+
+
+def compute_available_cash_for_new_csp(
+    snapshot: Dict[str, Any],
+    guardrails_config: Dict[str, Any],
+) -> float:
+    """
+    R26.1: Cash available for new CSP after existing CSP obligations and reserve floor.
+    available = cash - cash_secured_committed - reserve_floor.
+    """
+    cash = float(snapshot.get("cash") or 0)
+    committed = compute_cash_secured_committed(snapshot)
+    total_equity = snapshot.get("total_equity") or snapshot.get("total_capital")
+    if total_equity is not None:
+        try:
+            total_equity = float(total_equity)
+        except (TypeError, ValueError):
+            total_equity = cash
+    else:
+        total_equity = cash
+    if total_equity <= 0:
+        return 0.0
+    min_reserve_pct = float(guardrails_config.get("MIN_CASH_RESERVE_PCT", 25.0))
+    reserve_floor = total_equity * (min_reserve_pct / 100.0)
+    return max(0.0, cash - committed - reserve_floor)
 
 
 def max_symbol_budget(
@@ -121,17 +165,22 @@ def apply_sizing(
     snapshot: Dict[str, Any],
     metrics: Dict[str, Any],
     guardrails_config: Optional[Dict[str, Any]] = None,
+    symbol_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Apply portfolio-aware sizing. Returns dict with:
     - blocked: bool (True if size 0 due to caps)
-    - recommended_qty: int (shares) or None
-    - recommended_contracts: int (options) or None
-    - recommended_notional_usd: float or None
-    - sizing_constraints_hit: list of safe codes (deterministic order)
-    - sizing_recommended_by: "r260"
+    - recommended_qty / recommended_contracts / recommended_notional_usd
+    - sizing_constraints_hit, sizing_recommended_by
+    - R26.1 CSP advisory: cash_secured_available_usd, csp_risk_proxy_move_pct,
+      csp_risk_proxy_loss_per_contract_usd, csp_risk_proxy_cap_contracts, csp_risk_proxy_enforced
     """
     from app.core.settings import get_guardrails_config
+    from app.core.portfolio.risk_proxy_r261 import (
+        estimate_downside_move_pct,
+        estimate_csp_max_loss_proxy,
+        cap_contracts_by_risk_budget,
+    )
     cfg = guardrails_config or get_guardrails_config()
     symbol = (candidate.get("symbol") or "").strip().upper()
     strategy = (candidate.get("strategy") or candidate.get("side") or "").strip().upper()
@@ -177,6 +226,19 @@ def apply_sizing(
     if symbol_budget <= 0 and symbol:
         constraints_hit.append(CONSTRAINT_SYMBOL_CAP)
 
+    # R26.1: CSP cash-secured availability (hard cap)
+    strategy = (candidate.get("strategy") or candidate.get("side") or "").strip().upper()
+    is_csp = strategy == "CSP"
+    snapshot_for_csp = {
+        "cash": snapshot.get("cash"),
+        "total_equity": snapshot.get("total_equity") or total_equity,
+        "total_capital": snapshot.get("total_capital") or total_equity,
+        "option_positions": snapshot.get("option_positions") or [],
+    }
+    available_cash_for_new_csp = compute_available_cash_for_new_csp(snapshot_for_csp, cfg) if is_csp else float("inf")
+    if is_csp and available_cash_for_new_csp <= 0:
+        constraints_hit.append(CONSTRAINT_CASH_SECURED)
+
     # If any hard cap hit that forces 0, return blocked
     if CONSTRAINT_MAX_OPTIONS_POSITIONS in constraints_hit or CONSTRAINT_MAX_SHARES_POSITIONS in constraints_hit or CONSTRAINT_MAX_SYMBOLS in constraints_hit:
         return {
@@ -189,6 +251,8 @@ def apply_sizing(
         }
 
     effective_budget = min(available_budget, symbol_budget) if symbol else available_budget
+    if is_csp:
+        effective_budget = min(available_cash_for_new_csp, symbol_budget) if symbol else available_cash_for_new_csp
     if effective_budget <= 0:
         return {
             "blocked": True,
@@ -203,6 +267,7 @@ def apply_sizing(
     recommended_qty: Optional[int] = None
     recommended_contracts: Optional[int] = None
     recommended_notional_usd: Optional[float] = None
+    csp_advisory: Optional[Dict[str, Any]] = None
 
     if is_shares:
         price = candidate.get("price") or candidate.get("underlying_price") or 0.0
@@ -227,6 +292,26 @@ def apply_sizing(
         contracts = size_csp_entry(underlying, strike or 0.0, effective_budget)
         recommended_contracts = contracts
         recommended_notional_usd = (contracts * (strike or 0) * 100) if contracts and strike else None
+        # R26.1: Risk proxy (advisory or enforced)
+        ctx = symbol_context or candidate.get("symbol_context") or {}
+        ctx.setdefault("earnings_days_for_move", int(cfg.get("EARNINGS_DAYS_FOR_MOVE", 14)))
+        move_pct = estimate_downside_move_pct(ctx)
+        options_risk_pct = float(cfg.get("OPTIONS_MAX_RISK_PER_TRADE_PCT", 2.0))
+        risk_budget_usd = total_equity * (options_risk_pct / 100.0)
+        risk_proxy_cap = cap_contracts_by_risk_budget(risk_budget_usd, strike or 0.0, move_pct)
+        risk_proxy_enforced = bool(cfg.get("CSP_RISK_PROXY_ENFORCE", False))
+        if risk_proxy_enforced and (recommended_contracts or 0) > risk_proxy_cap:
+            recommended_contracts = risk_proxy_cap
+            recommended_notional_usd = (risk_proxy_cap * (strike or 0) * 100) if strike else None
+        csp_advisory = {
+            "cash_secured_available_usd": round(available_cash_for_new_csp, 2),
+            "csp_risk_proxy_move_pct": round(move_pct, 2),
+            "csp_risk_proxy_loss_per_contract_usd": round(
+                estimate_csp_max_loss_proxy(strike or 0.0, 1, move_pct), 2
+            ),
+            "csp_risk_proxy_cap_contracts": risk_proxy_cap,
+            "csp_risk_proxy_enforced": risk_proxy_enforced,
+        }
     elif strategy == "CC":
         shares_qty = int(candidate.get("current_shares_qty") or candidate.get("shares") or 0)
         max_contracts_cap = max(0, max_options - open_options) if is_options else None
@@ -256,7 +341,7 @@ def apply_sizing(
             recommended_notional_usd = None
 
     blocked = (recommended_qty or 0) == 0 and (recommended_contracts or 0) == 0
-    return {
+    out = {
         "blocked": blocked,
         "recommended_qty": recommended_qty,
         "recommended_contracts": recommended_contracts,
@@ -264,6 +349,9 @@ def apply_sizing(
         "sizing_constraints_hit": sorted(constraints_hit),
         "sizing_recommended_by": SIZING_RECOMMENDED_BY,
     }
+    if csp_advisory:
+        out.update(csp_advisory)
+    return out
 
 
 def get_available_budget_and_symbol_cap(

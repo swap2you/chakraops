@@ -447,6 +447,8 @@ def get_guardrails_config() -> dict:
         "MIN_CASH_RESERVE_PCT": float(os.getenv("GUARDRAILS_MIN_CASH_RESERVE_PCT", str(pg.get("min_cash_reserve_pct", 25.0)))),
         "OPTIONS_MAX_RISK_PER_TRADE_PCT": float(os.getenv("GUARDRAILS_OPTIONS_RISK_PCT", str(pg.get("options_max_risk_per_trade_pct", 2.0)))),
         "SECTOR_EXPOSURE_ADVISORY_PCT": float(os.getenv("GUARDRAILS_SECTOR_ADVISORY_PCT", str(pg.get("sector_exposure_advisory_pct", 35.0)))),
+        "CSP_RISK_PROXY_ENFORCE": os.getenv("GUARDRAILS_CSP_RISK_PROXY_ENFORCE", str(pg.get("csp_risk_proxy_enforce", False))).strip().lower() in ("true", "1", "yes"),
+        "EARNINGS_DAYS_FOR_MOVE": int(os.getenv("GUARDRAILS_EARNINGS_DAYS_FOR_MOVE", str(pg.get("earnings_days_for_move", 14)))),
     }
 
 

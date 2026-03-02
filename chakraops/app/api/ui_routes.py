@@ -4365,7 +4365,19 @@ def ui_action_needed(
                         "current_shares_qty": shares_for_sym,
                         "shares": shares_for_sym,
                     }
-                    sizing_result = apply_sizing(candidate, guardrails_snapshot, guardrails_metrics)
+                    # R26.1: Symbol context for risk proxy (earnings, atr_pct)
+                    symbol_context = {}
+                    earnings = diag.get("earnings") or {}
+                    if isinstance(earnings, dict):
+                        symbol_context["earnings_days"] = earnings.get("days")
+                        symbol_context["implied_earnings_move_pct"] = earnings.get("implied_move_pct") or earnings.get("implied_earnings_move_pct")
+                    technicals = diag.get("technicals") or {}
+                    if isinstance(technicals, dict):
+                        symbol_context["atr_pct"] = technicals.get("atr_pct")
+                    sizing_result = apply_sizing(
+                        candidate, guardrails_snapshot, guardrails_metrics,
+                        symbol_context=symbol_context,
+                    )
                     if sizing_result.get("blocked"):
                         continue
                     item["recommended_contracts"] = sizing_result.get("recommended_contracts")
@@ -4373,6 +4385,9 @@ def ui_action_needed(
                     item["sizing_constraints_hit"] = sizing_result.get("sizing_constraints_hit") or []
                     item["sizing_recommended_by"] = sizing_result.get("sizing_recommended_by") or "r260"
                     item["recommended_qty"] = None
+                    for _k in ("cash_secured_available_usd", "csp_risk_proxy_move_pct", "csp_risk_proxy_loss_per_contract_usd", "csp_risk_proxy_cap_contracts", "csp_risk_proxy_enforced"):
+                        if _k in sizing_result:
+                            item[_k] = sizing_result[_k]
                 except Exception:
                     pass
             options_out.append(item)

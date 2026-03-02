@@ -127,6 +127,8 @@ Then restart backend/containers. Do not commit `backups/`, `out/`, or `data/` (t
 
 **Data retention (R26.6):** To keep only the last N months of monthly close reports under `data/reports/`, run `./scripts/cleanup_reports.sh` (use `--dry-run` first). Env: `REPORTS_KEEP_N=24` (default).
 
+**Quarterly restore drill (R26.7):** Prove backups are usable by restoring latest out/data backups into a temp dir and running a short smoke test (healthz, system-health, reports). From repository root: `./scripts/restore_drill.sh`. Backend runs on port 8010 and exits after the smoke; use `./scripts/restore_drill.sh --keep` to leave the temp dir and process running for inspection. Requires prior backups in `./backups` (run `backup_out.sh` and `backup_data.sh` first).
+
 ### Phase 7: Decision Intelligence Pipeline (Recommended)
 
 **Generate Decision Snapshot (One-time):**

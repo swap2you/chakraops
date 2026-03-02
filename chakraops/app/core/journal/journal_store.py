@@ -22,9 +22,14 @@ _OVERRIDE_PATH: Optional[Path] = None
 
 
 def _journal_db_path() -> Path:
-    """Journal DB under data/ (not out/). Repo-relative from app/core/journal/."""
+    """Journal DB under data/ (not out/). Repo-relative from app/core/journal/. R26.7: DATA_DIR env override."""
     if _OVERRIDE_PATH is not None:
         return _OVERRIDE_PATH
+    data_dir_env = os.environ.get("DATA_DIR")
+    if data_dir_env:
+        data_dir = Path(data_dir_env).resolve()
+        data_dir.mkdir(parents=True, exist_ok=True)
+        return data_dir / "journal.db"
     base = Path(__file__).resolve().parents[3]
     data_dir = base / "data"
     data_dir.mkdir(parents=True, exist_ok=True)

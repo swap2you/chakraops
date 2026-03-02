@@ -1,5 +1,5 @@
 Monthly close — 2026-03
-Generated: 2026-03-02T19:04:42.178518+00:00
+Generated: 2026-03-02T19:24:48.245341+00:00
 Realized P/L: 0.00
 Fees: 0.00
 Trades: 0 | Win rate: 0.0%

@@ -139,6 +139,22 @@ Config: `FREEZE_TIME_ET=15:55`, `FREEZE_TZ=America/New_York`. The scheduler runs
 
 ---
 
+## Backups, Restore, Restore Drill (R26.6–R26.7)
+
+All commands run from **repo root** (parent of `scripts/`). Uses `./backups/` (out_*.tar.gz, data_*.tar.gz).
+
+**A) Daily/weekly backups:** `./scripts/backup_out.sh`; `./scripts/backup_data.sh` — creates `./backups/out_<timestamp>.tar.gz` and `data_<timestamp>.tar.gz` (retention: last 14; env `BACKUP_KEEP_N`).
+
+**B) Monthly retention cleanup:** `./scripts/cleanup_reports.sh --dry-run` then `./scripts/cleanup_reports.sh` — keeps last 24 months under `data/reports/` (env `REPORTS_KEEP_N`).
+
+**C) Restore (manual):** Stop app/containers first. Restore out: `tar -xzf ./backups/out_YYYYMMDD_HHMMSS.tar.gz -C .`. Restore data: `./scripts/restore_data.sh [--force] ./backups/data_YYYYMMDD_HHMMSS.tar.gz` (`--force` overwrites non-empty data dir).
+
+**D) Quarterly restore drill:** `./scripts/backup_out.sh && ./scripts/backup_data.sh` then `./scripts/restore_drill.sh`. Optional: `./scripts/restore_drill.sh --keep` (inspect temp; backend on port 8010). Requires bash, curl, mktemp; expect “--- DRILL OK ---”.
+
+**E) Docker:** `out/` and `data/` are bind-mounted; losing either breaks auditability. See `docker-compose.yml` mounts.
+
+---
+
 ## If something looks wrong
 
 - **Stale timestamps between endpoints** — `decision/latest` or universe shows an older `pipeline_timestamp` than the store file. Restart the server so it reloads from disk, or rerun eval and re-check.

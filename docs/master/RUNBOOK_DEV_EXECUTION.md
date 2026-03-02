@@ -102,6 +102,41 @@
 
 ---
 
+## Backups, Restore, Restore Drill (R26.6–R26.7)
+
+All commands below are run from **repo root** (parent of `scripts/`). Creates and uses `./backups/` (out_*.tar.gz, data_*.tar.gz).
+
+### A) Daily/weekly backups
+
+- **Backup out/:** `./scripts/backup_out.sh`
+- **Backup data/:** `./scripts/backup_data.sh`
+- Note: run from repo root; creates `./backups/out_<timestamp>.tar.gz` and `./backups/data_<timestamp>.tar.gz`. Retention: last `BACKUP_KEEP_N` (default 14); env overrides: `OUT_DIR`, `BACKUP_DIR`, `BACKUP_KEEP_N` (backup_out); `DATA_DIR`, `BACKUP_DIR`, `BACKUP_KEEP_N` (backup_data).
+
+### B) Monthly retention cleanup
+
+- **Dry-run first:** `./scripts/cleanup_reports.sh --dry-run`
+- **Then run:** `./scripts/cleanup_reports.sh`
+- Keeps last `REPORTS_KEEP_N` months (default 24) under `data/reports/`; deletes older YYYY-MM folders. Env override: `REPORTS_DIR`, `REPORTS_KEEP_N`.
+
+### C) Restore procedures (manual)
+
+- **Restore out:** Stop app/containers first, then: `tar -xzf ./backups/out_YYYYMMDD_HHMMSS.tar.gz -C .`
+- **Restore data:** Stop app/containers first, then: `./scripts/restore_data.sh [--force] ./backups/data_YYYYMMDD_HHMMSS.tar.gz`
+- Safety: script refuses if `DATA_DIR` is non-empty unless `--force`; always print “stop app/containers before restore” and confirm. Restart app/containers after restore.
+
+### D) Quarterly restore drill (smoke test)
+
+- **Create backups:** `./scripts/backup_out.sh && ./scripts/backup_data.sh`
+- **Run drill:** `./scripts/restore_drill.sh`
+- **Optional inspect:** `./scripts/restore_drill.sh --keep` (leaves temp dir and backend running on port 8010).
+- Requirements: bash, curl, mktemp. Drill uses port 8010; expect output “--- DRILL OK ---” and temp paths; backend stops and temp is removed unless `--keep`.
+
+### E) Docker note (state persistence)
+
+- `out/` and `data/` are bind-mounted in `docker-compose.yml` (e.g. `./out:/workspace/out`, `./data:/workspace/chakraops/data`). Losing either breaks auditability; back them up and run the restore drill quarterly.
+
+---
+
 ## Cursor OOM avoidance
 
 - Open **only one repo** in Cursor at a time (stable **or** dev).

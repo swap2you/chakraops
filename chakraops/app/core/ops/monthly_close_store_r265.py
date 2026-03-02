@@ -8,6 +8,7 @@ import csv
 import io
 import json
 import logging
+import os
 import sqlite3
 import threading
 from calendar import monthrange
@@ -24,15 +25,23 @@ ALLOWED_FILES = frozenset({"monthly_report.json", "monthly_report.csv", "journal
 
 
 def _reports_base_path() -> Path:
-    """Base for data/reports/ (not out/)."""
+    """Base for data/reports/ (not out/). R26.7: DATA_DIR env override."""
     if _OVERRIDE_BASE_PATH is not None:
         return _OVERRIDE_BASE_PATH
+    data_dir_env = os.environ.get("DATA_DIR")
+    if data_dir_env:
+        return Path(data_dir_env).resolve() / "reports"
     base = Path(__file__).resolve().parents[3]
     return base / "data" / "reports"
 
 
 def _state_db_path() -> Path:
-    """SQLite for monthly_close_state under data/."""
+    """SQLite for monthly_close_state under data/. R26.7: DATA_DIR env override."""
+    data_dir_env = os.environ.get("DATA_DIR")
+    if data_dir_env:
+        data_dir = Path(data_dir_env).resolve()
+        data_dir.mkdir(parents=True, exist_ok=True)
+        return data_dir / "monthly_close_r265.db"
     base = Path(__file__).resolve().parents[3]
     data_dir = base / "data"
     data_dir.mkdir(parents=True, exist_ok=True)

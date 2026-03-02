@@ -583,6 +583,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend pytest (5 passed; scoped: test_r265_monthly_close_pack.py + test_r266_data_retention.py), frontend tests unchanged (not rerun), frontend build pass (built in 8.70s).
 - **Scope:** backup_data.sh, restore_data.sh, cleanup_reports.sh; data/ bind mount in compose; README persistence; data/ gitignored; no secrets. Branch: release/R26.6.
 
+### R26.7 — Restore drill + smoke test (prove backups usable)
+
+- [x] **Requirements** — [R26.7_requirements.md](R26.7_requirements.md)
+- [x] **Release notes** — [R26.7_release_notes.md](R26.7_release_notes.md)
+- [x] **Verification** — [out/verification/R26.7/notes.md](../../../out/verification/R26.7/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend pytest: full suite 866 passed, 1 failed (pre-existing test_ui_positions_post_success_when_within_limits); scoped 32 passed (test_r265, test_r266, test_r264, test_r255, test_one_store_guardrails, test_decision_artifact_hygiene_r227). Frontend tests unchanged (not rerun). Frontend build pass (built in 8.70s).
+- **Scope:** restore_drill.sh; OUT_DIR/DATA_DIR env overrides (minimal); healthz + system-health + reports smoke; DRILL OK. Branch: release/R26.7.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
 import threading
 import uuid
@@ -24,9 +25,14 @@ STATUS_DONE = "DONE"
 
 
 def _checklist_db_path() -> Path:
-    """Checklist DB under data/ (not out/)."""
+    """Checklist DB under data/ (not out/). R26.7: DATA_DIR env override."""
     if _OVERRIDE_PATH is not None:
         return _OVERRIDE_PATH
+    data_dir_env = os.environ.get("DATA_DIR")
+    if data_dir_env:
+        data_dir = Path(data_dir_env).resolve()
+        data_dir.mkdir(parents=True, exist_ok=True)
+        return data_dir / "checklist_r264.db"
     base = Path(__file__).resolve().parents[3]
     data_dir = base / "data"
     data_dir.mkdir(parents=True, exist_ok=True)

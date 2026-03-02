@@ -575,6 +575,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend pytest (4 passed; scoped: test_r265_monthly_close_pack.py), frontend tests (ReportsPage 4 passed), frontend build pass
 - **Scope:** POST monthly/close; close pack under data/reports/YYYY-MM/; monthly_close_state; files + download endpoints; Reports Monthly Close panel; deterministic; safe labels only. Branch: release/R26.5.
 
+### R26.6 — Data retention + backups for data/ (ops hardening)
+
+- [x] **Requirements** — [R26.6_requirements.md](R26.6_requirements.md)
+- [x] **Release notes** — [R26.6_release_notes.md](R26.6_release_notes.md)
+- [x] **Verification** — [out/verification/R26.6/notes.md](../../../out/verification/R26.6/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend pytest (5 passed; scoped: test_r265_monthly_close_pack.py + test_r266_data_retention.py), frontend tests unchanged (not rerun), frontend build pass (built in 8.70s).
+- **Scope:** backup_data.sh, restore_data.sh, cleanup_reports.sh; data/ bind mount in compose; README persistence; data/ gitignored; no secrets. Branch: release/R26.6.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

@@ -1903,6 +1903,174 @@ def ui_today_summary(
 
 
 # ---------------------------------------------------------------------------
+# R26.4: Ops checklists (EOD / Weekly) + eod-summary / weekly-summary
+# ---------------------------------------------------------------------------
+
+
+@router.get("/ops/checklist")
+def ui_ops_checklist(
+    kind: str = Query(..., description="EOD or WEEKLY"),
+    key: str = Query(..., description="YYYY-MM-DD for EOD, YYYY-WW for WEEKLY"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.4: Get checklist state for kind+key."""
+    _require_ui_key(x_ui_key)
+    from app.core.ops.checklist_store_r264 import checklist_get, checklist_ensure_open, KIND_EOD, KIND_WEEKLY
+    k = (kind or "").strip().upper()
+    key_val = (key or "").strip()
+    if k not in (KIND_EOD, KIND_WEEKLY):
+        raise HTTPException(status_code=400, detail="kind must be EOD or WEEKLY")
+    if not key_val:
+        raise HTTPException(status_code=400, detail="key required")
+    row = checklist_get(k, key_val)
+    if row is None:
+        row = checklist_ensure_open(k, key_val)
+    return {"kind": k, "key": key_val, "row": row}
+
+
+@router.post("/ops/checklist/mark-done")
+async def ui_ops_checklist_mark_done(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.4: Mark checklist DONE for kind+key. Body: kind, key, notes?."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    kind = (body.get("kind") or "").strip().upper()
+    key_val = (body.get("key") or "").strip()
+    notes = (body.get("notes") or "").strip()[:2000] or None
+    from app.core.ops.checklist_store_r264 import checklist_set_done, KIND_EOD, KIND_WEEKLY
+    if kind not in (KIND_EOD, KIND_WEEKLY):
+        raise HTTPException(status_code=400, detail="kind must be EOD or WEEKLY")
+    if not key_val:
+        raise HTTPException(status_code=400, detail="key required")
+    row = checklist_set_done(kind, key_val, notes=notes)
+    return {"status": "OK", "row": row}
+
+
+def _eod_summary_for_date(date_str: str) -> Dict[str, Any]:
+    """Build eod-summary payload for date. No FAIL_/WARN_."""
+    from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2, get_eval_snapshot
+    from app.core.journal.journal_store import journal_list
+    from app.api.notifications_store import get_notifications_health
+    out: Dict[str, Any] = {
+        "date": date_str,
+        "eval_as_of": None,
+        "action_needed_count": None,
+        "notifications_new_count": 0,
+        "journal_entries_count": 0,
+    }
+    try:
+        store = get_evaluation_store_v2()
+        store.reload_from_disk()
+        artifact = store.get_latest()
+        if artifact and getattr(artifact, "metadata", None):
+            out["eval_as_of"] = (artifact.metadata or {}).get("pipeline_timestamp")
+        if not out["eval_as_of"]:
+            snap = get_eval_snapshot()
+            if isinstance(snap, dict):
+                out["eval_as_of"] = snap.get("quote_as_of") or snap.get("pipeline_timestamp")
+    except Exception:
+        pass
+    try:
+        health = get_notifications_health()
+        out["notifications_new_count"] = int(health.get("count_new") or 0)
+    except Exception:
+        pass
+    try:
+        entries = journal_list(from_date=date_str, to_date=date_str, limit=10000)
+        out["journal_entries_count"] = len(entries)
+    except Exception:
+        pass
+    return out
+
+
+@router.get("/ops/eod-summary")
+def ui_ops_eod_summary(
+    date: str = Query(..., description="YYYY-MM-DD"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.4: EOD summary for date (eval as_of, counts). No FAIL_/WARN_."""
+    _require_ui_key(x_ui_key)
+    date_str = (date or "").strip()[:10]
+    if len(date_str) != 10 or date_str[4] != "-" or date_str[7] != "-":
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    return _eod_summary_for_date(date_str)
+
+
+def _week_to_date_range(week_key: str) -> tuple[str, str] | None:
+    """Convert YYYY-WW to (from_date, to_date) for that week (Mon-Sun)."""
+    if not week_key or len(week_key) < 6:
+        return None
+    try:
+        from datetime import datetime as _dt, timedelta
+        parts = week_key.split("-")
+        year = int(parts[0])
+        w = int(parts[1])
+        d = _dt.strptime(f"{year}-{w:02d}-1", "%G-%V-%u").date()
+        end_d = d + timedelta(days=6)
+        return (d.isoformat(), end_d.isoformat())
+    except Exception:
+        return None
+
+
+@router.get("/ops/weekly-summary")
+def ui_ops_weekly_summary(
+    week: str = Query(..., description="YYYY-WW"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.4: Weekly summary (journal realized P/L, counts, winners/losers, guardrails). No FAIL_/WARN_."""
+    _require_ui_key(x_ui_key)
+    week_key = (week or "").strip()
+    date_range = _week_to_date_range(week_key)
+    if not date_range:
+        raise HTTPException(status_code=400, detail="week must be YYYY-WW")
+    from_date, to_date = date_range
+    from app.core.journal.journal_store import journal_list
+    from app.core.portfolio.guardrails_r259 import get_guardrails_metrics_and_status
+    out: Dict[str, Any] = {
+        "week": week_key,
+        "from_date": from_date,
+        "to_date": to_date,
+        "realized_pl_total": 0.0,
+        "trade_count": 0,
+        "winners": [],
+        "losers": [],
+        "guardrails": {},
+    }
+    try:
+        entries = journal_list(from_date=from_date, to_date=to_date, limit=2000)
+        out["trade_count"] = len(entries)
+        realized_by_symbol: Dict[str, float] = {}
+        for e in entries:
+            sym = (e.get("symbol") or "").strip().upper()
+            if not sym:
+                continue
+            pl = e.get("realized_pl")
+            if pl is not None:
+                try:
+                    pl_f = float(pl)
+                except (TypeError, ValueError):
+                    continue
+                out["realized_pl_total"] += pl_f
+                realized_by_symbol[sym] = realized_by_symbol.get(sym, 0) + pl_f
+        winners = sorted([{"symbol": s, "realized_pl": v} for s, v in realized_by_symbol.items() if v > 0], key=lambda x: -x["realized_pl"])[:10]
+        losers = sorted([{"symbol": s, "realized_pl": v} for s, v in realized_by_symbol.items() if v < 0], key=lambda x: x["realized_pl"])[:10]
+        out["winners"] = winners
+        out["losers"] = losers
+    except Exception:
+        pass
+    try:
+        out["guardrails"] = get_guardrails_metrics_and_status()
+    except Exception:
+        pass
+    return out
+
+
+# ---------------------------------------------------------------------------
 # R25.5: Journal + Monthly Reports (SQLite-backed; no FAIL/WARN in responses)
 # ---------------------------------------------------------------------------
 

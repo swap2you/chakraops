@@ -106,6 +106,20 @@ function todaySummaryPath(): string {
   return `/api/ui/today/summary`;
 }
 
+/** R26.4: Ops checklist and summaries. */
+function opsChecklistPath(kind: string, key: string): string {
+  return `/api/ui/ops/checklist?kind=${encodeURIComponent(kind)}&key=${encodeURIComponent(key)}`;
+}
+function opsChecklistMarkDonePath(): string {
+  return `/api/ui/ops/checklist/mark-done`;
+}
+function opsEodSummaryPath(date: string): string {
+  return `/api/ui/ops/eod-summary?date=${encodeURIComponent(date)}`;
+}
+function opsWeeklySummaryPath(week: string): string {
+  return `/api/ui/ops/weekly-summary?week=${encodeURIComponent(week)}`;
+}
+
 function uiTrackedPositionsPath(): string {
   return `/api/ui/positions/tracked`;
 }
@@ -377,6 +391,9 @@ export const queryKeys = {
   sharesCandidates: () => ["ui", "sharesCandidates"] as const,
   actionNeeded: () => ["ui", "actionNeeded"] as const,
   todaySummary: () => ["ui", "todaySummary"] as const,
+  opsChecklist: (kind: string, key: string) => ["ui", "opsChecklist", kind, key] as const,
+  opsEodSummary: (date: string) => ["ui", "opsEodSummary", date] as const,
+  opsWeeklySummary: (week: string) => ["ui", "opsWeeklySummary", week] as const,
   uiPositions: () => ["ui", "positions"] as const,
   uiTrackedPositions: () => ["ui", "positions", "tracked"] as const,
   uiAccountsDefault: () => ["ui", "accounts", "default"] as const,
@@ -675,6 +692,67 @@ export function useTodaySummary() {
   return useQuery({
     queryKey: queryKeys.todaySummary(),
     queryFn: () => apiGet<TodaySummaryResponse>(todaySummaryPath()),
+  });
+}
+
+/** R26.4: Ops checklist (EOD / WEEKLY). */
+export interface OpsChecklistResponse {
+  kind: string;
+  key: string;
+  row: { id?: string; kind?: string; key?: string; status?: string; done_ts?: string; notes?: string };
+}
+export function useOpsChecklist(kind: string, key: string) {
+  return useQuery({
+    queryKey: queryKeys.opsChecklist(kind, key),
+    queryFn: () => apiGet<OpsChecklistResponse>(opsChecklistPath(kind, key)),
+    enabled: !!kind && !!key,
+  });
+}
+export function useOpsChecklistMarkDone() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { kind: string; key: string; notes?: string }) =>
+      apiPost<{ status: string; row: OpsChecklistResponse["row"] }>(opsChecklistMarkDonePath(), payload),
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: queryKeys.opsChecklist(variables.kind, variables.key) });
+      qc.invalidateQueries({ queryKey: queryKeys.opsEodSummary(variables.key) });
+      qc.invalidateQueries({ queryKey: queryKeys.opsWeeklySummary(variables.key) });
+    },
+  });
+}
+
+/** R26.4: EOD summary for a date. */
+export interface OpsEodSummaryResponse {
+  date: string;
+  eval_as_of: string | null;
+  action_needed_count: number | null;
+  notifications_new_count: number;
+  journal_entries_count: number;
+}
+export function useOpsEodSummary(date: string) {
+  return useQuery({
+    queryKey: queryKeys.opsEodSummary(date),
+    queryFn: () => apiGet<OpsEodSummaryResponse>(opsEodSummaryPath(date)),
+    enabled: !!date && date.length === 10,
+  });
+}
+
+/** R26.4: Weekly summary. */
+export interface OpsWeeklySummaryResponse {
+  week: string;
+  from_date: string;
+  to_date: string;
+  realized_pl_total: number;
+  trade_count: number;
+  winners: { symbol: string; realized_pl: number }[];
+  losers: { symbol: string; realized_pl: number }[];
+  guardrails: Record<string, unknown>;
+}
+export function useOpsWeeklySummary(week: string) {
+  return useQuery({
+    queryKey: queryKeys.opsWeeklySummary(week),
+    queryFn: () => apiGet<OpsWeeklySummaryResponse>(opsWeeklySummaryPath(week)),
+    enabled: !!week && week.length >= 6,
   });
 }
 

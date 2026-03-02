@@ -199,6 +199,35 @@ def _run_nightly_evaluation() -> bool:
         return False
 
 
+def _emit_ops_checklist_reminders_if_needed() -> None:
+    """R26.4: At 19:00 ET emit EOD reminder if today not DONE; on Sunday emit weekly reminder if week not DONE. Dedupe per key."""
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        from backports.zoneinfo import ZoneInfo  # type: ignore
+    et_tz = ZoneInfo("America/New_York")
+    now_et = datetime.now(et_tz)
+    today_et = now_et.strftime("%Y-%m-%d")
+    try:
+        from app.core.ops.checklist_store_r264 import checklist_get
+        from app.api.notifications_store import (
+            maybe_append_ops_checklist_reminder,
+            OPS_EOD_CHECKLIST_REMINDER,
+            OPS_WEEKLY_REVIEW_REMINDER,
+        )
+        row_eod = checklist_get("EOD", today_et)
+        if row_eod is None or (row_eod.get("status") or "").upper() != "DONE":
+            maybe_append_ops_checklist_reminder(OPS_EOD_CHECKLIST_REMINDER, today_et)
+        if now_et.weekday() == 6:
+            y, w, _ = now_et.isocalendar()
+            week_key = f"{y}-{w:02d}"
+            row_weekly = checklist_get("WEEKLY", week_key)
+            if row_weekly is None or (row_weekly.get("status") or "").upper() != "DONE":
+                maybe_append_ops_checklist_reminder(OPS_WEEKLY_REVIEW_REMINDER, week_key)
+    except Exception:
+        raise
+
+
 def _nightly_scheduler_loop(stop_event: threading.Event) -> None:
     """
     Nightly scheduler loop.
@@ -228,7 +257,11 @@ def _nightly_scheduler_loop(stop_event: threading.Event) -> None:
             
             # Run nightly evaluation
             _run_nightly_evaluation()
-            
+            # R26.4: Emit ops checklist reminders at 19:00 ET (EOD + weekly on Sunday)
+            try:
+                _emit_ops_checklist_reminders_if_needed()
+            except Exception as rem_err:
+                logger.warning("[NIGHTLY_SCHEDULER] Ops reminder emission failed: %s", rem_err)
             # Sleep a bit to avoid re-triggering
             stop_event.wait(120)  # 2 minutes
             

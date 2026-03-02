@@ -30,6 +30,10 @@ const mockArchive = vi.fn(() => ({ mutate: vi.fn(), isPending: false }));
 const mockAckBulk = vi.fn(() => ({ mutate: vi.fn(), isPending: false }));
 const mockArchiveBulk = vi.fn(() => ({ mutate: vi.fn(), isPending: false }));
 
+const mockEodChecklist = { row: { status: "OPEN", key: "2026-02-27" } };
+const mockEodSummary = { date: "2026-02-27", eval_as_of: "2026-02-27T17:00:00Z", notifications_new_count: 0, journal_entries_count: 0 };
+const mockMarkEodDone = vi.fn(() => ({ mutate: vi.fn(), isPending: false }));
+
 vi.mock("@/api/queries", () => ({
   useTodaySummary: vi.fn(() => ({ data: mockSummary, isLoading: false, refetch: vi.fn() })),
   useActionNeeded: vi.fn(() => ({ data: mockActionNeeded, refetch: vi.fn() })),
@@ -40,6 +44,9 @@ vi.mock("@/api/queries", () => ({
   useArchiveNotification: () => mockArchive(),
   useAckBulkNotifications: () => mockAckBulk(),
   useArchiveBulkNotifications: () => mockArchiveBulk(),
+  useOpsChecklist: vi.fn(() => ({ data: mockEodChecklist })),
+  useOpsEodSummary: vi.fn(() => ({ data: mockEodSummary })),
+  useOpsChecklistMarkDone: () => mockMarkEodDone(),
 }));
 
 describe("TodayPage", () => {
@@ -102,5 +109,20 @@ describe("TodayPage", () => {
     renderWithRoute(<TodayPage />, "/today");
     const link = screen.getByTestId("today-journal-add");
     expect(link).toHaveAttribute("href", "/journal");
+  });
+
+  it("R26.4: EOD section shows and can mark done", async () => {
+    const mutateMock = vi.fn();
+    mockMarkEodDone.mockReturnValue({ mutate: mutateMock, isPending: false });
+    renderWithRoute(<TodayPage />, "/today");
+    expect(screen.getByTestId("today-eod-card")).toBeInTheDocument();
+    expect(screen.getByTestId("today-eod-mark-done")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("today-eod-mark-done"));
+    expect(mutateMock).toHaveBeenCalledWith(expect.objectContaining({ kind: "EOD" }));
+  });
+
+  it("R26.4: EOD pending banner when status OPEN", () => {
+    renderWithRoute(<TodayPage />, "/today");
+    expect(screen.getByTestId("today-eod-pending-banner")).toBeInTheDocument();
   });
 });

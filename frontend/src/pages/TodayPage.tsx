@@ -14,6 +14,9 @@ import {
   useArchiveNotification,
   useAckBulkNotifications,
   useArchiveBulkNotifications,
+  useOpsChecklist,
+  useOpsEodSummary,
+  useOpsChecklistMarkDone,
 } from "@/api/queries";
 import type { ActionNeededItem } from "@/api/queries";
 import { PageHeader } from "@/components/PageHeader";
@@ -99,6 +102,9 @@ export function TodayPage() {
   const { data: summary, isLoading: summaryLoading } = useTodaySummary();
   const { data: actionNeeded } = useActionNeeded();
   const runEval = useRunEval();
+  const { data: eodChecklist } = useOpsChecklist("EOD", today);
+  const { data: eodSummary } = useOpsEodSummary(today);
+  const markEodDone = useOpsChecklistMarkDone();
   const { data: journalData } = useJournal({ from_date: today, to_date: today, limit: 100 });
   const journalEntries = journalData?.entries ?? [];
   const journalSymbols = useMemo(() => new Set(journalEntries.map((e) => (e.symbol || "").toUpperCase())), [journalEntries]);
@@ -154,9 +160,16 @@ export function TodayPage() {
     [actionNeeded]
   );
 
+  const eodPending = (eodChecklist?.row?.status ?? "OPEN").toUpperCase() !== "DONE";
+
   return (
     <div className="space-y-4">
       <PageHeader title="Today" subtext="Daily workflow: run, action needed, tickets, journal, notifications" />
+      {eodPending && (
+        <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200" data-testid="today-eod-pending-banner">
+          EOD checklist pending. Complete before tomorrow.
+        </div>
+      )}
 
       {/* A) Run / Refresh */}
       <Card data-testid="today-run-section">
@@ -283,7 +296,36 @@ export function TodayPage() {
         </div>
       </Card>
 
-      {/* D) Journal checkpoint */}
+      {/* D) End of Day Checklist — R26.4 */}
+      <Card data-testid="today-eod-card">
+        <CardHeader
+          title="End of Day Checklist"
+          description="Summary for today; mark done when complete."
+          actions={
+            eodPending ? (
+              <Button
+                onClick={() => markEodDone.mutate({ kind: "EOD", key: today })}
+                disabled={markEodDone.isPending}
+                data-testid="today-eod-mark-done"
+              >
+                {markEodDone.isPending ? "Saving…" : "Mark EOD Done"}
+              </Button>
+            ) : (
+              <span className="text-sm text-zinc-500">Done</span>
+            )
+          }
+        />
+        <div className="text-sm space-y-1">
+          <p className="text-zinc-600 dark:text-zinc-400">
+            Status: {eodChecklist?.row?.status ?? "OPEN"}
+            {eodSummary && (
+              <> · Eval as of: {eodSummary.eval_as_of ?? "—"} · Notifications (new): {eodSummary.notifications_new_count} · Journal entries today: {eodSummary.journal_entries_count}</>
+            )}
+          </p>
+        </div>
+      </Card>
+
+      {/* E) Journal checkpoint */}
       <Card data-testid="today-journal-card">
         <CardHeader
           title="Journal checkpoint"

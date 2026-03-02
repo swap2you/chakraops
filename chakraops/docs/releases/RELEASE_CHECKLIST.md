@@ -559,6 +559,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend pytest (543 passed; scoped: test_r263_today_summary.py + tests/_core), frontend tests (200 passed, 18 skipped), frontend build pass
 - **Scope:** GET /api/ui/today/summary; TodayPage (Run/Refresh, Action Needed, Ticket queue localStorage, Journal checkpoint, Notifications inbox); /today route; safe labels only; no FAIL/WARN. Branch: release/R26.3.
 
+### R26.4 — EOD routine + weekly review automation (checklists + reminders)
+
+- [x] **Requirements** — [R26.4_requirements.md](R26.4_requirements.md)
+- [x] **Release notes** — [R26.4_release_notes.md](R26.4_release_notes.md)
+- [x] **Verification** — [out/verification/R26.4/notes.md](../../../out/verification/R26.4/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend pytest (4 passed; scoped: test_r264_ops_checklists.py), frontend tests (206 passed, 18 skipped), frontend build pass
+- **Scope:** Checklist SQLite (EOD/WEEKLY); GET/POST ops/checklist; eod-summary, weekly-summary; TodayPage EOD section, WeeklyReviewPage; reminder notifications (19:00 ET, Sunday); dedupe; safe labels only. Branch: release/R26.4.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

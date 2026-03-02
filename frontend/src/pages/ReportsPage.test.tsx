@@ -1,7 +1,9 @@
 /**
  * R25.5: Reports page — monthly summary with mocked hook; no FAIL/WARN in document.
+ * R26.5: Monthly close panel — Generate triggers mutation; no FAIL/WARN in DOM.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import userEvent from "@testing-library/user-event";
 import { render, screen } from "@/test/test-utils";
 import { ReportsPage } from "./ReportsPage";
 
@@ -24,6 +26,15 @@ const mockReport = {
   fees_total: 10.0,
 };
 
+const mockCloseFiles = {
+  month: "2026-02",
+  files: [{ name: "monthly_report.json", size: 100 }, { name: "summary.txt", size: 50 }],
+  generated_ts: "2026-02-27T12:00:00Z",
+  paths: ["monthly_report.json", "monthly_report.csv", "journal_export.csv", "summary.txt"],
+};
+
+const mockMutate = vi.fn();
+
 vi.mock("@/api/queries", () => ({
   useReportsMonthly: () => ({
     data: mockReport,
@@ -31,6 +42,15 @@ vi.mock("@/api/queries", () => ({
     isError: false,
     error: null,
   }),
+  useMonthlyCloseFiles: () => ({
+    data: mockCloseFiles,
+    isLoading: false,
+  }),
+  useMonthlyCloseGenerate: () => ({
+    mutate: mockMutate,
+    isPending: false,
+  }),
+  downloadMonthlyCloseFile: vi.fn(),
 }));
 
 describe("ReportsPage", () => {
@@ -46,6 +66,21 @@ describe("ReportsPage", () => {
     expect(screen.getAllByText(/Top losers/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("SPY")).toBeInTheDocument();
     expect(screen.getByText("IWM")).toBeInTheDocument();
+  });
+
+  it("renders Monthly Close panel with Generate button and download links (R26.5)", () => {
+    render(<ReportsPage />);
+    expect(screen.getByTestId("monthly-close-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("monthly-close-generate")).toHaveTextContent("Generate close pack");
+    expect(screen.getByText("Download monthly_report.json")).toBeInTheDocument();
+    expect(screen.getByText("Download summary.txt")).toBeInTheDocument();
+  });
+
+  it("Generate close pack triggers mutation with month (R26.5)", async () => {
+    render(<ReportsPage />);
+    await userEvent.click(screen.getByTestId("monthly-close-generate"));
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    expect(mockMutate).toHaveBeenCalledWith(expect.stringMatching(/^\d{4}-\d{2}$/));
   });
 
   it("document text does not contain FAIL or WARN (R25.5 safety)", () => {

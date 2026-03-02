@@ -521,11 +521,91 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 
 ### R25.9 — Portfolio guardrails + sizing caps (advisory-first)
 
-- [ ] **Requirements** — [R25.9_requirements.md](R25.9_requirements.md)
-- [ ] **Release notes** — [R25.9_release_notes.md](R25.9_release_notes.md)
+- [x] **Requirements** — [R25.9_requirements.md](R25.9_requirements.md)
+- [x] **Release notes** — [R25.9_release_notes.md](R25.9_release_notes.md)
 - [x] **Verification** — out/verification/R25.9/notes.md (gate tails + UAT; full-suite PASS recorded)
 - [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (185 passed, 18 skipped), frontend build pass
 - **Scope:** Guardrails config (defaults); compute_portfolio_metrics + evaluate_guardrails_for_entry; Action Needed suppress ENTRY when blocked; Dashboard + System Diagnostics Guardrails card; safe labels only; no FAIL/WARN. Branch: release/R25.9.
+
+### R26.0 — Portfolio-aware position sizing (Wheel: CSP/CC + shares)
+
+- [x] **Requirements** — [R26.0_requirements.md](R26.0_requirements.md)
+- [x] **Release notes** — [R26.0_release_notes.md](R26.0_release_notes.md)
+- [x] **Verification** — [out/verification/R26.0/notes.md](../../../out/verification/R26.0/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (187 passed, 18 skipped), frontend build pass
+- **Scope:** sizing_r260 (available budget, symbol cap, size_shares/size_csp/size_cc, apply_sizing); Action Needed sized ENTRY; recommended_qty/contracts, notional, constraints; UI size + notional + constraints; Guardrails card available budget; manual execution only; no FAIL/WARN. Branch: release/R26.0.
+
+### R26.1 — Sizing realism: CSP risk proxy + cash-secured reserve (advisory-first)
+
+- [x] **Requirements** — [R26.1_requirements.md](R26.1_requirements.md)
+- [x] **Release notes** — [R26.1_release_notes.md](R26.1_release_notes.md)
+- [x] **Verification** — [out/verification/R26.1/notes.md](../../../out/verification/R26.1/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (188 passed, 18 skipped), frontend build pass
+- **Scope:** risk_proxy_r261 (downside move, loss proxy, cap by risk budget); sizing_r260 cash-secured committed + available_cash_for_new_csp; CONSTRAINT_CASH_SECURED; CSP advisory fields; CSP_RISK_PROXY_ENFORCE; UI cash-secured + risk proxy; Guardrails cash-secured committed + CSP cash available. Branch: release/R26.1.
+
+### R26.2 — Trade Ticket v2 (execution plan + journal draft)
+
+- [x] **Requirements** — [R26.2_requirements.md](R26.2_requirements.md)
+- [x] **Release notes** — [R26.2_release_notes.md](R26.2_release_notes.md)
+- [x] **Verification** — [out/verification/R26.2/notes.md](../../../out/verification/R26.2/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend pytest (543 passed, 2 skipped; scoped: test_r262_trade_ticket.py + tests/_core), frontend tests (193 passed, 18 skipped), frontend build pass
+- **Scope:** GET /api/ui/trade-ticket; POST /api/ui/journal/from-ticket; TradeTicketPage (Snapshot/Sizing/Contract/Steps/Journal); links from Action Needed + Symbol Diagnostics; journal draft + Save to Journal; manual only; no FAIL/WARN. Branch: release/R26.2.
+
+### R26.3 — Daily Operator Workflow ("Today" command center)
+
+- [x] **Requirements** — [R26.3_requirements.md](R26.3_requirements.md)
+- [x] **Release notes** — [R26.3_release_notes.md](R26.3_release_notes.md)
+- [x] **Verification** — [out/verification/R26.3/notes.md](../../../out/verification/R26.3/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend pytest (543 passed; scoped: test_r263_today_summary.py + tests/_core), frontend tests (200 passed, 18 skipped), frontend build pass
+- **Scope:** GET /api/ui/today/summary; TodayPage (Run/Refresh, Action Needed, Ticket queue localStorage, Journal checkpoint, Notifications inbox); /today route; safe labels only; no FAIL/WARN. Branch: release/R26.3.
+
+### R26.4 — EOD routine + weekly review automation (checklists + reminders)
+
+- [x] **Requirements** — [R26.4_requirements.md](R26.4_requirements.md)
+- [x] **Release notes** — [R26.4_release_notes.md](R26.4_release_notes.md)
+- [x] **Verification** — [out/verification/R26.4/notes.md](../../../out/verification/R26.4/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend pytest (4 passed; scoped: test_r264_ops_checklists.py), frontend tests (206 passed, 18 skipped), frontend build pass
+- **Scope:** Checklist SQLite (EOD/WEEKLY); GET/POST ops/checklist; eod-summary, weekly-summary; TodayPage EOD section, WeeklyReviewPage; reminder notifications (19:00 ET, Sunday); dedupe; safe labels only. Branch: release/R26.4.
+
+### R26.5 — Monthly close + performance pack (journal-driven)
+
+- [x] **Requirements** — [R26.5_requirements.md](R26.5_requirements.md)
+- [x] **Release notes** — [R26.5_release_notes.md](R26.5_release_notes.md)
+- [x] **Verification** — [out/verification/R26.5/notes.md](../../../out/verification/R26.5/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend pytest (4 passed; scoped: test_r265_monthly_close_pack.py), frontend tests (ReportsPage 4 passed), frontend build pass
+- **Scope:** POST monthly/close; close pack under data/reports/YYYY-MM/; monthly_close_state; files + download endpoints; Reports Monthly Close panel; deterministic; safe labels only. Branch: release/R26.5.
+
+### R26.6 — Data retention + backups for data/ (ops hardening)
+
+- [x] **Requirements** — [R26.6_requirements.md](R26.6_requirements.md)
+- [x] **Release notes** — [R26.6_release_notes.md](R26.6_release_notes.md)
+- [x] **Verification** — [out/verification/R26.6/notes.md](../../../out/verification/R26.6/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend pytest (5 passed; scoped: test_r265_monthly_close_pack.py + test_r266_data_retention.py), frontend tests unchanged (not rerun), frontend build pass (built in 8.70s).
+- **Scope:** backup_data.sh, restore_data.sh, cleanup_reports.sh; data/ bind mount in compose; README persistence; data/ gitignored; no secrets. Branch: release/R26.6.
+
+### R26.7 — Restore drill + smoke test (prove backups usable)
+
+- [x] **Requirements** — [R26.7_requirements.md](R26.7_requirements.md)
+- [x] **Release notes** — [R26.7_release_notes.md](R26.7_release_notes.md)
+- [x] **Verification** — [out/verification/R26.7/notes.md](../../../out/verification/R26.7/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend pytest: full suite 866 passed, 1 failed (pre-existing test_ui_positions_post_success_when_within_limits); scoped 32 passed (test_r265, test_r266, test_r264, test_r255, test_one_store_guardrails, test_decision_artifact_hygiene_r227). Frontend tests unchanged (not rerun). Frontend build pass (built in 8.70s).
+- **Scope:** restore_drill.sh; OUT_DIR/DATA_DIR env overrides (minimal); healthz + system-health + reports smoke; DRILL OK. Branch: release/R26.7.
+
+### R26.8 — Restore full-suite backend green + formalize scoped gate policy
+
+- [x] **Requirements** — R26.8_requirements.md
+- [x] **Release notes** — R26.8_release_notes.md
+- [x] **Verification** — [out/verification/R26.8/notes.md](../../../out/verification/R26.8/notes.md)
+- [x] **Gate** — Backend full suite 866 passed, 1 skipped; frontend tests 208 passed, 18 skipped; build built in 8.29s
+- **Scope:** Fix test_ui_positions_post_success_when_within_limits (mock wheel policy); RELEASE_PLAYBOOK section 1.4 gate policy (scoped vs full-suite, exceptions); release artifacts. Branch: release/R26.8.
+
+### R26.9 — Execution discipline lock (Ticket → Journal → Notifications → EOD)
+
+- [x] **Requirements** — R26.9_requirements.md
+- [x] **Release notes** — R26.9_release_notes.md
+- [x] **Verification** — [out/verification/R26.9/notes.md](../../../out/verification/R26.9/notes.md)
+- [x] **Gate** — Backend full suite 869 passed, 3 skipped; frontend tests 212 passed, 18 skipped; build built in 20.52s
+- **Scope:** Execution log store + API; TodayPage queue Mark Done gate (journal or skip); EOD mark-done block when NEW notifications unless override; safe UI. Branch: release/R26.9.
 
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 

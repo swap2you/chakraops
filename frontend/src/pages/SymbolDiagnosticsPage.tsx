@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, Link } from "react-router-dom";
 import { Calendar, ChevronDown, ChevronRight, Database, Droplets, MessageSquare, X } from "lucide-react";
-import { useSymbolDiagnostics, useRecomputeSymbolDiagnostics, useDefaultAccount, useUiSystemHealth, useUpsertSharePosition, useDeleteSharePosition, useCloseSharePosition, useClosedSharePositions, useSetDeltaOverride, useDeleteDeltaOverride } from "@/api/queries";
+import { useSymbolDiagnostics, useRecomputeSymbolDiagnostics, useDefaultAccount, useUiSystemHealth, useUpsertSharePosition, useDeleteSharePosition, useCloseSharePosition, useClosedSharePositions, useSetDeltaOverride, useDeleteDeltaOverride, useActionNeeded } from "@/api/queries";
 import type { SymbolDiagnosticsResponseExtended } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { TradeTicketDrawer } from "@/components/TradeTicketDrawer";
@@ -10,6 +10,7 @@ import { CopilotPanel } from "@/components/CopilotPanel";
 import { Card, CardHeader, Badge, StatusBadge, Button, Tooltip } from "@/components/ui";
 import type { SymbolDiagnosticsCandidate } from "@/api/types";
 import { buildReasonsFromPrimary, formatGateReason } from "@/reasons/parsePrimaryReason";
+import { constraintToLabel } from "@/utils/sizingConstraints";
 
 function regimeColor(r: string | null | undefined): string {
   const s = (r ?? "").toUpperCase();
@@ -107,7 +108,15 @@ export function SymbolDiagnosticsPage({ initialTabForTest }: { initialTabForTest
   const recompute = useRecomputeSymbolDiagnostics();
   const { data: accountData } = useDefaultAccount();
   const { data: health } = useUiSystemHealth();
+  const { data: actionNeeded } = useActionNeeded();
   const marketClosed = health?.market?.phase ? health.market.phase !== "OPEN" && health.market.phase !== "UNKNOWN" : false;
+
+  /** R26.0: ENTRY sizing for current symbol from action-needed (if any). */
+  const entrySizingItem = activeSymbol
+    ? [...(actionNeeded?.top_options ?? []), ...(actionNeeded?.top_shares ?? [])].find(
+        (item) => item.symbol === activeSymbol && item.next_action_code === "ENTRY" && item.sizing_recommended_by === "r260"
+      )
+    : null;
 
   const handleLookup = useCallback(() => {
     const s = symbol.trim().toUpperCase();
@@ -178,6 +187,55 @@ export function SymbolDiagnosticsPage({ initialTabForTest }: { initialTabForTest
 
       {data && !isLoading && (
         <>
+          {/* R26.0: Suggested size when this symbol has ENTRY with r260 sizing */}
+          {entrySizingItem && (
+            <Card data-testid="suggested-size-card">
+              <CardHeader
+                title="Suggested size"
+                description="Portfolio-aware sizing for ENTRY (manual execution only)."
+                actions={
+                  <Link
+                    to={`/ticket?symbol=${encodeURIComponent(activeSymbol ?? "")}&strategy=${encodeURIComponent(entrySizingItem.strategy || "SHARES")}&action=OPEN`}
+                    className="text-sm text-emerald-600 hover:underline dark:text-emerald-400"
+                    data-testid="suggested-size-trade-ticket-link"
+                  >
+                    Trade Ticket
+                  </Link>
+                }
+              />
+              <div className="text-sm text-zinc-600 dark:text-zinc-400 space-y-1">
+                {entrySizingItem.recommended_contracts != null && entrySizingItem.recommended_contracts > 0 && (
+                  <p>Size: {entrySizingItem.recommended_contracts} contracts</p>
+                )}
+                {entrySizingItem.recommended_qty != null && entrySizingItem.recommended_qty > 0 && (
+                  <p>Size: {entrySizingItem.recommended_qty} shares</p>
+                )}
+                {entrySizingItem.recommended_notional_usd != null && entrySizingItem.recommended_notional_usd > 0 && (
+                  <p>Notional: ${entrySizingItem.recommended_notional_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                )}
+                {(entrySizingItem.sizing_constraints_hit?.length ?? 0) > 0 && (
+                  <p>Constraints: {entrySizingItem.sizing_constraints_hit!.map((c) => constraintToLabel(c)).join(", ")}</p>
+                )}
+                {/* R26.1: CSP advisory */}
+                {(entrySizingItem.cash_secured_available_usd != null || entrySizingItem.csp_risk_proxy_move_pct != null) && (
+                  <div className="mt-1 pt-1 border-t border-zinc-200 dark:border-zinc-700" data-testid="suggested-size-csp-advisory">
+                    {entrySizingItem.cash_secured_available_usd != null && (
+                      <p>Cash-secured available: ${entrySizingItem.cash_secured_available_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                    )}
+                    {entrySizingItem.csp_risk_proxy_move_pct != null && (
+                      <p>Risk proxy move: {entrySizingItem.csp_risk_proxy_move_pct}%</p>
+                    )}
+                    {entrySizingItem.csp_risk_proxy_loss_per_contract_usd != null && (
+                      <p>Risk proxy loss (per contract): ${entrySizingItem.csp_risk_proxy_loss_per_contract_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                    )}
+                    {entrySizingItem.csp_risk_proxy_cap_contracts != null && (
+                      <p>Risk proxy cap: {entrySizingItem.csp_risk_proxy_cap_contracts} contracts{entrySizingItem.csp_risk_proxy_enforced ? " (enforced)" : ""}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
           <div className="w-full max-w-full">
             <ExecutionConsole
               data={data}

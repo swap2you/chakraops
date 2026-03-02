@@ -1686,6 +1686,449 @@ def ui_notification_delete(
 
 
 # ---------------------------------------------------------------------------
+# R26.2: Trade Ticket v2 — GET ticket payload; POST journal from ticket
+# ---------------------------------------------------------------------------
+
+
+@router.get("/trade-ticket")
+def ui_trade_ticket(
+    symbol: str = Query(..., description="Symbol"),
+    strategy: str = Query("SHARES", description="SHARES | CSP | CC"),
+    action: str = Query("OPEN", description="OPEN | CLOSE | BUY | SELL"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.2: Build trade ticket (snapshot/sizing/contract/steps/journal draft). No decision persistence."""
+    _require_ui_key(x_ui_key)
+    from app.core.portfolio.trade_ticket_r262 import build_trade_ticket
+    ticket = build_trade_ticket(symbol=symbol, strategy=strategy, action=action)
+    return ticket
+
+
+@router.post("/journal/from-ticket")
+async def ui_journal_from_ticket(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.2: Create journal entry from ticket payload (same schema as POST /journal)."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    trade_date = (body.get("trade_date") or "").strip()[:10]
+    symbol = (body.get("symbol") or "").strip().upper()
+    strategy = (body.get("strategy") or "SHARES").strip().upper()
+    action = (body.get("action") or "").strip().upper()
+    if not trade_date or not symbol or not action:
+        raise HTTPException(status_code=400, detail="trade_date, symbol, and action required")
+    try:
+        qty = float(body.get("qty", 0))
+    except (TypeError, ValueError):
+        qty = 0.0
+    price = body.get("price")
+    premium = body.get("premium")
+    if price is not None:
+        try:
+            price = float(price)
+        except (TypeError, ValueError):
+            price = None
+    if premium is not None:
+        try:
+            premium = float(premium)
+        except (TypeError, ValueError):
+            premium = None
+    fees = body.get("fees")
+    if fees is not None:
+        try:
+            fees = float(fees)
+        except (TypeError, ValueError):
+            fees = None
+    strike_val = None
+    if body.get("strike") is not None:
+        try:
+            strike_val = float(body["strike"])
+        except (TypeError, ValueError):
+            pass
+    realized_val = None
+    if body.get("realized_pl") is not None:
+        try:
+            realized_val = float(body["realized_pl"])
+        except (TypeError, ValueError):
+            pass
+    try:
+        from app.core.journal.journal_store import journal_create
+        entry = journal_create(
+            trade_date=trade_date,
+            symbol=symbol,
+            strategy=strategy,
+            action=action,
+            qty=qty,
+            price=price,
+            premium=premium,
+            fees=fees,
+            contract_key=(body.get("contract_key") or "").strip() or None,
+            expiry=(body.get("expiry") or "").strip()[:10] or None,
+            strike=strike_val,
+            right=(body.get("right") or "").strip() or None,
+            notes=(body.get("notes") or "").strip()[:2000] or None,
+            tags=(body.get("tags") or "").strip()[:500] or None,
+            realized_pl=realized_val,
+            link_id=(body.get("link_id") or "").strip() or None,
+        )
+        return {"entry": entry}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Journal from-ticket error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to create entry")
+
+
+# ---------------------------------------------------------------------------
+# R26.3: Today summary — lightweight single payload for Today page
+# ---------------------------------------------------------------------------
+
+
+def _format_ts_et(ts_utc: str | None) -> str:
+    """Format UTC timestamp to ET display string for Today summary."""
+    if not ts_utc or not isinstance(ts_utc, str):
+        return "—"
+    try:
+        from datetime import datetime, timezone
+        from zoneinfo import ZoneInfo
+        dt = datetime.fromisoformat(ts_utc.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        et = dt.astimezone(ZoneInfo("America/New_York"))
+        return et.strftime("%Y-%m-%d %H:%M ET")
+    except Exception:
+        return str(ts_utc)[:19] + " ET"
+
+
+@router.get("/today/summary")
+def ui_today_summary(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.3: Lightweight summary for Today page. Same as_of as decision store; no heavy ORATS."""
+    _require_ui_key(x_ui_key)
+    latest_run_ts: str | None = None
+    as_of_et = "—"
+    try:
+        from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2, get_eval_snapshot
+        store = get_evaluation_store_v2()
+        store.reload_from_disk()
+        artifact = store.get_latest()
+        if artifact and getattr(artifact, "metadata", None):
+            latest_run_ts = (artifact.metadata or {}).get("pipeline_timestamp")
+        if not latest_run_ts:
+            snap = get_eval_snapshot()
+            if isinstance(snap, dict):
+                latest_run_ts = snap.get("quote_as_of") or snap.get("pipeline_timestamp")
+        as_of_et = _format_ts_et(latest_run_ts)
+    except Exception:
+        pass
+
+    cadence_mode = "EOD_BIASED"
+    eligibility_as_of: str | None = latest_run_ts
+    try:
+        from app.core.settings import get_decision_cadence_mode
+        cadence_mode = get_decision_cadence_mode()
+    except Exception:
+        pass
+
+    guardrails = _get_guardrails_health()
+
+    orats_status = "UNKNOWN"
+    orats_freshness_state_label: str | None = None
+    try:
+        from app.api.data_health import get_data_health, get_orats_freshness_state
+        dh = get_data_health()
+        raw = (dh.get("status") or "UNKNOWN").upper()
+        if raw == "OK":
+            orats_status = "OK"
+        elif raw in ("WARN", "DEGRADED"):
+            orats_status = "WARN"
+        else:
+            orats_status = "DOWN"
+        freshness = get_orats_freshness_state()
+        orats_freshness_state_label = freshness.get("state_label") or freshness.get("state")
+    except Exception:
+        orats_status = "DOWN"
+
+    notifications_health: Dict[str, Any] = {}
+    notifications_new_count = 0
+    try:
+        from app.api.notifications_store import get_notifications_health
+        notifications_health = get_notifications_health()
+        notifications_new_count = int(notifications_health.get("count_new") or 0)
+    except Exception:
+        notifications_health = {"count_new": 0, "count_acked": 0, "count_archived": 0, "last_emitted_ts": None}
+
+    earnings_probe: Dict[str, Any] = {"status": "Unavailable", "next_date": None, "days": None, "implied_move_pct": None, "as_of": None}
+    try:
+        import os
+        sym = (os.environ.get("EARNINGS_PROBE_SYMBOL") or "SPY").strip().upper() or "SPY"
+        from app.core.orats.earnings import fetch_earnings_advisory
+        from app.core.config.orats_secrets import ORATS_API_TOKEN
+        token = (ORATS_API_TOKEN or "").strip() or None
+        out = fetch_earnings_advisory(sym, token=token)
+        status = (out.get("earnings_data_status") or "Unavailable").strip()
+        if status not in ("OK", "Unavailable", "Stale"):
+            status = "Unavailable"
+        earnings_probe = {
+            "status": status,
+            "next_date": out.get("earnings_next_date"),
+            "days": out.get("earnings_days"),
+            "implied_move_pct": out.get("implied_earnings_move_pct"),
+            "as_of": out.get("earnings_as_of"),
+        }
+    except Exception:
+        pass
+
+    # action_needed_count: client should derive from GET /api/ui/action-needed to avoid duplicate heavy work
+    action_needed_count: int | None = None
+
+    return {
+        "latest_run_ts": latest_run_ts,
+        "as_of_et": as_of_et,
+        "cadence": {"mode": cadence_mode, "eligibility_as_of": eligibility_as_of},
+        "orats_status": orats_status,
+        "orats_freshness_state_label": orats_freshness_state_label,
+        "guardrails": guardrails,
+        "notifications_health": notifications_health,
+        "notifications_new_count": notifications_new_count,
+        "earnings_probe": earnings_probe,
+        "action_needed_count": action_needed_count,
+    }
+
+
+# ---------------------------------------------------------------------------
+# R26.4: Ops checklists (EOD / Weekly) + eod-summary / weekly-summary
+# ---------------------------------------------------------------------------
+
+
+@router.get("/ops/checklist")
+def ui_ops_checklist(
+    kind: str = Query(..., description="EOD or WEEKLY"),
+    key: str = Query(..., description="YYYY-MM-DD for EOD, YYYY-WW for WEEKLY"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.4: Get checklist state for kind+key."""
+    _require_ui_key(x_ui_key)
+    from app.core.ops.checklist_store_r264 import checklist_get, checklist_ensure_open, KIND_EOD, KIND_WEEKLY
+    k = (kind or "").strip().upper()
+    key_val = (key or "").strip()
+    if k not in (KIND_EOD, KIND_WEEKLY):
+        raise HTTPException(status_code=400, detail="kind must be EOD or WEEKLY")
+    if not key_val:
+        raise HTTPException(status_code=400, detail="key required")
+    row = checklist_get(k, key_val)
+    if row is None:
+        row = checklist_ensure_open(k, key_val)
+    return {"kind": k, "key": key_val, "row": row}
+
+
+@router.post("/ops/checklist/mark-done")
+async def ui_ops_checklist_mark_done(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.4: Mark checklist DONE for kind+key. Body: kind, key, notes?, override_reason? (R26.9: required when EOD and NEW notifications)."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    kind = (body.get("kind") or "").strip().upper()
+    key_val = (body.get("key") or "").strip()
+    notes = (body.get("notes") or "").strip()[:2000] or None
+    override_reason = (body.get("override_reason") or "").strip()[:140] or None
+    from app.core.ops.checklist_store_r264 import checklist_set_done, KIND_EOD, KIND_WEEKLY
+    if kind not in (KIND_EOD, KIND_WEEKLY):
+        raise HTTPException(status_code=400, detail="kind must be EOD or WEEKLY")
+    if not key_val:
+        raise HTTPException(status_code=400, detail="key required")
+    # R26.9: EOD mark-done blocked when NEW notifications exist unless override_reason provided
+    if kind == KIND_EOD:
+        from app.api.notifications_store import get_notifications_health
+        from app.core.ops.execution_log_store_r269 import execution_log_append, EVENT_EOD_OVERRIDE
+        health = get_notifications_health()
+        count_new = int(health.get("count_new") or 0)
+        if count_new > 0 and not override_reason:
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot complete EOD while inbox has NEW items.",
+            )
+        if count_new > 0 and override_reason:
+            execution_log_append(EVENT_EOD_OVERRIDE, reason=override_reason)
+    row = checklist_set_done(kind, key_val, notes=notes)
+    return {"status": "OK", "row": row}
+
+
+# ---------------------------------------------------------------------------
+# R26.9: Ops execution log (overrides and done transitions)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/ops/execution-log")
+async def ui_ops_execution_log_post(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.9: Write one execution log event. Body: event_type, symbol?, strategy?, action?, ticket_id?, reason?. No FAIL_/WARN_."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    event_type = (body.get("event_type") or "").strip().upper()
+    symbol = (body.get("symbol") or "").strip() or None
+    strategy = (body.get("strategy") or "").strip() or None
+    action = (body.get("action") or "").strip() or None
+    ticket_id = (body.get("ticket_id") or "").strip() or None
+    reason = (body.get("reason") or "").strip()[:140] or None
+    from app.core.ops.execution_log_store_r269 import execution_log_append, VALID_EVENTS
+    if event_type not in VALID_EVENTS:
+        raise HTTPException(status_code=400, detail=f"event_type must be one of {list(VALID_EVENTS)}")
+    row = execution_log_append(event_type=event_type, symbol=symbol, strategy=strategy, action=action, ticket_id=ticket_id, reason=reason)
+    return {"status": "OK", "row": row}
+
+
+@router.get("/ops/execution-log")
+def ui_ops_execution_log_get(
+    date: str | None = Query(None, description="YYYY-MM-DD (optional)"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.9: List execution log rows. Optional date filter. No FAIL_/WARN_."""
+    _require_ui_key(x_ui_key)
+    from app.core.ops.execution_log_store_r269 import execution_log_list
+    date_str = (date or "").strip()[:10] if date else None
+    if date_str and (len(date_str) != 10 or date_str[4] != "-" or date_str[7] != "-"):
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    rows = execution_log_list(date=date_str)
+    return {"rows": rows}
+
+
+def _eod_summary_for_date(date_str: str) -> Dict[str, Any]:
+    """Build eod-summary payload for date. No FAIL_/WARN_."""
+    from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2, get_eval_snapshot
+    from app.core.journal.journal_store import journal_list
+    from app.api.notifications_store import get_notifications_health
+    out: Dict[str, Any] = {
+        "date": date_str,
+        "eval_as_of": None,
+        "action_needed_count": None,
+        "notifications_new_count": 0,
+        "journal_entries_count": 0,
+    }
+    try:
+        store = get_evaluation_store_v2()
+        store.reload_from_disk()
+        artifact = store.get_latest()
+        if artifact and getattr(artifact, "metadata", None):
+            out["eval_as_of"] = (artifact.metadata or {}).get("pipeline_timestamp")
+        if not out["eval_as_of"]:
+            snap = get_eval_snapshot()
+            if isinstance(snap, dict):
+                out["eval_as_of"] = snap.get("quote_as_of") or snap.get("pipeline_timestamp")
+    except Exception:
+        pass
+    try:
+        health = get_notifications_health()
+        out["notifications_new_count"] = int(health.get("count_new") or 0)
+    except Exception:
+        pass
+    try:
+        entries = journal_list(from_date=date_str, to_date=date_str, limit=10000)
+        out["journal_entries_count"] = len(entries)
+    except Exception:
+        pass
+    return out
+
+
+@router.get("/ops/eod-summary")
+def ui_ops_eod_summary(
+    date: str = Query(..., description="YYYY-MM-DD"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.4: EOD summary for date (eval as_of, counts). No FAIL_/WARN_."""
+    _require_ui_key(x_ui_key)
+    date_str = (date or "").strip()[:10]
+    if len(date_str) != 10 or date_str[4] != "-" or date_str[7] != "-":
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    return _eod_summary_for_date(date_str)
+
+
+def _week_to_date_range(week_key: str) -> tuple[str, str] | None:
+    """Convert YYYY-WW to (from_date, to_date) for that week (Mon-Sun)."""
+    if not week_key or len(week_key) < 6:
+        return None
+    try:
+        from datetime import datetime as _dt, timedelta
+        parts = week_key.split("-")
+        year = int(parts[0])
+        w = int(parts[1])
+        d = _dt.strptime(f"{year}-{w:02d}-1", "%G-%V-%u").date()
+        end_d = d + timedelta(days=6)
+        return (d.isoformat(), end_d.isoformat())
+    except Exception:
+        return None
+
+
+@router.get("/ops/weekly-summary")
+def ui_ops_weekly_summary(
+    week: str = Query(..., description="YYYY-WW"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.4: Weekly summary (journal realized P/L, counts, winners/losers, guardrails). No FAIL_/WARN_."""
+    _require_ui_key(x_ui_key)
+    week_key = (week or "").strip()
+    date_range = _week_to_date_range(week_key)
+    if not date_range:
+        raise HTTPException(status_code=400, detail="week must be YYYY-WW")
+    from_date, to_date = date_range
+    from app.core.journal.journal_store import journal_list
+    from app.core.portfolio.guardrails_r259 import get_guardrails_metrics_and_status
+    out: Dict[str, Any] = {
+        "week": week_key,
+        "from_date": from_date,
+        "to_date": to_date,
+        "realized_pl_total": 0.0,
+        "trade_count": 0,
+        "winners": [],
+        "losers": [],
+        "guardrails": {},
+    }
+    try:
+        entries = journal_list(from_date=from_date, to_date=to_date, limit=2000)
+        out["trade_count"] = len(entries)
+        realized_by_symbol: Dict[str, float] = {}
+        for e in entries:
+            sym = (e.get("symbol") or "").strip().upper()
+            if not sym:
+                continue
+            pl = e.get("realized_pl")
+            if pl is not None:
+                try:
+                    pl_f = float(pl)
+                except (TypeError, ValueError):
+                    continue
+                out["realized_pl_total"] += pl_f
+                realized_by_symbol[sym] = realized_by_symbol.get(sym, 0) + pl_f
+        winners = sorted([{"symbol": s, "realized_pl": v} for s, v in realized_by_symbol.items() if v > 0], key=lambda x: -x["realized_pl"])[:10]
+        losers = sorted([{"symbol": s, "realized_pl": v} for s, v in realized_by_symbol.items() if v < 0], key=lambda x: x["realized_pl"])[:10]
+        out["winners"] = winners
+        out["losers"] = losers
+    except Exception:
+        pass
+    try:
+        out["guardrails"] = get_guardrails_metrics_and_status()
+    except Exception:
+        pass
+    return out
+
+
+# ---------------------------------------------------------------------------
 # R25.5: Journal + Monthly Reports (SQLite-backed; no FAIL/WARN in responses)
 # ---------------------------------------------------------------------------
 
@@ -1874,6 +2317,98 @@ def ui_reports_monthly(
         import logging
         logging.getLogger(__name__).exception("Monthly report error: %s", e)
         raise HTTPException(status_code=500, detail="Unable to load report")
+
+
+# R26.5: Monthly close pack (data/reports/<month>/; state + files + download)
+def _monthly_close_allowlist() -> frozenset:
+    from app.core.ops.monthly_close_store_r265 import ALLOWED_FILES
+    return ALLOWED_FILES
+
+
+@router.post("/reports/monthly/close")
+def ui_reports_monthly_close(
+    month: str = Query(..., description="YYYY-MM"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.5: Generate monthly close pack under data/reports/<month>/; deterministic."""
+    _require_ui_key(x_ui_key)
+    month = (month or "").strip()[:7]
+    if len(month) != 7 or month[4] != "-":
+        raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+    try:
+        from app.core.ops.monthly_close_store_r265 import generate_monthly_close_pack
+        result = generate_monthly_close_pack(month)
+        return {"status": "OK", "month": result["month"], "generated_ts": result["generated_ts"], "paths": result["paths"]}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Monthly close pack error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to generate close pack")
+
+
+@router.get("/reports/monthly/close/files")
+def ui_reports_monthly_close_files(
+    month: str = Query(..., description="YYYY-MM"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.5: List available close pack files and sizes for month."""
+    _require_ui_key(x_ui_key)
+    month = (month or "").strip()[:7]
+    if len(month) != 7 or month[4] != "-":
+        raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+    try:
+        from app.core.ops.monthly_close_store_r265 import _reports_base_path, ALLOWED_FILES, monthly_close_get
+        base = _reports_base_path()
+        month_dir = base / month
+        files: List[Dict[str, Any]] = []
+        if month_dir.exists():
+            for name in sorted(ALLOWED_FILES):
+                p = month_dir / name
+                if p.is_file():
+                    files.append({"name": name, "size": p.stat().st_size})
+        state = monthly_close_get(month)
+        out: Dict[str, Any] = {"month": month, "files": files}
+        if state:
+            out["generated_ts"] = state.get("generated_ts")
+            out["paths"] = state.get("paths_json") or []
+        return out
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Monthly close files error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to list files")
+
+
+@router.get("/reports/monthly/close/download")
+def ui_reports_monthly_close_download(
+    month: str = Query(..., description="YYYY-MM"),
+    file: str = Query(..., description="File name (allowlist)"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+):
+    """R26.5: Stream close pack file; file param validated against allowlist."""
+    _require_ui_key(x_ui_key)
+    month = (month or "").strip()[:7]
+    if len(month) != 7 or month[4] != "-":
+        raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+    allowlist = _monthly_close_allowlist()
+    if (file or "").strip() not in allowlist:
+        raise HTTPException(status_code=400, detail="Invalid file name")
+    try:
+        from app.core.ops.monthly_close_store_r265 import _reports_base_path
+        from fastapi.responses import FileResponse
+        base = _reports_base_path()
+        path = (base / month / file.strip()).resolve()
+        expected_dir = (base / month).resolve()
+        if not path.is_file() or path.parent != expected_dir or path.name != file.strip():
+            raise HTTPException(status_code=404, detail="File not found")
+        media = "application/json" if file.endswith(".json") else "text/csv" if file.endswith(".csv") else "text/plain"
+        return FileResponse(path, media_type=media, filename=file)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Monthly close download error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to download")
 
 
 @router.get("/accounts/default")
@@ -4194,7 +4729,9 @@ def ui_action_needed(
         return {"options": [], "shares": [], "recently_changed": _recent_transitions()}
 
     # R25.9: Guardrails — compute metrics once for request-time ENTRY suppression
+    # R26.0: Sizing uses same snapshot + metrics for portfolio-aware size
     guardrails_metrics: Dict[str, Any] = {}
+    guardrails_snapshot: Dict[str, Any] = {}
     try:
         from app.core.portfolio.guardrails_r259 import (
             build_guardrails_snapshot,
@@ -4202,6 +4739,7 @@ def ui_action_needed(
             evaluate_guardrails_for_entry,
         )
         _guard_snap = build_guardrails_snapshot()
+        guardrails_snapshot = dict(_guard_snap)
         _snap_for_prices = get_eval_snapshot()
         _prices = {}
         if _snap_for_prices and isinstance(_snap_for_prices, dict):
@@ -4209,6 +4747,8 @@ def ui_action_needed(
                 if isinstance(_v, dict) and _v.get("price") is not None:
                     _prices[_sym] = float(_v["price"])
         guardrails_metrics = compute_portfolio_metrics(_guard_snap, symbol_prices=_prices)
+        guardrails_snapshot["total_equity"] = guardrails_metrics.get("total_equity")
+        guardrails_snapshot["symbol_notionals"] = guardrails_metrics.get("symbol_notionals") or {}
     except Exception:
         pass
 
@@ -4337,6 +4877,54 @@ def ui_action_needed(
                         continue
                 except Exception:
                     pass
+                # R26.0: Portfolio-aware sizing for ENTRY
+                try:
+                    from app.core.portfolio.sizing_r260 import apply_sizing
+                    from app.core.accounts.holdings_db import get_holdings_for_evaluation
+                    opt_strategy = (getattr(sel_c, "strategy", None) or "CSP").strip().upper() if sel_c else "CSP"
+                    strike_val = getattr(sel_c, "strike", None) or (item.get("strike") if isinstance(item.get("strike"), (int, float)) else None)
+                    underlying_price = getattr(summary, "price", None) or getattr(summary, "underlying_price", None)
+                    if underlying_price is None and isinstance(diag.get("stock"), dict):
+                        underlying_price = diag["stock"].get("price") or diag["stock"].get("underlying_price")
+                    try:
+                        underlying_price = float(underlying_price) if underlying_price is not None else None
+                    except (TypeError, ValueError):
+                        underlying_price = None
+                    shares_for_sym = (get_holdings_for_evaluation() or {}).get(sym) or 0
+                    candidate = {
+                        "symbol": sym,
+                        "strategy": opt_strategy,
+                        "strike": strike_val,
+                        "underlying_price": underlying_price,
+                        "price": underlying_price,
+                        "current_shares_qty": shares_for_sym,
+                        "shares": shares_for_sym,
+                    }
+                    # R26.1: Symbol context for risk proxy (earnings, atr_pct)
+                    symbol_context = {}
+                    earnings = diag.get("earnings") or {}
+                    if isinstance(earnings, dict):
+                        symbol_context["earnings_days"] = earnings.get("days")
+                        symbol_context["implied_earnings_move_pct"] = earnings.get("implied_move_pct") or earnings.get("implied_earnings_move_pct")
+                    technicals = diag.get("technicals") or {}
+                    if isinstance(technicals, dict):
+                        symbol_context["atr_pct"] = technicals.get("atr_pct")
+                    sizing_result = apply_sizing(
+                        candidate, guardrails_snapshot, guardrails_metrics,
+                        symbol_context=symbol_context,
+                    )
+                    if sizing_result.get("blocked"):
+                        continue
+                    item["recommended_contracts"] = sizing_result.get("recommended_contracts")
+                    item["recommended_notional_usd"] = sizing_result.get("recommended_notional_usd")
+                    item["sizing_constraints_hit"] = sizing_result.get("sizing_constraints_hit") or []
+                    item["sizing_recommended_by"] = sizing_result.get("sizing_recommended_by") or "r260"
+                    item["recommended_qty"] = None
+                    for _k in ("cash_secured_available_usd", "csp_risk_proxy_move_pct", "csp_risk_proxy_loss_per_contract_usd", "csp_risk_proxy_cap_contracts", "csp_risk_proxy_enforced"):
+                        if _k in sizing_result:
+                            item[_k] = sizing_result[_k]
+                except Exception:
+                    pass
             options_out.append(item)
         except Exception:
             continue
@@ -4377,6 +4965,27 @@ def ui_action_needed(
                         continue
                     if ev.get("hard_blocks"):
                         continue
+                except Exception:
+                    pass
+                # R26.0: Portfolio-aware sizing for shares ENTRY
+                try:
+                    from app.core.portfolio.sizing_r260 import apply_sizing
+                    share_price = getattr(summary, "price", None) or getattr(summary, "underlying_price", None)
+                    if share_price is None and isinstance(diag.get("stock"), dict):
+                        share_price = diag["stock"].get("price") or diag["stock"].get("underlying_price")
+                    try:
+                        share_price = float(share_price) if share_price is not None else 0.0
+                    except (TypeError, ValueError):
+                        share_price = 0.0
+                    candidate = {"symbol": sym, "strategy": "SHARES", "price": share_price, "underlying_price": share_price}
+                    sizing_result = apply_sizing(candidate, guardrails_snapshot, guardrails_metrics)
+                    if sizing_result.get("blocked"):
+                        continue
+                    item["recommended_qty"] = sizing_result.get("recommended_qty")
+                    item["recommended_contracts"] = None
+                    item["recommended_notional_usd"] = sizing_result.get("recommended_notional_usd")
+                    item["sizing_constraints_hit"] = sizing_result.get("sizing_constraints_hit") or []
+                    item["sizing_recommended_by"] = sizing_result.get("sizing_recommended_by") or "r260"
                 except Exception:
                     pass
             shares_out.append(item)

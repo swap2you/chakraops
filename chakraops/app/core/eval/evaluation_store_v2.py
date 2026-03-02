@@ -56,6 +56,12 @@ def reset_output_dir() -> None:
     _DEFAULT_OUTPUT_DIR = None
 
 
+# R26.7: Restore drill — OUT_DIR env override (minimal; tests can still set_output_dir after import)
+_out_dir_env = os.environ.get("OUT_DIR")
+if _out_dir_env:
+    set_output_dir(Path(_out_dir_env).resolve())
+
+
 def get_decision_store_path() -> Path:
     """Return canonical decision_latest.json path (write target). ONE source of truth."""
     if _DEFAULT_OUTPUT_DIR is not None:

@@ -414,3 +414,41 @@ def maybe_append_options_lifecycle_notification(
         details["symbol"] = symbol
     append_notification("INFO", event_type, message, symbol=symbol, details=details, subtype=event_type)
     return True
+
+
+# R26.4: Ops checklist reminder types (safe; no FAIL/WARN)
+OPS_EOD_CHECKLIST_REMINDER = "OPS_EOD_CHECKLIST_REMINDER"
+OPS_WEEKLY_REVIEW_REMINDER = "OPS_WEEKLY_REVIEW_REMINDER"
+
+
+def maybe_append_ops_checklist_reminder(reminder_type: str, key: str) -> bool:
+    """
+    R26.4: Append EOD or Weekly reminder only if no active (NEW/ACKED) for same type+key.
+    Dedupe: one per key until acked/archived. Safe labels only.
+    """
+    if reminder_type not in (OPS_EOD_CHECKLIST_REMINDER, OPS_WEEKLY_REVIEW_REMINDER):
+        return False
+    key = (key or "").strip()
+    if not key:
+        return False
+    recent = load_notifications(limit=500, state_filter=None)
+    for rec in recent:
+        if rec.get("type") != reminder_type:
+            continue
+        if (rec.get("details") or {}).get("key") != key:
+            continue
+        if rec.get("state") in ("NEW", "ACKED"):
+            return False
+    if reminder_type == OPS_EOD_CHECKLIST_REMINDER:
+        message = f"EOD checklist pending for {key}. Complete before tomorrow."
+    else:
+        message = f"Weekly review pending for week {key}. Complete when ready."
+    append_notification(
+        "INFO",
+        reminder_type,
+        message,
+        symbol=None,
+        details={"key": key},
+        subtype=reminder_type,
+    )
+    return True

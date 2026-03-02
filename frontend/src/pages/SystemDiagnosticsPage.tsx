@@ -644,6 +644,32 @@ export function SystemDiagnosticsPage() {
                 <span className="block text-xs text-zinc-500 dark:text-zinc-500">Max symbol notional %</span>
                 <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.guardrails.metrics?.max_symbol_notional_pct ?? "—"}%</p>
               </div>
+              {/* R26.0: Available budget (post cash reserve) */}
+              {data.guardrails.metrics?.available_budget_usd != null && (
+                <div>
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">Available budget</span>
+                  <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200" data-testid="guardrails-available-budget">
+                    ${data.guardrails.metrics.available_budget_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </p>
+                </div>
+              )}
+              {/* R26.1: Cash-secured committed and CSP cash available */}
+              {data.guardrails.metrics?.cash_secured_committed_usd != null && (
+                <div>
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">Cash-secured committed</span>
+                  <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200" data-testid="guardrails-cash-secured-committed">
+                    ${data.guardrails.metrics.cash_secured_committed_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </p>
+                </div>
+              )}
+              {data.guardrails.metrics?.csp_cash_available_usd != null && (
+                <div>
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">CSP cash available</span>
+                  <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200" data-testid="guardrails-csp-cash-available">
+                    ${data.guardrails.metrics.csp_cash_available_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </p>
+                </div>
+              )}
             </div>
           </Card>
         )}

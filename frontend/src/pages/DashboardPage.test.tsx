@@ -196,4 +196,112 @@ describe("DashboardPage", () => {
     expect(screen.getByTestId("action-needed-roll-reason-AAPL")).toHaveTextContent("Reason: DTE window");
     expect(document.body.textContent).not.toMatch(/FAIL_|WARN_/);
   });
+
+  it("R26.0: Action Needed shows size, notional, and constraints for ENTRY with r260 sizing", async () => {
+    mockUseActionNeeded.mockReturnValue({
+      data: {
+        top_options: [
+          {
+            symbol: "SPY",
+            next_action_code: "ENTRY",
+            rationale_lines: ["Eligible."],
+            key_number: null,
+            tab: "Options",
+            accordion: "trade",
+            accordion_id: "trade",
+            sizing_recommended_by: "r260",
+            recommended_contracts: 2,
+            recommended_notional_usd: 20000,
+            sizing_constraints_hit: ["CASH_RESERVE"],
+          },
+        ],
+        top_shares: [
+          {
+            symbol: "QQQ",
+            next_action_code: "ENTRY",
+            rationale_lines: ["Support."],
+            key_number: null,
+            tab: "Shares",
+            accordion: "trade-plan",
+            accordion_id: "trade-plan",
+            sizing_recommended_by: "r260",
+            recommended_qty: 50,
+            recommended_notional_usd: 25000,
+            sizing_constraints_hit: [],
+          },
+        ],
+        recently_changed: [],
+      },
+    });
+    render(<DashboardPage />);
+    await screen.findByTestId("action-needed-card");
+    const optSizing = screen.getByTestId("action-needed-sizing-SPY");
+    expect(optSizing).toHaveTextContent(/Size: 2 contracts/);
+    expect(optSizing).toHaveTextContent(/Notional: \$20,000/);
+    expect(optSizing).toHaveTextContent(/Constraints: Cash reserve/);
+    const shrSizing = screen.getByTestId("action-needed-sizing-QQQ");
+    expect(shrSizing).toHaveTextContent(/Size: 50 shares/);
+    expect(shrSizing).toHaveTextContent(/Notional: \$25,000/);
+    expect(document.body.textContent).not.toMatch(/FAIL_|WARN_/);
+  });
+
+  it("R26.1: CSP ENTRY shows cash-secured and risk proxy advisory (no FAIL/WARN)", async () => {
+    mockUseActionNeeded.mockReturnValue({
+      data: {
+        top_options: [
+          {
+            symbol: "SPY",
+            next_action_code: "ENTRY",
+            rationale_lines: ["CSP eligible."],
+            key_number: null,
+            tab: "Options",
+            accordion_id: "trade",
+            sizing_recommended_by: "r260",
+            recommended_contracts: 2,
+            recommended_notional_usd: 24000,
+            cash_secured_available_usd: 50000,
+            csp_risk_proxy_move_pct: 7,
+            csp_risk_proxy_loss_per_contract_usd: 840,
+            csp_risk_proxy_cap_contracts: 4,
+            csp_risk_proxy_enforced: false,
+          },
+        ],
+        top_shares: [],
+        recently_changed: [],
+      },
+    });
+    render(<DashboardPage />);
+    await screen.findByTestId("action-needed-card");
+    const advisory = screen.getByTestId("action-needed-csp-advisory-SPY");
+    expect(advisory).toHaveTextContent(/Cash-secured available: \$50,000/);
+    expect(advisory).toHaveTextContent(/Risk proxy move: 7%/);
+    expect(advisory).toHaveTextContent(/Risk proxy loss \(per contract\): \$840/);
+    expect(advisory).toHaveTextContent(/Risk proxy cap: 4 contracts/);
+    expect(document.body.textContent).not.toMatch(/FAIL_|WARN_/);
+  });
+
+  it("R26.0: No FAIL or WARN in DOM when guardrails include available_budget_usd", async () => {
+    mockUseUiSystemHealth.mockReturnValue({
+      data: {
+        ...mockHealth,
+        guardrails: {
+          status: "OK",
+          metrics: {
+            cash_reserve_pct: 30,
+            open_options_count: 1,
+            open_shares_count: 0,
+            symbols_exposure_count: 2,
+            max_symbol_notional_pct: 10,
+            available_budget_usd: 45000,
+          },
+          limits: { MAX_OPEN_OPTIONS_POSITIONS: 6, MAX_OPEN_SHARES_POSITIONS: 10, MAX_SYMBOLS_EXPOSURE: 12 },
+        },
+      },
+    });
+    render(<DashboardPage />);
+    await screen.findByTestId("guardrails-card");
+    expect(screen.getByTestId("guardrails-available-budget")).toHaveTextContent("$45,000");
+    expect(document.body.textContent).not.toMatch(/FAIL_|WARN_/);
+    mockUseUiSystemHealth.mockReturnValue({ data: mockHealth });
+  });
 });

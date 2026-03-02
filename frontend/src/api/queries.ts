@@ -4,7 +4,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiDelete, apiGet, apiPatch, apiPost, apiPostText } from "./client";
+import { apiDelete, apiGet, apiGetBlob, apiPatch, apiPost, apiPostNoBody, apiPostText } from "./client";
 import type {
   ArtifactListResponse,
   DecisionArtifactV2,
@@ -99,6 +99,29 @@ function sharesCandidatesPath(): string {
 /** R24.1: Action Needed — top options + top shares for Dashboard. */
 function actionNeededPath(): string {
   return `/api/ui/action-needed`;
+}
+
+/** R26.3: Today summary for Today page. */
+function todaySummaryPath(): string {
+  return `/api/ui/today/summary`;
+}
+
+/** R26.4: Ops checklist and summaries. */
+function opsChecklistPath(kind: string, key: string): string {
+  return `/api/ui/ops/checklist?kind=${encodeURIComponent(kind)}&key=${encodeURIComponent(key)}`;
+}
+function opsChecklistMarkDonePath(): string {
+  return `/api/ui/ops/checklist/mark-done`;
+}
+/** R26.9: Ops execution log (write event). */
+function opsExecutionLogPath(): string {
+  return `/api/ui/ops/execution-log`;
+}
+function opsEodSummaryPath(date: string): string {
+  return `/api/ui/ops/eod-summary?date=${encodeURIComponent(date)}`;
+}
+function opsWeeklySummaryPath(week: string): string {
+  return `/api/ui/ops/weekly-summary?week=${encodeURIComponent(week)}`;
 }
 
 function uiTrackedPositionsPath(): string {
@@ -296,6 +319,15 @@ function uiNotificationsArchiveBulkPath(): string {
 }
 
 /** R25.5: Journal */
+/** R26.2: Trade ticket */
+function tradeTicketPath(symbol: string, strategy: string, action: string): string {
+  const p = new URLSearchParams();
+  p.set("symbol", symbol);
+  p.set("strategy", strategy);
+  p.set("action", action);
+  return `/api/ui/trade-ticket?${p.toString()}`;
+}
+
 function uiJournalPath(params: { from_date?: string; to_date?: string; symbol?: string; strategy?: string; limit?: number; offset?: number }): string {
   const p = new URLSearchParams();
   if (params.from_date) p.set("from_date", params.from_date);
@@ -307,6 +339,9 @@ function uiJournalPath(params: { from_date?: string; to_date?: string; symbol?: 
   const q = p.toString();
   return q ? `/api/ui/journal?${q}` : "/api/ui/journal";
 }
+function uiJournalFromTicketPath(): string {
+  return "/api/ui/journal/from-ticket";
+}
 function uiJournalExportPath(from_date: string, to_date: string): string {
   return `/api/ui/journal/export?from_date=${encodeURIComponent(from_date)}&to_date=${encodeURIComponent(to_date)}`;
 }
@@ -316,6 +351,16 @@ function uiJournalEntryPath(id: string): string {
 /** R25.5: Reports monthly */
 function uiReportsMonthlyPath(month: string): string {
   return `/api/ui/reports/monthly?month=${encodeURIComponent(month)}`;
+}
+/** R26.5: Monthly close pack */
+function uiMonthlyCloseFilesPath(month: string): string {
+  return `/api/ui/reports/monthly/close/files?month=${encodeURIComponent(month)}`;
+}
+function uiMonthlyCloseDownloadPath(month: string, file: string): string {
+  return `/api/ui/reports/monthly/close/download?month=${encodeURIComponent(month)}&file=${encodeURIComponent(file)}`;
+}
+function uiMonthlyCloseGeneratePath(month: string): string {
+  return `/api/ui/reports/monthly/close?month=${encodeURIComponent(month)}`;
 }
 /** R25.6: Universe Admin */
 function uiUniverseAdminPath(params: { limit?: number; offset?: number; status?: string }): string {
@@ -359,6 +404,10 @@ export const queryKeys = {
   uiEarningsDebug: (symbol: string) => ["ui", "earningsDebug", symbol] as const,
   sharesCandidates: () => ["ui", "sharesCandidates"] as const,
   actionNeeded: () => ["ui", "actionNeeded"] as const,
+  todaySummary: () => ["ui", "todaySummary"] as const,
+  opsChecklist: (kind: string, key: string) => ["ui", "opsChecklist", kind, key] as const,
+  opsEodSummary: (date: string) => ["ui", "opsEodSummary", date] as const,
+  opsWeeklySummary: (week: string) => ["ui", "opsWeeklySummary", week] as const,
   uiPositions: () => ["ui", "positions"] as const,
   uiTrackedPositions: () => ["ui", "positions", "tracked"] as const,
   uiAccountsDefault: () => ["ui", "accounts", "default"] as const,
@@ -390,7 +439,10 @@ export const queryKeys = {
   uiDeltaOverrides: () => ["ui", "deltaOverrides"] as const,
   /** R25.5 */
   uiJournal: (params?: Record<string, unknown>) => ["ui", "journal", params ?? ""] as const,
+  tradeTicket: (symbol: string, strategy: string, action: string) =>
+    ["ui", "tradeTicket", symbol, strategy, action] as const,
   uiReportsMonthly: (month: string) => ["ui", "reports", "monthly", month] as const,
+  uiMonthlyCloseFiles: (month: string) => ["ui", "reports", "monthly", "close", "files", month] as const,
   /** R25.6 */
   uiUniverseAdmin: (params?: Record<string, unknown>) => ["ui", "universe", "admin", params ?? ""] as const,
   uiUniverseHealth: () => ["ui", "universe", "health"] as const,
@@ -611,6 +663,18 @@ export interface ActionNeededItem {
   mark_age_sec?: number | null;
   roll_window_threshold_dte?: number | null;
   roll_reason_codes?: string[] | null;
+  /** R26.0: Portfolio-aware sizing (request-time only; safe codes). */
+  recommended_qty?: number | null;
+  recommended_contracts?: number | null;
+  recommended_notional_usd?: number | null;
+  sizing_constraints_hit?: string[] | null;
+  sizing_recommended_by?: string | null;
+  /** R26.1: CSP cash-secured + risk proxy (advisory). */
+  cash_secured_available_usd?: number | null;
+  csp_risk_proxy_move_pct?: number | null;
+  csp_risk_proxy_loss_per_contract_usd?: number | null;
+  csp_risk_proxy_cap_contracts?: number | null;
+  csp_risk_proxy_enforced?: boolean | null;
 }
 export interface ActionNeededResponse {
   top_options: ActionNeededItem[];
@@ -623,6 +687,103 @@ export function useActionNeeded() {
   return useQuery({
     queryKey: queryKeys.actionNeeded(),
     queryFn: () => apiGet<ActionNeededResponse>(actionNeededPath()),
+  });
+}
+
+/** R26.3: Today summary — run status, cadence, guardrails, notifications count, earnings probe. */
+export interface TodaySummaryResponse {
+  latest_run_ts: string | null;
+  as_of_et: string;
+  cadence: { mode: string; eligibility_as_of: string | null };
+  orats_status: string;
+  orats_freshness_state_label: string | null;
+  guardrails: Record<string, unknown>;
+  notifications_health: Record<string, unknown>;
+  notifications_new_count: number;
+  earnings_probe: Record<string, unknown>;
+  action_needed_count: number | null;
+}
+export function useTodaySummary() {
+  return useQuery({
+    queryKey: queryKeys.todaySummary(),
+    queryFn: () => apiGet<TodaySummaryResponse>(todaySummaryPath()),
+  });
+}
+
+/** R26.4: Ops checklist (EOD / WEEKLY). */
+export interface OpsChecklistResponse {
+  kind: string;
+  key: string;
+  row: { id?: string; kind?: string; key?: string; status?: string; done_ts?: string; notes?: string };
+}
+export function useOpsChecklist(kind: string, key: string) {
+  return useQuery({
+    queryKey: queryKeys.opsChecklist(kind, key),
+    queryFn: () => apiGet<OpsChecklistResponse>(opsChecklistPath(kind, key)),
+    enabled: !!kind && !!key,
+  });
+}
+export function useOpsChecklistMarkDone() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { kind: string; key: string; notes?: string; override_reason?: string }) =>
+      apiPost<{ status: string; row: OpsChecklistResponse["row"] }>(opsChecklistMarkDonePath(), payload),
+    onSuccess: (_, variables) => {
+      qc.invalidateQueries({ queryKey: queryKeys.opsChecklist(variables.kind, variables.key) });
+      qc.invalidateQueries({ queryKey: queryKeys.opsEodSummary(variables.key) });
+      qc.invalidateQueries({ queryKey: queryKeys.opsWeeklySummary(variables.key) });
+    },
+  });
+}
+
+/** R26.9: Post one execution log event (MARK_DONE, SKIP_JOURNAL, EOD_OVERRIDE). */
+export interface ExecutionLogPayload {
+  event_type: string;
+  symbol?: string;
+  strategy?: string;
+  action?: string;
+  ticket_id?: string;
+  reason?: string;
+}
+export function useExecutionLogPost() {
+  return useMutation({
+    mutationFn: (payload: ExecutionLogPayload) =>
+      apiPost<{ status: string; row: Record<string, unknown> }>(opsExecutionLogPath(), payload),
+  });
+}
+
+/** R26.4: EOD summary for a date. */
+export interface OpsEodSummaryResponse {
+  date: string;
+  eval_as_of: string | null;
+  action_needed_count: number | null;
+  notifications_new_count: number;
+  journal_entries_count: number;
+}
+export function useOpsEodSummary(date: string) {
+  return useQuery({
+    queryKey: queryKeys.opsEodSummary(date),
+    queryFn: () => apiGet<OpsEodSummaryResponse>(opsEodSummaryPath(date)),
+    enabled: !!date && date.length === 10,
+  });
+}
+
+/** R26.4: Weekly summary. */
+export interface OpsWeeklySummaryResponse {
+  week: string;
+  from_date: string;
+  to_date: string;
+  realized_pl_total: number;
+  trade_count: number;
+  winners: { symbol: string; realized_pl: number }[];
+  losers: { symbol: string; realized_pl: number }[];
+  guardrails: Record<string, unknown>;
+}
+export function useOpsWeeklySummary(week: string) {
+  return useQuery({
+    queryKey: queryKeys.opsWeeklySummary(week),
+    queryFn: () => apiGet<OpsWeeklySummaryResponse>(opsWeeklySummaryPath(week)),
+    enabled: !!week && week.length >= 6,
   });
 }
 
@@ -1297,6 +1458,8 @@ export function useRunEval() {
       qc.invalidateQueries({ queryKey: ["ui", "symbolDiagnostics"] });
       qc.invalidateQueries({ queryKey: queryKeys.uiAlerts() });
       qc.invalidateQueries({ queryKey: queryKeys.uiSystemHealth() });
+      qc.invalidateQueries({ queryKey: queryKeys.todaySummary() });
+      qc.invalidateQueries({ queryKey: queryKeys.actionNeeded() });
     },
   });
 }
@@ -1439,6 +1602,7 @@ export function useAckNotification(_limit = 100) {
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["ui", "notifications"] });
+      qc.invalidateQueries({ queryKey: queryKeys.todaySummary() });
     },
   });
 }
@@ -1454,6 +1618,7 @@ export function useArchiveNotification() {
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["ui", "notifications"] });
+      qc.invalidateQueries({ queryKey: queryKeys.todaySummary() });
     },
   });
 }
@@ -1581,6 +1746,40 @@ export function useJournalCreate() {
   });
 }
 
+/** R26.2: Trade ticket payload */
+export interface TradeTicketResponse {
+  symbol: string;
+  strategy: string;
+  action: string;
+  snapshot_header: Record<string, unknown>;
+  sizing: Record<string, unknown>;
+  contract_details: Record<string, unknown>;
+  execution_steps: string[];
+  journal_draft: Record<string, unknown>;
+  guardrails: Record<string, unknown>;
+  earnings_advisory: Record<string, unknown>;
+  error?: string;
+}
+export function useTradeTicket(symbol: string, strategy: string, action: string) {
+  return useQuery({
+    queryKey: queryKeys.tradeTicket(symbol, strategy, action),
+    queryFn: () => apiGet<TradeTicketResponse>(tradeTicketPath(symbol, strategy, action)),
+    enabled: !!symbol?.trim(),
+  });
+}
+
+/** R26.2: Create journal entry from ticket payload */
+export function useJournalFromTicket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      apiPost<JournalCreateResponse>(uiJournalFromTicketPath(), payload).then((r) => r.entry),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "journal"] });
+    },
+  });
+}
+
 export function useJournalUpdate() {
   const qc = useQueryClient();
   return useMutation({
@@ -1605,6 +1804,45 @@ export function useReportsMonthly(month: string) {
     queryFn: () => apiGet<MonthlyReportResponse>(uiReportsMonthlyPath(month)),
     enabled: !!month && month.length === 7 && month[4] === "-",
   });
+}
+
+/** R26.5: Monthly close pack — files list + generate + download */
+export interface MonthlyCloseFilesResponse {
+  month: string;
+  files: { name: string; size: number }[];
+  generated_ts?: string | null;
+  paths?: string[];
+}
+export function useMonthlyCloseFiles(month: string) {
+  return useQuery({
+    queryKey: queryKeys.uiMonthlyCloseFiles(month),
+    queryFn: () => apiGet<MonthlyCloseFilesResponse>(uiMonthlyCloseFilesPath(month)),
+    enabled: !!month && month.length === 7 && month[4] === "-",
+  });
+}
+export function useMonthlyCloseGenerate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (month: string) =>
+      apiPostNoBody<{ status: string; month: string; generated_ts: string; paths: string[] }>(
+        uiMonthlyCloseGeneratePath(month)
+      ),
+    onSuccess: (_, month) => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiMonthlyCloseFiles(month) });
+    },
+  });
+}
+export function getMonthlyCloseDownloadPath(month: string, file: string): string {
+  return uiMonthlyCloseDownloadPath(month, file);
+}
+export async function downloadMonthlyCloseFile(month: string, file: string): Promise<void> {
+  const blob = await apiGetBlob(uiMonthlyCloseDownloadPath(month, file));
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = file;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 /** R25.6: Universe Admin — current list + history */

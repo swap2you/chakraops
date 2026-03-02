@@ -350,3 +350,14 @@
 {"event": "state", "ref_id": "dcbbb83e-f4c1-4c20-90c2-2c15f1831e2b", "state": "ARCHIVED", "updated_at": "2026-02-27T22:10:50.154571+00:00"}
 {"event": "state", "ref_id": "7df5829f-e81b-42a8-b9e2-48ad7af09c81", "state": "ARCHIVED", "updated_at": "2026-02-27T22:10:50.172279+00:00"}
 {"id": "14529f96-be1c-477b-bc79-b006bb19c496", "timestamp_utc": "2026-02-27T22:23:18.036022+00:00", "severity": "WARN", "type": "ORATS_WARN", "subtype": "ORATS_STALE", "symbol": null, "message": "ORATS status WARN; data may be stale", "details": {"status": "WARN", "last_success_at": "2026-02-27T15:36:44.014039+00:00", "last_error_reason": null}}
+{"id": "3fb1c172-eb7b-4894-a44b-5ec7230bd5be", "timestamp_utc": "2026-03-02T16:24:56.597286+00:00", "severity": "WARN", "type": "ORATS_WARN", "subtype": "ORATS_STALE", "symbol": null, "message": "ORATS status WARN; data may be stale", "details": {"status": "WARN", "last_success_at": "2026-02-27T15:36:44.014039+00:00", "last_error_reason": null}}
+{"id": "8e11fa58-ec71-4c25-9847-14b06dadd294", "timestamp_utc": "2026-03-02T16:25:54.821585+00:00", "severity": "WARN", "type": "ORATS_WARN", "subtype": "ORATS_STALE", "symbol": null, "message": "ORATS status WARN; data may be stale", "details": {"status": "WARN", "last_success_at": "2026-02-27T15:36:44.014039+00:00", "last_error_reason": null}}
+{"id": "6cdb1992-186d-485e-a5bf-aa1b1733d16d", "timestamp_utc": "2026-03-02T17:10:36.131806+00:00", "severity": "INFO", "type": "OPS_EOD_CHECKLIST_REMINDER", "subtype": "OPS_EOD_CHECKLIST_REMINDER", "symbol": null, "message": "EOD checklist pending for 2026-02-27-r264-test. Complete before tomorrow.", "details": {"key": "2026-02-27-r264-test"}}
+{"event": "ack", "ref_id": "6cdb1992-186d-485e-a5bf-aa1b1733d16d", "ack_at_utc": "2026-03-02T19:24:07.520311+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "8e11fa58-ec71-4c25-9847-14b06dadd294", "ack_at_utc": "2026-03-02T19:24:07.538384+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "3fb1c172-eb7b-4894-a44b-5ec7230bd5be", "ack_at_utc": "2026-03-02T19:24:07.556298+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "14529f96-be1c-477b-bc79-b006bb19c496", "ack_at_utc": "2026-03-02T19:24:07.573050+00:00", "ack_by": "ui"}
+{"event": "state", "ref_id": "6cdb1992-186d-485e-a5bf-aa1b1733d16d", "state": "ARCHIVED", "updated_at": "2026-03-02T19:24:07.598363+00:00"}
+{"event": "state", "ref_id": "8e11fa58-ec71-4c25-9847-14b06dadd294", "state": "ARCHIVED", "updated_at": "2026-03-02T19:24:07.615529+00:00"}
+{"event": "state", "ref_id": "3fb1c172-eb7b-4894-a44b-5ec7230bd5be", "state": "ARCHIVED", "updated_at": "2026-03-02T19:24:07.631536+00:00"}
+{"event": "state", "ref_id": "14529f96-be1c-477b-bc79-b006bb19c496", "state": "ARCHIVED", "updated_at": "2026-03-02T19:24:07.649670+00:00"}

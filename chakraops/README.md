@@ -54,7 +54,7 @@ docker compose up --build
 
 - **Frontend:** http://localhost:3000  
 - **Backend API:** http://localhost:8000  
-- **State persistence:** `out/` is bind-mounted so `decision_latest.json` and verification artifacts persist on the host. Do not delete `out/` if you need existing state.
+- **State persistence:** `out/` and `data/` are bind-mounted so state persists on the host. Do not delete them if you need existing state. `out/` holds decision artifacts and evaluations; `data/` holds journal DBs, checklists, and monthly reports (R26.6). Back up with `./scripts/backup_out.sh` and `./scripts/backup_data.sh`.
 
 **Env:** Create `.env` at repo root from `.env.example` if you need ORATS/Slack; optional for a minimal smoke (system-health and dashboard load without it).
 
@@ -93,9 +93,9 @@ For internet-safe deployment with HTTPS and basic auth (Caddy reverse proxy, sam
 - **Dev:** `docker compose up --build` — frontend :3000, backend :8000 (for local debugging).
 - **Prod:** `docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod up -d --build` — only 80/443 open; backend not exposed.
 
-### Backup and restore (R25.0)
+### Backup and restore (R25.0, R26.6)
 
-**Backup** (from repository root): Archives `./out` to `./backups/out_<timestamp>.tar.gz`; keeps last `BACKUP_KEEP_N` (default 14) and deletes older archives.
+**Out** (from repository root): Archives `./out` to `./backups/out_<timestamp>.tar.gz`; keeps last `BACKUP_KEEP_N` (default 14).
 
 ```bash
 ./scripts/backup_out.sh
@@ -103,13 +103,31 @@ For internet-safe deployment with HTTPS and basic auth (Caddy reverse proxy, sam
 
 Optional env: `OUT_DIR=./out`, `BACKUP_DIR=./backups`, `BACKUP_KEEP_N=14`.
 
-**Restore:** Stop the backend (or any process using `out/`), then extract a backup over `out/`:
+**Data** (R26.6): Archives `./data` (journal, checklists, monthly reports) to `./backups/data_<timestamp>.tar.gz`; same retention.
+
+```bash
+./scripts/backup_data.sh
+```
+
+Optional env: `DATA_DIR=./data`, `BACKUP_DIR=./backups`, `BACKUP_KEEP_N=14`.
+
+**Restore out:** Stop the backend (or any process using `out/`), then:
 
 ```bash
 tar -xzf ./backups/out_YYYYMMDD_HHMMSS.tar.gz -C .
 ```
 
-Then restart backend/containers. Do not commit `backups/` or `out/` (add to `.gitignore` if needed).
+**Restore data:** Stop app/containers, then:
+
+```bash
+./scripts/restore_data.sh [--force] ./backups/data_YYYYMMDD_HHMMSS.tar.gz
+```
+
+Then restart backend/containers. Do not commit `backups/`, `out/`, or `data/` (they are in `.gitignore`). No secrets are stored in images.
+
+**Data retention (R26.6):** To keep only the last N months of monthly close reports under `data/reports/`, run `./scripts/cleanup_reports.sh` (use `--dry-run` first). Env: `REPORTS_KEEP_N=24` (default).
+
+**Quarterly restore drill (R26.7):** Prove backups are usable by restoring latest out/data backups into a temp dir and running a short smoke test (healthz, system-health, reports). From repository root: `./scripts/restore_drill.sh`. Backend runs on port 8010 and exits after the smoke; use `./scripts/restore_drill.sh --keep` to leave the temp dir and process running for inspection. Requires prior backups in `./backups` (run `backup_out.sh` and `backup_data.sh` first).
 
 ### Phase 7: Decision Intelligence Pipeline (Recommended)
 

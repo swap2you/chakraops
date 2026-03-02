@@ -5,6 +5,7 @@ import { ExternalLink, Activity, Droplets, Zap, Info, Settings } from "lucide-re
 import { useArtifactList, useDecision, useUniverse, useUiSystemHealth, useUiTrackedPositions, usePortfolioMtm, useDefaultAccount, useRunEval, useSharesCandidates, useActionNeeded } from "@/api/queries";
 import type { DecisionMode, SymbolEvalSummary, UniverseSymbol } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
+import { constraintToLabel } from "@/utils/sizingConstraints";
 import {
   Card,
   CardHeader,
@@ -295,6 +296,32 @@ export function DashboardPage() {
                     {health.guardrails.metrics?.max_symbol_notional_pct ?? "—"}%
                   </span>
                 </div>
+                {/* R26.0: Available budget (post cash reserve) */}
+                {health.guardrails.metrics?.available_budget_usd != null && (
+                  <div>
+                    <span className="block text-xs text-zinc-500 dark:text-zinc-500">Available budget</span>
+                    <span className="font-mono text-zinc-700 dark:text-zinc-300" data-testid="guardrails-available-budget">
+                      ${health.guardrails.metrics.available_budget_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                )}
+                {/* R26.1: Cash-secured committed and CSP cash available */}
+                {health.guardrails.metrics?.cash_secured_committed_usd != null && (
+                  <div>
+                    <span className="block text-xs text-zinc-500 dark:text-zinc-500">Cash-secured committed</span>
+                    <span className="font-mono text-zinc-700 dark:text-zinc-300" data-testid="guardrails-cash-secured-committed">
+                      ${health.guardrails.metrics.cash_secured_committed_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                )}
+                {health.guardrails.metrics?.csp_cash_available_usd != null && (
+                  <div>
+                    <span className="block text-xs text-zinc-500 dark:text-zinc-500">CSP cash available</span>
+                    <span className="font-mono text-zinc-700 dark:text-zinc-300" data-testid="guardrails-csp-cash-available">
+                      ${health.guardrails.metrics.csp_cash_available_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </span>
+                  </div>
+                )}
               </div>
             </Card>
           )}
@@ -373,13 +400,10 @@ export function DashboardPage() {
                       const actionLabel = item.next_action_code === "ENTRY" ? "Entry" : item.next_action_code === "CLOSE" ? "Close" : item.next_action_code === "ROLL" ? "Roll" : item.next_action_code === "HOLD" ? "Hold" : item.next_action_code;
                       const recommendLabel = item.recommended_action_code === "CLOSE" ? "Close" : item.recommended_action_code === "ROLL" ? "Roll" : item.recommended_action_code === "HOLD" ? "Hold" : item.recommended_action_code;
                       const rollReasonLabel = (item.roll_reason_codes?.includes("DTE_WINDOW") && item.recommended_action_code === "ROLL") ? "DTE window" : null;
+                      const ticketHref = `/ticket?symbol=${encodeURIComponent(item.symbol)}&strategy=${encodeURIComponent((item.strategy || "CSP").toUpperCase())}&action=${encodeURIComponent(item.next_action_code === "ENTRY" ? "OPEN" : item.next_action_code === "CLOSE" ? "CLOSE" : "OPEN")}`;
                       return (
-                        <Link
-                          key={`opt-${item.symbol}`}
-                          to={href}
-                          className="block rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-                          data-testid={`action-needed-options-row-${item.symbol}`}
-                        >
+                        <div key={`opt-${item.symbol}`} className="rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50 flex items-center justify-between gap-2">
+                        <Link to={href} className="flex-1 min-w-0" data-testid={`action-needed-options-row-${item.symbol}`}>
                           <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{item.symbol}</span>
                           <Badge variant={item.next_action_code === "ENTRY" ? "success" : item.next_action_code === "CLOSE" ? "danger" : "neutral"} className="ml-2">
                             {actionLabel}
@@ -398,6 +422,40 @@ export function DashboardPage() {
                           )}
                           {(item.rationale_lines?.[0]) && (
                             <p className="mt-1 text-zinc-600 dark:text-zinc-400 truncate">{item.rationale_lines[0]}</p>
+                          )}
+                          {/* R26.0: ENTRY sizing — size, notional, constraints (safe labels only) */}
+                          {item.next_action_code === "ENTRY" && item.sizing_recommended_by === "r260" && (
+                            <p className="mt-0.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-sizing-${item.symbol}`}>
+                              {item.recommended_contracts != null && item.recommended_contracts > 0 && (
+                                <>Size: {item.recommended_contracts} contracts</>
+                              )}
+                              {item.recommended_qty != null && item.recommended_qty > 0 && (
+                                <>Size: {item.recommended_qty} shares</>
+                              )}
+                              {item.recommended_notional_usd != null && item.recommended_notional_usd > 0 && (
+                                <> · Notional: ${item.recommended_notional_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</>
+                              )}
+                              {(item.sizing_constraints_hit?.length ?? 0) > 0 && (
+                                <> · Constraints: {item.sizing_constraints_hit!.map((c) => constraintToLabel(c)).join(", ")}</>
+                              )}
+                            </p>
+                          )}
+                          {/* R26.1: CSP advisory — cash-secured, risk proxy (safe labels only) */}
+                          {item.next_action_code === "ENTRY" && (item.cash_secured_available_usd != null || item.csp_risk_proxy_move_pct != null) && (
+                            <div className="mt-0.5 text-zinc-500 dark:text-zinc-500 text-xs" data-testid={`action-needed-csp-advisory-${item.symbol}`}>
+                              {item.cash_secured_available_usd != null && (
+                                <p>Cash-secured available: ${item.cash_secured_available_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                              )}
+                              {item.csp_risk_proxy_move_pct != null && (
+                                <p>Risk proxy move: {item.csp_risk_proxy_move_pct}%</p>
+                              )}
+                              {item.csp_risk_proxy_loss_per_contract_usd != null && (
+                                <p>Risk proxy loss (per contract): ${item.csp_risk_proxy_loss_per_contract_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                              )}
+                              {item.csp_risk_proxy_cap_contracts != null && (
+                                <p>Risk proxy cap: {item.csp_risk_proxy_cap_contracts} contracts{item.csp_risk_proxy_enforced ? " (enforced)" : ""}</p>
+                              )}
+                            </div>
                           )}
                           {item.key_number != null && (
                             <p className="mt-0.5 text-zinc-500 dark:text-zinc-500">Key: {item.key_number}</p>
@@ -420,6 +478,8 @@ export function DashboardPage() {
                             <p className="mt-0.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-roll-reason-${item.symbol}`}>Reason: {rollReasonLabel}</p>
                           )}
                         </Link>
+                        <Link to={ticketHref} className="shrink-0 text-emerald-600 hover:underline dark:text-emerald-400" data-testid={`action-needed-ticket-${item.symbol}`}>Ticket</Link>
+                        </div>
                       );
                     })}
                   </div>
@@ -434,13 +494,10 @@ export function DashboardPage() {
                     {(actionNeeded.top_shares.slice(0, 5)).map((item) => {
                       const href = `/symbol-diagnostics?symbol=${encodeURIComponent(item.symbol)}&tab=Shares${item.accordion_id ? `&accordion=${encodeURIComponent(item.accordion_id)}` : ""}`;
                       const actionLabel = item.next_action_code === "ENTRY" ? "Entry" : item.next_action_code === "CLOSE" ? "Close" : item.next_action_code;
+                      const ticketHrefShares = `/ticket?symbol=${encodeURIComponent(item.symbol)}&strategy=SHARES&action=${item.next_action_code === "ENTRY" ? "BUY" : item.next_action_code === "CLOSE" ? "SELL" : "BUY"}`;
                       return (
-                        <Link
-                          key={`shr-${item.symbol}`}
-                          to={href}
-                          className="block rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-                          data-testid={`action-needed-shares-row-${item.symbol}`}
-                        >
+                        <div key={`shr-${item.symbol}`} className="rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50 flex items-center justify-between gap-2">
+                        <Link to={href} className="flex-1 min-w-0" data-testid={`action-needed-shares-row-${item.symbol}`}>
                           <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{item.symbol}</span>
                           <Badge variant={item.next_action_code === "ENTRY" ? "success" : item.next_action_code === "CLOSE" ? "danger" : "neutral"} className="ml-2">
                             {actionLabel}
@@ -451,10 +508,26 @@ export function DashboardPage() {
                           {(item.rationale_lines?.[0]) && (
                             <p className="mt-1 text-zinc-600 dark:text-zinc-400 truncate">{item.rationale_lines[0]}</p>
                           )}
+                          {/* R26.0: ENTRY sizing for shares */}
+                          {item.next_action_code === "ENTRY" && item.sizing_recommended_by === "r260" && (
+                            <p className="mt-0.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-sizing-${item.symbol}`}>
+                              {item.recommended_qty != null && item.recommended_qty > 0 && (
+                                <>Size: {item.recommended_qty} shares</>
+                              )}
+                              {item.recommended_notional_usd != null && item.recommended_notional_usd > 0 && (
+                                <> · Notional: ${item.recommended_notional_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</>
+                              )}
+                              {(item.sizing_constraints_hit?.length ?? 0) > 0 && (
+                                <> · Constraints: {item.sizing_constraints_hit!.map((c) => constraintToLabel(c)).join(", ")}</>
+                              )}
+                            </p>
+                          )}
                           {item.key_number != null && (
                             <p className="mt-0.5 text-zinc-500 dark:text-zinc-500">Key: {item.key_number}</p>
                           )}
                         </Link>
+                        <Link to={ticketHrefShares} className="shrink-0 text-emerald-600 hover:underline dark:text-emerald-400" data-testid={`action-needed-ticket-${item.symbol}`}>Ticket</Link>
+                        </div>
                       );
                     })}
                   </div>

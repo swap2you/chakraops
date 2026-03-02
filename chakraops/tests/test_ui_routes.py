@@ -246,22 +246,24 @@ def test_ui_positions_post_success_when_within_limits(tmp_path):
         return accounts_file
 
     app = _get_app()
+    # R26.8: Mock wheel policy so test is deterministic (DTE uses date.today(); policy can block on DTE/IV).
     with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
         with patch("app.core.accounts.store._accounts_path", side_effect=_fake_accounts_path):
-            client = TestClient(app)
-            r = client.post(
-                "/api/ui/positions",
-                json={
-                    "symbol": "SPY",
-                    "strategy": "CSP",
-                    "contracts": 1,
-                    "strike": 450.0,
-                    "expiration": "2026-03-21",
-                    "credit_expected": 2.50,
-                    "contract_key": "450-2026-03-21-PUT",
-                    "decision_ref": {"evaluation_timestamp_utc": "2026-02-17T20:00:00Z", "artifact_source": "LIVE"},
-                },
-            )
+            with patch("app.core.wheel.policy.evaluate_wheel_policy", return_value={"allowed": True, "blocked_by": []}):
+                client = TestClient(app)
+                r = client.post(
+                    "/api/ui/positions",
+                    json={
+                        "symbol": "SPY",
+                        "strategy": "CSP",
+                        "contracts": 1,
+                        "strike": 450.0,
+                        "expiration": "2026-03-21",
+                        "credit_expected": 2.50,
+                        "contract_key": "450-2026-03-21-PUT",
+                        "decision_ref": {"evaluation_timestamp_utc": "2026-02-17T20:00:00Z", "artifact_source": "LIVE"},
+                    },
+                )
     assert r.status_code == 200
     body = r.json()
     assert body.get("symbol") == "SPY"

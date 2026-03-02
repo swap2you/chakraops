@@ -543,6 +543,22 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend pytest (539 passed, 2 skipped), frontend tests (188 passed, 18 skipped), frontend build pass
 - **Scope:** risk_proxy_r261 (downside move, loss proxy, cap by risk budget); sizing_r260 cash-secured committed + available_cash_for_new_csp; CONSTRAINT_CASH_SECURED; CSP advisory fields; CSP_RISK_PROXY_ENFORCE; UI cash-secured + risk proxy; Guardrails cash-secured committed + CSP cash available. Branch: release/R26.1.
 
+### R26.2 — Trade Ticket v2 (execution plan + journal draft)
+
+- [x] **Requirements** — [R26.2_requirements.md](R26.2_requirements.md)
+- [x] **Release notes** — [R26.2_release_notes.md](R26.2_release_notes.md)
+- [x] **Verification** — [out/verification/R26.2/notes.md](../../../out/verification/R26.2/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend pytest (543 passed, 2 skipped; scoped: test_r262_trade_ticket.py + tests/_core), frontend tests (193 passed, 18 skipped), frontend build pass
+- **Scope:** GET /api/ui/trade-ticket; POST /api/ui/journal/from-ticket; TradeTicketPage (Snapshot/Sizing/Contract/Steps/Journal); links from Action Needed + Symbol Diagnostics; journal draft + Save to Journal; manual only; no FAIL/WARN. Branch: release/R26.2.
+
+### R26.3 — Daily Operator Workflow ("Today" command center)
+
+- [ ] **Requirements** — [R26.3_requirements.md](R26.3_requirements.md)
+- [ ] **Release notes** — [R26.3_release_notes.md](R26.3_release_notes.md)
+- [ ] **Verification** — out/verification/R26.3/notes.md (gate tails + UAT)
+- [ ] **Gate** — Backend pytest, frontend tests, frontend build pass
+- **Scope:** GET /api/ui/today/summary; TodayPage (Run/Refresh, Action Needed, Ticket queue localStorage, Journal checkpoint, Notifications inbox); /today route; safe labels only; no FAIL/WARN. Branch: release/R26.3.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

@@ -1,7 +1,1801 @@
 {
-  "artifact_version": "v2",
-  "metadata": {},
-  "symbols": [],
-  "gates_by_symbol": {},
-  "candidates_by_symbol": {}
+  "metadata": {
+    "artifact_version": "v2",
+    "mode": "LIVE",
+    "pipeline_timestamp": "2026-03-02T16:26:44.106079+00:00",
+    "evaluation_timestamp_utc": "2026-03-02T16:26:44.106079+00:00",
+    "run_id": "a070d15c-0b36-4873-abd7-314f49c5b871",
+    "market_phase": "OPEN",
+    "universe_size": 27,
+    "evaluated_count_stage1": 27,
+    "evaluated_count_stage2": 2,
+    "eligible_count": 1,
+    "warnings": []
+  },
+  "symbols": [
+    {
+      "symbol": "AAPL",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 60,
+      "band": "B",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:10:57Z",
+      "evaluated_at": "2026-03-02T16:26:55.755737+00:00",
+      "strategy": null,
+      "price": 264.84,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 60,
+        "final_score": 60,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 60,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 264.84,
+      "capital_required": 26483.999999999996,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 305735.16,
+      "primary_reason_codes": [
+        "NOT_NEAR_SUPPORT",
+        "RSI_RANGE",
+        "RSI_CC",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
+    },
+    {
+      "symbol": "ABNB",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 50,
+      "band": "C",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:11:01Z",
+      "evaluated_at": "2026-03-02T16:26:58.995349+00:00",
+      "strategy": null,
+      "price": 132.66,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 50,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 132.66,
+      "capital_required": 13266.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 204867.34,
+      "primary_reason_codes": [
+        "REGIME_CONFLICT",
+        "NOT_NEAR_SUPPORT",
+        "RSI_RANGE",
+        "RSI_CSP",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
+    },
+    {
+      "symbol": "AMD",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 50,
+      "band": "C",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:10:57Z",
+      "evaluated_at": "2026-03-02T16:26:57.394016+00:00",
+      "strategy": null,
+      "price": 194.86,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 50,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 194.86,
+      "capital_required": 19486.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 204805.14,
+      "primary_reason_codes": [
+        "REGIME_CONFLICT",
+        "NOT_NEAR_RESISTANCE",
+        "RSI_RANGE",
+        "RSI_CC",
+        "ATR",
+        "ATR_TOO_HIGH",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
+    },
+    {
+      "symbol": "AMZN",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 50,
+      "band": "C",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:10:48Z",
+      "evaluated_at": "2026-03-02T16:26:58.746067+00:00",
+      "strategy": null,
+      "price": 207.98,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 50,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 207.98,
+      "capital_required": 20798.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 204792.02,
+      "primary_reason_codes": [
+        "REGIME_CONFLICT",
+        "NOT_NEAR_SUPPORT",
+        "RSI_RANGE",
+        "RSI_CC",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
+    },
+    {
+      "symbol": "AVGO",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 50,
+      "band": "C",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:10:57Z",
+      "evaluated_at": "2026-03-02T16:26:57.439393+00:00",
+      "strategy": null,
+      "price": 315.55,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 50,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 315.55,
+      "capital_required": 31555.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 204684.45,
+      "primary_reason_codes": [
+        "REGIME_CONFLICT",
+        "RSI_RANGE",
+        "RSI_CC",
+        "REGIME_CSP",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
+    },
+    {
+      "symbol": "COIN",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 50,
+      "band": "C",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:10:57Z",
+      "evaluated_at": "2026-03-02T16:26:58.496066+00:00",
+      "strategy": null,
+      "price": 183.82,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 50,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 183.82,
+      "capital_required": 18382.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 204816.18,
+      "primary_reason_codes": [
+        "NOT_NEAR_SUPPORT",
+        "NOT_NEAR_RESISTANCE",
+        "RSI_RANGE",
+        "RSI_CC",
+        "ATR",
+        "ATR_TOO_HIGH",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
+    },
+    {
+      "symbol": "COST",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 50,
+      "band": "C",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:10:55Z",
+      "evaluated_at": "2026-03-02T16:27:00.169301+00:00",
+      "strategy": null,
+      "price": 1008.67,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 50,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 1008.67,
+      "capital_required": 100867.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 203991.33,
+      "primary_reason_codes": [
+        "RSI_RANGE",
+        "RSI_CSP",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
+    },
+    {
+      "symbol": "CRM",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 60,
+      "band": "B",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:10:57Z",
+      "evaluated_at": "2026-03-02T16:26:55.756425+00:00",
+      "strategy": null,
+      "price": 192.46,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 60,
+        "final_score": 60,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 60,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 192.46,
+      "capital_required": 19246.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 305807.54,
+      "primary_reason_codes": [
+        "NOT_NEAR_SUPPORT",
+        "NOT_NEAR_RESISTANCE",
+        "RSI_RANGE",
+        "RSI_CC",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
+    },
+    {
+      "symbol": "CRWD",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 50,
+      "band": "C",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:11:01Z",
+      "evaluated_at": "2026-03-02T16:26:57.417977+00:00",
+      "strategy": null,
+      "price": 383.78,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 50,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 383.78,
+      "capital_required": 38378.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 204616.22,
+      "primary_reason_codes": [
+        "NOT_NEAR_SUPPORT",
+        "RSI_RANGE",
+        "RSI_CSP",
+        "RSI_CC",
+        "ATR",
+        "ATR_TOO_HIGH",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
+    },
+    {
+      "symbol": "DIS",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 50,
+      "band": "C",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:11:02Z",
+      "evaluated_at": "2026-03-02T16:26:59.021261+00:00",
+      "strategy": null,
+      "price": 104.13,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 50,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 104.13,
+      "capital_required": 10413.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 204895.87,
+      "primary_reason_codes": [
+        "RSI_RANGE",
+        "RSI_CC",
+        "REGIME_CSP",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
+    },
+    {
+      "symbol": "GOOGL",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 50,
+      "band": "C",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:11:03Z",
+      "evaluated_at": "2026-03-02T16:26:59.948836+00:00",
+      "strategy": null,
+      "price": 305.86,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 50,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 305.86,
+      "capital_required": 30586.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 204694.14,
+      "primary_reason_codes": [
+        "REGIME_CONFLICT",
+        "RSI_RANGE",
+        "RSI_CC",
+        "REGIME_CSP",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
+    },
+    {
+      "symbol": "HD",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 65,
+      "band": "B",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "FAIL",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:11:01Z",
+      "evaluated_at": "2026-03-02T16:27:00.260795+00:00",
+      "strategy": null,
+      "price": 371.71,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 67,
+        "final_score": 65,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": [
+            {
+              "type": "regime_cap",
+              "cap_value": 65,
+              "before": 67,
+              "after": 65,
+              "reason_code": "REGIME_CAP"
+            }
+          ]
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 65,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 371.71,
+      "capital_required": 37171.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 306128.29,
+      "primary_reason_codes": [
+        "REJECTED_DUE_TO_DELTA"
+      ],
+      "rejected_due_to_delta_count": 14
+    },
+    {
+      "symbol": "JPM",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 60,
+      "band": "B",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:11:03Z",
+      "evaluated_at": "2026-03-02T16:26:55.757165+00:00",
+      "strategy": null,
+      "price": 298.99,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 60,
+        "final_score": 60,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 60,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 298.99,
+      "capital_required": 29899.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 305701.01,
+      "primary_reason_codes": [
+        "REGIME_CONFLICT",
+        "RSI_RANGE",
+        "RSI_CC",
+        "REGIME_CSP",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
+    },
+    {
+      "symbol": "META",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 60,
+      "band": "B",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:11:03Z",
+      "evaluated_at": "2026-03-02T16:26:55.758343+00:00",
+      "strategy": null,
+      "price": 655.0,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 60,
+        "final_score": 60,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 60,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 655.0,
+      "capital_required": 65500.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 305345.0,
+      "primary_reason_codes": [
+        "NOT_NEAR_RESISTANCE",
+        "RSI_RANGE",
+        "RSI_CC",
+        "REGIME_CSP",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
+    },
+    {
+      "symbol": "MRVL",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 50,
+      "band": "C",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:10:56Z",
+      "evaluated_at": "2026-03-02T16:27:00.499347+00:00",
+      "strategy": null,
+      "price": 80.94,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 50,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 80.94,
+      "capital_required": 8094.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 204919.06,
+      "primary_reason_codes": [
+        "REGIME_CONFLICT",
+        "REGIME_CSP",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
+    },
+    {
+      "symbol": "MSFT",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 50,
+      "band": "C",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:10:54Z",
+      "evaluated_at": "2026-03-02T16:27:01.285162+00:00",
+      "strategy": null,
+      "price": 399.48,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 50,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 399.48,
+      "capital_required": 39948.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 204600.52,
+      "primary_reason_codes": [
+        "NOT_NEAR_RESISTANCE",
+        "RSI_RANGE",
+        "RSI_CSP",
+        "RSI_CC",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
+    },
+    {
+      "symbol": "MU",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 50,
+      "band": "C",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:10:57Z",
+      "evaluated_at": "2026-03-02T16:27:01.622165+00:00",
+      "strategy": null,
+      "price": 407.92,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 50,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 407.92,
+      "capital_required": 40792.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 204592.08,
+      "primary_reason_codes": [
+        "NOT_NEAR_SUPPORT",
+        "NOT_NEAR_RESISTANCE",
+        "ATR",
+        "ATR_TOO_HIGH",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
+    },
+    {
+      "symbol": "NKE",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 50,
+      "band": "C",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:10:59Z",
+      "evaluated_at": "2026-03-02T16:26:44.106079+00:00",
+      "strategy": null,
+      "price": 61.05,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 50,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 61.05,
+      "capital_required": 6105.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 204938.95,
+      "primary_reason_codes": [
+        "STOCK_QUALIFIED"
+      ]
+    },
+    {
+      "symbol": "NVDA",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 60,
+      "band": "B",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:11:00Z",
+      "evaluated_at": "2026-03-02T16:26:55.839973+00:00",
+      "strategy": null,
+      "price": 180.93,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 60,
+        "final_score": 60,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 60,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 180.93,
+      "capital_required": 18093.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 305819.07,
+      "primary_reason_codes": [
+        "REGIME_CONFLICT",
+        "RSI_RANGE",
+        "RSI_CC",
+        "REGIME_CSP",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
+    },
+    {
+      "symbol": "ORCL",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 50,
+      "band": "C",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:11:00Z",
+      "evaluated_at": "2026-03-02T16:26:44.106079+00:00",
+      "strategy": null,
+      "price": 147.99,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 50,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 147.99,
+      "capital_required": 14799.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 204852.01,
+      "primary_reason_codes": [
+        "STOCK_QUALIFIED"
+      ]
+    },
+    {
+      "symbol": "QQQ",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 50,
+      "band": "C",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:11:03Z",
+      "evaluated_at": "2026-03-02T16:26:44.106079+00:00",
+      "strategy": null,
+      "price": 606.69,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 50,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 606.69,
+      "capital_required": 60669.00000000001,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 204393.31,
+      "primary_reason_codes": [
+        "STOCK_QUALIFIED"
+      ]
+    },
+    {
+      "symbol": "SMCI",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 50,
+      "band": "C",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:10:59Z",
+      "evaluated_at": "2026-03-02T16:26:44.106079+00:00",
+      "strategy": null,
+      "price": 31.61,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 50,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 31.61,
+      "capital_required": 3161.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 204968.39,
+      "primary_reason_codes": [
+        "STOCK_QUALIFIED"
+      ]
+    },
+    {
+      "symbol": "SNOW",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 50,
+      "band": "C",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:10:54Z",
+      "evaluated_at": "2026-03-02T16:26:44.106079+00:00",
+      "strategy": null,
+      "price": 170.12,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 50,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 170.12,
+      "capital_required": 17012.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 204829.88,
+      "primary_reason_codes": [
+        "STOCK_QUALIFIED"
+      ]
+    },
+    {
+      "symbol": "SPY",
+      "verdict": "ELIGIBLE",
+      "final_verdict": "ELIGIBLE",
+      "score": 65,
+      "band": "B",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "PASS",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:11:05Z",
+      "evaluated_at": "2026-03-02T16:26:55.757753+00:00",
+      "strategy": "CSP",
+      "price": 685.23,
+      "expiration": "2026-03-31",
+      "has_candidates": true,
+      "candidate_count": 1,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 80,
+        "strategy_fit_score": 100,
+        "capital_efficiency_score": 100,
+        "composite_score": 89,
+        "csp_notional": 67700.0,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 89,
+        "final_score": 65,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": [
+            {
+              "type": "regime_cap",
+              "cap_value": 65,
+              "before": 89,
+              "after": 65,
+              "reason_code": "REGIME_CAP"
+            }
+          ]
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 65,
+      "score_caps": null,
+      "max_loss": 66686.0,
+      "underlying_price": 685.23,
+      "capital_required": 66686.0,
+      "expected_credit": 10.14,
+      "premium_yield_pct": 0.015205590378790152,
+      "market_cap": null,
+      "rank_score": 305833.2920559038,
+      "primary_reason_codes": [
+        "CHAIN_SELECTED"
+      ]
+    },
+    {
+      "symbol": "TSLA",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 50,
+      "band": "C",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:11:03Z",
+      "evaluated_at": "2026-03-02T16:26:44.106079+00:00",
+      "strategy": null,
+      "price": 403.66,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 50,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 403.66,
+      "capital_required": 40366.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 204596.34,
+      "primary_reason_codes": [
+        "STOCK_QUALIFIED"
+      ]
+    },
+    {
+      "symbol": "TSM",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 60,
+      "band": "B",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:11:07Z",
+      "evaluated_at": "2026-03-02T16:26:57.179831+00:00",
+      "strategy": null,
+      "price": 370.0,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 60,
+        "final_score": 60,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 60,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 370.0,
+      "capital_required": 37000.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 305630.0,
+      "primary_reason_codes": [
+        "RSI_RANGE",
+        "RSI_CSP",
+        "NOT_HELD_FOR_CC",
+        "NO_HOLDINGS"
+      ]
+    },
+    {
+      "symbol": "WMT",
+      "verdict": "HOLD",
+      "final_verdict": "HOLD",
+      "score": 50,
+      "band": "C",
+      "stage_status": "RUN",
+      "stage1_status": "PASS",
+      "stage2_status": "NOT_RUN",
+      "provider_status": "OK",
+      "data_freshness": "2026-03-02T16:11:03Z",
+      "evaluated_at": "2026-03-02T16:26:44.106079+00:00",
+      "strategy": null,
+      "price": 127.78,
+      "expiration": null,
+      "has_candidates": false,
+      "candidate_count": 0,
+      "score_breakdown": {
+        "data_quality_score": 100,
+        "regime_score": 65,
+        "options_liquidity_score": 20,
+        "strategy_fit_score": 50,
+        "capital_efficiency_score": 100,
+        "composite_score": 67,
+        "csp_notional": null,
+        "notional_pct": null,
+        "capital_penalties": [],
+        "top_penalty": null,
+        "raw_score": 50,
+        "final_score": 50,
+        "score_caps": {
+          "regime_cap": 65,
+          "applied_caps": []
+        }
+      },
+      "raw_score": null,
+      "pre_cap_score": null,
+      "final_score": 50,
+      "score_caps": null,
+      "max_loss": null,
+      "underlying_price": 127.78,
+      "capital_required": 12778.0,
+      "expected_credit": null,
+      "premium_yield_pct": null,
+      "market_cap": null,
+      "rank_score": 204872.22,
+      "primary_reason_codes": [
+        "STOCK_QUALIFIED"
+      ]
+    }
+  ],
+  "selected_candidates": [
+    {
+      "symbol": "SPY",
+      "strategy": "CSP",
+      "expiry": "2026-03-31",
+      "strike": 677.0,
+      "delta": -0.3921,
+      "credit_estimate": null,
+      "max_loss": null,
+      "contract_key": "677-2026-03-31-PUT",
+      "option_symbol": null
+    }
+  ],
+  "candidates_by_symbol": {
+    "AAPL": [],
+    "ABNB": [],
+    "AMD": [],
+    "AMZN": [],
+    "AVGO": [],
+    "COIN": [],
+    "COST": [],
+    "CRM": [],
+    "CRWD": [],
+    "DIS": [],
+    "GOOGL": [],
+    "HD": [],
+    "JPM": [],
+    "META": [],
+    "MRVL": [],
+    "MSFT": [],
+    "MU": [],
+    "NKE": [],
+    "NVDA": [],
+    "ORCL": [],
+    "QQQ": [],
+    "SMCI": [],
+    "SNOW": [],
+    "SPY": [
+      {
+        "symbol": "SPY",
+        "strategy": "CSP",
+        "expiry": "2026-03-31",
+        "strike": 677.0,
+        "delta": -0.3921,
+        "credit_estimate": 10.14,
+        "max_loss": 66686.0,
+        "contract_key": "677-2026-03-31-PUT",
+        "option_symbol": null
+      }
+    ],
+    "TSLA": [],
+    "TSM": [],
+    "WMT": []
+  },
+  "gates_by_symbol": {
+    "AAPL": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
+    "ABNB": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
+    "AMD": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
+    "AMZN": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
+    "AVGO": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
+    "COIN": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
+    "COST": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
+    "CRM": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
+    "CRWD": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
+    "DIS": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
+    "GOOGL": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
+    "HD": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      },
+      {
+        "gate_code": "OPTIONS_LIQUIDITY_STAGE2",
+        "status": "FAIL"
+      }
+    ],
+    "JPM": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
+    "META": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
+    "MRVL": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
+    "MSFT": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
+    "MU": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
+    "NKE": [],
+    "NVDA": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
+    "ORCL": [],
+    "QQQ": [],
+    "SMCI": [],
+    "SNOW": [],
+    "SPY": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      },
+      {
+        "gate_code": "OPTIONS_LIQUIDITY_STAGE2",
+        "status": "PASS"
+      }
+    ],
+    "TSLA": [],
+    "TSM": [
+      {
+        "gate_code": "STOCK_QUALITY_STAGE1",
+        "status": "PASS"
+      }
+    ],
+    "WMT": []
+  },
+  "earnings_by_symbol": {
+    "AAPL": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "ABNB": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "AMD": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "AMZN": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "AVGO": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "COIN": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "COST": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "CRM": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "CRWD": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "DIS": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "GOOGL": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "HD": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "JPM": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "META": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "MRVL": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "MSFT": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "MU": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "NKE": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "NVDA": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "ORCL": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "QQQ": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "SMCI": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "SNOW": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "SPY": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "TSLA": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "TSM": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    },
+    "WMT": {
+      "earnings_days": null,
+      "earnings_block": false,
+      "status_code": "Unavailable"
+    }
+  },
+  "warnings": []
 }

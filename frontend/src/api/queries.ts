@@ -101,6 +101,11 @@ function actionNeededPath(): string {
   return `/api/ui/action-needed`;
 }
 
+/** R26.3: Today summary for Today page. */
+function todaySummaryPath(): string {
+  return `/api/ui/today/summary`;
+}
+
 function uiTrackedPositionsPath(): string {
   return `/api/ui/positions/tracked`;
 }
@@ -296,6 +301,15 @@ function uiNotificationsArchiveBulkPath(): string {
 }
 
 /** R25.5: Journal */
+/** R26.2: Trade ticket */
+function tradeTicketPath(symbol: string, strategy: string, action: string): string {
+  const p = new URLSearchParams();
+  p.set("symbol", symbol);
+  p.set("strategy", strategy);
+  p.set("action", action);
+  return `/api/ui/trade-ticket?${p.toString()}`;
+}
+
 function uiJournalPath(params: { from_date?: string; to_date?: string; symbol?: string; strategy?: string; limit?: number; offset?: number }): string {
   const p = new URLSearchParams();
   if (params.from_date) p.set("from_date", params.from_date);
@@ -306,6 +320,9 @@ function uiJournalPath(params: { from_date?: string; to_date?: string; symbol?: 
   if (params.offset != null) p.set("offset", String(params.offset));
   const q = p.toString();
   return q ? `/api/ui/journal?${q}` : "/api/ui/journal";
+}
+function uiJournalFromTicketPath(): string {
+  return "/api/ui/journal/from-ticket";
 }
 function uiJournalExportPath(from_date: string, to_date: string): string {
   return `/api/ui/journal/export?from_date=${encodeURIComponent(from_date)}&to_date=${encodeURIComponent(to_date)}`;
@@ -359,6 +376,7 @@ export const queryKeys = {
   uiEarningsDebug: (symbol: string) => ["ui", "earningsDebug", symbol] as const,
   sharesCandidates: () => ["ui", "sharesCandidates"] as const,
   actionNeeded: () => ["ui", "actionNeeded"] as const,
+  todaySummary: () => ["ui", "todaySummary"] as const,
   uiPositions: () => ["ui", "positions"] as const,
   uiTrackedPositions: () => ["ui", "positions", "tracked"] as const,
   uiAccountsDefault: () => ["ui", "accounts", "default"] as const,
@@ -390,6 +408,8 @@ export const queryKeys = {
   uiDeltaOverrides: () => ["ui", "deltaOverrides"] as const,
   /** R25.5 */
   uiJournal: (params?: Record<string, unknown>) => ["ui", "journal", params ?? ""] as const,
+  tradeTicket: (symbol: string, strategy: string, action: string) =>
+    ["ui", "tradeTicket", symbol, strategy, action] as const,
   uiReportsMonthly: (month: string) => ["ui", "reports", "monthly", month] as const,
   /** R25.6 */
   uiUniverseAdmin: (params?: Record<string, unknown>) => ["ui", "universe", "admin", params ?? ""] as const,
@@ -635,6 +655,26 @@ export function useActionNeeded() {
   return useQuery({
     queryKey: queryKeys.actionNeeded(),
     queryFn: () => apiGet<ActionNeededResponse>(actionNeededPath()),
+  });
+}
+
+/** R26.3: Today summary — run status, cadence, guardrails, notifications count, earnings probe. */
+export interface TodaySummaryResponse {
+  latest_run_ts: string | null;
+  as_of_et: string;
+  cadence: { mode: string; eligibility_as_of: string | null };
+  orats_status: string;
+  orats_freshness_state_label: string | null;
+  guardrails: Record<string, unknown>;
+  notifications_health: Record<string, unknown>;
+  notifications_new_count: number;
+  earnings_probe: Record<string, unknown>;
+  action_needed_count: number | null;
+}
+export function useTodaySummary() {
+  return useQuery({
+    queryKey: queryKeys.todaySummary(),
+    queryFn: () => apiGet<TodaySummaryResponse>(todaySummaryPath()),
   });
 }
 
@@ -1309,6 +1349,8 @@ export function useRunEval() {
       qc.invalidateQueries({ queryKey: ["ui", "symbolDiagnostics"] });
       qc.invalidateQueries({ queryKey: queryKeys.uiAlerts() });
       qc.invalidateQueries({ queryKey: queryKeys.uiSystemHealth() });
+      qc.invalidateQueries({ queryKey: queryKeys.todaySummary() });
+      qc.invalidateQueries({ queryKey: queryKeys.actionNeeded() });
     },
   });
 }
@@ -1451,6 +1493,7 @@ export function useAckNotification(_limit = 100) {
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["ui", "notifications"] });
+      qc.invalidateQueries({ queryKey: queryKeys.todaySummary() });
     },
   });
 }
@@ -1466,6 +1509,7 @@ export function useArchiveNotification() {
       ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["ui", "notifications"] });
+      qc.invalidateQueries({ queryKey: queryKeys.todaySummary() });
     },
   });
 }
@@ -1587,6 +1631,40 @@ export function useJournalCreate() {
   return useMutation({
     mutationFn: (payload: Record<string, unknown>) =>
       apiPost<JournalCreateResponse>(uiJournalPath({}), payload).then((r) => r.entry),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "journal"] });
+    },
+  });
+}
+
+/** R26.2: Trade ticket payload */
+export interface TradeTicketResponse {
+  symbol: string;
+  strategy: string;
+  action: string;
+  snapshot_header: Record<string, unknown>;
+  sizing: Record<string, unknown>;
+  contract_details: Record<string, unknown>;
+  execution_steps: string[];
+  journal_draft: Record<string, unknown>;
+  guardrails: Record<string, unknown>;
+  earnings_advisory: Record<string, unknown>;
+  error?: string;
+}
+export function useTradeTicket(symbol: string, strategy: string, action: string) {
+  return useQuery({
+    queryKey: queryKeys.tradeTicket(symbol, strategy, action),
+    queryFn: () => apiGet<TradeTicketResponse>(tradeTicketPath(symbol, strategy, action)),
+    enabled: !!symbol?.trim(),
+  });
+}
+
+/** R26.2: Create journal entry from ticket payload */
+export function useJournalFromTicket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Record<string, unknown>) =>
+      apiPost<JournalCreateResponse>(uiJournalFromTicketPath(), payload).then((r) => r.entry),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["ui", "journal"] });
     },

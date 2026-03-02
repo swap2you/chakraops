@@ -400,13 +400,10 @@ export function DashboardPage() {
                       const actionLabel = item.next_action_code === "ENTRY" ? "Entry" : item.next_action_code === "CLOSE" ? "Close" : item.next_action_code === "ROLL" ? "Roll" : item.next_action_code === "HOLD" ? "Hold" : item.next_action_code;
                       const recommendLabel = item.recommended_action_code === "CLOSE" ? "Close" : item.recommended_action_code === "ROLL" ? "Roll" : item.recommended_action_code === "HOLD" ? "Hold" : item.recommended_action_code;
                       const rollReasonLabel = (item.roll_reason_codes?.includes("DTE_WINDOW") && item.recommended_action_code === "ROLL") ? "DTE window" : null;
+                      const ticketHref = `/ticket?symbol=${encodeURIComponent(item.symbol)}&strategy=${encodeURIComponent((item.strategy || "CSP").toUpperCase())}&action=${encodeURIComponent(item.next_action_code === "ENTRY" ? "OPEN" : item.next_action_code === "CLOSE" ? "CLOSE" : "OPEN")}`;
                       return (
-                        <Link
-                          key={`opt-${item.symbol}`}
-                          to={href}
-                          className="block rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-                          data-testid={`action-needed-options-row-${item.symbol}`}
-                        >
+                        <div key={`opt-${item.symbol}`} className="rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50 flex items-center justify-between gap-2">
+                        <Link to={href} className="flex-1 min-w-0" data-testid={`action-needed-options-row-${item.symbol}`}>
                           <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{item.symbol}</span>
                           <Badge variant={item.next_action_code === "ENTRY" ? "success" : item.next_action_code === "CLOSE" ? "danger" : "neutral"} className="ml-2">
                             {actionLabel}
@@ -481,6 +478,8 @@ export function DashboardPage() {
                             <p className="mt-0.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-roll-reason-${item.symbol}`}>Reason: {rollReasonLabel}</p>
                           )}
                         </Link>
+                        <Link to={ticketHref} className="shrink-0 text-emerald-600 hover:underline dark:text-emerald-400" data-testid={`action-needed-ticket-${item.symbol}`}>Ticket</Link>
+                        </div>
                       );
                     })}
                   </div>
@@ -495,13 +494,10 @@ export function DashboardPage() {
                     {(actionNeeded.top_shares.slice(0, 5)).map((item) => {
                       const href = `/symbol-diagnostics?symbol=${encodeURIComponent(item.symbol)}&tab=Shares${item.accordion_id ? `&accordion=${encodeURIComponent(item.accordion_id)}` : ""}`;
                       const actionLabel = item.next_action_code === "ENTRY" ? "Entry" : item.next_action_code === "CLOSE" ? "Close" : item.next_action_code;
+                      const ticketHrefShares = `/ticket?symbol=${encodeURIComponent(item.symbol)}&strategy=SHARES&action=${item.next_action_code === "ENTRY" ? "BUY" : item.next_action_code === "CLOSE" ? "SELL" : "BUY"}`;
                       return (
-                        <Link
-                          key={`shr-${item.symbol}`}
-                          to={href}
-                          className="block rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-                          data-testid={`action-needed-shares-row-${item.symbol}`}
-                        >
+                        <div key={`shr-${item.symbol}`} className="rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50 flex items-center justify-between gap-2">
+                        <Link to={href} className="flex-1 min-w-0" data-testid={`action-needed-shares-row-${item.symbol}`}>
                           <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{item.symbol}</span>
                           <Badge variant={item.next_action_code === "ENTRY" ? "success" : item.next_action_code === "CLOSE" ? "danger" : "neutral"} className="ml-2">
                             {actionLabel}
@@ -530,6 +526,8 @@ export function DashboardPage() {
                             <p className="mt-0.5 text-zinc-500 dark:text-zinc-500">Key: {item.key_number}</p>
                           )}
                         </Link>
+                        <Link to={ticketHrefShares} className="shrink-0 text-emerald-600 hover:underline dark:text-emerald-400" data-testid={`action-needed-ticket-${item.symbol}`}>Ticket</Link>
+                        </div>
                       );
                     })}
                   </div>

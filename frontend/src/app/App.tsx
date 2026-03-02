@@ -10,6 +10,8 @@ import { NotificationsPage } from "@/pages/NotificationsPage";
 import { PortfolioPage } from "@/pages/PortfolioPage";
 import { WheelPage } from "@/pages/WheelPage";
 import { JournalPage } from "@/pages/JournalPage";
+import { TradeTicketPage } from "@/pages/TradeTicketPage";
+import { TodayPage } from "@/pages/TodayPage";
 import { ReportsPage } from "@/pages/ReportsPage";
 import { UniverseAdminPage } from "@/pages/UniverseAdminPage";
 import { UniverseHealthPage } from "@/pages/UniverseHealthPage";
@@ -37,6 +39,8 @@ export function App() {
               <Route path="/system" element={<SystemDiagnosticsPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/journal" element={<JournalPage />} />
+              <Route path="/ticket" element={<TradeTicketPage />} />
+              <Route path="/today" element={<TodayPage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/universe-admin" element={<UniverseAdminPage />} />
               <Route path="/universe-health" element={<UniverseHealthPage />} />

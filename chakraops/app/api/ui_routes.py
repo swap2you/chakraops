@@ -1686,6 +1686,223 @@ def ui_notification_delete(
 
 
 # ---------------------------------------------------------------------------
+# R26.2: Trade Ticket v2 — GET ticket payload; POST journal from ticket
+# ---------------------------------------------------------------------------
+
+
+@router.get("/trade-ticket")
+def ui_trade_ticket(
+    symbol: str = Query(..., description="Symbol"),
+    strategy: str = Query("SHARES", description="SHARES | CSP | CC"),
+    action: str = Query("OPEN", description="OPEN | CLOSE | BUY | SELL"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.2: Build trade ticket (snapshot/sizing/contract/steps/journal draft). No decision persistence."""
+    _require_ui_key(x_ui_key)
+    from app.core.portfolio.trade_ticket_r262 import build_trade_ticket
+    ticket = build_trade_ticket(symbol=symbol, strategy=strategy, action=action)
+    return ticket
+
+
+@router.post("/journal/from-ticket")
+async def ui_journal_from_ticket(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.2: Create journal entry from ticket payload (same schema as POST /journal)."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    trade_date = (body.get("trade_date") or "").strip()[:10]
+    symbol = (body.get("symbol") or "").strip().upper()
+    strategy = (body.get("strategy") or "SHARES").strip().upper()
+    action = (body.get("action") or "").strip().upper()
+    if not trade_date or not symbol or not action:
+        raise HTTPException(status_code=400, detail="trade_date, symbol, and action required")
+    try:
+        qty = float(body.get("qty", 0))
+    except (TypeError, ValueError):
+        qty = 0.0
+    price = body.get("price")
+    premium = body.get("premium")
+    if price is not None:
+        try:
+            price = float(price)
+        except (TypeError, ValueError):
+            price = None
+    if premium is not None:
+        try:
+            premium = float(premium)
+        except (TypeError, ValueError):
+            premium = None
+    fees = body.get("fees")
+    if fees is not None:
+        try:
+            fees = float(fees)
+        except (TypeError, ValueError):
+            fees = None
+    strike_val = None
+    if body.get("strike") is not None:
+        try:
+            strike_val = float(body["strike"])
+        except (TypeError, ValueError):
+            pass
+    realized_val = None
+    if body.get("realized_pl") is not None:
+        try:
+            realized_val = float(body["realized_pl"])
+        except (TypeError, ValueError):
+            pass
+    try:
+        from app.core.journal.journal_store import journal_create
+        entry = journal_create(
+            trade_date=trade_date,
+            symbol=symbol,
+            strategy=strategy,
+            action=action,
+            qty=qty,
+            price=price,
+            premium=premium,
+            fees=fees,
+            contract_key=(body.get("contract_key") or "").strip() or None,
+            expiry=(body.get("expiry") or "").strip()[:10] or None,
+            strike=strike_val,
+            right=(body.get("right") or "").strip() or None,
+            notes=(body.get("notes") or "").strip()[:2000] or None,
+            tags=(body.get("tags") or "").strip()[:500] or None,
+            realized_pl=realized_val,
+            link_id=(body.get("link_id") or "").strip() or None,
+        )
+        return {"entry": entry}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Journal from-ticket error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to create entry")
+
+
+# ---------------------------------------------------------------------------
+# R26.3: Today summary — lightweight single payload for Today page
+# ---------------------------------------------------------------------------
+
+
+def _format_ts_et(ts_utc: str | None) -> str:
+    """Format UTC timestamp to ET display string for Today summary."""
+    if not ts_utc or not isinstance(ts_utc, str):
+        return "—"
+    try:
+        from datetime import datetime, timezone
+        from zoneinfo import ZoneInfo
+        dt = datetime.fromisoformat(ts_utc.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        et = dt.astimezone(ZoneInfo("America/New_York"))
+        return et.strftime("%Y-%m-%d %H:%M ET")
+    except Exception:
+        return str(ts_utc)[:19] + " ET"
+
+
+@router.get("/today/summary")
+def ui_today_summary(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.3: Lightweight summary for Today page. Same as_of as decision store; no heavy ORATS."""
+    _require_ui_key(x_ui_key)
+    latest_run_ts: str | None = None
+    as_of_et = "—"
+    try:
+        from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2, get_eval_snapshot
+        store = get_evaluation_store_v2()
+        store.reload_from_disk()
+        artifact = store.get_latest()
+        if artifact and getattr(artifact, "metadata", None):
+            latest_run_ts = (artifact.metadata or {}).get("pipeline_timestamp")
+        if not latest_run_ts:
+            snap = get_eval_snapshot()
+            if isinstance(snap, dict):
+                latest_run_ts = snap.get("quote_as_of") or snap.get("pipeline_timestamp")
+        as_of_et = _format_ts_et(latest_run_ts)
+    except Exception:
+        pass
+
+    cadence_mode = "EOD_BIASED"
+    eligibility_as_of: str | None = latest_run_ts
+    try:
+        from app.core.settings import get_decision_cadence_mode
+        cadence_mode = get_decision_cadence_mode()
+    except Exception:
+        pass
+
+    guardrails = _get_guardrails_health()
+
+    orats_status = "UNKNOWN"
+    orats_freshness_state_label: str | None = None
+    try:
+        from app.api.data_health import get_data_health, get_orats_freshness_state
+        dh = get_data_health()
+        raw = (dh.get("status") or "UNKNOWN").upper()
+        if raw == "OK":
+            orats_status = "OK"
+        elif raw in ("WARN", "DEGRADED"):
+            orats_status = "WARN"
+        else:
+            orats_status = "DOWN"
+        freshness = get_orats_freshness_state()
+        orats_freshness_state_label = freshness.get("state_label") or freshness.get("state")
+    except Exception:
+        orats_status = "DOWN"
+
+    notifications_health: Dict[str, Any] = {}
+    notifications_new_count = 0
+    try:
+        from app.api.notifications_store import get_notifications_health
+        notifications_health = get_notifications_health()
+        notifications_new_count = int(notifications_health.get("count_new") or 0)
+    except Exception:
+        notifications_health = {"count_new": 0, "count_acked": 0, "count_archived": 0, "last_emitted_ts": None}
+
+    earnings_probe: Dict[str, Any] = {"status": "Unavailable", "next_date": None, "days": None, "implied_move_pct": None, "as_of": None}
+    try:
+        import os
+        sym = (os.environ.get("EARNINGS_PROBE_SYMBOL") or "SPY").strip().upper() or "SPY"
+        from app.core.orats.earnings import fetch_earnings_advisory
+        from app.core.config.orats_secrets import ORATS_API_TOKEN
+        token = (ORATS_API_TOKEN or "").strip() or None
+        out = fetch_earnings_advisory(sym, token=token)
+        status = (out.get("earnings_data_status") or "Unavailable").strip()
+        if status not in ("OK", "Unavailable", "Stale"):
+            status = "Unavailable"
+        earnings_probe = {
+            "status": status,
+            "next_date": out.get("earnings_next_date"),
+            "days": out.get("earnings_days"),
+            "implied_move_pct": out.get("implied_earnings_move_pct"),
+            "as_of": out.get("earnings_as_of"),
+        }
+    except Exception:
+        pass
+
+    # action_needed_count: client should derive from GET /api/ui/action-needed to avoid duplicate heavy work
+    action_needed_count: int | None = None
+
+    return {
+        "latest_run_ts": latest_run_ts,
+        "as_of_et": as_of_et,
+        "cadence": {"mode": cadence_mode, "eligibility_as_of": eligibility_as_of},
+        "orats_status": orats_status,
+        "orats_freshness_state_label": orats_freshness_state_label,
+        "guardrails": guardrails,
+        "notifications_health": notifications_health,
+        "notifications_new_count": notifications_new_count,
+        "earnings_probe": earnings_probe,
+        "action_needed_count": action_needed_count,
+    }
+
+
+# ---------------------------------------------------------------------------
 # R25.5: Journal + Monthly Reports (SQLite-backed; no FAIL/WARN in responses)
 # ---------------------------------------------------------------------------
 

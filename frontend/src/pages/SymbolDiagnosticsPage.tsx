@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, Link } from "react-router-dom";
 import { Calendar, ChevronDown, ChevronRight, Database, Droplets, MessageSquare, X } from "lucide-react";
 import { useSymbolDiagnostics, useRecomputeSymbolDiagnostics, useDefaultAccount, useUiSystemHealth, useUpsertSharePosition, useDeleteSharePosition, useCloseSharePosition, useClosedSharePositions, useSetDeltaOverride, useDeleteDeltaOverride, useActionNeeded } from "@/api/queries";
 import type { SymbolDiagnosticsResponseExtended } from "@/api/types";
@@ -190,7 +190,19 @@ export function SymbolDiagnosticsPage({ initialTabForTest }: { initialTabForTest
           {/* R26.0: Suggested size when this symbol has ENTRY with r260 sizing */}
           {entrySizingItem && (
             <Card data-testid="suggested-size-card">
-              <CardHeader title="Suggested size" description="Portfolio-aware sizing for ENTRY (manual execution only)." />
+              <CardHeader
+                title="Suggested size"
+                description="Portfolio-aware sizing for ENTRY (manual execution only)."
+                actions={
+                  <Link
+                    to={`/ticket?symbol=${encodeURIComponent(activeSymbol ?? "")}&strategy=${encodeURIComponent(entrySizingItem.strategy || "SHARES")}&action=OPEN`}
+                    className="text-sm text-emerald-600 hover:underline dark:text-emerald-400"
+                    data-testid="suggested-size-trade-ticket-link"
+                  >
+                    Trade Ticket
+                  </Link>
+                }
+              />
               <div className="text-sm text-zinc-600 dark:text-zinc-400 space-y-1">
                 {entrySizingItem.recommended_contracts != null && entrySizingItem.recommended_contracts > 0 && (
                   <p>Size: {entrySizingItem.recommended_contracts} contracts</p>

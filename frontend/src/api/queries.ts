@@ -4,7 +4,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiDelete, apiGet, apiPatch, apiPost, apiPostText } from "./client";
+import { apiDelete, apiGet, apiGetBlob, apiPatch, apiPost, apiPostNoBody, apiPostText } from "./client";
 import type {
   ArtifactListResponse,
   DecisionArtifactV2,
@@ -348,6 +348,16 @@ function uiJournalEntryPath(id: string): string {
 function uiReportsMonthlyPath(month: string): string {
   return `/api/ui/reports/monthly?month=${encodeURIComponent(month)}`;
 }
+/** R26.5: Monthly close pack */
+function uiMonthlyCloseFilesPath(month: string): string {
+  return `/api/ui/reports/monthly/close/files?month=${encodeURIComponent(month)}`;
+}
+function uiMonthlyCloseDownloadPath(month: string, file: string): string {
+  return `/api/ui/reports/monthly/close/download?month=${encodeURIComponent(month)}&file=${encodeURIComponent(file)}`;
+}
+function uiMonthlyCloseGeneratePath(month: string): string {
+  return `/api/ui/reports/monthly/close?month=${encodeURIComponent(month)}`;
+}
 /** R25.6: Universe Admin */
 function uiUniverseAdminPath(params: { limit?: number; offset?: number; status?: string }): string {
   const p = new URLSearchParams();
@@ -428,6 +438,7 @@ export const queryKeys = {
   tradeTicket: (symbol: string, strategy: string, action: string) =>
     ["ui", "tradeTicket", symbol, strategy, action] as const,
   uiReportsMonthly: (month: string) => ["ui", "reports", "monthly", month] as const,
+  uiMonthlyCloseFiles: (month: string) => ["ui", "reports", "monthly", "close", "files", month] as const,
   /** R25.6 */
   uiUniverseAdmin: (params?: Record<string, unknown>) => ["ui", "universe", "admin", params ?? ""] as const,
   uiUniverseHealth: () => ["ui", "universe", "health"] as const,
@@ -1773,6 +1784,45 @@ export function useReportsMonthly(month: string) {
     queryFn: () => apiGet<MonthlyReportResponse>(uiReportsMonthlyPath(month)),
     enabled: !!month && month.length === 7 && month[4] === "-",
   });
+}
+
+/** R26.5: Monthly close pack — files list + generate + download */
+export interface MonthlyCloseFilesResponse {
+  month: string;
+  files: { name: string; size: number }[];
+  generated_ts?: string | null;
+  paths?: string[];
+}
+export function useMonthlyCloseFiles(month: string) {
+  return useQuery({
+    queryKey: queryKeys.uiMonthlyCloseFiles(month),
+    queryFn: () => apiGet<MonthlyCloseFilesResponse>(uiMonthlyCloseFilesPath(month)),
+    enabled: !!month && month.length === 7 && month[4] === "-",
+  });
+}
+export function useMonthlyCloseGenerate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (month: string) =>
+      apiPostNoBody<{ status: string; month: string; generated_ts: string; paths: string[] }>(
+        uiMonthlyCloseGeneratePath(month)
+      ),
+    onSuccess: (_, month) => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiMonthlyCloseFiles(month) });
+    },
+  });
+}
+export function getMonthlyCloseDownloadPath(month: string, file: string): string {
+  return uiMonthlyCloseDownloadPath(month, file);
+}
+export async function downloadMonthlyCloseFile(month: string, file: string): Promise<void> {
+  const blob = await apiGetBlob(uiMonthlyCloseDownloadPath(month, file));
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = file;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 /** R25.6: Universe Admin — current list + history */

@@ -79,6 +79,26 @@ export async function apiPost<T>(path: string, payload: unknown): Promise<T> {
   return (body ?? {}) as T;
 }
 
+/** POST with no body (e.g. R26.5 monthly close generate). */
+export async function apiPostNoBody<T>(path: string): Promise<T> {
+  const url = resolveUrl(path);
+  const res = await fetch(url, {
+    method: "POST",
+    headers: getHeaders(),
+  });
+  const text = await res.text();
+  let body: unknown;
+  try {
+    body = text ? JSON.parse(text) : undefined;
+  } catch {
+    body = undefined;
+  }
+  if (!res.ok) {
+    throw new ApiError(`API ${res.status}: ${res.statusText}`, res.status, body);
+  }
+  return (body ?? {}) as T;
+}
+
 export async function apiPatch<T>(path: string, payload: unknown): Promise<T> {
   const url = resolveUrl(path);
   const res = await fetch(url, {
@@ -131,4 +151,21 @@ export async function apiDelete<T>(path: string): Promise<T> {
     throw new ApiError(`API ${res.status}: ${res.statusText}`, res.status, body);
   }
   return (body ?? {}) as T;
+}
+
+/** R26.5: GET and return response as Blob (e.g. file download). */
+export async function apiGetBlob(path: string): Promise<Blob> {
+  const url = resolveUrl(path);
+  const res = await fetch(url, { method: "GET", headers: getHeaders() });
+  if (!res.ok) {
+    const text = await res.text();
+    let body: unknown;
+    try {
+      body = text ? JSON.parse(text) : undefined;
+    } catch {
+      body = text;
+    }
+    throw new ApiError(`API ${res.status}: ${res.statusText}`, res.status, body);
+  }
+  return res.blob();
 }

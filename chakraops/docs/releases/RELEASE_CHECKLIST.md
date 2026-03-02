@@ -567,6 +567,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend pytest (4 passed; scoped: test_r264_ops_checklists.py), frontend tests (206 passed, 18 skipped), frontend build pass
 - **Scope:** Checklist SQLite (EOD/WEEKLY); GET/POST ops/checklist; eod-summary, weekly-summary; TodayPage EOD section, WeeklyReviewPage; reminder notifications (19:00 ET, Sunday); dedupe; safe labels only. Branch: release/R26.4.
 
+### R26.5 — Monthly close + performance pack (journal-driven)
+
+- [x] **Requirements** — [R26.5_requirements.md](R26.5_requirements.md)
+- [x] **Release notes** — [R26.5_release_notes.md](R26.5_release_notes.md)
+- [x] **Verification** — [out/verification/R26.5/notes.md](../../../out/verification/R26.5/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend pytest (4 passed; scoped: test_r265_monthly_close_pack.py), frontend tests (ReportsPage 4 passed), frontend build pass
+- **Scope:** POST monthly/close; close pack under data/reports/YYYY-MM/; monthly_close_state; files + download endpoints; Reports Monthly Close panel; deterministic; safe labels only. Branch: release/R26.5.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

@@ -1,9 +1,15 @@
 /**
  * R25.5: Monthly report — realized P/L, counts, winners/losers.
+ * R26.5: Monthly close pack — generate and download.
  * Uses /api/ui/reports/monthly. Safe labels only (no raw codes).
  */
 import { useState } from "react";
-import { useReportsMonthly } from "@/api/queries";
+import {
+  useReportsMonthly,
+  useMonthlyCloseFiles,
+  useMonthlyCloseGenerate,
+  downloadMonthlyCloseFile,
+} from "@/api/queries";
 import type { MonthlyReportResponse } from "@/api/queries";
 import { PageHeader } from "@/components/PageHeader";
 import {
@@ -33,6 +39,8 @@ function currentMonth(): string {
 export function ReportsPage() {
   const [month, setMonth] = useState(currentMonth());
   const { data, isLoading, isError, error } = useReportsMonthly(month);
+  const { data: closeFiles, isLoading: closeFilesLoading } = useMonthlyCloseFiles(month);
+  const generateClose = useMonthlyCloseGenerate();
 
   const report = data as MonthlyReportResponse | undefined;
   const hasData = report && (report.trade_count > 0 || report.total_realized_pl !== 0 || report.fees_total !== 0);
@@ -55,6 +63,50 @@ export function ReportsPage() {
           />
         </label>
       </div>
+
+      {/* R26.5: Monthly Close pack */}
+      <Card data-testid="monthly-close-panel">
+        <CardHeader className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          Monthly close
+        </CardHeader>
+        <div className="space-y-3 pt-2">
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            Generate a close pack (JSON, CSV, journal export, summary) for the selected month. Files are saved under data/reports/{month}/.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => generateClose.mutate(month)}
+              disabled={generateClose.isPending || !month}
+              className="rounded bg-zinc-800 px-3 py-1.5 text-sm text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-700 dark:hover:bg-zinc-600"
+              data-testid="monthly-close-generate"
+            >
+              {generateClose.isPending ? "Generating…" : "Generate close pack"}
+            </button>
+          </div>
+          {closeFilesLoading && <p className="text-sm text-zinc-500">Loading…</p>}
+          {!closeFilesLoading && closeFiles?.generated_ts && (
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              Last generated: {new Date(closeFiles.generated_ts).toLocaleString()}
+            </p>
+          )}
+          {!closeFilesLoading && (closeFiles?.files?.length ?? 0) > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {(closeFiles?.files ?? []).map((f) => (
+                <button
+                  key={f.name}
+                  type="button"
+                  onClick={() => downloadMonthlyCloseFile(month, f.name)}
+                  className="rounded border border-zinc-300 bg-white px-2 py-1 text-sm text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                  data-testid={`monthly-close-download-${f.name.replace(".", "-")}`}
+                >
+                  Download {f.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </Card>
 
       {isLoading && (
         <div className="rounded-lg border border-zinc-200 bg-zinc-50/50 p-8 text-center text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/50">

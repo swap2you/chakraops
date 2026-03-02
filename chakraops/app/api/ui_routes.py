@@ -2261,6 +2261,98 @@ def ui_reports_monthly(
         raise HTTPException(status_code=500, detail="Unable to load report")
 
 
+# R26.5: Monthly close pack (data/reports/<month>/; state + files + download)
+def _monthly_close_allowlist() -> frozenset:
+    from app.core.ops.monthly_close_store_r265 import ALLOWED_FILES
+    return ALLOWED_FILES
+
+
+@router.post("/reports/monthly/close")
+def ui_reports_monthly_close(
+    month: str = Query(..., description="YYYY-MM"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.5: Generate monthly close pack under data/reports/<month>/; deterministic."""
+    _require_ui_key(x_ui_key)
+    month = (month or "").strip()[:7]
+    if len(month) != 7 or month[4] != "-":
+        raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+    try:
+        from app.core.ops.monthly_close_store_r265 import generate_monthly_close_pack
+        result = generate_monthly_close_pack(month)
+        return {"status": "OK", "month": result["month"], "generated_ts": result["generated_ts"], "paths": result["paths"]}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Monthly close pack error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to generate close pack")
+
+
+@router.get("/reports/monthly/close/files")
+def ui_reports_monthly_close_files(
+    month: str = Query(..., description="YYYY-MM"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.5: List available close pack files and sizes for month."""
+    _require_ui_key(x_ui_key)
+    month = (month or "").strip()[:7]
+    if len(month) != 7 or month[4] != "-":
+        raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+    try:
+        from app.core.ops.monthly_close_store_r265 import _reports_base_path, ALLOWED_FILES, monthly_close_get
+        base = _reports_base_path()
+        month_dir = base / month
+        files: List[Dict[str, Any]] = []
+        if month_dir.exists():
+            for name in sorted(ALLOWED_FILES):
+                p = month_dir / name
+                if p.is_file():
+                    files.append({"name": name, "size": p.stat().st_size})
+        state = monthly_close_get(month)
+        out: Dict[str, Any] = {"month": month, "files": files}
+        if state:
+            out["generated_ts"] = state.get("generated_ts")
+            out["paths"] = state.get("paths_json") or []
+        return out
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Monthly close files error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to list files")
+
+
+@router.get("/reports/monthly/close/download")
+def ui_reports_monthly_close_download(
+    month: str = Query(..., description="YYYY-MM"),
+    file: str = Query(..., description="File name (allowlist)"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+):
+    """R26.5: Stream close pack file; file param validated against allowlist."""
+    _require_ui_key(x_ui_key)
+    month = (month or "").strip()[:7]
+    if len(month) != 7 or month[4] != "-":
+        raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+    allowlist = _monthly_close_allowlist()
+    if (file or "").strip() not in allowlist:
+        raise HTTPException(status_code=400, detail="Invalid file name")
+    try:
+        from app.core.ops.monthly_close_store_r265 import _reports_base_path
+        from fastapi.responses import FileResponse
+        base = _reports_base_path()
+        path = (base / month / file.strip()).resolve()
+        expected_dir = (base / month).resolve()
+        if not path.is_file() or path.parent != expected_dir or path.name != file.strip():
+            raise HTTPException(status_code=404, detail="File not found")
+        media = "application/json" if file.endswith(".json") else "text/csv" if file.endswith(".csv") else "text/plain"
+        return FileResponse(path, media_type=media, filename=file)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Monthly close download error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to download")
+
+
 @router.get("/accounts/default")
 def ui_accounts_default(
     x_ui_key: str | None = Header(None, alias="x-ui-key"),

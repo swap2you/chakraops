@@ -1,0 +1,21 @@
+{
+  "month": "2026-03",
+  "generated_ts": "2026-03-02T18:20:13.341986+00:00",
+  "totals": {
+    "realized_pl": 0.0,
+    "fees": 0.0,
+    "trade_count": 0,
+    "win_rate": 0.0
+  },
+  "by_strategy": {},
+  "winners": [],
+  "losers": [],
+  "guardrails": {
+    "status": "Blocked",
+    "total_equity": null,
+    "cash_reserve_pct": null,
+    "open_options_count": null,
+    "open_shares_count": null,
+    "symbols_exposure_count": null
+  }
+}

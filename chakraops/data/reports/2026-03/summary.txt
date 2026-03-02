@@ -1,0 +1,6 @@
+Monthly close — 2026-03
+Generated: 2026-03-02T18:20:13.341986+00:00
+Realized P/L: 0.00
+Fees: 0.00
+Trades: 0 | Win rate: 0.0%
+Guardrails: Blocked

@@ -599,6 +599,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend full suite 866 passed, 1 skipped; frontend tests 208 passed, 18 skipped; build built in 8.29s
 - **Scope:** Fix test_ui_positions_post_success_when_within_limits (mock wheel policy); RELEASE_PLAYBOOK section 1.4 gate policy (scoped vs full-suite, exceptions); release artifacts. Branch: release/R26.8.
 
+### R26.9 — Execution discipline lock (Ticket → Journal → Notifications → EOD)
+
+- [x] **Requirements** — R26.9_requirements.md
+- [x] **Release notes** — R26.9_release_notes.md
+- [x] **Verification** — [out/verification/R26.9/notes.md](../../../out/verification/R26.9/notes.md)
+- [x] **Gate** — Backend full suite 869 passed, 3 skipped; frontend tests 212 passed, 18 skipped; build built in 20.52s
+- **Scope:** Execution log store + API; TodayPage queue Mark Done gate (journal or skip); EOD mark-done block when NEW notifications unless override; safe UI. Branch: release/R26.9.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

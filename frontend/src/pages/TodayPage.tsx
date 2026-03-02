@@ -17,6 +17,7 @@ import {
   useOpsChecklist,
   useOpsEodSummary,
   useOpsChecklistMarkDone,
+  useExecutionLogPost,
 } from "@/api/queries";
 import type { ActionNeededItem } from "@/api/queries";
 import { PageHeader } from "@/components/PageHeader";
@@ -28,10 +29,12 @@ const DONE_TODAY_KEY = "chakraops_r263_done_today";
 
 interface QueueItem {
   id: string;
+  ticket_id?: string;
   symbol: string;
   strategy: string;
   action: string;
   created_ts: string;
+  journal_saved?: boolean;
 }
 
 function todayDate(): string {
@@ -44,7 +47,12 @@ function loadQueue(): QueueItem[] {
     const raw = localStorage.getItem(TICKET_QUEUE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? parsed : [];
+    const arr = Array.isArray(parsed) ? parsed : [];
+    return arr.map((item: QueueItem) => ({
+      ...item,
+      ticket_id: item.ticket_id ?? item.id,
+      journal_saved: item.journal_saved ?? false,
+    }));
   } catch {
     return [];
   }
@@ -105,9 +113,18 @@ export function TodayPage() {
   const { data: eodChecklist } = useOpsChecklist("EOD", today);
   const { data: eodSummary } = useOpsEodSummary(today);
   const markEodDone = useOpsChecklistMarkDone();
+  const executionLogPost = useExecutionLogPost();
   const { data: journalData } = useJournal({ from_date: today, to_date: today, limit: 100 });
   const journalEntries = journalData?.entries ?? [];
   const journalSymbols = useMemo(() => new Set(journalEntries.map((e) => (e.symbol || "").toUpperCase())), [journalEntries]);
+  const journalSymbolStrategySet = useMemo(
+    () => new Set(journalEntries.map((e) => `${(e.symbol || "").toUpperCase()}|${(e.strategy || "").toUpperCase()}`)),
+    [journalEntries]
+  );
+  const [skipModalItem, setSkipModalItem] = useState<QueueItem | null>(null);
+  const [skipReason, setSkipReason] = useState("");
+  const [eodShowOverride, setEodShowOverride] = useState(false);
+  const [eodOverrideReason, setEodOverrideReason] = useState("");
 
   const { data: notifData, refetch: refetchNotif } = useNotifications(100, "NEW");
   const notifications = notifData?.notifications ?? [];
@@ -123,18 +140,32 @@ export function TodayPage() {
     saveDoneToday(doneToday);
   }, [doneToday]);
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ev = e as CustomEvent<{ ticket_id: string }>;
+      const tid = ev.detail?.ticket_id;
+      if (!tid) return;
+      setQueue((prev) => prev.map((q) => (q.ticket_id === tid || q.id === tid ? { ...q, journal_saved: true } : q)));
+    };
+    window.addEventListener("chakraops-journal-saved", handler);
+    return () => window.removeEventListener("chakraops-journal-saved", handler);
+  }, []);
+
   const addToQueue = useCallback((item: ActionNeededItem, isOptions: boolean) => {
     const strategy = (item.strategy || (isOptions ? "CSP" : "SHARES")).toUpperCase();
     const action =
       item.next_action_code === "ENTRY" ? (isOptions ? "OPEN" : "BUY") : item.next_action_code === "CLOSE" ? (isOptions ? "CLOSE" : "SELL") : "OPEN";
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     setQueue((prev) => [
       ...prev,
       {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        id,
+        ticket_id: id,
         symbol: item.symbol,
         strategy,
         action,
         created_ts: new Date().toISOString(),
+        journal_saved: false,
       },
     ]);
   }, []);
@@ -143,13 +174,62 @@ export function TodayPage() {
     setQueue((prev) => prev.filter((q) => q.id !== id));
   }, []);
 
-  const markDone = useCallback((id: string) => {
-    const item = queue.find((q) => q.id === id);
-    if (item) {
+  const hasJournalForItem = useCallback(
+    (item: QueueItem) => journalSymbolStrategySet.has(`${item.symbol.toUpperCase()}|${item.strategy.toUpperCase()}`),
+    [journalSymbolStrategySet]
+  );
+
+  const performMarkDone = useCallback(
+    (item: QueueItem) => {
       setDoneToday((prev) => [...prev, { symbol: item.symbol, date: today }]);
-      setQueue((prev) => prev.filter((q) => q.id !== id));
+      setQueue((prev) => prev.filter((q) => q.id !== item.id));
+    },
+    [today]
+  );
+
+  const markDone = useCallback(
+    (id: string) => {
+      const item = queue.find((q) => q.id === id);
+      if (!item) return;
+      if (item.journal_saved || hasJournalForItem(item)) {
+        performMarkDone(item);
+        return;
+      }
+      setSkipModalItem(item);
+      setSkipReason("");
+    },
+    [queue, hasJournalForItem, performMarkDone]
+  );
+
+  const confirmSkipAndMarkDone = useCallback(async () => {
+    if (!skipModalItem || !skipReason.trim()) return;
+    const item = skipModalItem;
+    const reason = skipReason.trim().slice(0, 140);
+    setSkipModalItem(null);
+    setSkipReason("");
+    try {
+      await executionLogPost.mutateAsync({
+        event_type: "SKIP_JOURNAL",
+        symbol: item.symbol,
+        strategy: item.strategy,
+        action: item.action,
+        ticket_id: item.ticket_id ?? item.id,
+        reason,
+      });
+      await executionLogPost.mutateAsync({
+        event_type: "MARK_DONE",
+        symbol: item.symbol,
+        strategy: item.strategy,
+        action: item.action,
+        ticket_id: item.ticket_id ?? item.id,
+      });
+    } catch {
+      setSkipModalItem(item);
+      setSkipReason(reason);
+      return;
     }
-  }, [queue, today]);
+    performMarkDone(item);
+  }, [skipModalItem, skipReason, executionLogPost, performMarkDone]);
 
   const missingJournalSymbols = useMemo(() => {
     return doneToday.filter((d) => d.date === today && !journalSymbols.has(d.symbol.toUpperCase())).map((d) => d.symbol);
@@ -275,14 +355,19 @@ export function TodayPage() {
             queue.map((q) => (
               <div
                 key={q.id}
-                className="flex items-center justify-between gap-2 rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs"
+                className="flex flex-wrap items-center justify-between gap-2 rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs"
                 data-testid={`today-queue-item-${q.symbol}`}
               >
-                <span className="font-mono">{q.symbol}</span>
-                <span className="text-zinc-500">{q.strategy} · {q.action}</span>
-                <span className="text-zinc-400">{new Date(q.created_ts).toLocaleTimeString()}</span>
-                <div className="flex gap-1">
-                  <Link to={`/ticket?symbol=${encodeURIComponent(q.symbol)}&strategy=${q.strategy}&action=${q.action}`}>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-mono">{q.symbol}</span>
+                  <span className="text-zinc-500">{q.strategy} · {q.action}</span>
+                  <span className="text-zinc-400">{new Date(q.created_ts).toLocaleTimeString()}</span>
+                  {q.journal_saved && (
+                    <Badge variant="neutral" className="shrink-0" data-testid="today-queue-badge-journal-saved">Journal saved</Badge>
+                  )}
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <Link to={`/ticket?symbol=${encodeURIComponent(q.symbol)}&strategy=${q.strategy}&action=${q.action}&ticket_id=${encodeURIComponent(q.ticket_id ?? q.id)}`}>
                     <Button variant="secondary" size="sm">Open Ticket</Button>
                   </Link>
                   <Button variant="secondary" size="sm" onClick={() => markDone(q.id)} data-testid={`today-queue-done-${q.symbol}`}>
@@ -296,20 +381,65 @@ export function TodayPage() {
         </div>
       </Card>
 
-      {/* D) End of Day Checklist — R26.4 */}
+      {/* D) End of Day Checklist — R26.4 / R26.9 */}
       <Card data-testid="today-eod-card">
         <CardHeader
           title="End of Day Checklist"
           description="Summary for today; mark done when complete."
           actions={
             eodPending ? (
-              <Button
-                onClick={() => markEodDone.mutate({ kind: "EOD", key: today })}
-                disabled={markEodDone.isPending}
-                data-testid="today-eod-mark-done"
-              >
-                {markEodDone.isPending ? "Saving…" : "Mark EOD Done"}
-              </Button>
+              <>
+                {!eodShowOverride ? (
+                  <Button
+                    onClick={() =>
+                      markEodDone.mutate(
+                        { kind: "EOD", key: today },
+                        {
+                          onError: (err: unknown) => {
+                            const e = err as { status?: number };
+                            if (e?.status === 409) setEodShowOverride(true);
+                          },
+                        }
+                      )
+                    }
+                    disabled={markEodDone.isPending}
+                    data-testid="today-eod-mark-done"
+                  >
+                    {markEodDone.isPending ? "Saving…" : "Mark EOD Done"}
+                  </Button>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2" data-testid="today-eod-override">
+                    <input
+                      type="text"
+                      placeholder="Override reason (required)"
+                      value={eodOverrideReason}
+                      onChange={(e) => setEodOverrideReason(e.target.value.slice(0, 140))}
+                      className="rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-2 py-1 text-sm max-w-[200px]"
+                      data-testid="today-eod-override-reason"
+                    />
+                    <Button
+                      onClick={() => {
+                        markEodDone.mutate(
+                          { kind: "EOD", key: today, override_reason: eodOverrideReason.trim().slice(0, 140) },
+                          {
+                            onSuccess: () => {
+                              setEodShowOverride(false);
+                              setEodOverrideReason("");
+                            },
+                          }
+                        );
+                      }}
+                      disabled={markEodDone.isPending || !eodOverrideReason.trim()}
+                      data-testid="today-eod-mark-done-with-override"
+                    >
+                      Complete EOD anyway
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={() => { setEodShowOverride(false); setEodOverrideReason(""); }}>
+                      Cancel
+                    </Button>
+                  </div>
+                )}
+              </>
             ) : (
               <span className="text-sm text-zinc-500">Done</span>
             )
@@ -322,6 +452,11 @@ export function TodayPage() {
               <> · Eval as of: {eodSummary.eval_as_of ?? "—"} · Notifications (new): {eodSummary.notifications_new_count} · Journal entries today: {eodSummary.journal_entries_count}</>
             )}
           </p>
+          {eodShowOverride && (
+            <p className="text-amber-600 dark:text-amber-400" data-testid="today-eod-blocked-message">
+              Cannot complete EOD while inbox has NEW items.
+            </p>
+          )}
         </div>
       </Card>
 
@@ -411,6 +546,38 @@ export function TodayPage() {
           )}
         </div>
       </Card>
+
+      {/* R26.9: Skip journal modal */}
+      {skipModalItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" data-testid="today-skip-modal">
+          <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-4 shadow-lg max-w-md">
+            <p className="text-sm text-zinc-700 dark:text-zinc-300 mb-2">
+              No journal entry for {skipModalItem.symbol} ({skipModalItem.strategy} · {skipModalItem.action}) today. Enter a short reason to skip and mark done.
+            </p>
+            <input
+              type="text"
+              placeholder="Reason (required, max 140 chars)"
+              value={skipReason}
+              onChange={(e) => setSkipReason(e.target.value.slice(0, 140))}
+              className="w-full rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-2 py-1.5 text-sm mb-3"
+              data-testid="today-skip-reason-input"
+            />
+            <div className="flex gap-2 justify-end">
+              <Button variant="secondary" size="sm" onClick={() => { setSkipModalItem(null); setSkipReason(""); }}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => confirmSkipAndMarkDone()}
+                disabled={!skipReason.trim() || executionLogPost.isPending}
+                data-testid="today-skip-confirm"
+              >
+                {executionLogPost.isPending ? "Saving…" : "Skip journal (reason recorded)"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

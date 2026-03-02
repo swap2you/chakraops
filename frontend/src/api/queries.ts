@@ -113,6 +113,10 @@ function opsChecklistPath(kind: string, key: string): string {
 function opsChecklistMarkDonePath(): string {
   return `/api/ui/ops/checklist/mark-done`;
 }
+/** R26.9: Ops execution log (write event). */
+function opsExecutionLogPath(): string {
+  return `/api/ui/ops/execution-log`;
+}
 function opsEodSummaryPath(date: string): string {
   return `/api/ui/ops/eod-summary?date=${encodeURIComponent(date)}`;
 }
@@ -722,13 +726,29 @@ export function useOpsChecklist(kind: string, key: string) {
 export function useOpsChecklistMarkDone() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { kind: string; key: string; notes?: string }) =>
+    mutationFn: (payload: { kind: string; key: string; notes?: string; override_reason?: string }) =>
       apiPost<{ status: string; row: OpsChecklistResponse["row"] }>(opsChecklistMarkDonePath(), payload),
     onSuccess: (_, variables) => {
       qc.invalidateQueries({ queryKey: queryKeys.opsChecklist(variables.kind, variables.key) });
       qc.invalidateQueries({ queryKey: queryKeys.opsEodSummary(variables.key) });
       qc.invalidateQueries({ queryKey: queryKeys.opsWeeklySummary(variables.key) });
     },
+  });
+}
+
+/** R26.9: Post one execution log event (MARK_DONE, SKIP_JOURNAL, EOD_OVERRIDE). */
+export interface ExecutionLogPayload {
+  event_type: string;
+  symbol?: string;
+  strategy?: string;
+  action?: string;
+  ticket_id?: string;
+  reason?: string;
+}
+export function useExecutionLogPost() {
+  return useMutation({
+    mutationFn: (payload: ExecutionLogPayload) =>
+      apiPost<{ status: string; row: Record<string, unknown> }>(opsExecutionLogPath(), payload),
   });
 }
 

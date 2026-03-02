@@ -33,6 +33,7 @@ const mockArchiveBulk = vi.fn(() => ({ mutate: vi.fn(), isPending: false }));
 const mockEodChecklist = { row: { status: "OPEN", key: "2026-02-27" } };
 const mockEodSummary = { date: "2026-02-27", eval_as_of: "2026-02-27T17:00:00Z", notifications_new_count: 0, journal_entries_count: 0 };
 const mockMarkEodDone = vi.fn(() => ({ mutate: vi.fn(), isPending: false }));
+const mockExecutionLogPost = vi.fn(() => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }));
 
 vi.mock("@/api/queries", () => ({
   useTodaySummary: vi.fn(() => ({ data: mockSummary, isLoading: false, refetch: vi.fn() })),
@@ -47,6 +48,7 @@ vi.mock("@/api/queries", () => ({
   useOpsChecklist: vi.fn(() => ({ data: mockEodChecklist })),
   useOpsEodSummary: vi.fn(() => ({ data: mockEodSummary })),
   useOpsChecklistMarkDone: () => mockMarkEodDone(),
+  useExecutionLogPost: () => mockExecutionLogPost(),
 }));
 
 describe("TodayPage", () => {
@@ -118,11 +120,52 @@ describe("TodayPage", () => {
     expect(screen.getByTestId("today-eod-card")).toBeInTheDocument();
     expect(screen.getByTestId("today-eod-mark-done")).toBeInTheDocument();
     await userEvent.click(screen.getByTestId("today-eod-mark-done"));
-    expect(mutateMock).toHaveBeenCalledWith(expect.objectContaining({ kind: "EOD" }));
+    expect(mutateMock).toHaveBeenCalledWith(expect.objectContaining({ kind: "EOD" }), expect.any(Object));
   });
 
   it("R26.4: EOD pending banner when status OPEN", () => {
     renderWithRoute(<TodayPage />, "/today");
     expect(screen.getByTestId("today-eod-pending-banner")).toBeInTheDocument();
+  });
+
+  it("R26.9: Mark Done without journal opens skip modal", async () => {
+    renderWithRoute(<TodayPage />, "/today");
+    await userEvent.click(screen.getByTestId("today-add-queue-SPY"));
+    await userEvent.click(screen.getByTestId("today-queue-done-SPY"));
+    expect(screen.getByTestId("today-skip-modal")).toBeInTheDocument();
+    expect(screen.getByTestId("today-skip-reason-input")).toBeInTheDocument();
+    expect(screen.getByTestId("today-skip-confirm")).toBeInTheDocument();
+  });
+
+  it("R26.9: Skip modal confirm posts execution log and closes", async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    mockExecutionLogPost.mockReturnValue({ mutate: vi.fn(), mutateAsync, isPending: false });
+    renderWithRoute(<TodayPage />, "/today");
+    await userEvent.click(screen.getByTestId("today-add-queue-SPY"));
+    await userEvent.click(screen.getByTestId("today-queue-done-SPY"));
+    await userEvent.type(screen.getByTestId("today-skip-reason-input"), "Skipped for test");
+    await userEvent.click(screen.getByTestId("today-skip-confirm"));
+    expect(mutateAsync).toHaveBeenCalled();
+    expect(screen.queryByTestId("today-skip-modal")).not.toBeInTheDocument();
+  });
+
+  it("R26.9: EOD mark done blocked when 409 shows override UI", async () => {
+    const mutateMock = vi.fn((payload: { override_reason?: string }, options?: { onError?: (err: { status: number }) => void }) => {
+      if (payload.override_reason) (options as { onSuccess?: () => void })?.onSuccess?.();
+      else options?.onError?.({ status: 409 });
+    });
+    mockMarkEodDone.mockReturnValue({ mutate: mutateMock, isPending: false });
+    renderWithRoute(<TodayPage />, "/today");
+    await userEvent.click(screen.getByTestId("today-eod-mark-done"));
+    expect(screen.getByTestId("today-eod-blocked-message")).toBeInTheDocument();
+    expect(screen.getByTestId("today-eod-override")).toBeInTheDocument();
+    expect(screen.getByTestId("today-eod-override-reason")).toBeInTheDocument();
+    expect(screen.getByTestId("today-eod-mark-done-with-override")).toBeInTheDocument();
+  });
+
+  it("R26.9: No FAIL/WARN in DOM", () => {
+    renderWithRoute(<TodayPage />, "/today");
+    expect(document.body.textContent).not.toMatch(/\bFAIL\b/);
+    expect(document.body.textContent).not.toMatch(/\bWARN\b/);
   });
 });

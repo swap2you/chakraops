@@ -54,7 +54,7 @@ describe("TradeTicketPage", () => {
     renderWithRoute(<TradeTicketPage />, ticketUrl);
     const saveBtn = screen.getByTestId("ticket-save-journal");
     await userEvent.click(saveBtn);
-    expect(mockMutate).toHaveBeenCalledWith(mockTicket.journal_draft);
+    expect(mockMutate).toHaveBeenCalledWith(mockTicket.journal_draft, expect.any(Object));
   });
 
   it("no FAIL or WARN in DOM", () => {

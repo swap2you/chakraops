@@ -1933,7 +1933,7 @@ async def ui_ops_checklist_mark_done(
     request: Request,
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """R26.4: Mark checklist DONE for kind+key. Body: kind, key, notes?."""
+    """R26.4: Mark checklist DONE for kind+key. Body: kind, key, notes?, override_reason? (R26.9: required when EOD and NEW notifications)."""
     _require_ui_key(x_ui_key)
     try:
         body = await request.json()
@@ -1942,13 +1942,71 @@ async def ui_ops_checklist_mark_done(
     kind = (body.get("kind") or "").strip().upper()
     key_val = (body.get("key") or "").strip()
     notes = (body.get("notes") or "").strip()[:2000] or None
+    override_reason = (body.get("override_reason") or "").strip()[:140] or None
     from app.core.ops.checklist_store_r264 import checklist_set_done, KIND_EOD, KIND_WEEKLY
     if kind not in (KIND_EOD, KIND_WEEKLY):
         raise HTTPException(status_code=400, detail="kind must be EOD or WEEKLY")
     if not key_val:
         raise HTTPException(status_code=400, detail="key required")
+    # R26.9: EOD mark-done blocked when NEW notifications exist unless override_reason provided
+    if kind == KIND_EOD:
+        from app.api.notifications_store import get_notifications_health
+        from app.core.ops.execution_log_store_r269 import execution_log_append, EVENT_EOD_OVERRIDE
+        health = get_notifications_health()
+        count_new = int(health.get("count_new") or 0)
+        if count_new > 0 and not override_reason:
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot complete EOD while inbox has NEW items.",
+            )
+        if count_new > 0 and override_reason:
+            execution_log_append(EVENT_EOD_OVERRIDE, reason=override_reason)
     row = checklist_set_done(kind, key_val, notes=notes)
     return {"status": "OK", "row": row}
+
+
+# ---------------------------------------------------------------------------
+# R26.9: Ops execution log (overrides and done transitions)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/ops/execution-log")
+async def ui_ops_execution_log_post(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.9: Write one execution log event. Body: event_type, symbol?, strategy?, action?, ticket_id?, reason?. No FAIL_/WARN_."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    event_type = (body.get("event_type") or "").strip().upper()
+    symbol = (body.get("symbol") or "").strip() or None
+    strategy = (body.get("strategy") or "").strip() or None
+    action = (body.get("action") or "").strip() or None
+    ticket_id = (body.get("ticket_id") or "").strip() or None
+    reason = (body.get("reason") or "").strip()[:140] or None
+    from app.core.ops.execution_log_store_r269 import execution_log_append, VALID_EVENTS
+    if event_type not in VALID_EVENTS:
+        raise HTTPException(status_code=400, detail=f"event_type must be one of {list(VALID_EVENTS)}")
+    row = execution_log_append(event_type=event_type, symbol=symbol, strategy=strategy, action=action, ticket_id=ticket_id, reason=reason)
+    return {"status": "OK", "row": row}
+
+
+@router.get("/ops/execution-log")
+def ui_ops_execution_log_get(
+    date: str | None = Query(None, description="YYYY-MM-DD (optional)"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R26.9: List execution log rows. Optional date filter. No FAIL_/WARN_."""
+    _require_ui_key(x_ui_key)
+    from app.core.ops.execution_log_store_r269 import execution_log_list
+    date_str = (date or "").strip()[:10] if date else None
+    if date_str and (len(date_str) != 10 or date_str[4] != "-" or date_str[7] != "-"):
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    rows = execution_log_list(date=date_str)
+    return {"rows": rows}
 
 
 def _eod_summary_for_date(date_str: str) -> Dict[str, Any]:

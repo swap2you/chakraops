@@ -34,10 +34,17 @@ export function TradeTicketPage() {
     ? [j.trade_date, j.symbol, j.strategy, j.action, j.qty, j.price ?? j.premium ?? "", j.contract_key ?? "", j.notes ?? ""].join(",")
     : "";
 
+  const ticketId = searchParams.get("ticket_id")?.trim() ?? "";
   const handleSaveToJournal = useCallback(() => {
     if (!ticket?.journal_draft) return;
-    saveToJournal.mutate(ticket.journal_draft as Record<string, unknown>);
-  }, [ticket?.journal_draft, saveToJournal]);
+    saveToJournal.mutate(ticket.journal_draft as Record<string, unknown>, {
+      onSuccess: () => {
+        if (ticketId) {
+          window.dispatchEvent(new CustomEvent("chakraops-journal-saved", { detail: { ticket_id: ticketId } }));
+        }
+      },
+    });
+  }, [ticket?.journal_draft, ticketId, saveToJournal]);
 
   if (!symbol) {
     return (

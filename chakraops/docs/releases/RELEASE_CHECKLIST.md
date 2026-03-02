@@ -553,10 +553,10 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 
 ### R26.3 — Daily Operator Workflow ("Today" command center)
 
-- [ ] **Requirements** — [R26.3_requirements.md](R26.3_requirements.md)
-- [ ] **Release notes** — [R26.3_release_notes.md](R26.3_release_notes.md)
-- [ ] **Verification** — out/verification/R26.3/notes.md (gate tails + UAT)
-- [ ] **Gate** — Backend pytest, frontend tests, frontend build pass
+- [x] **Requirements** — [R26.3_requirements.md](R26.3_requirements.md)
+- [x] **Release notes** — [R26.3_release_notes.md](R26.3_release_notes.md)
+- [x] **Verification** — [out/verification/R26.3/notes.md](../../../out/verification/R26.3/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend pytest (543 passed; scoped: test_r263_today_summary.py + tests/_core), frontend tests (200 passed, 18 skipped), frontend build pass
 - **Scope:** GET /api/ui/today/summary; TodayPage (Run/Refresh, Action Needed, Ticket queue localStorage, Journal checkpoint, Notifications inbox); /today route; safe labels only; no FAIL/WARN. Branch: release/R26.3.
 
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification

@@ -41,6 +41,24 @@ npm run build
 - **Pass:** Exit code 0; "built in Xs" or equivalent.
 - **Fail:** Fix type/build hygiene; document in release notes; do not mark DONE until pass.
 
+### 1.4 Gate policy: when scoped vs full-suite
+
+**When scoped backend gates are allowed**
+
+- **Doc-only releases:** No backend gates required; allowed if desired.
+- **Frontend-only changes:** Backend full suite optional; must run frontend tests and frontend build.
+- **Ops-only releases (scripts + docs):** Scoped backend gate allowed or skip; must record explicitly in verification notes.
+
+**When full-suite is mandatory**
+
+- **Any backend logic or config changes:** Full backend pytest suite required.
+- **Any persistence or path changes affecting `data/` or `out/`:** Full backend suite required.
+
+**How to record exceptions**
+
+- Must list failing test name(s), justification, and plan to fix in the next release.
+- Must be time-boxed to the next release (no open-ended skips).
+
 ---
 
 ## 2. Recording outputs in `out/verification/<Release>/notes.md`

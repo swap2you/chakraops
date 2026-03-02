@@ -591,6 +591,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend pytest: full suite 866 passed, 1 failed (pre-existing test_ui_positions_post_success_when_within_limits); scoped 32 passed (test_r265, test_r266, test_r264, test_r255, test_one_store_guardrails, test_decision_artifact_hygiene_r227). Frontend tests unchanged (not rerun). Frontend build pass (built in 8.70s).
 - **Scope:** restore_drill.sh; OUT_DIR/DATA_DIR env overrides (minimal); healthz + system-health + reports smoke; DRILL OK. Branch: release/R26.7.
 
+### R26.8 — Restore full-suite backend green + formalize scoped gate policy
+
+- [x] **Requirements** — R26.8_requirements.md
+- [x] **Release notes** — R26.8_release_notes.md
+- [x] **Verification** — [out/verification/R26.8/notes.md](../../../out/verification/R26.8/notes.md)
+- [x] **Gate** — Backend full suite 866 passed, 1 skipped; frontend tests 208 passed, 18 skipped; build built in 8.29s
+- **Scope:** Fix test_ui_positions_post_success_when_within_limits (mock wheel policy); RELEASE_PLAYBOOK section 1.4 gate policy (scoped vs full-suite, exceptions); release artifacts. Branch: release/R26.8.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

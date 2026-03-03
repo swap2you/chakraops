@@ -19,10 +19,12 @@ const mockTicket = {
 const mockUseTradeTicket = vi.fn(() => ({ data: mockTicket, isLoading: false, isError: false }));
 const mockMutate = vi.fn();
 const mockUseJournalFromTicket = vi.fn(() => ({ mutate: mockMutate, isPending: false }));
+const mockPaperMutate = vi.fn();
 
 vi.mock("@/api/queries", () => ({
   useTradeTicket: (...args: unknown[]) => mockUseTradeTicket(...args),
   useJournalFromTicket: () => mockUseJournalFromTicket(),
+  usePaperExecute: () => ({ mutate: mockPaperMutate, isPending: false }),
 }));
 
 const ticketUrl = "/ticket?symbol=SPY&strategy=CSP&action=OPEN";
@@ -65,5 +67,22 @@ describe("TradeTicketPage", () => {
   it("shows no symbol message when symbol is missing", () => {
     renderWithRoute(<TradeTicketPage />, "/ticket");
     expect(screen.getByText(/No symbol/)).toBeInTheDocument();
+  });
+
+  it("shows paper section with toggle (R27.0)", () => {
+    renderWithRoute(<TradeTicketPage />, ticketUrl);
+    expect(screen.getByTestId("ticket-paper-section")).toBeInTheDocument();
+    expect(screen.getByTestId("ticket-paper-toggle")).toBeInTheDocument();
+  });
+
+  it("Simulate Fill calls paper execute mutation when paper mode on and price set (R27.0)", async () => {
+    renderWithRoute(<TradeTicketPage />, ticketUrl);
+    await userEvent.click(screen.getByText("Paper execute"));
+    await userEvent.click(screen.getByTestId("ticket-paper-toggle"));
+    await userEvent.type(screen.getByTestId("ticket-paper-price"), "2.50");
+    await userEvent.click(screen.getByTestId("ticket-paper-simulate"));
+    expect(mockPaperMutate).toHaveBeenCalled();
+    const payload = mockPaperMutate.mock.calls[0][0];
+    expect(payload).toMatchObject({ mode: "PAPER", action: expect.any(String), symbol: "SPY", strategy: "CSP", qty: 2 });
   });
 });

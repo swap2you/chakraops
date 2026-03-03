@@ -22,13 +22,14 @@ describe("Sidebar", () => {
     mockGetShowAdvanced.mockReturnValue(false);
   });
 
-  it("renders nav with Dashboard, Universe, Symbol, Wheel, Portfolio, Notifications, System", () => {
+  it("renders nav with Dashboard, Universe, Symbol, Wheel, Portfolio, Paper, Notifications, System", () => {
     render(<Sidebar />);
     expect(screen.getByRole("link", { name: /dashboard/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /^Universe$/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /symbol/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /wheel/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /account & portfolio/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^Paper$/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /notifications/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /system/i })).toBeInTheDocument();
   });

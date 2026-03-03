@@ -62,6 +62,7 @@ export function JournalPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editNotes, setEditNotes] = useState("");
   const [editTags, setEditTags] = useState("");
+  const [includePaper, setIncludePaper] = useState(false);
 
   const { from_date, to_date } = useMemo(() => monthToRange(month), [month]);
   const { data, isLoading, isError, error } = useJournal({
@@ -70,6 +71,7 @@ export function JournalPage() {
     symbol: symbolFilter.trim() || undefined,
     strategy: strategyFilter.trim() || undefined,
     limit: 200,
+    include_paper: includePaper,
   });
   const createMutation = useJournalCreate();
   const updateMutation = useJournalUpdate();
@@ -161,6 +163,15 @@ export function JournalPage() {
             placeholder="e.g. SPY"
             className="w-24 rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
           />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="journal-include-paper">
+          <input
+            type="checkbox"
+            checked={includePaper}
+            onChange={(e) => setIncludePaper(e.target.checked)}
+            className="rounded border-zinc-300 dark:border-zinc-600"
+          />
+          Include paper
         </label>
         <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
           Strategy

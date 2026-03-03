@@ -328,7 +328,7 @@ function tradeTicketPath(symbol: string, strategy: string, action: string): stri
   return `/api/ui/trade-ticket?${p.toString()}`;
 }
 
-function uiJournalPath(params: { from_date?: string; to_date?: string; symbol?: string; strategy?: string; limit?: number; offset?: number }): string {
+function uiJournalPath(params: { from_date?: string; to_date?: string; symbol?: string; strategy?: string; limit?: number; offset?: number; include_paper?: boolean }): string {
   const p = new URLSearchParams();
   if (params.from_date) p.set("from_date", params.from_date);
   if (params.to_date) p.set("to_date", params.to_date);
@@ -336,6 +336,7 @@ function uiJournalPath(params: { from_date?: string; to_date?: string; symbol?: 
   if (params.strategy) p.set("strategy", params.strategy);
   if (params.limit != null) p.set("limit", String(params.limit));
   if (params.offset != null) p.set("offset", String(params.offset));
+  if (params.include_paper !== undefined) p.set("include_paper", String(params.include_paper));
   const q = p.toString();
   return q ? `/api/ui/journal?${q}` : "/api/ui/journal";
 }
@@ -348,9 +349,27 @@ function uiJournalExportPath(from_date: string, to_date: string): string {
 function uiJournalEntryPath(id: string): string {
   return `/api/ui/journal/${encodeURIComponent(id)}`;
 }
-/** R25.5: Reports monthly */
-function uiReportsMonthlyPath(month: string): string {
-  return `/api/ui/reports/monthly?month=${encodeURIComponent(month)}`;
+/** R25.5: Reports monthly. R27.0: include_paper */
+function uiReportsMonthlyPath(month: string, include_paper?: boolean): string {
+  const p = new URLSearchParams();
+  p.set("month", month);
+  if (include_paper !== undefined) p.set("include_paper", String(include_paper));
+  return `/api/ui/reports/monthly?${p.toString()}`;
+}
+/** R27.0: Paper trading */
+function paperExecutePath(): string {
+  return "/api/ui/paper/execute";
+}
+function paperPositionsPath(params: { status?: string; symbol?: string; strategy?: string }): string {
+  const p = new URLSearchParams();
+  if (params.status) p.set("status", params.status);
+  if (params.symbol) p.set("symbol", params.symbol);
+  if (params.strategy) p.set("strategy", params.strategy);
+  const q = p.toString();
+  return q ? `/api/ui/paper/positions?${q}` : "/api/ui/paper/positions";
+}
+function paperSummaryPath(month: string): string {
+  return `/api/ui/paper/summary?month=${encodeURIComponent(month)}`;
 }
 /** R26.5: Monthly close pack */
 function uiMonthlyCloseFilesPath(month: string): string {
@@ -408,6 +427,8 @@ export const queryKeys = {
   opsChecklist: (kind: string, key: string) => ["ui", "opsChecklist", kind, key] as const,
   opsEodSummary: (date: string) => ["ui", "opsEodSummary", date] as const,
   opsWeeklySummary: (week: string) => ["ui", "opsWeeklySummary", week] as const,
+  paperPositions: (params: Record<string, unknown>) => ["ui", "paper", "positions", params] as const,
+  paperSummary: (month: string) => ["ui", "paper", "summary", month] as const,
   uiPositions: () => ["ui", "positions"] as const,
   uiTrackedPositions: () => ["ui", "positions", "tracked"] as const,
   uiAccountsDefault: () => ["ui", "accounts", "default"] as const,
@@ -749,6 +770,63 @@ export function useExecutionLogPost() {
   return useMutation({
     mutationFn: (payload: ExecutionLogPayload) =>
       apiPost<{ status: string; row: Record<string, unknown> }>(opsExecutionLogPath(), payload),
+  });
+}
+
+/** R27.0: Paper trading */
+export interface PaperExecutePayload {
+  mode: "PAPER";
+  symbol: string;
+  strategy: string;
+  action: "OPEN" | "CLOSE";
+  qty: number;
+  shares_price?: number;
+  premium?: number;
+  fees?: number;
+  position_id?: string;
+  contract_key?: string;
+  expiry?: string;
+  strike?: number;
+  right?: string;
+  notes?: string;
+}
+export interface PaperPosition {
+  id: string;
+  symbol: string;
+  strategy: string;
+  qty: number;
+  open_price: number;
+  open_ts: string;
+  status: string;
+  realized_pl?: number;
+  close_ts?: string;
+  contract_key?: string;
+  expiry?: string;
+  strike?: number;
+  right?: string;
+}
+export function usePaperExecute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: PaperExecutePayload) =>
+      apiPost<{ status: string; reason?: string; position: PaperPosition }>(paperExecutePath(), payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "paper"] });
+      qc.invalidateQueries({ queryKey: ["ui", "journal"] });
+    },
+  });
+}
+export function usePaperPositions(params: { status?: string; symbol?: string; strategy?: string }) {
+  return useQuery({
+    queryKey: queryKeys.paperPositions(params),
+    queryFn: () => apiGet<{ positions: PaperPosition[] }>(paperPositionsPath(params)),
+  });
+}
+export function usePaperSummary(month: string) {
+  return useQuery({
+    queryKey: queryKeys.paperSummary(month),
+    queryFn: () => apiGet<{ month: string; realized_pl: number; trade_count: number; win_rate: number; fees_total: number; by_strategy: Record<string, number> }>(paperSummaryPath(month)),
+    enabled: !!month && month.length === 7 && month[4] === "-",
   });
 }
 
@@ -1728,6 +1806,7 @@ export function useJournal(params: {
   strategy?: string;
   limit?: number;
   offset?: number;
+  include_paper?: boolean;
 }) {
   return useQuery({
     queryKey: queryKeys.uiJournal(params),
@@ -1798,10 +1877,10 @@ export function useJournalExport() {
   });
 }
 
-export function useReportsMonthly(month: string) {
+export function useReportsMonthly(month: string, include_paper?: boolean) {
   return useQuery({
-    queryKey: queryKeys.uiReportsMonthly(month),
-    queryFn: () => apiGet<MonthlyReportResponse>(uiReportsMonthlyPath(month)),
+    queryKey: [...queryKeys.uiReportsMonthly(month), include_paper ?? false] as const,
+    queryFn: () => apiGet<MonthlyReportResponse>(uiReportsMonthlyPath(month, include_paper)),
     enabled: !!month && month.length === 7 && month[4] === "-",
   });
 }

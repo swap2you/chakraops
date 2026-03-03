@@ -38,7 +38,8 @@ function currentMonth(): string {
 
 export function ReportsPage() {
   const [month, setMonth] = useState(currentMonth());
-  const { data, isLoading, isError, error } = useReportsMonthly(month);
+  const [includePaper, setIncludePaper] = useState(false);
+  const { data, isLoading, isError, error } = useReportsMonthly(month, includePaper);
   const { data: closeFiles, isLoading: closeFilesLoading } = useMonthlyCloseFiles(month);
   const generateClose = useMonthlyCloseGenerate();
 
@@ -61,6 +62,15 @@ export function ReportsPage() {
             onChange={(e) => setMonth(e.target.value || currentMonth())}
             className="rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
           />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="reports-include-paper">
+          <input
+            type="checkbox"
+            checked={includePaper}
+            onChange={(e) => setIncludePaper(e.target.checked)}
+            className="rounded border-zinc-300 dark:border-zinc-600"
+          />
+          Include paper
         </label>
       </div>
 

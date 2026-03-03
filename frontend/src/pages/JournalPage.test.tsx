@@ -60,4 +60,10 @@ describe("JournalPage", () => {
     expect(screen.getByRole("button", { name: /Export CSV/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Add entry/i })).toBeInTheDocument();
   });
+
+  it("shows Include paper toggle (R27.0)", () => {
+    render(<JournalPage />);
+    expect(screen.getByTestId("journal-include-paper")).toBeInTheDocument();
+    expect(screen.getByText(/Include paper/)).toBeInTheDocument();
+  });
 });

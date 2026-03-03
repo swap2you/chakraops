@@ -607,6 +607,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend full suite 869 passed, 3 skipped; frontend tests 212 passed, 18 skipped; build built in 20.52s
 - **Scope:** Execution log store + API; TodayPage queue Mark Done gate (journal or skip); EOD mark-done block when NEW notifications unless override; safe UI. Branch: release/R26.9.
 
+### R27.0 — Paper Trading Mode (simulated fills + P/L)
+
+- [x] **Requirements** — chakraops/docs/releases/R27.0_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R27.0_release_notes.md
+- [x] **Verification** — out/verification/R27.0/notes.md (gate tails + UAT)
+- [x] **Gate** — Backend pytest full suite pass; frontend tests + build pass (evidence in notes.md)
+- **Scope:** Paper store + API (execute, positions, summary); journal is_paper + include_paper; TradeTicketPage paper execute; Paper page; Journal/Reports include paper toggle. Branch: release/R27.0.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

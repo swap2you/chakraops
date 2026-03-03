@@ -89,4 +89,10 @@ describe("ReportsPage", () => {
     expect(text).not.toMatch(/\bFAIL\b/);
     expect(text).not.toMatch(/\bWARN\b/);
   });
+
+  it("shows Include paper toggle (R27.0)", () => {
+    render(<ReportsPage />);
+    expect(screen.getByTestId("reports-include-paper")).toBeInTheDocument();
+    expect(screen.getByText(/Include paper/)).toBeInTheDocument();
+  });
 });

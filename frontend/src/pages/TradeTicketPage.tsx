@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { ChevronDown, ChevronRight, Copy, Check } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardHeader, Button } from "@/components/ui";
-import { useTradeTicket, useJournalFromTicket } from "@/api/queries";
+import { useTradeTicket, useJournalFromTicket, usePaperExecute } from "@/api/queries";
 import { constraintToLabel } from "@/utils/sizingConstraints";
 
 export function TradeTicketPage() {
@@ -14,7 +14,12 @@ export function TradeTicketPage() {
 
   const { data: ticket, isLoading, isError } = useTradeTicket(symbol, strategy, action);
   const saveToJournal = useJournalFromTicket();
+  const paperExecute = usePaperExecute();
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
+  const [paperMode, setPaperMode] = useState(false);
+  const [paperPrice, setPaperPrice] = useState("");
+  const [paperFees, setPaperFees] = useState("0");
+  const [paperToast, setPaperToast] = useState<string | null>(null);
   const [snapshotOpen, setSnapshotOpen] = useState(true);
   const [sizingOpen, setSizingOpen] = useState(true);
   const [contractOpen, setContractOpen] = useState(true);
@@ -45,6 +50,48 @@ export function TradeTicketPage() {
       },
     });
   }, [ticket?.journal_draft, ticketId, saveToJournal]);
+
+  const handleSimulateFill = useCallback(() => {
+    const j = ticket?.journal_draft as Record<string, unknown> | undefined;
+    if (!j) return;
+    const qty = Number(j.qty) || 0;
+    if (qty <= 0) return;
+    const strat = (String(j.strategy ?? strategy)).toUpperCase();
+    const act = (String(j.action ?? action)).toUpperCase();
+    const isOpen = act === "OPEN" || act === "BUY";
+    const price = parseFloat(paperPrice);
+    const fees = parseFloat(paperFees) || 0;
+    const payload = {
+      mode: "PAPER" as const,
+      symbol: String(j.symbol ?? symbol).toUpperCase(),
+      strategy: strat,
+      action: isOpen ? "OPEN" : "CLOSE",
+      qty,
+      fees,
+      contract_key: j.contract_key ? String(j.contract_key) : undefined,
+      expiry: j.expiry ? String(j.expiry).slice(0, 10) : undefined,
+      strike: j.strike != null ? Number(j.strike) : undefined,
+      right: j.right ? String(j.right) : undefined,
+      notes: j.notes ? String(j.notes).slice(0, 500) : undefined,
+    };
+    if (strat === "SHARES") {
+      (payload as Record<string, unknown>).shares_price = price;
+    } else {
+      (payload as Record<string, unknown>).premium = price;
+    }
+    if (!isOpen && (j as { position_id?: string }).position_id) {
+      (payload as Record<string, unknown>).position_id = (j as { position_id?: string }).position_id;
+    }
+    paperExecute.mutate(payload as Parameters<typeof paperExecute.mutate>[0], {
+      onSuccess: () => {
+        setPaperToast("Paper fill recorded");
+        setTimeout(() => setPaperToast(null), 3000);
+        if (ticketId) {
+          window.dispatchEvent(new CustomEvent("chakraops-journal-saved", { detail: { ticket_id: ticketId } }));
+        }
+      },
+    });
+  }, [ticket, symbol, strategy, action, paperPrice, paperFees, ticketId, paperExecute]);
 
   if (!symbol) {
     return (
@@ -177,6 +224,61 @@ export function TradeTicketPage() {
               {copiedSection === "csv" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} Copy CSV line
             </Button>
           </div>
+        </div>
+      </details>
+
+      {/* R27.0: Paper execute */}
+      <details className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900/60" data-testid="ticket-paper-section">
+        <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-medium">
+          Paper execute
+        </summary>
+        <div className="border-t border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm space-y-2">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={paperMode}
+              onChange={(e) => setPaperMode(e.target.checked)}
+              data-testid="ticket-paper-toggle"
+            />
+            Simulate fill (paper trade)
+          </label>
+          {paperMode && (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="text-zinc-600 dark:text-zinc-400">
+                  {strategy === "SHARES" ? "Price" : "Premium"}:
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  value={paperPrice}
+                  onChange={(e) => setPaperPrice(e.target.value)}
+                  placeholder={strategy === "SHARES" ? "e.g. 450" : "e.g. 2.50"}
+                  className="rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-2 py-1 w-24"
+                  data-testid="ticket-paper-price"
+                />
+                <label className="text-zinc-600 dark:text-zinc-400">Fees:</label>
+                <input
+                  type="number"
+                  step="any"
+                  value={paperFees}
+                  onChange={(e) => setPaperFees(e.target.value)}
+                  className="rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-2 py-1 w-20"
+                  data-testid="ticket-paper-fees"
+                />
+              </div>
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={handleSimulateFill}
+                disabled={paperExecute.isPending || !paperPrice.trim()}
+                data-testid="ticket-paper-simulate"
+              >
+                {paperExecute.isPending ? "Saving…" : "Simulate Fill"}
+              </Button>
+              {paperToast && <p className="text-emerald-600 dark:text-emerald-400" data-testid="ticket-paper-toast">{paperToast}</p>}
+            </>
+          )}
         </div>
       </details>
     </div>

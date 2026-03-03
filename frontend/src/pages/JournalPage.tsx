@@ -20,6 +20,7 @@ import {
   TableCell,
   EmptyState,
   Button,
+  Badge,
 } from "@/components/ui";
 import { Plus, Download, Loader2, Pencil, Check, X } from "lucide-react";
 
@@ -63,6 +64,7 @@ export function JournalPage() {
   const [editNotes, setEditNotes] = useState("");
   const [editTags, setEditTags] = useState("");
   const [includePaper, setIncludePaper] = useState(false);
+  const [paperOnly, setPaperOnly] = useState(false);
 
   const { from_date, to_date } = useMemo(() => monthToRange(month), [month]);
   const { data, isLoading, isError, error } = useJournal({
@@ -71,7 +73,8 @@ export function JournalPage() {
     symbol: symbolFilter.trim() || undefined,
     strategy: strategyFilter.trim() || undefined,
     limit: 200,
-    include_paper: includePaper,
+    include_paper: paperOnly ? true : includePaper,
+    paper_only: paperOnly,
   });
   const createMutation = useJournalCreate();
   const updateMutation = useJournalUpdate();
@@ -173,6 +176,15 @@ export function JournalPage() {
           />
           Include paper
         </label>
+        <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="journal-paper-only">
+          <input
+            type="checkbox"
+            checked={paperOnly}
+            onChange={(e) => setPaperOnly(e.target.checked)}
+            className="rounded border-zinc-300 dark:border-zinc-600"
+          />
+          Paper only
+        </label>
         <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
           Strategy
           <select
@@ -212,11 +224,12 @@ export function JournalPage() {
         <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
           <Table>
             <TableHeader>
-              <TableRow>
+                <TableRow>
                 <TableHead>Date</TableHead>
                 <TableHead>Symbol</TableHead>
                 <TableHead>Strategy</TableHead>
                 <TableHead>Action</TableHead>
+                <TableHead>Paper</TableHead>
                 <TableHead className="text-right">Qty</TableHead>
                 <TableHead className="text-right">Price</TableHead>
                 <TableHead className="text-right">Premium</TableHead>
@@ -234,6 +247,7 @@ export function JournalPage() {
                   <TableCell className="font-medium">{e.symbol}</TableCell>
                   <TableCell>{e.strategy}</TableCell>
                   <TableCell>{e.action}</TableCell>
+                  <TableCell>{e.is_paper ? <Badge variant="neutral" data-testid="journal-paper-badge">Paper</Badge> : "—"}</TableCell>
                   <TableCell className="text-right">{e.qty}</TableCell>
                   <TableCell className="text-right">{e.price != null ? formatCurrency(e.price) : "—"}</TableCell>
                   <TableCell className="text-right">{e.premium != null ? formatCurrency(e.premium) : "—"}</TableCell>

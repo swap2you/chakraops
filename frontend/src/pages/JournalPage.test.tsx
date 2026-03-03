@@ -66,4 +66,10 @@ describe("JournalPage", () => {
     expect(screen.getByTestId("journal-include-paper")).toBeInTheDocument();
     expect(screen.getByText(/Include paper/)).toBeInTheDocument();
   });
+
+  it("shows Paper only filter (R27.2)", () => {
+    render(<JournalPage />);
+    expect(screen.getByTestId("journal-paper-only")).toBeInTheDocument();
+    expect(screen.getByText(/Paper only/)).toBeInTheDocument();
+  });
 });

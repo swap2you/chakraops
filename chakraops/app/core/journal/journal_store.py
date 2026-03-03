@@ -194,13 +194,16 @@ def journal_list(
     limit: int = 100,
     offset: int = 0,
     include_paper: bool = True,
+    paper_only: bool = False,
 ) -> List[Dict[str, Any]]:
-    """List entries ordered by created_ts desc. R27.0: include_paper=False excludes paper entries."""
+    """List entries ordered by created_ts desc. R27.0: include_paper=False excludes paper. R27.2: paper_only=True only paper."""
     init_journal_db()
     conditions: List[str] = []
     params: List[Any] = []
     if not include_paper:
         conditions.append("(COALESCE(is_paper, 0) = 0)")
+    if paper_only:
+        conditions.append("(COALESCE(is_paper, 0) = 1)")
     if from_date:
         conditions.append("trade_date >= ?")
         params.append(from_date)
@@ -295,8 +298,8 @@ def journal_export_csv(from_date: str, to_date: str) -> str:
     return out.getvalue()
 
 
-def journal_monthly_aggregate(month: str, include_paper: bool = False) -> Dict[str, Any]:
-    """month = YYYY-MM. Returns total_realized_pl, by_strategy, trade_count, etc. R27.0: include_paper=False excludes paper (default)."""
+def journal_monthly_aggregate(month: str, include_paper: bool = False, paper_only: bool = False) -> Dict[str, Any]:
+    """month = YYYY-MM. Returns total_realized_pl, by_strategy, trade_count, etc. R27.0: include_paper. R27.2: paper_only=True only paper."""
     init_journal_db()
     from_ym = f"{month}-01"
     to_ym = f"{month}-31"
@@ -305,7 +308,12 @@ def journal_monthly_aggregate(month: str, include_paper: bool = False) -> Dict[s
         y, m = int(month[:4]), int(month[5:7])
         last = calendar.monthrange(y, m)[1]
         to_ym = f"{month}-{last:02d}"
-    paper_clause = "" if include_paper else " AND (COALESCE(is_paper, 0) = 0)"
+    if paper_only:
+        paper_clause = " AND (COALESCE(is_paper, 0) = 1)"
+    elif not include_paper:
+        paper_clause = " AND (COALESCE(is_paper, 0) = 0)"
+    else:
+        paper_clause = ""
     with _LOCK:
         conn = _get_conn()
         try:

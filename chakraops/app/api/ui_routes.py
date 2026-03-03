@@ -2162,15 +2162,103 @@ def ui_paper_positions(
     status: str | None = Query(None, description="OPEN or CLOSED"),
     symbol: str | None = Query(None),
     strategy: str | None = Query(None),
+    include_marks: bool = Query(True, description="R27.2: Include request-time mark/unrealized for OPEN"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """R27.0: List paper positions. R27.1: OPEN positions include request-time mark_value, mark_source, mark_age_sec, quote_ts, unrealized_pl_usd. No FAIL_/WARN_."""
+    """R27.0: List paper positions. R27.1: OPEN positions include mark_value, mark_source, mark_age_sec, quote_ts, unrealized_pl_usd. R27.2: include_marks=false for cheap call. No FAIL_/WARN_."""
     _require_ui_key(x_ui_key)
     from app.core.paper.paper_store_r270 import paper_list_positions
     from app.core.paper.paper_mark_r271 import enrich_paper_positions_with_mark
     positions = paper_list_positions(status=status, symbol=symbol, strategy=strategy)
-    positions = enrich_paper_positions_with_mark(positions)
+    if include_marks:
+        positions = enrich_paper_positions_with_mark(positions)
     return {"positions": positions}
+
+
+@router.get("/paper/positions/{position_id}")
+def ui_paper_position_by_id(
+    position_id: str,
+    include_marks: bool = Query(True, description="R27.2: Include request-time mark for OPEN"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R27.2: Single paper position detail (enriched when OPEN and include_marks). No FAIL_/WARN_."""
+    _require_ui_key(x_ui_key)
+    from app.core.paper.paper_store_r270 import paper_get_position
+    from app.core.paper.paper_mark_r271 import enrich_paper_positions_with_mark
+    pos = paper_get_position(position_id.strip())
+    if not pos:
+        raise HTTPException(status_code=404, detail="Position not found")
+    if include_marks and (pos.get("status") or "").upper() == "OPEN":
+        enriched = enrich_paper_positions_with_mark([pos])
+        return enriched[0] if enriched else pos
+    return pos
+
+
+# R27.2: Dedicated close endpoint (journal action CLOSE_CSP/CLOSE_CC/SELL)
+@router.post("/paper/close")
+async def ui_paper_close(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R27.2: Close paper position. Body: position_id, close_price (shares) or close_premium (options), close_fees?, ts?. Journal action SELL|CLOSE_CSP|CLOSE_CC. No FAIL_/WARN_."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    position_id = (body.get("position_id") or "").strip()
+    if not position_id:
+        raise HTTPException(status_code=400, detail="position_id required")
+    close_price = None
+    if body.get("close_price") is not None:
+        try:
+            close_price = float(body["close_price"])
+        except (TypeError, ValueError):
+            pass
+    if close_price is None and body.get("close_premium") is not None:
+        try:
+            close_price = float(body["close_premium"])
+        except (TypeError, ValueError):
+            pass
+    if close_price is None:
+        raise HTTPException(status_code=400, detail="close_price or close_premium required")
+    close_fees = 0.0
+    if body.get("close_fees") is not None:
+        try:
+            close_fees = float(body["close_fees"])
+        except (TypeError, ValueError):
+            pass
+    ts = (body.get("ts") or "").strip() or None
+    from app.core.paper.paper_store_r270 import paper_get_position, paper_execute_close
+    from app.core.journal.journal_store import journal_create
+    pos_before = paper_get_position(position_id)
+    if not pos_before or (pos_before.get("status") or "").upper() != "OPEN":
+        raise HTTPException(status_code=404, detail="Position not found or already closed")
+    strategy = (pos_before.get("strategy") or "SHARES").strip().upper()
+    position = paper_execute_close(position_id=position_id, close_price=close_price, close_fees=close_fees, ts=ts)
+    trade_date = (position.get("close_ts") or "")[:10] or (datetime.now(timezone.utc).date()).isoformat()
+    action = "SELL" if strategy == "SHARES" else ("CLOSE_CSP" if strategy == "CSP" else "CLOSE_CC")
+    existing_tags = (pos_before.get("notes") or "").strip()[:200] or ""
+    tags = "paper" + (f", {existing_tags}" if existing_tags else "")
+    journal_create(
+        trade_date=trade_date,
+        symbol=position.get("symbol", ""),
+        strategy=strategy,
+        action=action,
+        qty=float(position.get("qty", 0)),
+        price=close_price if strategy == "SHARES" else None,
+        premium=close_price if strategy != "SHARES" else None,
+        fees=close_fees,
+        contract_key=position.get("contract_key"),
+        expiry=position.get("expiry"),
+        strike=position.get("strike"),
+        right=position.get("right"),
+        realized_pl=position.get("realized_pl"),
+        link_id=f"paper:{position.get('id')}",
+        is_paper=True,
+        tags=tags[:500] if tags else None,
+    )
+    return {"status": "OK", "reason": "Paper position closed", "position": position}
 
 
 @router.get("/paper/summary")
@@ -2320,13 +2408,14 @@ def ui_journal_list(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     include_paper: bool = Query(True, description="R27.0: Include paper trades"),
+    paper_only: bool = Query(False, description="R27.2: Only paper entries"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """R25.5: List journal entries (ordered by created_ts desc). R27.0: include_paper. Safe response only."""
+    """R25.5: List journal entries (ordered by created_ts desc). R27.0: include_paper. R27.2: paper_only. Safe response only."""
     _require_ui_key(x_ui_key)
     try:
         from app.core.journal.journal_store import journal_list
-        entries = journal_list(from_date=from_date, to_date=to_date, symbol=symbol, strategy=strategy, limit=limit, offset=offset, include_paper=include_paper)
+        entries = journal_list(from_date=from_date, to_date=to_date, symbol=symbol, strategy=strategy, limit=limit, offset=offset, include_paper=include_paper, paper_only=paper_only)
         return {"entries": entries}
     except Exception as e:
         import logging
@@ -2504,6 +2593,9 @@ def ui_reports_monthly(
                 data["mode"] = "PAPER_ONLY"
             else:
                 data["mode"] = "LIVE_ONLY"
+            # R27.2: Split totals when include_paper enabled
+            data["live_totals"] = journal_monthly_aggregate(month, include_paper=False)
+            data["paper_totals"] = journal_monthly_aggregate(month, include_paper=True, paper_only=True)
         return data
     except Exception as e:
         import logging

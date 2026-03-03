@@ -45,13 +45,18 @@ const mockSummary = {
 
 const mockUsePaperPositions = vi.fn((params: { status?: string }) => {
   const positions = params?.status === "CLOSED" ? mockClosedPositions : mockOpenPositions;
-  return { data: { positions }, isLoading: false, isError: false };
+  return { data: { positions }, isLoading: false, isError: false, refetch: vi.fn() };
 });
 const mockUsePaperSummary = vi.fn(() => ({ data: mockSummary, isLoading: false }));
+const mockUsePaperClose = vi.fn(() => ({
+  mutateAsync: vi.fn().mockResolvedValue(undefined),
+  isPending: false,
+}));
 
 vi.mock("@/api/queries", () => ({
   usePaperPositions: (params: { status?: string }) => mockUsePaperPositions(params),
   usePaperSummary: (month: string) => mockUsePaperSummary(month),
+  usePaperClose: () => mockUsePaperClose(),
 }));
 
 describe("PaperPage", () => {
@@ -59,7 +64,7 @@ describe("PaperPage", () => {
     vi.clearAllMocks();
     mockUsePaperPositions.mockImplementation((params: { status?: string }) => {
       const positions = params?.status === "CLOSED" ? mockClosedPositions : mockOpenPositions;
-      return { data: { positions }, isLoading: false, isError: false };
+      return { data: { positions }, isLoading: false, isError: false, refetch: vi.fn() };
     });
     mockUsePaperSummary.mockReturnValue({ data: mockSummary, isLoading: false });
   });
@@ -101,5 +106,13 @@ describe("PaperPage", () => {
     expect(screen.getByTestId("paper-cell-mark")).toBeInTheDocument();
     expect(screen.getByTestId("paper-cell-unrealized")).toBeInTheDocument();
     expect(screen.getByTestId("paper-cell-unrealized")).toHaveTextContent("500.00");
+  });
+
+  it("Close button opens modal; modal has submit (R27.2)", async () => {
+    render(<PaperPage />);
+    await userEvent.click(screen.getByTestId("paper-close-btn"));
+    expect(screen.getByTestId("paper-close-modal")).toBeInTheDocument();
+    expect(screen.getByTestId("paper-close-submit")).toBeInTheDocument();
+    expect(screen.getByTestId("paper-close-price-input")).toBeInTheDocument();
   });
 });

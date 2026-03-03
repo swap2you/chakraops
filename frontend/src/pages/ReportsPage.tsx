@@ -180,6 +180,34 @@ export function ReportsPage() {
 
       {!isLoading && !isError && hasData && report && (
         <div className="space-y-6">
+          {/* R27.2: Split Live / Paper totals when include_paper enabled */}
+          {report.live_totals != null && report.paper_totals != null && (
+            <Card data-testid="reports-split-totals">
+              <CardHeader className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                Split totals (Live vs Paper)
+              </CardHeader>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 pt-2">
+                <div className="rounded border border-zinc-200 p-3 dark:border-zinc-700">
+                  <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">Live</p>
+                  <p className={report.live_totals.total_realized_pl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
+                    {formatCurrency(report.live_totals.total_realized_pl)}
+                  </p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {report.live_totals.trade_count} trades · Win rate {report.live_totals.win_rate}%
+                  </p>
+                </div>
+                <div className="rounded border border-zinc-200 p-3 dark:border-zinc-700">
+                  <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1">Paper</p>
+                  <p className={report.paper_totals.total_realized_pl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
+                    {formatCurrency(report.paper_totals.total_realized_pl)}
+                  </p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {report.paper_totals.trade_count} trades · Win rate {report.paper_totals.win_rate}%
+                  </p>
+                </div>
+              </div>
+            </Card>
+          )}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="pb-1 text-sm font-medium text-zinc-500 dark:text-zinc-400">

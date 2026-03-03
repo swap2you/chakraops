@@ -623,6 +623,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend 883 passed, 1 skipped (129.44s); frontend 223 passed, 18 skipped (39.10s); build 10.29s (evidence in notes.md)
 - **Scope:** Paper positions API mark/unrealized (request-time); reports monthly included_paper/mode; monthly close live/paper subdir; paper execute sizing tags; PaperPage Mark/Unrealized; Reports mode; close pack toggle. Branch: release/R27.1.
 
+### R27.2 — Paper portfolio realism + close workflow parity
+
+- [x] **Requirements** — chakraops/docs/releases/R27.2_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R27.2_release_notes.md
+- [x] **Verification** — [out/verification/R27.2/notes.md](../../../out/verification/R27.2/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend 887 passed, 1 skipped (114.80s); frontend 225 passed, 18 skipped (45.40s); build 11.43s (evidence in notes.md)
+- **Scope:** Paper positions include_marks + GET /paper/positions/{id}; POST /paper/close + journal CLOSE_*; PaperPage close modal, filters, refresh; Journal paper-only + Paper badge; Reports split Live/Paper totals. Branch: release/R27.2.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

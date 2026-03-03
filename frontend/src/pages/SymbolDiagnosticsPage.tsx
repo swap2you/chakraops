@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Calendar, ChevronDown, ChevronRight, Database, Droplets, MessageSquare, X } from "lucide-react";
-import { useSymbolDiagnostics, useRecomputeSymbolDiagnostics, useDefaultAccount, useUiSystemHealth, useUpsertSharePosition, useDeleteSharePosition, useCloseSharePosition, useClosedSharePositions, useSetDeltaOverride, useDeleteDeltaOverride, useActionNeeded } from "@/api/queries";
+import { useSymbolDiagnostics, useRecomputeSymbolDiagnostics, useDefaultAccount, useUiSystemHealth, useUpsertSharePosition, useDeleteSharePosition, useCloseSharePosition, useClosedSharePositions, useSetDeltaOverride, useDeleteDeltaOverride, useActionNeeded, useJournalRecordClose } from "@/api/queries";
 import type { SymbolDiagnosticsResponseExtended } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { TradeTicketDrawer } from "@/components/TradeTicketDrawer";
@@ -11,6 +11,7 @@ import { Card, CardHeader, Badge, StatusBadge, Button, Tooltip } from "@/compone
 import type { SymbolDiagnosticsCandidate } from "@/api/types";
 import { buildReasonsFromPrimary, formatGateReason } from "@/reasons/parsePrimaryReason";
 import { constraintToLabel } from "@/utils/sizingConstraints";
+import { pushSystemNotification } from "@/lib/notifications";
 
 function regimeColor(r: string | null | undefined): string {
   const s = (r ?? "").toUpperCase();
@@ -360,6 +361,8 @@ function ExecutionConsole({
   const [tradeAccordionOpen, setTradeAccordionOpen] = useState(openByAccordionId === "trade" || !openByAccordionId);
   const [technicalsAccordionOpen, setTechnicalsAccordionOpen] = useState(openByAccordionId === "technicals");
   const [riskAccordionOpen, setRiskAccordionOpen] = useState(openByAccordionId === "risk");
+  const [recordCloseModalOpen, setRecordCloseModalOpen] = useState(false);
+  const [recordCloseForm, setRecordCloseForm] = useState({ action: "CLOSE_CSP" as "CLOSE_CSP" | "CLOSE_CC" | "ROLL", strategy: "CSP" as "CSP" | "CC", qty: "1", premium: "", fees: "", contract_key: "", expiry: "", strike: "", right: "P", notes: "", trade_date: new Date().toISOString().slice(0, 10) });
   const bandMin = data.delta_diagnostics?.band_min ?? data.computed_values?.delta_band?.[0] ?? 0.25;
   const bandMax = data.delta_diagnostics?.band_max ?? data.computed_values?.delta_band?.[1] ?? 0.35;
   const [deltaOverrideForm, setDeltaOverrideForm] = useState({ delta_lo: data.delta_override?.delta_lo ?? bandMin, delta_hi: data.delta_override?.delta_hi ?? bandMax });
@@ -369,6 +372,7 @@ function ExecutionConsole({
   const upsertSharePosition = useUpsertSharePosition(data.symbol);
   const deleteSharePosition = useDeleteSharePosition();
   const closeSharePosition = useCloseSharePosition(data.symbol);
+  const journalRecordClose = useJournalRecordClose();
   const setDeltaOverride = useSetDeltaOverride(data.symbol);
   const deleteDeltaOverride = useDeleteDeltaOverride(data.symbol);
   const comp = data.computed;
@@ -521,6 +525,9 @@ function ExecutionConsole({
             ) : data.options_lifecycle.assignment_risk?.active ? (
               <p><span className="text-zinc-500 dark:text-zinc-400">Reason: </span>Assignment risk</p>
             ) : null}
+            <div className="pt-2">
+              <Button size="sm" variant="secondary" onClick={() => setRecordCloseModalOpen(true)} data-testid="record-close-btn">Record close</Button>
+            </div>
           </div>
         </Card>
       )}
@@ -1192,6 +1199,76 @@ function ExecutionConsole({
           initialOpenAccordionId={initialAccordionId}
         />
       )}
+
+      {recordCloseModalOpen && (
+        <Card className="fixed inset-0 z-50 m-4 max-h-[90vh] overflow-auto border-amber-200 dark:border-amber-800 bg-white dark:bg-zinc-900" data-testid="record-close-modal">
+          <CardHeader title="Record options close / roll" />
+          <div className="grid grid-cols-1 gap-3 max-w-sm p-4">
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Symbol</label>
+              <input type="text" className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={data.symbol} readOnly />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Strategy</label>
+              <select className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={recordCloseForm.strategy} onChange={(e) => setRecordCloseForm((f) => ({ ...f, strategy: e.target.value as "CSP" | "CC" }))}>
+                <option value="CSP">CSP</option>
+                <option value="CC">CC</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Action</label>
+              <select className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={recordCloseForm.action} onChange={(e) => setRecordCloseForm((f) => ({ ...f, action: e.target.value as "CLOSE_CSP" | "CLOSE_CC" | "ROLL" }))}>
+                <option value="CLOSE_CSP">CLOSE_CSP</option>
+                <option value="CLOSE_CC">CLOSE_CC</option>
+                <option value="ROLL">ROLL</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Qty (required)</label>
+              <input type="number" min="1" className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={recordCloseForm.qty} onChange={(e) => setRecordCloseForm((f) => ({ ...f, qty: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Premium (optional)</label>
+              <input type="number" step="0.01" className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={recordCloseForm.premium} onChange={(e) => setRecordCloseForm((f) => ({ ...f, premium: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Fees (optional)</label>
+              <input type="number" step="0.01" className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={recordCloseForm.fees} onChange={(e) => setRecordCloseForm((f) => ({ ...f, fees: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Contract key (optional)</label>
+              <input type="text" className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={recordCloseForm.contract_key} onChange={(e) => setRecordCloseForm((f) => ({ ...f, contract_key: e.target.value }))} placeholder="OCC symbol" />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Expiry (optional)</label>
+              <input type="text" className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={recordCloseForm.expiry} onChange={(e) => setRecordCloseForm((f) => ({ ...f, expiry: e.target.value }))} placeholder="YYYY-MM-DD" />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Strike (optional)</label>
+              <input type="number" step="0.01" className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={recordCloseForm.strike} onChange={(e) => setRecordCloseForm((f) => ({ ...f, strike: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Right (optional)</label>
+              <select className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={recordCloseForm.right} onChange={(e) => setRecordCloseForm((f) => ({ ...f, right: e.target.value }))}>
+                <option value="P">P</option>
+                <option value="C">C</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Trade date</label>
+              <input type="date" className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={recordCloseForm.trade_date} onChange={(e) => setRecordCloseForm((f) => ({ ...f, trade_date: e.target.value }))} />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Notes (optional)</label>
+              <input type="text" className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={recordCloseForm.notes} onChange={(e) => setRecordCloseForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Optional" />
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" data-testid="record-close-submit" disabled={journalRecordClose.isPending} onClick={() => { const qty = parseInt(recordCloseForm.qty, 10); if (!Number.isNaN(qty) && qty > 0) { journalRecordClose.mutate({ symbol: data.symbol, strategy: recordCloseForm.strategy, action: recordCloseForm.action, qty, premium: recordCloseForm.premium.trim() ? parseFloat(recordCloseForm.premium) : undefined, fees: recordCloseForm.fees.trim() ? parseFloat(recordCloseForm.fees) : undefined, contract_key: recordCloseForm.contract_key.trim() || undefined, expiry: recordCloseForm.expiry.trim() || undefined, strike: recordCloseForm.strike.trim() ? parseFloat(recordCloseForm.strike) : undefined, right: recordCloseForm.right || undefined, notes: recordCloseForm.notes.trim() || undefined, trade_date: recordCloseForm.trade_date || undefined }, { onSuccess: () => { pushSystemNotification({ source: "system", severity: "info", title: "Journal entry created", message: "Options close/roll recorded." }); setRecordCloseModalOpen(false); } }); } }}>{journalRecordClose.isPending ? "Saving…" : "Save"}</Button>
+              <Button size="sm" variant="secondary" onClick={() => setRecordCloseModalOpen(false)}>Cancel</Button>
+            </div>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
@@ -1273,7 +1350,7 @@ function SharesTabContent({
   const [riskOpen, setRiskOpen] = useState(aid === "risk");
   const [positionOpen, setPositionOpen] = useState(aid === "position");
   const [closeModalOpen, setCloseModalOpen] = useState(false);
-  const [closeForm, setCloseForm] = useState({ exit_price: "", exit_date: new Date().toISOString().slice(0, 10), notes: "" });
+  const [closeForm, setCloseForm] = useState({ exit_price: "", exit_date: new Date().toISOString().slice(0, 10), fees: "", notes: "" });
 
   const pos = data.shares_position;
   const plan = data.shares_plan;
@@ -1517,11 +1594,15 @@ function SharesTabContent({
               <input type="date" className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={closeForm.exit_date} onChange={(e) => setCloseForm((f) => ({ ...f, exit_date: e.target.value }))} />
             </div>
             <div>
+              <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Fees (optional)</label>
+              <input type="number" step="0.01" className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={closeForm.fees} onChange={(e) => setCloseForm((f) => ({ ...f, fees: e.target.value }))} placeholder="0" />
+            </div>
+            <div>
               <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Notes (optional)</label>
               <input type="text" className="w-full rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-800" value={closeForm.notes} onChange={(e) => setCloseForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" />
             </div>
             <div className="flex gap-2">
-              <Button size="sm" onClick={() => { const ex = parseFloat(closeForm.exit_price); if (!Number.isNaN(ex) && ex > 0) { closeSharePosition.mutate({ account_id: accountId, exit_price: ex, exit_date: closeForm.exit_date ? new Date(closeForm.exit_date).toISOString() : null, notes: closeForm.notes.trim() || null }); setCloseModalOpen(false); setCloseForm({ exit_price: "", exit_date: new Date().toISOString().slice(0, 10), notes: "" }); } }} disabled={closeSharePosition.isPending}>{closeSharePosition.isPending ? "Closing…" : "Close"}</Button>
+              <Button size="sm" data-testid="close-position-submit" onClick={() => { const ex = parseFloat(closeForm.exit_price); if (!Number.isNaN(ex) && ex > 0) { const feesNum = closeForm.fees.trim() ? parseFloat(closeForm.fees) : 0; closeSharePosition.mutate({ account_id: accountId, exit_price: ex, exit_date: closeForm.exit_date ? new Date(closeForm.exit_date).toISOString() : null, fees: Number.isNaN(feesNum) ? undefined : feesNum, notes: closeForm.notes.trim() || null }, { onSuccess: () => { pushSystemNotification({ source: "system", severity: "info", title: "Position closed", message: `${data.symbol} shares closed. Journal entry created.` }); } }); setCloseModalOpen(false); setCloseForm({ exit_price: "", exit_date: new Date().toISOString().slice(0, 10), fees: "", notes: "" }); } }} disabled={closeSharePosition.isPending}>{closeSharePosition.isPending ? "Closing…" : "Close"}</Button>
               <Button size="sm" variant="secondary" onClick={() => setCloseModalOpen(false)}>Cancel</Button>
             </div>
           </div>

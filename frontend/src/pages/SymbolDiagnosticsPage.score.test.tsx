@@ -57,6 +57,7 @@ vi.mock("@/api/queries", async (importOriginal) => {
     useDeleteSharePosition: () => ({ mutate: vi.fn(), isPending: false }),
     useCloseSharePosition: () => ({ mutate: vi.fn(), isPending: false }),
     useClosedSharePositions: () => ({ data: { positions: [] } }),
+    useJournalRecordClose: () => ({ mutate: vi.fn(), isPending: false }),
   };
 });
 
@@ -846,6 +847,48 @@ describe("SymbolDiagnosticsPage R23.5.0 Shares Trade Plan and lifecycle", () => 
     expect(within(modal).getByText("Exit price (required)")).toBeInTheDocument();
     expect(within(modal).getByText("Exit date (default today)")).toBeInTheDocument();
   }, 15000);
+});
+
+describe("SymbolDiagnosticsPage R27.3 Live close and record close", () => {
+  it("close modal has Fees field and submit (R27.3)", async () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: {
+        ...mockDiagnosticsWithCap,
+        shares_position: { id: "p1", account_id: "default", symbol: "SPY", quantity: 100, avg_cost: 140, opened_at: null, notes: null, created_at: "", updated_at: "", target_price: 150, stop_price: 130 },
+        shares_plan: {},
+      },
+      isLoading: false,
+      isError: false,
+    });
+    renderWithRoute(<SymbolDiagnosticsPage initialTabForTest="Shares" />, "/symbol-diagnostics?symbol=SPY&tab=Shares");
+    await screen.findByTestId("shares-tab-content", {}, { timeout: 10000 });
+    await userEvent.click(await screen.findByTestId("close-position-open-btn", {}, { timeout: 5000 }));
+    const modal = await waitFor(() => screen.getByTestId("close-position-modal"), { timeout: 10000 });
+    expect(within(modal).getByTestId("close-position-submit")).toBeInTheDocument();
+    expect(within(modal).getByText("Fees (optional)")).toBeInTheDocument();
+  }, 15000);
+
+  it("Options tab with lifecycle shows Record close button (R27.3)", async () => {
+    useSymbolDiagnosticsMock.mockReturnValue({
+      data: {
+        ...mockDiagnosticsWithCap,
+        options_lifecycle: { recommended_action_code: "CLOSE", pct_max_profit: 60, dte: 10, mark_value: 0.5, mark_source: "LAST", mark_age_sec: 5 },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<SymbolDiagnosticsPage initialTabForTest="Options" />);
+    await waitFor(() => expect(screen.getByTestId("options-lifecycle-strip")).toBeInTheDocument(), { timeout: 5000 });
+    expect(screen.getByTestId("record-close-btn")).toBeInTheDocument();
+  }, 10000);
+
+  it("document text does not contain FAIL or WARN (R27.3)", () => {
+    useSymbolDiagnosticsMock.mockReturnValue({ data: mockDiagnosticsWithCap, isLoading: false, isError: false });
+    const { container } = render(<SymbolDiagnosticsPage />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\bFAIL\b/);
+    expect(text).not.toMatch(/\bWARN\b/);
+  });
 });
 
 describe("SymbolDiagnosticsPage R23.4.6 UX and Copilot drawer", () => {

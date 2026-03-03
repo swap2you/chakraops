@@ -2503,6 +2503,83 @@ async def ui_journal_create(
         raise HTTPException(status_code=500, detail="Unable to create entry")
 
 
+# R27.3: Record options close/roll in Journal only (no execution)
+@router.post("/journal/record-close")
+async def ui_journal_record_close(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R27.3: Record CLOSE_CSP/CLOSE_CC/ROLL in Journal. Body: symbol, strategy (CSP|CC), action (CLOSE_CSP|CLOSE_CC|ROLL), qty, premium, contract_key?, expiry?, strike?, right?, fees?, notes?, trade_date?. No execution. No FAIL_/WARN_."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    if not isinstance(body, dict):
+        body = {}
+    symbol = (body.get("symbol") or "").strip().upper()
+    strategy = (body.get("strategy") or "CSP").strip().upper()
+    if strategy not in ("CSP", "CC"):
+        raise HTTPException(status_code=400, detail="strategy must be CSP or CC")
+    action = (body.get("action") or "CLOSE_CSP").strip().upper()
+    if action not in ("CLOSE_CSP", "CLOSE_CC", "ROLL"):
+        raise HTTPException(status_code=400, detail="action must be CLOSE_CSP, CLOSE_CC, or ROLL")
+    try:
+        qty = float(body.get("qty", 0))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="qty required and must be a number")
+    premium = None
+    if body.get("premium") is not None:
+        try:
+            premium = float(body["premium"])
+        except (TypeError, ValueError):
+            pass
+    fees = None
+    if body.get("fees") is not None:
+        try:
+            fees = float(body["fees"])
+        except (TypeError, ValueError):
+            pass
+    trade_date = (body.get("trade_date") or "").strip()[:10] or (datetime.now(timezone.utc).date()).isoformat()
+    contract_key = (body.get("contract_key") or "").strip() or None
+    expiry = (body.get("expiry") or "").strip()[:10] or None
+    strike = None
+    if body.get("strike") is not None:
+        try:
+            strike = float(body["strike"])
+        except (TypeError, ValueError):
+            pass
+    right = (body.get("right") or "").strip() or None
+    notes = (body.get("notes") or "").strip()[:2000] or None
+    if not symbol:
+        raise HTTPException(status_code=400, detail="symbol required")
+    try:
+        from app.core.journal.journal_store import journal_create
+        entry = journal_create(
+            trade_date=trade_date,
+            symbol=symbol,
+            strategy=strategy,
+            action=action,
+            qty=qty,
+            price=None,
+            premium=premium,
+            fees=fees,
+            contract_key=contract_key,
+            expiry=expiry,
+            strike=strike,
+            right=right,
+            realized_pl=None,
+            link_id=None,
+            is_paper=False,
+            notes=notes,
+        )
+        return {"status": "OK", "entry": entry}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Journal record-close error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to create entry")
+
+
 @router.patch("/journal/{entry_id}")
 async def ui_journal_update(
     entry_id: str,
@@ -3626,7 +3703,7 @@ async def ui_shares_position_close(
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
     request: Request = None,
 ) -> Dict[str, Any]:
-    """R23.5.0: Close share position. Body: { account_id?, exit_price, exit_date?, notes? }. Moves to closed history and returns closed record with realized_pnl."""
+    """R23.5.0: Close share position. R27.3: Body exit_price, exit_date? (ts), fees?, notes?; auto-create journal entry is_paper=false, SELL, link_id=shares:{symbol}:{id}. No FAIL_/WARN_."""
     _require_ui_key(x_ui_key)
     try:
         body: Dict[str, Any] = {}
@@ -3642,14 +3719,36 @@ async def ui_shares_position_close(
             exit_price_f = float(exit_price)
         except (TypeError, ValueError):
             raise HTTPException(status_code=400, detail="exit_price must be a number")
-        exit_date = body.get("exit_date")
+        exit_date = body.get("exit_date") or body.get("ts")
         if exit_date is not None and not isinstance(exit_date, str):
             exit_date = None
         notes = body.get("notes")
         if notes is not None and not isinstance(notes, str):
             notes = None
+        fees_val = 0.0
+        if body.get("fees") is not None:
+            try:
+                fees_val = float(body["fees"])
+            except (TypeError, ValueError):
+                pass
         from app.core.accounts.holdings_db import close_share_position
-        closed = close_share_position(aid, symbol, exit_price_f, exit_date=exit_date, notes=notes)
+        from app.core.journal.journal_store import journal_create
+        closed = close_share_position(aid, symbol.strip().upper(), exit_price_f, exit_date=exit_date, notes=notes)
+        trade_date = (closed.get("closed_at") or "")[:10] or (datetime.now(timezone.utc).date()).isoformat()
+        realized_for_journal = (closed.get("realized_pnl") or 0) - fees_val
+        journal_create(
+            trade_date=trade_date,
+            symbol=closed.get("symbol", symbol.strip().upper()),
+            strategy="SHARES",
+            action="SELL",
+            qty=float(closed.get("quantity", 0)),
+            price=exit_price_f,
+            fees=fees_val,
+            realized_pl=round(realized_for_journal, 2),
+            link_id=f"shares:{closed.get('symbol', symbol)}:{closed.get('id')}",
+            is_paper=False,
+            notes=(notes or "").strip()[:2000] or None,
+        )
         return closed
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

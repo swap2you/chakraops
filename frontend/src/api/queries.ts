@@ -1253,18 +1253,66 @@ export function useDeleteSharePosition() {
   });
 }
 
-/** R23.5.0: POST /api/ui/shares/positions/{symbol}/close — close position (exit_price, exit_date?, notes?). */
+/** R23.5.0/R27.3: POST /api/ui/shares/positions/{symbol}/close — exit_price, exit_date? (ts), fees?, notes?; creates journal entry. */
 export function useCloseSharePosition(symbol: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { account_id: string; exit_price: number; exit_date?: string | null; notes?: string | null }) =>
-      apiPost<ClosedSharePosition>(uiSharePositionClosePath(symbol!), payload),
+    mutationFn: (payload: {
+      account_id: string;
+      exit_price: number;
+      exit_date?: string | null;
+      ts?: string | null;
+      fees?: number | null;
+      notes?: string | null;
+    }) =>
+      apiPost<ClosedSharePosition>(
+        uiSharePositionClosePath(symbol!),
+        {
+          account_id: payload.account_id,
+          exit_price: payload.exit_price,
+          exit_date: payload.exit_date ?? payload.ts ?? undefined,
+          fees: payload.fees ?? undefined,
+          notes: payload.notes ?? undefined,
+        }
+      ),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ["ui", "shares"] });
       qc.invalidateQueries({ queryKey: queryKeys.uiSharesPositions(variables.account_id) });
       qc.invalidateQueries({ queryKey: queryKeys.uiClosedSharePositions(variables.account_id) });
       qc.invalidateQueries({ queryKey: queryKeys.uiPortfolio() });
       qc.invalidateQueries({ queryKey: ["ui", "symbolDiagnostics"] });
+      qc.invalidateQueries({ queryKey: ["ui", "journal"] });
+    },
+  });
+}
+
+/** R27.3: POST /api/ui/journal/record-close — record options close/roll in Journal only (no execution). */
+export function uiJournalRecordClosePath(): string {
+  return "/api/ui/journal/record-close";
+}
+
+export interface RecordClosePayload {
+  symbol: string;
+  strategy: "CSP" | "CC";
+  action: "CLOSE_CSP" | "CLOSE_CC" | "ROLL";
+  qty: number;
+  premium?: number | null;
+  contract_key?: string | null;
+  expiry?: string | null;
+  strike?: number | null;
+  right?: string | null;
+  fees?: number | null;
+  notes?: string | null;
+  trade_date?: string | null;
+}
+
+export function useJournalRecordClose() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: RecordClosePayload) =>
+      apiPost<{ status: string; entry: JournalEntry }>(uiJournalRecordClosePath(), payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "journal"] });
     },
   });
 }

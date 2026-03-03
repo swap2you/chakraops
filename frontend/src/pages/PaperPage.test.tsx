@@ -16,6 +16,11 @@ const mockOpenPositions = [
     open_ts: "2026-02-20T12:00:00Z",
     realized_pl: null,
     close_ts: null,
+    mark_value: 455,
+    mark_source: "LAST",
+    mark_age_sec: 10,
+    quote_ts: "2026-02-27T12:00:00Z",
+    unrealized_pl_usd: 500,
   },
 ];
 const mockClosedPositions = [
@@ -87,5 +92,14 @@ describe("PaperPage", () => {
     const text = container.textContent ?? "";
     expect(text).not.toMatch(/\bFAIL\b/);
     expect(text).not.toMatch(/\bWARN\b/);
+  });
+
+  it("Open tab shows Mark and Unrealized P/L columns (R27.1)", () => {
+    render(<PaperPage />);
+    expect(screen.getByTestId("paper-th-mark")).toBeInTheDocument();
+    expect(screen.getByTestId("paper-th-unrealized")).toBeInTheDocument();
+    expect(screen.getByTestId("paper-cell-mark")).toBeInTheDocument();
+    expect(screen.getByTestId("paper-cell-unrealized")).toBeInTheDocument();
+    expect(screen.getByTestId("paper-cell-unrealized")).toHaveTextContent("500.00");
   });
 });

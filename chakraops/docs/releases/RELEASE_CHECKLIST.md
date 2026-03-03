@@ -615,6 +615,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend pytest full suite pass; frontend tests + build pass (evidence in notes.md)
 - **Scope:** Paper store + API (execute, positions, summary); journal is_paper + include_paper; TradeTicketPage paper execute; Paper page; Journal/Reports include paper toggle. Branch: release/R27.0.
 
+### R27.1 — Paper-to-live parity + analysis hygiene
+
+- [x] **Requirements** — chakraops/docs/releases/R27.1_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R27.1_release_notes.md
+- [x] **Verification** — [out/verification/R27.1/notes.md](../../../out/verification/R27.1/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend 883 passed, 1 skipped (129.44s); frontend 223 passed, 18 skipped (39.10s); build 10.29s (evidence in notes.md)
+- **Scope:** Paper positions API mark/unrealized (request-time); reports monthly included_paper/mode; monthly close live/paper subdir; paper execute sizing tags; PaperPage Mark/Unrealized; Reports mode; close pack toggle. Branch: release/R27.1.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

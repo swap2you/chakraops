@@ -67,13 +67,29 @@ def _get_conn() -> sqlite3.Connection:
     return conn
 
 
+PACK_LIVE = "live"
+PACK_PAPER = "paper"
+
+
+def _norm_pack(pack: Optional[str]) -> str:
+    p = (pack or "").strip().lower()
+    return PACK_PAPER if p == PACK_PAPER else PACK_LIVE
+
+
 def init_monthly_close_db() -> None:
-    """Create monthly_close_state table if not exist."""
+    """Create monthly_close_state table if not exist. R27.1: monthly_close_pack for live/paper subdirs."""
     sql = """
     CREATE TABLE IF NOT EXISTS monthly_close_state (
         month TEXT PRIMARY KEY,
         generated_ts TEXT NOT NULL,
         paths_json TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS monthly_close_pack (
+        month TEXT NOT NULL,
+        pack TEXT NOT NULL,
+        generated_ts TEXT NOT NULL,
+        paths_json TEXT NOT NULL,
+        PRIMARY KEY (month, pack)
     );
     """
     with _LOCK:
@@ -89,16 +105,33 @@ def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
     return dict(row) if row else {}
 
 
-def monthly_close_get(month: str) -> Optional[Dict[str, Any]]:
-    """Get state for month (YYYY-MM). Returns dict with month, generated_ts, paths_json or None."""
+def monthly_close_get(month: str, pack: str = PACK_LIVE) -> Optional[Dict[str, Any]]:
+    """Get state for month (YYYY-MM) and pack (live|paper). R27.1: reads from monthly_close_pack; falls back to monthly_close_state for pack=live."""
     init_monthly_close_db()
     month = (month or "").strip()[:7]
     if len(month) != 7 or month[4] != "-":
         return None
+    pack = _norm_pack(pack)
     with _LOCK:
         conn = _get_conn()
         try:
-            row = conn.execute("SELECT month, generated_ts, paths_json FROM monthly_close_state WHERE month = ?", (month,)).fetchone()
+            row = conn.execute(
+                "SELECT month, pack, generated_ts, paths_json FROM monthly_close_pack WHERE month = ? AND pack = ?",
+                (month, pack),
+            ).fetchone()
+            if not row and pack == PACK_LIVE:
+                row = conn.execute(
+                    "SELECT month, generated_ts, paths_json FROM monthly_close_state WHERE month = ?",
+                    (month,),
+                ).fetchone()
+                if row:
+                    d = _row_to_dict(row)
+                    d["pack"] = PACK_LIVE
+                    try:
+                        d["paths_json"] = json.loads(d.get("paths_json") or "[]")
+                    except Exception:
+                        d["paths_json"] = []
+                    return d
             if not row:
                 return None
             d = _row_to_dict(row)
@@ -111,19 +144,20 @@ def monthly_close_get(month: str) -> Optional[Dict[str, Any]]:
             conn.close()
 
 
-def monthly_close_set(month: str, generated_ts: str, paths_json: List[str]) -> None:
-    """Upsert state for month."""
+def monthly_close_set(month: str, generated_ts: str, paths_json: List[str], pack: str = PACK_LIVE) -> None:
+    """Upsert state for month and pack (live|paper). R27.1: writes to monthly_close_pack."""
     init_monthly_close_db()
     month = (month or "").strip()[:7]
     if len(month) != 7 or month[4] != "-":
         raise ValueError("month must be YYYY-MM")
+    pack = _norm_pack(pack)
     with _LOCK:
         conn = _get_conn()
         try:
             conn.execute(
-                """INSERT OR REPLACE INTO monthly_close_state (month, generated_ts, paths_json)
-                   VALUES (?, ?, ?)""",
-                (month, generated_ts, json.dumps(paths_json)),
+                """INSERT OR REPLACE INTO monthly_close_pack (month, pack, generated_ts, paths_json)
+                   VALUES (?, ?, ?, ?)""",
+                (month, pack, generated_ts, json.dumps(paths_json)),
             )
             conn.commit()
         finally:
@@ -156,31 +190,42 @@ def _guardrails_snapshot_safe() -> Dict[str, Any]:
     return out
 
 
-def generate_monthly_close_pack(month: str) -> Dict[str, Any]:
+def generate_monthly_close_pack(month: str, include_paper: bool = False) -> Dict[str, Any]:
     """
-    Generate close pack for month (YYYY-MM) under data/reports/<month>/.
+    Generate close pack for month (YYYY-MM). R27.1: include_paper=False -> data/reports/<month>/live/,
+    include_paper=True -> .../paper/. Report includes included_paper and mode.
     Creates monthly_report.json, monthly_report.csv, journal_export.csv, summary.txt.
-    Returns dict: month, generated_ts, paths (relative file names), report (for API).
-    Deterministic: same journal data -> same file contents and ordering.
+    Returns dict: month, pack, generated_ts, paths, report.
     """
     month = (month or "").strip()[:7]
     if len(month) != 7 or month[4] != "-":
         raise ValueError("month must be YYYY-MM")
-    from app.core.journal.journal_store import journal_monthly_aggregate, journal_list
+    from app.core.journal.journal_store import journal_monthly_aggregate, journal_list, journal_monthly_paper_live_counts
 
+    pack = PACK_PAPER if include_paper else PACK_LIVE
     from_date, to_date = _month_range(month)
     generated_ts = datetime.now(timezone.utc).isoformat()
     base = _reports_base_path()
-    month_dir = base / month
+    month_dir = base / month / pack
     month_dir.mkdir(parents=True, exist_ok=True)
 
-    agg = journal_monthly_aggregate(month)
-    entries = journal_list(from_date=from_date, to_date=to_date, limit=10000, offset=0)
+    agg = journal_monthly_aggregate(month, include_paper=include_paper)
+    entries = journal_list(from_date=from_date, to_date=to_date, limit=10000, offset=0, include_paper=include_paper)
     entries.sort(key=lambda e: (e.get("trade_date") or "", e.get("created_ts") or ""))
+
+    live_count, paper_count = journal_monthly_paper_live_counts(month)
+    if live_count and paper_count:
+        mode = "MIXED"
+    elif paper_count:
+        mode = "PAPER_ONLY"
+    else:
+        mode = "LIVE_ONLY"
 
     report: Dict[str, Any] = {
         "month": month,
         "generated_ts": generated_ts,
+        "included_paper": include_paper,
+        "mode": mode,
         "totals": {
             "realized_pl": agg.get("total_realized_pl", 0),
             "fees": agg.get("fees_total", 0),
@@ -219,7 +264,7 @@ def generate_monthly_close_pack(month: str) -> Dict[str, Any]:
             f.write("id,created_ts,trade_date,symbol,strategy,action,qty,price,premium,fees,contract_key,notes,tags,realized_pl,link_id\n")
 
     lines = [
-        f"Monthly close — {month}",
+        f"Monthly close — {month} ({pack})",
         f"Generated: {generated_ts}",
         f"Realized P/L: {report['totals']['realized_pl']:.2f}",
         f"Fees: {report['totals']['fees']:.2f}",
@@ -233,5 +278,5 @@ def generate_monthly_close_pack(month: str) -> Dict[str, Any]:
         f.write("\n".join(lines[:10]))
 
     paths = ["monthly_report.json", "monthly_report.csv", "journal_export.csv", "summary.txt"]
-    monthly_close_set(month, generated_ts, paths)
-    return {"month": month, "generated_ts": generated_ts, "paths": paths, "report": report}
+    monthly_close_set(month, generated_ts, paths, pack=pack)
+    return {"month": month, "pack": pack, "generated_ts": generated_ts, "paths": paths, "report": report}

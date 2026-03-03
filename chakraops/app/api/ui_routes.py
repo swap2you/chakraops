@@ -2080,6 +2080,13 @@ async def ui_paper_execute(
                 notes=(body.get("notes") or "").strip()[:500] or None,
             )
             trade_date = (position.get("open_ts") or "")[:10] or (datetime.now(timezone.utc).date()).isoformat()
+            tags_parts = [(body.get("tags") or "").strip()]
+            sizing_hit = body.get("sizing_constraints_hit")
+            if isinstance(sizing_hit, list):
+                for c in sizing_hit:
+                    if isinstance(c, str) and c.strip() and "FAIL" not in c and "WARN" not in c:
+                        tags_parts.append("constraint:" + c.strip())
+            journal_tags = ", ".join(p for p in tags_parts if p)[:500]
             journal_create(
                 trade_date=trade_date,
                 symbol=symbol,
@@ -2094,6 +2101,7 @@ async def ui_paper_execute(
                 strike=position.get("strike"),
                 right=position.get("right"),
                 notes=position.get("notes"),
+                tags=journal_tags or None,
                 link_id=f"paper:{position.get('id')}",
                 is_paper=True,
             )
@@ -2156,10 +2164,12 @@ def ui_paper_positions(
     strategy: str | None = Query(None),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """R27.0: List paper positions. No FAIL_/WARN_."""
+    """R27.0: List paper positions. R27.1: OPEN positions include request-time mark_value, mark_source, mark_age_sec, quote_ts, unrealized_pl_usd. No FAIL_/WARN_."""
     _require_ui_key(x_ui_key)
     from app.core.paper.paper_store_r270 import paper_list_positions
+    from app.core.paper.paper_mark_r271 import enrich_paper_positions_with_mark
     positions = paper_list_positions(status=status, symbol=symbol, strategy=strategy)
+    positions = enrich_paper_positions_with_mark(positions)
     return {"positions": positions}
 
 
@@ -2475,14 +2485,26 @@ def ui_reports_monthly(
     include_paper: bool = Query(False, description="R27.0: Include paper trades in aggregate"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """R25.5: Monthly report aggregate (realized P/L, counts, winners/losers). R27.0: include_paper. Safe response only."""
+    """R25.5: Monthly report aggregate. R27.0: include_paper. R27.1: response includes included_paper and mode (LIVE_ONLY|PAPER_ONLY|MIXED). Safe response only."""
     _require_ui_key(x_ui_key)
     month = (month or "").strip()[:7]
     if len(month) != 7 or month[4] != "-":
         raise HTTPException(status_code=400, detail="month must be YYYY-MM")
     try:
-        from app.core.journal.journal_store import journal_monthly_aggregate
-        return journal_monthly_aggregate(month, include_paper=include_paper)
+        from app.core.journal.journal_store import journal_monthly_aggregate, journal_monthly_paper_live_counts
+        data = journal_monthly_aggregate(month, include_paper=include_paper)
+        data["included_paper"] = include_paper
+        if not include_paper:
+            data["mode"] = "LIVE_ONLY"
+        else:
+            live_count, paper_count = journal_monthly_paper_live_counts(month)
+            if live_count and paper_count:
+                data["mode"] = "MIXED"
+            elif paper_count:
+                data["mode"] = "PAPER_ONLY"
+            else:
+                data["mode"] = "LIVE_ONLY"
+        return data
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Monthly report error: %s", e)
@@ -2498,17 +2520,18 @@ def _monthly_close_allowlist() -> frozenset:
 @router.post("/reports/monthly/close")
 def ui_reports_monthly_close(
     month: str = Query(..., description="YYYY-MM"),
+    include_paper: bool = Query(False, description="R27.1: Generate paper pack (data/reports/<month>/paper/)"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """R26.5: Generate monthly close pack under data/reports/<month>/; deterministic."""
+    """R26.5: Generate monthly close pack. R27.1: include_paper=false -> live/ subdir, true -> paper/ subdir."""
     _require_ui_key(x_ui_key)
     month = (month or "").strip()[:7]
     if len(month) != 7 or month[4] != "-":
         raise HTTPException(status_code=400, detail="month must be YYYY-MM")
     try:
         from app.core.ops.monthly_close_store_r265 import generate_monthly_close_pack
-        result = generate_monthly_close_pack(month)
-        return {"status": "OK", "month": result["month"], "generated_ts": result["generated_ts"], "paths": result["paths"]}
+        result = generate_monthly_close_pack(month, include_paper=include_paper)
+        return {"status": "OK", "month": result["month"], "pack": result.get("pack", "live"), "generated_ts": result["generated_ts"], "paths": result["paths"]}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -2520,25 +2543,29 @@ def ui_reports_monthly_close(
 @router.get("/reports/monthly/close/files")
 def ui_reports_monthly_close_files(
     month: str = Query(..., description="YYYY-MM"),
+    pack: str = Query("live", description="R27.1: live or paper"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """R26.5: List available close pack files and sizes for month."""
+    """R26.5: List available close pack files and sizes for month. R27.1: pack=live|paper for subdir."""
     _require_ui_key(x_ui_key)
     month = (month or "").strip()[:7]
     if len(month) != 7 or month[4] != "-":
         raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+    pack = (pack or "live").strip().lower()
+    if pack not in ("live", "paper"):
+        pack = "live"
     try:
         from app.core.ops.monthly_close_store_r265 import _reports_base_path, ALLOWED_FILES, monthly_close_get
         base = _reports_base_path()
-        month_dir = base / month
+        month_dir = base / month / pack
         files: List[Dict[str, Any]] = []
         if month_dir.exists():
             for name in sorted(ALLOWED_FILES):
                 p = month_dir / name
                 if p.is_file():
                     files.append({"name": name, "size": p.stat().st_size})
-        state = monthly_close_get(month)
-        out: Dict[str, Any] = {"month": month, "files": files}
+        state = monthly_close_get(month, pack=pack)
+        out: Dict[str, Any] = {"month": month, "pack": pack, "files": files}
         if state:
             out["generated_ts"] = state.get("generated_ts")
             out["paths"] = state.get("paths_json") or []
@@ -2553,26 +2580,31 @@ def ui_reports_monthly_close_files(
 def ui_reports_monthly_close_download(
     month: str = Query(..., description="YYYY-MM"),
     file: str = Query(..., description="File name (allowlist)"),
+    pack: str = Query("live", description="R27.1: live or paper"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ):
-    """R26.5: Stream close pack file; file param validated against allowlist."""
+    """R26.5: Stream close pack file; file validated against allowlist. R27.1: pack=live|paper for subdir; no path traversal."""
     _require_ui_key(x_ui_key)
     month = (month or "").strip()[:7]
     if len(month) != 7 or month[4] != "-":
         raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+    pack = (pack or "live").strip().lower()
+    if pack not in ("live", "paper"):
+        pack = "live"
     allowlist = _monthly_close_allowlist()
-    if (file or "").strip() not in allowlist:
+    file_name = (file or "").strip()
+    if file_name not in allowlist:
         raise HTTPException(status_code=400, detail="Invalid file name")
     try:
         from app.core.ops.monthly_close_store_r265 import _reports_base_path
         from fastapi.responses import FileResponse
         base = _reports_base_path()
-        path = (base / month / file.strip()).resolve()
-        expected_dir = (base / month).resolve()
-        if not path.is_file() or path.parent != expected_dir or path.name != file.strip():
+        path = (base / month / pack / file_name).resolve()
+        expected_dir = (base / month / pack).resolve()
+        if not path.is_file() or path.parent != expected_dir or path.name != file_name:
             raise HTTPException(status_code=404, detail="File not found")
-        media = "application/json" if file.endswith(".json") else "text/csv" if file.endswith(".csv") else "text/plain"
-        return FileResponse(path, media_type=media, filename=file)
+        media = "application/json" if file_name.endswith(".json") else "text/csv" if file_name.endswith(".csv") else "text/plain"
+        return FileResponse(path, media_type=media, filename=file_name)
     except HTTPException:
         raise
     except Exception as e:

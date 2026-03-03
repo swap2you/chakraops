@@ -25,9 +25,10 @@ def test_close_pack_created_in_temp_directory() -> None:
         try:
             result = generate_monthly_close_pack("2026-03")
             assert result["month"] == "2026-03"
+            assert result.get("pack") == "live"
             assert "generated_ts" in result
             assert set(result["paths"]) == {"monthly_report.json", "monthly_report.csv", "journal_export.csv", "summary.txt"}
-            month_dir = Path(tmp) / "2026-03"
+            month_dir = Path(tmp) / "2026-03" / "live"
             assert month_dir.is_dir()
             for name in result["paths"]:
                 assert (month_dir / name).is_file()
@@ -62,7 +63,7 @@ def test_deterministic_file_contents_ordering() -> None:
             assert r1["report"]["totals"]["realized_pl"] == r2["report"]["totals"]["realized_pl"]
             assert r1["report"]["totals"]["trade_count"] == 2
             assert sorted(r1["paths"]) == sorted(r2["paths"])
-            month_dir = Path(tmp) / "reports" / "2026-04"
+            month_dir = Path(tmp) / "reports" / "2026-04" / "live"
             size1 = (month_dir / "monthly_report.json").stat().st_size
             size2 = (month_dir / "monthly_report.json").stat().st_size
             assert size1 == size2
@@ -81,7 +82,7 @@ def test_download_allowlist_works() -> None:
         client = TestClient(app)
         r = client.get("/api/ui/reports/monthly/close/download?month=2026-03&file=../../../etc/passwd")
         assert r.status_code == 400
-        r2 = client.get("/api/ui/reports/monthly/close/download?month=2026-03&file=monthly_report.json")
+        r2 = client.get("/api/ui/reports/monthly/close/download?month=2026-03&pack=live&file=monthly_report.json")
         assert r2.status_code in (200, 404)
         r3 = client.get("/api/ui/reports/monthly/close/download?month=2026-03&file=not_allowed.txt")
         assert r3.status_code == 400

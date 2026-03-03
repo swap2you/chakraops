@@ -351,3 +351,29 @@ def journal_monthly_aggregate(month: str, include_paper: bool = False) -> Dict[s
         "top_losers": top_losers,
         "fees_total": round(fees_total, 2),
     }
+
+
+def journal_monthly_paper_live_counts(month: str) -> tuple[int, int]:
+    """R27.1: Return (live_count, paper_count) of journal entries in month (YYYY-MM)."""
+    init_journal_db()
+    if len(month) != 7 or month[4] != "-":
+        return (0, 0)
+    import calendar
+    y, m = int(month[:4]), int(month[5:7])
+    last = calendar.monthrange(y, m)[1]
+    from_ym = f"{month}-01"
+    to_ym = f"{month}-{last:02d}"
+    with _LOCK:
+        conn = _get_conn()
+        try:
+            live = conn.execute(
+                """SELECT COUNT(*) FROM journal_entries WHERE trade_date >= ? AND trade_date <= ? AND (COALESCE(is_paper, 0) = 0)""",
+                (from_ym, to_ym),
+            ).fetchone()[0]
+            paper = conn.execute(
+                """SELECT COUNT(*) FROM journal_entries WHERE trade_date >= ? AND trade_date <= ? AND (COALESCE(is_paper, 0) = 1)""",
+                (from_ym, to_ym),
+            ).fetchone()[0]
+            return (int(live), int(paper))
+        finally:
+            conn.close()

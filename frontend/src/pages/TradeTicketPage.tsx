@@ -82,6 +82,13 @@ export function TradeTicketPage() {
     if (!isOpen && (j as { position_id?: string }).position_id) {
       (payload as Record<string, unknown>).position_id = (j as { position_id?: string }).position_id;
     }
+    const sizing = ticket?.sizing as { sizing_constraints_hit?: string[] } | undefined;
+    const constraintsHit = sizing?.sizing_constraints_hit;
+    if (Array.isArray(constraintsHit) && constraintsHit.length > 0) {
+      (payload as Record<string, unknown>).sizing_constraints_hit = constraintsHit.filter(
+        (c): c is string => typeof c === "string" && !c.includes("FAIL") && !c.includes("WARN")
+      );
+    }
     paperExecute.mutate(payload as Parameters<typeof paperExecute.mutate>[0], {
       onSuccess: () => {
         setPaperToast("Paper fill recorded");

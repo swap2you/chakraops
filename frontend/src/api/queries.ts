@@ -371,15 +371,25 @@ function paperPositionsPath(params: { status?: string; symbol?: string; strategy
 function paperSummaryPath(month: string): string {
   return `/api/ui/paper/summary?month=${encodeURIComponent(month)}`;
 }
-/** R26.5: Monthly close pack */
-function uiMonthlyCloseFilesPath(month: string): string {
-  return `/api/ui/reports/monthly/close/files?month=${encodeURIComponent(month)}`;
+/** R26.5: Monthly close pack. R27.1: pack=live|paper, include_paper for generate */
+function uiMonthlyCloseFilesPath(month: string, pack?: "live" | "paper"): string {
+  const p = new URLSearchParams();
+  p.set("month", month);
+  if (pack) p.set("pack", pack);
+  return `/api/ui/reports/monthly/close/files?${p.toString()}`;
 }
-function uiMonthlyCloseDownloadPath(month: string, file: string): string {
-  return `/api/ui/reports/monthly/close/download?month=${encodeURIComponent(month)}&file=${encodeURIComponent(file)}`;
+function uiMonthlyCloseDownloadPath(month: string, file: string, pack?: "live" | "paper"): string {
+  const p = new URLSearchParams();
+  p.set("month", month);
+  p.set("file", file);
+  if (pack) p.set("pack", pack);
+  return `/api/ui/reports/monthly/close/download?${p.toString()}`;
 }
-function uiMonthlyCloseGeneratePath(month: string): string {
-  return `/api/ui/reports/monthly/close?month=${encodeURIComponent(month)}`;
+function uiMonthlyCloseGeneratePath(month: string, include_paper?: boolean): string {
+  const p = new URLSearchParams();
+  p.set("month", month);
+  if (include_paper) p.set("include_paper", "true");
+  return `/api/ui/reports/monthly/close?${p.toString()}`;
 }
 /** R25.6: Universe Admin */
 function uiUniverseAdminPath(params: { limit?: number; offset?: number; status?: string }): string {
@@ -463,7 +473,7 @@ export const queryKeys = {
   tradeTicket: (symbol: string, strategy: string, action: string) =>
     ["ui", "tradeTicket", symbol, strategy, action] as const,
   uiReportsMonthly: (month: string) => ["ui", "reports", "monthly", month] as const,
-  uiMonthlyCloseFiles: (month: string) => ["ui", "reports", "monthly", "close", "files", month] as const,
+  uiMonthlyCloseFiles: (month: string, pack?: "live" | "paper") => ["ui", "reports", "monthly", "close", "files", month, pack ?? "live"] as const,
   /** R25.6 */
   uiUniverseAdmin: (params?: Record<string, unknown>) => ["ui", "universe", "admin", params ?? ""] as const,
   uiUniverseHealth: () => ["ui", "universe", "health"] as const,
@@ -789,6 +799,8 @@ export interface PaperExecutePayload {
   strike?: number;
   right?: string;
   notes?: string;
+  /** R27.1: Safe constraint codes for journal tags */
+  sizing_constraints_hit?: string[];
 }
 export interface PaperPosition {
   id: string;
@@ -804,6 +816,12 @@ export interface PaperPosition {
   expiry?: string;
   strike?: number;
   right?: string;
+  /** R27.1: Request-time mark (not persisted) */
+  mark_value?: number | null;
+  mark_source?: string | null;
+  mark_age_sec?: number | null;
+  quote_ts?: string | null;
+  unrealized_pl_usd?: number | null;
 }
 export function usePaperExecute() {
   const qc = useQueryClient();
@@ -1797,6 +1815,9 @@ export interface MonthlyReportResponse {
   top_winners: { symbol: string; realized_pl: number | null; strategy: string }[];
   top_losers: { symbol: string; realized_pl: number | null; strategy: string }[];
   fees_total: number;
+  /** R27.1 */
+  included_paper?: boolean;
+  mode?: "LIVE_ONLY" | "PAPER_ONLY" | "MIXED";
 }
 
 export function useJournal(params: {
@@ -1888,34 +1909,36 @@ export function useReportsMonthly(month: string, include_paper?: boolean) {
 /** R26.5: Monthly close pack — files list + generate + download */
 export interface MonthlyCloseFilesResponse {
   month: string;
+  pack?: "live" | "paper";
   files: { name: string; size: number }[];
   generated_ts?: string | null;
   paths?: string[];
 }
-export function useMonthlyCloseFiles(month: string) {
+export function useMonthlyCloseFiles(month: string, pack: "live" | "paper" = "live") {
   return useQuery({
-    queryKey: queryKeys.uiMonthlyCloseFiles(month),
-    queryFn: () => apiGet<MonthlyCloseFilesResponse>(uiMonthlyCloseFilesPath(month)),
+    queryKey: queryKeys.uiMonthlyCloseFiles(month, pack),
+    queryFn: () => apiGet<MonthlyCloseFilesResponse>(uiMonthlyCloseFilesPath(month, pack)),
     enabled: !!month && month.length === 7 && month[4] === "-",
   });
 }
 export function useMonthlyCloseGenerate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (month: string) =>
-      apiPostNoBody<{ status: string; month: string; generated_ts: string; paths: string[] }>(
-        uiMonthlyCloseGeneratePath(month)
+    mutationFn: (arg: { month: string; include_paper?: boolean }) =>
+      apiPostNoBody<{ status: string; month: string; pack?: string; generated_ts: string; paths: string[] }>(
+        uiMonthlyCloseGeneratePath(arg.month, arg.include_paper)
       ),
-    onSuccess: (_, month) => {
-      qc.invalidateQueries({ queryKey: queryKeys.uiMonthlyCloseFiles(month) });
+    onSuccess: (_, arg) => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiMonthlyCloseFiles(arg.month, "live") });
+      qc.invalidateQueries({ queryKey: queryKeys.uiMonthlyCloseFiles(arg.month, "paper") });
     },
   });
 }
-export function getMonthlyCloseDownloadPath(month: string, file: string): string {
-  return uiMonthlyCloseDownloadPath(month, file);
+export function getMonthlyCloseDownloadPath(month: string, file: string, pack?: "live" | "paper"): string {
+  return uiMonthlyCloseDownloadPath(month, file, pack);
 }
-export async function downloadMonthlyCloseFile(month: string, file: string): Promise<void> {
-  const blob = await apiGetBlob(uiMonthlyCloseDownloadPath(month, file));
+export async function downloadMonthlyCloseFile(month: string, file: string, pack: "live" | "paper" = "live"): Promise<void> {
+  const blob = await apiGetBlob(uiMonthlyCloseDownloadPath(month, file, pack));
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

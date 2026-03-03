@@ -1,5 +1,5 @@
 /**
- * R27.0: Paper portfolio — open and closed paper positions. Safe labels only.
+ * R27.0: Paper portfolio — open and closed paper positions. R27.1: Mark + Unrealized P/L for open. Safe labels only.
  */
 import { useState } from "react";
 import { PageHeader } from "@/components/PageHeader";
@@ -9,7 +9,14 @@ import { usePaperPositions, usePaperSummary, type PaperPosition } from "@/api/qu
 const TAB_OPEN = "OPEN";
 const TAB_CLOSED = "CLOSED";
 
-function PositionTable({ positions }: { positions: PaperPosition[] }) {
+function formatMark(p: PaperPosition): string {
+  if (p.mark_value == null) return "—";
+  const src = p.mark_source || "";
+  const age = p.mark_age_sec != null ? ` (${p.mark_age_sec}s)` : "";
+  return `${p.mark_value.toFixed(2)} ${src}${age}`.trim();
+}
+
+function PositionTable({ positions, showMarkColumns }: { positions: PaperPosition[]; showMarkColumns?: boolean }) {
   if (positions.length === 0) {
     return <p className="text-sm text-zinc-500">No positions.</p>;
   }
@@ -23,6 +30,12 @@ function PositionTable({ positions }: { positions: PaperPosition[] }) {
             <th className="text-right py-2 px-2">Qty</th>
             <th className="text-right py-2 px-2">Open price</th>
             <th className="text-left py-2 px-2">Open date</th>
+            {showMarkColumns && (
+              <>
+                <th className="text-right py-2 px-2" data-testid="paper-th-mark">Mark</th>
+                <th className="text-right py-2 px-2" data-testid="paper-th-unrealized">Unrealized P/L</th>
+              </>
+            )}
             <th className="text-right py-2 px-2">Realized P/L</th>
             <th className="text-left py-2 px-2">Close date</th>
           </tr>
@@ -35,6 +48,18 @@ function PositionTable({ positions }: { positions: PaperPosition[] }) {
               <td className="py-2 px-2 text-right">{p.qty}</td>
               <td className="py-2 px-2 text-right">{p.open_price}</td>
               <td className="py-2 px-2 text-zinc-600 dark:text-zinc-400">{(p.open_ts || "").slice(0, 10)}</td>
+              {showMarkColumns && (
+                <>
+                  <td className="py-2 px-2 text-right text-zinc-600 dark:text-zinc-400" data-testid="paper-cell-mark">{formatMark(p)}</td>
+                  <td className="py-2 px-2 text-right" data-testid="paper-cell-unrealized">
+                    {p.unrealized_pl_usd != null ? (
+                      <span className={p.unrealized_pl_usd >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
+                        {p.unrealized_pl_usd.toFixed(2)}
+                      </span>
+                    ) : "—"}
+                  </td>
+                </>
+              )}
               <td className="py-2 px-2 text-right">
                 {p.realized_pl != null ? (
                   <span className={p.realized_pl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
@@ -105,7 +130,7 @@ export function PaperPage() {
         {isLoading ? (
           <p className="text-sm text-zinc-500 p-2">Loading…</p>
         ) : (
-          <PositionTable positions={positions} />
+          <PositionTable positions={positions} showMarkColumns={tab === TAB_OPEN} />
         )}
       </Card>
     </div>

@@ -679,6 +679,15 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend 911 passed, 1 skipped (77.78s); frontend 244 passed, 18 skipped (47.38s); build 10.21s (evidence in notes.md)
 - **Scope:** Request-time options enrichment (mark_value/source/age, unrealized proxy, dte, pct_max_profit, lifecycle recommend+reason); GET /portfolio/options or options_positions in /portfolio; Portfolio Options tab + links; Notifications Open Ticket for options lifecycle. Branch: release/R27.8.
 
+### R27.9 — Unified Positions DB v1 (read-only aggregation first)
+
+- [x] **Requirements** — chakraops/docs/releases/R27.9_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R27.9_release_notes.md
+- [x] **Verification** — [out/verification/R27.9/notes.md](../../../out/verification/R27.9/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend 917 passed, 3 skipped; frontend tests 245 passed, 18 skipped; build built in 8.33s. Evidence: out/verification/R27.9/notes.md
+- [x] **UAT** — Checklist completed in out/verification/R27.9/notes.md (grep proof recorded; file not present expected)
+- **Scope:** Unified positions store (positions_open/positions_closed); read-only aggregation from holdings_db + tracked positions + paper; GET /api/ui/positions/unified; system-health positions_unified; Positions page with filters and safe labels. Branch: release/R27.9.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

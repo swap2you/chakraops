@@ -26,6 +26,7 @@ import type {
   SharesPositionsListResponse,
   ClosedSharePosition,
   ClosedSharePositionsListResponse,
+  UiPositionsUnifiedResponse,
 } from "./types";
 import type { DecisionMode, DecisionRef } from "./types";
 export type { DecisionRef };
@@ -138,6 +139,22 @@ function uiAccountsPath(): string {
 
 function uiPositionsPath(): string {
   return `/api/ui/positions`;
+}
+
+/** R27.9: GET /api/ui/positions/unified */
+function uiPositionsUnifiedPath(params: {
+  state?: string;
+  include_paper?: boolean;
+  instrument_type?: string | null;
+  symbol?: string | null;
+}): string {
+  const q = new URLSearchParams();
+  if (params.state) q.set("state", params.state);
+  if (params.include_paper !== undefined) q.set("include_paper", String(params.include_paper));
+  if (params.instrument_type?.trim()) q.set("instrument_type", params.instrument_type.trim());
+  if (params.symbol?.trim()) q.set("symbol", params.symbol.trim());
+  const s = q.toString();
+  return s ? `/api/ui/positions/unified?${s}` : "/api/ui/positions/unified";
 }
 
 function uiPositionsManualExecutePath(): string {
@@ -471,6 +488,8 @@ export const queryKeys = {
   paperPositions: (params: Record<string, unknown>) => ["ui", "paper", "positions", params] as const,
   paperSummary: (month: string) => ["ui", "paper", "summary", month] as const,
   uiPositions: () => ["ui", "positions"] as const,
+  /** R27.9 */
+  uiPositionsUnified: (params: Record<string, unknown>) => ["ui", "positions", "unified", params] as const,
   uiTrackedPositions: () => ["ui", "positions", "tracked"] as const,
   uiAccountsDefault: () => ["ui", "accounts", "default"] as const,
   uiAccounts: () => ["ui", "accounts"] as const,
@@ -1167,6 +1186,23 @@ export function usePortfolio() {
   return useQuery({
     queryKey: queryKeys.uiPortfolio(),
     queryFn: () => apiGet<PortfolioResponse>(uiPortfolioPath()),
+  });
+}
+
+/** R27.9: GET /api/ui/positions/unified — read-only aggregation (live shares, live options, paper). */
+export function useUnifiedPositions(params: {
+  state?: "open" | "closed";
+  include_paper?: boolean;
+  instrument_type?: string | null;
+  symbol?: string | null;
+} = {}) {
+  const { state = "open", include_paper = true, instrument_type, symbol } = params;
+  return useQuery({
+    queryKey: queryKeys.uiPositionsUnified({ state, include_paper, instrument_type, symbol }),
+    queryFn: () =>
+      apiGet<UiPositionsUnifiedResponse>(
+        uiPositionsUnifiedPath({ state, include_paper, instrument_type, symbol })
+      ),
   });
 }
 

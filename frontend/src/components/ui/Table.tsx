@@ -31,11 +31,12 @@ export function TableRow({
   children,
   className,
   onClick,
+  ...rest
 }: {
   children: React.ReactNode;
   className?: string;
   onClick?: () => void;
-}) {
+} & React.ComponentPropsWithoutRef<"tr">) {
   return (
     <tr
       className={clsx(
@@ -46,6 +47,7 @@ export function TableRow({
       )}
       onClick={onClick}
       role={onClick ? "button" : undefined}
+      {...rest}
     >
       {children}
     </tr>

@@ -170,6 +170,15 @@ def _get_guardrails_health() -> Dict[str, Any]:
         }
 
 
+def _get_positions_unified_health() -> Dict[str, Any]:
+    """R27.9: positions_unified block for system health — open_count, closed_count, last_build_ts. Safe only."""
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import get_positions_unified_health
+        return get_positions_unified_health()
+    except Exception:
+        return {"open_count": 0, "closed_count": 0, "last_build_ts": None}
+
+
 def _get_decision_store_mtime_utc() -> Optional[str]:
     """Return active decision store file mtime as ISO UTC string, or None."""
     try:
@@ -1281,6 +1290,7 @@ def ui_system_health(
         "cadence": {"mode": cadence_mode_health, "eligibility_as_of": eligibility_as_of_health},
         "earnings_probe_symbol": earnings_probe_symbol,
         "guardrails": _get_guardrails_health(),
+        "positions_unified": _get_positions_unified_health(),
     }
 
 
@@ -3942,6 +3952,31 @@ def ui_alerts(
         import logging
         logging.getLogger(__name__).exception("Error loading alerts: %s", e)
         return {"alerts": []}
+
+
+@router.get("/positions/unified")
+def ui_positions_unified(
+    state: str = Query(default="open", description="open | closed"),
+    include_paper: bool = Query(default=True, description="Include paper positions"),
+    instrument_type: str | None = Query(default=None, description="Filter: SHARES | CSP | CC"),
+    symbol: str | None = Query(default=None, description="Filter by symbol"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R27.9: Unified positions (read-only aggregation from live shares, live options, paper). Safe labels only."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import build_unified_positions
+        positions = build_unified_positions(
+            state=state,
+            include_paper=include_paper,
+            instrument_type=instrument_type,
+            symbol=symbol,
+        )
+        return {"positions": positions, "state": state, "include_paper": include_paper}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error building unified positions: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/positions")

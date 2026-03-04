@@ -8,6 +8,7 @@ import { SymbolDiagnosticsPage } from "@/pages/SymbolDiagnosticsPage";
 import { SystemDiagnosticsPage } from "@/pages/SystemDiagnosticsPage";
 import { NotificationsPage } from "@/pages/NotificationsPage";
 import { PortfolioPage } from "@/pages/PortfolioPage";
+import { PositionsPage } from "@/pages/PositionsPage";
 import { WheelPage } from "@/pages/WheelPage";
 import { JournalPage } from "@/pages/JournalPage";
 import { TradeTicketPage } from "@/pages/TradeTicketPage";
@@ -53,6 +54,7 @@ export function App() {
               <Route path="/universe-admin" element={<UniverseAdminPage />} />
               <Route path="/universe-health" element={<UniverseHealthPage />} />
               <Route path="/portfolio" element={<PortfolioPage />} />
+              <Route path="/positions" element={<PositionsPage />} />
               {getWheelPageMode() !== "hidden" ? (
                 <Route path="/wheel" element={<WheelPage />} />
               ) : (

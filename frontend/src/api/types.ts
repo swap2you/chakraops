@@ -953,3 +953,30 @@ export interface SharesPlan {
   indicators_used?: Record<string, unknown>;
   as_of_inputs?: Record<string, unknown>;
 }
+
+/** R27.9: Unified position row (read-only aggregation). Safe labels only; no FAIL_/WARN_. */
+export interface UnifiedPosition {
+  id: string;
+  symbol: string;
+  instrument_type: string;
+  is_paper: number;
+  qty: number;
+  avg_price?: number | null;
+  strike?: number | null;
+  expiry?: string | null;
+  right?: string | null;
+  opened_ts: string;
+  link_id?: string | null;
+  notes?: string | null;
+  tags?: string | null;
+  closed_ts?: string | null;
+  realized_pl?: number | null;
+  fees?: number | null;
+}
+
+/** R27.9: GET /api/ui/positions/unified response */
+export interface UiPositionsUnifiedResponse {
+  positions: UnifiedPosition[];
+  state: string;
+  include_paper: boolean;
+}

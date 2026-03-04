@@ -655,6 +655,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend 902 passed, 1 skipped (62.21s); frontend 236 passed, 18 skipped (31.42s); build 7.12s (evidence in notes.md)
 - **Scope:** Backtest replay from journal (live/paper/mixed); summary + trades; JSON/CSV export; BacktestPage + API. Branch: release/R27.5.
 
+### R27.6 — Learn / Operator Guide (wife-friendly)
+
+- [x] **Requirements** — chakraops/docs/releases/R27.6_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R27.6_release_notes.md
+- [x] **Verification** — [out/verification/R27.6/notes.md](../../../out/verification/R27.6/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend 902 passed, 1 skipped (47.02s); frontend 239 passed, 18 skipped (27.28s); build 6.50s (evidence in notes.md)
+- **Scope:** Learn page at /learn (daily routine, key terms, links); sidebar Learn nav; frontend-only. Branch: release/R27.6.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

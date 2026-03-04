@@ -15,6 +15,7 @@ import { TodayPage } from "@/pages/TodayPage";
 import { WeeklyReviewPage } from "@/pages/WeeklyReviewPage";
 import { ReportsPage } from "@/pages/ReportsPage";
 import { BacktestPage } from "@/pages/BacktestPage";
+import { LearnPage } from "@/pages/LearnPage";
 import { PaperPage } from "@/pages/PaperPage";
 import { UniverseAdminPage } from "@/pages/UniverseAdminPage";
 import { UniverseHealthPage } from "@/pages/UniverseHealthPage";
@@ -42,6 +43,7 @@ export function App() {
               <Route path="/system" element={<SystemDiagnosticsPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/journal" element={<JournalPage />} />
+              <Route path="/learn" element={<LearnPage />} />
               <Route path="/ticket" element={<TradeTicketPage />} />
               <Route path="/today" element={<TodayPage />} />
               <Route path="/weekly" element={<WeeklyReviewPage />} />

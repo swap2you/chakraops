@@ -671,6 +671,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend 906 passed, 1 skipped (54.01s); frontend 242 passed, 18 skipped (38.43s); build 7.75s (evidence in notes.md)
 - **Scope:** Shares store (cost basis/unrealized P/L); enrichment (mark_value, pct_return, days_held, cc_eligible); CC_ELIGIBLE notification; Portfolio CC badge/filter + Ticket link; Notifications CC_ELIGIBLE safe label + deep link. Branch: release/R27.7.
 
+### R27.8 — Options Position Management v1 (portfolio + ticket parity)
+
+- [x] **Requirements** — chakraops/docs/releases/R27.8_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R27.8_release_notes.md
+- [x] **Verification** — [out/verification/R27.8/notes.md](../../../out/verification/R27.8/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend 911 passed, 1 skipped (77.78s); frontend 244 passed, 18 skipped (47.38s); build 10.21s (evidence in notes.md)
+- **Scope:** Request-time options enrichment (mark_value/source/age, unrealized proxy, dte, pct_max_profit, lifecycle recommend+reason); GET /portfolio/options or options_positions in /portfolio; Portfolio Options tab + links; Notifications Open Ticket for options lifecycle. Branch: release/R27.8.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

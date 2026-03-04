@@ -14,7 +14,7 @@ import {
   useUpsertHolding,
   useDeleteHolding,
 } from "@/api/queries";
-import type { PortfolioPosition, AccountHolding, SharePositionSummary } from "@/api/types";
+import type { PortfolioPosition, AccountHolding, SharePositionSummary, OptionsPositionSummary } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { ClosePositionDrawer } from "@/components/ClosePositionDrawer";
 import { PortfolioPositionDetailDrawer } from "@/components/PortfolioPositionDetailDrawer";
@@ -76,6 +76,7 @@ export function PortfolioPage() {
   const positions = data?.positions ?? [];
   const capitalDeployed = data?.capital_deployed ?? 0;
   const sharesPositions = data?.shares_positions ?? [];
+  const optionsPositions = data?.options_positions ?? [];
   const openPositionsCount = data?.open_positions_count ?? positions.filter((p) => (p.status ?? "").toUpperCase() === "OPEN" || (p.status ?? "").toUpperCase() === "PARTIAL_EXIT").length;
 
   const accounts = accountsData?.accounts ?? [];
@@ -427,6 +428,86 @@ export function PortfolioPage() {
                     </TableRow>
                   );
                 })}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+
+      {optionsPositions.length > 0 && (
+        <Card>
+          <CardHeader
+            title="Options Positions"
+            description="R27.8: Enriched option positions (mark/source/age, DTE, max profit %, lifecycle recommend+reason)."
+          />
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Symbol</TableHead>
+                <TableHead>Strategy</TableHead>
+                <TableHead>Strike</TableHead>
+                <TableHead>Expiry</TableHead>
+                <TableHead>DTE</TableHead>
+                <TableHead>Mark</TableHead>
+                <TableHead>Unrealized P/L</TableHead>
+                <TableHead>Max profit %</TableHead>
+                <TableHead>Recommend</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {optionsPositions.map((row: OptionsPositionSummary) => {
+                const markStr =
+                  row.mark_value != null
+                    ? [fmtCurrency(row.mark_value), row.mark_source ?? "", row.mark_age_sec != null ? `(${row.mark_age_sec}s)` : ""].filter(Boolean).join(" ")
+                    : "—";
+                return (
+                  <TableRow key={row.position_id}>
+                    <TableCell>
+                      <Link
+                        to={`/symbol-diagnostics?symbol=${encodeURIComponent(row.symbol)}`}
+                        className="font-mono font-medium text-zinc-900 dark:text-zinc-200 hover:underline"
+                      >
+                        {row.symbol}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="font-mono">{row.strategy ?? "—"}</TableCell>
+                    <TableCell numeric className="font-mono">{row.strike != null ? fmtNum(row.strike) : "—"}</TableCell>
+                    <TableCell className="font-mono text-zinc-700 dark:text-zinc-300">{row.expiration ?? "—"}</TableCell>
+                    <TableCell numeric className="font-mono">{row.dte != null ? row.dte : "—"}</TableCell>
+                    <TableCell className="font-mono text-zinc-700 dark:text-zinc-300">{markStr}</TableCell>
+                    <TableCell
+                      numeric
+                      className={`font-mono ${row.unrealized_pnl != null ? (row.unrealized_pnl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400") : ""}`}
+                    >
+                      {row.unrealized_pnl != null ? fmtCurrency(row.unrealized_pnl) : "—"}
+                    </TableCell>
+                    <TableCell numeric className="font-mono">{row.pct_max_profit != null ? fmtPct(row.pct_max_profit) : "—"}</TableCell>
+                    <TableCell>
+                      <Badge variant={row.lifecycle_recommend === "Close" ? "danger" : row.lifecycle_recommend === "Roll" ? "warning" : "neutral"}>
+                        {row.lifecycle_recommend ?? "—"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-zinc-600 dark:text-zinc-400 text-sm">{row.lifecycle_reason ?? "—"}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-2">
+                        <Link
+                          to={`/ticket?symbol=${encodeURIComponent(row.symbol)}&strategy=${encodeURIComponent(row.strategy || "CSP")}&action=CLOSE`}
+                          className="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
+                        >
+                          Open Ticket
+                        </Link>
+                        <Link
+                          to={`/symbol-diagnostics?symbol=${encodeURIComponent(row.symbol)}`}
+                          className="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
+                        >
+                          Open Symbol
+                        </Link>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </Card>

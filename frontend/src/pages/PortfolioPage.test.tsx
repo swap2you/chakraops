@@ -315,4 +315,63 @@ describe("PortfolioPage", () => {
     expect(text).not.toMatch(/FAIL_/);
     expect(text).not.toMatch(/WARN_/);
   });
+
+  it("R27.8: shows Options Positions table with mark, DTE, recommend, reason and Open Ticket / Open Symbol links", () => {
+    usePortfolio.mockReturnValue({
+      data: {
+        ...mockPortfolioOpen,
+        options_positions: [
+          {
+            position_id: "pos-opt-1",
+            symbol: "SPY",
+            strategy: "CSP",
+            strike: 400,
+            expiration: "2026-04-18",
+            contracts: 1,
+            mark_value: 1.2,
+            mark_source: "LAST",
+            mark_age_sec: 30,
+            unrealized_pnl: 130,
+            dte: 45,
+            pct_max_profit: 52,
+            lifecycle_recommend: "Hold",
+            lifecycle_reason: "Hold",
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<PortfolioPage />);
+    expect(screen.getByText("Options Positions")).toBeInTheDocument();
+    expect(screen.getByText("Max profit %")).toBeInTheDocument();
+    expect(screen.getByText("Recommend")).toBeInTheDocument();
+    expect(screen.getByText("Reason")).toBeInTheDocument();
+    expect(screen.getAllByText("Hold").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByRole("link", { name: /open ticket/i }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByRole("link", { name: /open symbol/i }).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("R27.8: document has no FAIL or WARN when options_positions present", () => {
+    usePortfolio.mockReturnValue({
+      data: {
+        ...mockPortfolioOpen,
+        options_positions: [
+          {
+            position_id: "pos-1",
+            symbol: "SPY",
+            strategy: "CSP",
+            lifecycle_recommend: "Hold",
+            lifecycle_reason: "Hold",
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<PortfolioPage />);
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/\bFAIL\b/);
+    expect(text).not.toMatch(/\bWARN\b/);
+  });
 });

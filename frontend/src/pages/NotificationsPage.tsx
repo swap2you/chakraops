@@ -363,6 +363,14 @@ export function NotificationsPage() {
                     Open CC ticket for {selected.symbol}
                   </Link>
                 ) : null}
+                {/^OPTIONS_/.test(selected.type ?? "") ? (
+                  <Link
+                    to={`/ticket?symbol=${encodeURIComponent(selected.symbol)}&strategy=CSP&action=CLOSE`}
+                    className="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
+                  >
+                    Open Ticket
+                  </Link>
+                ) : null}
                 <Link
                   to={
                     selected.type === "SHARES_EXIT_SIGNAL"

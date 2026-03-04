@@ -484,12 +484,36 @@ export interface PortfolioPosition {
   realized_pnl?: number | null;
 }
 
+/** R27.8: Enriched option position for portfolio Options tab (mark_value/source/age, dte, pct_max_profit, lifecycle_recommend/reason). */
+export interface OptionsPositionSummary {
+  position_id: string;
+  symbol: string;
+  strategy: string;
+  strike?: number | null;
+  expiration?: string | null;
+  contracts?: number;
+  mark_value?: number | null;
+  mark_source?: string | null;
+  mark_age_sec?: number | null;
+  quote_ts?: string | null;
+  unrealized_pnl?: number | null;
+  dte?: number | null;
+  pct_max_profit?: number | null;
+  lifecycle_recommend?: string | null;
+  lifecycle_reason?: string | null;
+  premium_captured_pct?: number | null;
+  alert_flags?: string[];
+  [key: string]: unknown;
+}
+
 export interface PortfolioResponse {
   positions: PortfolioPosition[];
   capital_deployed?: number;
   open_positions_count?: number;
   /** R23.0: Share positions (qty, avg_cost, last_price, market_value, unrealized_pnl when price available). */
   shares_positions?: SharePositionSummary[];
+  /** R27.8: Enriched open option positions (CSP/CC) for Options tab. */
+  options_positions?: OptionsPositionSummary[];
 }
 
 /** Phase 12.0: GET /api/ui/portfolio/metrics */

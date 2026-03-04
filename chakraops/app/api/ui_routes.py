@@ -3098,13 +3098,15 @@ def ui_portfolio(
                 elif p.strike and p.contracts:
                     capital_deployed += float(p.strike) * 100 * int(p.contracts)
             out.append(enriched)
-        # R23.0: Include share positions (qty, avg_cost, last_price when available from artifact). R27.4: mark/unrealized.
+        # R23.0: Include share positions. R27.4: mark/unrealized. R27.8: options_positions (enriched open CSP/CC).
         shares_positions_out: List[Dict[str, Any]] = []
+        options_positions_out: List[Dict[str, Any]] = []
         try:
             from app.core.accounts.holdings_db import list_share_positions
             from app.core.accounts.holdings_db import _DEFAULT_ACCOUNT_ID
             from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
             from app.core.portfolio.live_shares_mark_r274 import enrich_live_shares_positions_with_mark
+            from app.core.portfolio.options_enrichment_r278 import enrich_options_positions_for_portfolio
             store = get_evaluation_store_v2()
             store.reload_from_disk()
             artifact = store.get_latest()
@@ -3146,6 +3148,7 @@ def ui_portfolio(
             for row in shares_positions_out:
                 if row.get("cc_eligible") is True and row.get("symbol"):
                     maybe_append_cc_eligible_notification(row["symbol"])
+            options_positions_out = enrich_options_positions_for_portfolio(positions, price_by_symbol, quote_ts_iso)
         except Exception:
             pass
         return {
@@ -3153,11 +3156,56 @@ def ui_portfolio(
             "capital_deployed": round(capital_deployed, 2),
             "open_positions_count": open_count,
             "shares_positions": shares_positions_out,
+            "options_positions": options_positions_out,
         }
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Error loading portfolio: %s", e)
-        return {"positions": [], "capital_deployed": 0, "open_positions_count": 0, "shares_positions": []}
+        return {"positions": [], "capital_deployed": 0, "open_positions_count": 0, "shares_positions": [], "options_positions": []}
+
+
+@router.get("/portfolio/options")
+def ui_portfolio_options(
+    exclude_test: bool = Query(default=True),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    R27.8: Enriched open option positions (CSP/CC) for portfolio Options tab.
+    Same data as options_positions in GET /portfolio; deterministic sort.
+    """
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.positions.service import list_positions
+        from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
+        from app.core.portfolio.options_enrichment_r278 import enrich_options_positions_for_portfolio
+        positions = list_positions(status=None, symbol=None, exclude_test=exclude_test)
+        price_by_symbol: Dict[str, float] = {}
+        quote_ts_iso: Optional[str] = None
+        try:
+            store = get_evaluation_store_v2()
+            store.reload_from_disk()
+            artifact = store.get_latest()
+            if artifact:
+                quote_ts_iso = (getattr(artifact, "metadata", None) or {}).get("pipeline_timestamp")
+                if getattr(artifact, "symbols", None):
+                    for s in artifact.symbols:
+                        sym = (getattr(s, "symbol", "") or "").strip().upper()
+                        if not sym:
+                            continue
+                        p = getattr(s, "price", None) or getattr(s, "underlying_price", None)
+                        if p is not None:
+                            try:
+                                price_by_symbol[sym] = float(p)
+                            except (TypeError, ValueError):
+                                pass
+        except Exception:
+            pass
+        options_positions_out = enrich_options_positions_for_portfolio(positions, price_by_symbol, quote_ts_iso)
+        return {"options_positions": options_positions_out}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error loading portfolio options: %s", e)
+        return {"options_positions": []}
 
 
 @router.get("/portfolio/metrics")

@@ -20,6 +20,23 @@ const mockEntries = [
     notes: "test",
     tags: "tag1",
     realized_pl: null,
+    link_target: null as { kind: string; id: string } | null,
+  },
+  {
+    id: "e2",
+    created_ts: "2026-02-21T10:00:00Z",
+    trade_date: "2026-02-21",
+    symbol: "SPY",
+    strategy: "SHARES",
+    action: "SELL",
+    qty: 100,
+    price: 455.0,
+    premium: null,
+    fees: null,
+    notes: "close",
+    tags: "",
+    realized_pl: 500,
+    link_target: { kind: "shares", id: "SPY:pos-abc" } as { kind: string; id: string },
   },
 ];
 
@@ -43,7 +60,7 @@ describe("JournalPage", () => {
   it("renders journal list using mocked hook", () => {
     render(<JournalPage />);
     expect(screen.getByRole("heading", { name: /Journal/i })).toBeInTheDocument();
-    expect(screen.getByText("SPY")).toBeInTheDocument();
+    expect(screen.getAllByText("SPY").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("BUY")).toBeInTheDocument();
     expect(screen.getAllByText(/SHARES/).length).toBeGreaterThanOrEqual(1);
   });
@@ -71,5 +88,20 @@ describe("JournalPage", () => {
     render(<JournalPage />);
     expect(screen.getByTestId("journal-paper-only")).toBeInTheDocument();
     expect(screen.getByText(/Paper only/)).toBeInTheDocument();
+  });
+
+  it("R27.4: Open link renders when entry has link_target", () => {
+    render(<JournalPage />);
+    const openLinks = screen.getAllByTestId("journal-open-link");
+    expect(openLinks.length).toBe(1);
+    expect(openLinks[0]).toHaveTextContent("Open");
+    expect(openLinks[0]).toHaveAttribute("href", "/symbol-diagnostics?symbol=SPY");
+  });
+
+  it("R27.4: no FAIL or WARN in DOM", () => {
+    const { container } = render(<JournalPage />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\bFAIL\b/);
+    expect(text).not.toMatch(/\bWARN\b/);
   });
 });

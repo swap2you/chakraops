@@ -14,7 +14,7 @@ import {
   useUpsertHolding,
   useDeleteHolding,
 } from "@/api/queries";
-import type { PortfolioPosition, AccountHolding } from "@/api/types";
+import type { PortfolioPosition, AccountHolding, SharePositionSummary } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { ClosePositionDrawer } from "@/components/ClosePositionDrawer";
 import { PortfolioPositionDetailDrawer } from "@/components/PortfolioPositionDetailDrawer";
@@ -331,41 +331,50 @@ export function PortfolioPage() {
 
       {sharesPositions.length > 0 && (
         <Card>
-          <CardHeader title="Shares Positions" description="R23.0: Share positions (MTM when price available)." />
+          <CardHeader title="Shares Positions" description="R23.0: Share positions. R27.4: Mark (value+source+age) and Unrealized P/L." />
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Symbol</TableHead>
                 <TableHead>Qty</TableHead>
                 <TableHead>Avg cost</TableHead>
+                <TableHead>Mark</TableHead>
                 <TableHead>Last price</TableHead>
                 <TableHead>Market value</TableHead>
-                <TableHead>Unrealized PnL</TableHead>
+                <TableHead>Unrealized P/L</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sharesPositions.map((row: { symbol: string; quantity: number; avg_cost?: number | null; last_price?: number | null; market_value?: number | null; unrealized_pnl?: number | null }) => (
-                <TableRow key={row.symbol}>
-                  <TableCell>
-                    <Link
-                      to={`/symbol-diagnostics?symbol=${encodeURIComponent(row.symbol)}`}
-                      className="font-mono font-medium text-zinc-900 dark:text-zinc-200 hover:underline"
+              {sharesPositions.map((row: SharePositionSummary) => {
+                const unrealizedPl = row.unrealized_pl ?? row.unrealized_pnl;
+                const markStr =
+                  row.mark_value != null
+                    ? [fmtCurrency(row.mark_value), row.mark_source ?? "", row.mark_age_sec != null ? `(${row.mark_age_sec}s)` : ""].filter(Boolean).join(" ")
+                    : "—";
+                return (
+                  <TableRow key={row.symbol}>
+                    <TableCell>
+                      <Link
+                        to={`/symbol-diagnostics?symbol=${encodeURIComponent(row.symbol)}`}
+                        className="font-mono font-medium text-zinc-900 dark:text-zinc-200 hover:underline"
+                      >
+                        {row.symbol}
+                      </Link>
+                    </TableCell>
+                    <TableCell numeric className="font-mono">{row.quantity}</TableCell>
+                    <TableCell numeric className="font-mono">{row.avg_cost != null ? fmtNum(row.avg_cost) : "—"}</TableCell>
+                    <TableCell className="font-mono text-zinc-700 dark:text-zinc-300">{markStr}</TableCell>
+                    <TableCell numeric className="font-mono">{row.last_price != null ? fmtNum(row.last_price) : "—"}</TableCell>
+                    <TableCell numeric className="font-mono">{row.market_value != null ? fmtCurrency(row.market_value) : "—"}</TableCell>
+                    <TableCell
+                      numeric
+                      className={`font-mono ${unrealizedPl != null ? (unrealizedPl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400") : ""}`}
                     >
-                      {row.symbol}
-                    </Link>
-                  </TableCell>
-                  <TableCell numeric className="font-mono">{row.quantity}</TableCell>
-                  <TableCell numeric className="font-mono">{row.avg_cost != null ? fmtNum(row.avg_cost) : "—"}</TableCell>
-                  <TableCell numeric className="font-mono">{row.last_price != null ? fmtNum(row.last_price) : "—"}</TableCell>
-                  <TableCell numeric className="font-mono">{row.market_value != null ? fmtCurrency(row.market_value) : "—"}</TableCell>
-                  <TableCell
-                    numeric
-                    className={`font-mono ${row.unrealized_pnl != null ? (row.unrealized_pnl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400") : ""}`}
-                  >
-                    {row.unrealized_pnl != null ? fmtCurrency(row.unrealized_pnl) : "—"}
-                  </TableCell>
-                </TableRow>
-              ))}
+                      {unrealizedPl != null ? fmtCurrency(unrealizedPl) : "—"}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </Card>

@@ -66,6 +66,17 @@ const mockPortfolioOpen = {
   ],
   capital_deployed: 45000,
   open_positions_count: 1,
+  shares_positions: [] as Array<{
+    symbol: string;
+    quantity: number;
+    avg_cost?: number | null;
+    mark_value?: number | null;
+    mark_source?: string | null;
+    mark_age_sec?: number | null;
+    unrealized_pl?: number | null;
+    market_value?: number | null;
+    unrealized_pnl?: number | null;
+  }>,
 };
 
 const mockPortfolioClosed = {
@@ -230,5 +241,33 @@ describe("PortfolioPage", () => {
     expect(link).toBeInTheDocument();
     expect(link).toHaveAttribute("href", "/symbol-diagnostics?symbol=SPY");
     expect(screen.getByText("no run")).toBeInTheDocument();
+  });
+
+  it("R27.4: renders Shares Positions with Mark and Unrealized P/L columns; em dash when missing", () => {
+    usePortfolio.mockReturnValue({
+      data: {
+        ...mockPortfolioOpen,
+        shares_positions: [
+          { symbol: "SPY", quantity: 100, avg_cost: 100, mark_value: 105, mark_source: "LAST", mark_age_sec: 30, unrealized_pl: 500, market_value: 10500 },
+          { symbol: "QQQ", quantity: 50, avg_cost: null, market_value: null, unrealized_pl: null },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<PortfolioPage />);
+    expect(screen.getByText("Shares Positions")).toBeInTheDocument();
+    expect(screen.getAllByText("Mark").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Unrealized P/L")).toBeInTheDocument();
+    expect(screen.getByText(/LAST/)).toBeInTheDocument();
+    expect(screen.getByText(/\$500\.00/)).toBeInTheDocument();
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("R27.4: document textContent has no FAIL or WARN", () => {
+    render(<PortfolioPage />);
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/\bFAIL\b/);
+    expect(text).not.toMatch(/\bWARN\b/);
   });
 });

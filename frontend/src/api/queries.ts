@@ -1885,6 +1885,8 @@ export interface JournalEntry {
   tags?: string | null;
   realized_pl?: number | null;
   link_id?: string | null;
+  /** R27.4: Request-time deep-link hint; { kind, id } when link_id recognized */
+  link_target?: { kind: string; id: string } | null;
   /** R27.0: Paper trade flag (0/1 from API) */
   is_paper?: number | null;
 }

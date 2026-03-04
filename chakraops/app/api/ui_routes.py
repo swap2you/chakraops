@@ -2411,11 +2411,14 @@ def ui_journal_list(
     paper_only: bool = Query(False, description="R27.2: Only paper entries"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """R25.5: List journal entries (ordered by created_ts desc). R27.0: include_paper. R27.2: paper_only. Safe response only."""
+    """R25.5: List journal entries (ordered by created_ts desc). R27.0: include_paper. R27.2: paper_only. R27.4: link_target (request-time)."""
     _require_ui_key(x_ui_key)
     try:
         from app.core.journal.journal_store import journal_list
+        from app.core.journal.journal_links_r274 import parse_link_id
         entries = journal_list(from_date=from_date, to_date=to_date, symbol=symbol, strategy=strategy, limit=limit, offset=offset, include_paper=include_paper, paper_only=paper_only)
+        for e in entries:
+            e["link_target"] = parse_link_id(e.get("link_id"))
         return {"entries": entries}
     except Exception as e:
         import logging
@@ -3003,34 +3006,40 @@ def ui_portfolio(
                 elif p.strike and p.contracts:
                     capital_deployed += float(p.strike) * 100 * int(p.contracts)
             out.append(enriched)
-        # R23.0: Include share positions (qty, avg_cost, last_price when available from artifact)
+        # R23.0: Include share positions (qty, avg_cost, last_price when available from artifact). R27.4: mark/unrealized.
         shares_positions_out: List[Dict[str, Any]] = []
         try:
             from app.core.accounts.holdings_db import list_share_positions
             from app.core.accounts.holdings_db import _DEFAULT_ACCOUNT_ID
             from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
+            from app.core.portfolio.live_shares_mark_r274 import enrich_live_shares_positions_with_mark
             store = get_evaluation_store_v2()
             store.reload_from_disk()
             artifact = store.get_latest()
             price_by_symbol: Dict[str, float] = {}
-            if artifact and getattr(artifact, "symbols", None):
-                for s in artifact.symbols:
-                    sym = (getattr(s, "symbol", "") or "").strip().upper()
-                    if not sym:
-                        continue
-                    p = getattr(s, "price", None) or getattr(s, "underlying_price", None)
-                    if p is not None:
-                        try:
-                            price_by_symbol[sym] = float(p)
-                        except (TypeError, ValueError):
-                            pass
+            quote_ts_iso: Optional[str] = None
+            if artifact:
+                meta = getattr(artifact, "metadata", None) or {}
+                quote_ts_iso = meta.get("pipeline_timestamp")
+                if getattr(artifact, "symbols", None):
+                    for s in artifact.symbols:
+                        sym = (getattr(s, "symbol", "") or "").strip().upper()
+                        if not sym:
+                            continue
+                        p = getattr(s, "price", None) or getattr(s, "underlying_price", None)
+                        if p is not None:
+                            try:
+                                price_by_symbol[sym] = float(p)
+                            except (TypeError, ValueError):
+                                pass
+            raw_shares: List[Dict[str, Any]] = []
             for pos in list_share_positions(_DEFAULT_ACCOUNT_ID):
                 last_price = price_by_symbol.get(pos["symbol"])
                 qty = pos.get("quantity") or 0
                 avg_cost = pos.get("avg_cost")
                 market_value = (last_price * qty) if last_price is not None and qty else None
                 unrealized_pnl = (last_price - avg_cost) * qty if (last_price is not None and avg_cost is not None and qty) else None
-                shares_positions_out.append({
+                raw_shares.append({
                     "symbol": pos["symbol"],
                     "quantity": qty,
                     "avg_cost": pos.get("avg_cost"),
@@ -3039,6 +3048,7 @@ def ui_portfolio(
                     "unrealized_pnl": round(unrealized_pnl, 2) if unrealized_pnl is not None else None,
                     "updated_at": pos.get("updated_at"),
                 })
+            shares_positions_out = enrich_live_shares_positions_with_mark(raw_shares, price_by_symbol, quote_ts_iso)
         except Exception:
             pass
         return {

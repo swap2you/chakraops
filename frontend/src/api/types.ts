@@ -547,7 +547,7 @@ export interface SharePosition {
   stop_price?: number | null;
 }
 
-/** R23.0: Share position with optional MTM (from portfolio/symbol-diagnostics). */
+/** R23.0: Share position with optional MTM. R27.4: mark_value, mark_source, quote_ts, mark_age_sec, unrealized_pl. */
 export interface SharePositionSummary {
   symbol: string;
   quantity: number;
@@ -555,6 +555,13 @@ export interface SharePositionSummary {
   last_price?: number | null;
   market_value?: number | null;
   unrealized_pnl?: number | null;
+  /** R27.4: Request-time mark (MID→LAST→BID→ASK); null when missing */
+  mark_value?: number | null;
+  mark_source?: string | null;
+  quote_ts?: string | null;
+  mark_age_sec?: number | null;
+  /** R27.4: Unrealized P/L when open; null when missing */
+  unrealized_pl?: number | null;
   updated_at?: string | null;
 }
 

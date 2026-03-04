@@ -22,6 +22,7 @@ import {
   Button,
   Badge,
 } from "@/components/ui";
+import { Link } from "react-router-dom";
 import { Plus, Download, Loader2, Pencil, Check, X } from "lucide-react";
 
 function formatCurrency(val: number | null | undefined): string {
@@ -237,11 +238,20 @@ export function JournalPage() {
                 <TableHead className="text-right">Realized P/L</TableHead>
                 <TableHead>Notes</TableHead>
                 <TableHead>Tags</TableHead>
+                <TableHead className="w-20">Open</TableHead>
                 <TableHead className="w-20">Edit</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {entries.map((e) => (
+              {entries.map((e) => {
+                const linkTarget = e.link_target;
+                const openUrl =
+                  linkTarget?.kind === "shares" && linkTarget?.id
+                    ? `/symbol-diagnostics?symbol=${encodeURIComponent(linkTarget.id.split(":")[0])}`
+                    : linkTarget
+                      ? "/portfolio"
+                      : null;
+                return (
                 <TableRow key={e.id}>
                   <TableCell>{formatDate(e.trade_date)}</TableCell>
                   <TableCell className="font-medium">{e.symbol}</TableCell>
@@ -280,6 +290,15 @@ export function JournalPage() {
                     )}
                   </TableCell>
                   <TableCell>
+                    {openUrl ? (
+                      <Link to={openUrl} className="text-sm text-emerald-600 hover:underline dark:text-emerald-400" data-testid="journal-open-link">
+                        Open
+                      </Link>
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
+                  <TableCell>
                     {editingId === e.id ? (
                       <div className="flex items-center gap-1">
                         <button
@@ -312,7 +331,8 @@ export function JournalPage() {
                     )}
                   </TableCell>
                 </TableRow>
-              ))}
+              );
+              })}
             </TableBody>
           </Table>
         </div>

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -2782,6 +2783,97 @@ def ui_reports_monthly_close_download(
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Monthly close download error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to download")
+
+
+# R27.5: Journal-driven backtest replay
+BACKTEST_FILE_ALLOWLIST = frozenset({"summary_json", "trades_csv"})
+
+
+@router.post("/backtest/run")
+async def ui_backtest_run(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R27.5: Run backtest for date range. Body: start_date, end_date, include_paper, paper_only. Returns run_id, paths, metrics."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json()
+        start_date = (body.get("start_date") or "").strip()[:10]
+        end_date = (body.get("end_date") or "").strip()[:10]
+        if not start_date or not end_date or len(start_date) != 10 or len(end_date) != 10:
+            raise HTTPException(status_code=400, detail="start_date and end_date required (YYYY-MM-DD)")
+        include_paper = bool(body.get("include_paper", False))
+        paper_only = bool(body.get("paper_only", False))
+        from app.core.backtest.backtest_store_r275 import run_and_persist
+        out = run_and_persist(start_date, end_date, include_paper=include_paper, paper_only=paper_only)
+        return {"status": "OK", **out}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Backtest run error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to run backtest")
+
+
+@router.get("/backtest/runs")
+def ui_backtest_runs(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R27.5: List backtest runs (created_ts desc)."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.backtest.backtest_store_r275 import list_runs
+        runs = list_runs(limit=limit, offset=offset)
+        return {"runs": runs}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Backtest runs list error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to list runs")
+
+
+@router.get("/backtest/download")
+def ui_backtest_download(
+    run_id: str = Query(..., description="Run UUID"),
+    file: str = Query(..., description="summary_json or trades_csv"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+):
+    """R27.5: Stream backtest file. Allowlist only; no path traversal."""
+    _require_ui_key(x_ui_key)
+    file = (file or "").strip()
+    if file not in BACKTEST_FILE_ALLOWLIST:
+        raise HTTPException(status_code=400, detail="Invalid file name")
+    try:
+        from app.core.backtest.backtest_store_r275 import get_run
+        from fastapi.responses import FileResponse
+        run = get_run(run_id)
+        if not run:
+            raise HTTPException(status_code=404, detail="Run not found")
+        path_json = run.get("path_json")
+        if not path_json:
+            raise HTTPException(status_code=404, detail="Run paths not found")
+        paths = json.loads(path_json)
+        path_key = "summary_json" if file == "summary_json" else "trades_csv"
+        path_str = paths.get(path_key)
+        if not path_str:
+            raise HTTPException(status_code=404, detail="File not found")
+        path_obj = Path(path_str).resolve()
+        if not path_obj.is_file():
+            raise HTTPException(status_code=404, detail="File not found")
+        run_dir = paths.get("run_dir")
+        if run_dir:
+            expected_dir = Path(run_dir).resolve()
+            if path_obj.parent != expected_dir:
+                raise HTTPException(status_code=403, detail="Path not allowed")
+        media = "application/json" if file == "summary_json" else "text/csv"
+        return FileResponse(path_obj, media_type=media, filename="backtest_summary.json" if file == "summary_json" else "backtest_trades.csv")
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Backtest download error: %s", e)
         raise HTTPException(status_code=500, detail="Unable to download")
 
 

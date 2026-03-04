@@ -230,6 +230,35 @@ def journal_list(
             conn.close()
 
 
+def journal_list_range(
+    start_date: str,
+    end_date: str,
+    include_paper: bool = True,
+    paper_only: bool = False,
+    limit: int = 50000,
+) -> List[Dict[str, Any]]:
+    """R27.5: Entries in [start_date, end_date] for backtest. Deterministic order: trade_date ASC, created_ts ASC, id ASC."""
+    init_journal_db()
+    conditions: List[str] = ["trade_date >= ?", "trade_date <= ?"]
+    params: List[Any] = [start_date.strip()[:10], end_date.strip()[:10]]
+    if not include_paper:
+        conditions.append("(COALESCE(is_paper, 0) = 0)")
+    if paper_only:
+        conditions.append("(COALESCE(is_paper, 0) = 1)")
+    where = " WHERE " + " AND ".join(conditions)
+    params.append(limit)
+    with _LOCK:
+        conn = _get_conn()
+        try:
+            rows = conn.execute(
+                f"SELECT * FROM journal_entries{where} ORDER BY trade_date ASC, created_ts ASC, id ASC LIMIT ?",
+                params,
+            ).fetchall()
+            return [_row_to_dict(r) for r in rows]
+        finally:
+            conn.close()
+
+
 def journal_update(
     entry_id: str,
     notes: Optional[str] = None,

@@ -647,6 +647,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend 895 passed, 3 skipped (56.45s); frontend 232 passed, 18 skipped (29.43s); build 7.14s (evidence in notes.md)
 - **Scope:** Live shares mark/unrealized in portfolio; journal link_target; Portfolio + Journal UX. Branch: release/R27.4.
 
+### R27.5 — Journal-driven backtesting baseline (replay)
+
+- [x] **Requirements** — chakraops/docs/releases/R27.5_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R27.5_release_notes.md
+- [x] **Verification** — [out/verification/R27.5/notes.md](../../../out/verification/R27.5/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend 902 passed, 1 skipped (62.21s); frontend 236 passed, 18 skipped (31.42s); build 7.12s (evidence in notes.md)
+- **Scope:** Backtest replay from journal (live/paper/mixed); summary + trades; JSON/CSV export; BacktestPage + API. Branch: release/R27.5.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

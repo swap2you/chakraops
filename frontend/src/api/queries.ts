@@ -405,6 +405,23 @@ function uiMonthlyCloseGeneratePath(month: string, include_paper?: boolean): str
   if (include_paper) p.set("include_paper", "true");
   return `/api/ui/reports/monthly/close?${p.toString()}`;
 }
+/** R27.5: Backtest replay */
+function uiBacktestRunPath(): string {
+  return "/api/ui/backtest/run";
+}
+function uiBacktestRunsPath(limit?: number, offset?: number): string {
+  const p = new URLSearchParams();
+  if (limit != null) p.set("limit", String(limit));
+  if (offset != null) p.set("offset", String(offset));
+  const q = p.toString();
+  return q ? `/api/ui/backtest/runs?${q}` : "/api/ui/backtest/runs";
+}
+function uiBacktestDownloadPath(run_id: string, file: "summary_json" | "trades_csv"): string {
+  const p = new URLSearchParams();
+  p.set("run_id", run_id);
+  p.set("file", file);
+  return `/api/ui/backtest/download?${p.toString()}`;
+}
 /** R25.6: Universe Admin */
 function uiUniverseAdminPath(params: { limit?: number; offset?: number; status?: string }): string {
   const p = new URLSearchParams();
@@ -488,6 +505,8 @@ export const queryKeys = {
     ["ui", "tradeTicket", symbol, strategy, action] as const,
   uiReportsMonthly: (month: string) => ["ui", "reports", "monthly", month] as const,
   uiMonthlyCloseFiles: (month: string, pack?: "live" | "paper") => ["ui", "reports", "monthly", "close", "files", month, pack ?? "live"] as const,
+  /** R27.5 */
+  uiBacktestRuns: (limit?: number, offset?: number) => ["ui", "backtest", "runs", limit ?? 50, offset ?? 0] as const,
   /** R25.6 */
   uiUniverseAdmin: (params?: Record<string, unknown>) => ["ui", "universe", "admin", params ?? ""] as const,
   uiUniverseHealth: () => ["ui", "universe", "health"] as const,
@@ -2036,6 +2055,84 @@ export function useMonthlyCloseGenerate() {
 }
 export function getMonthlyCloseDownloadPath(month: string, file: string, pack?: "live" | "paper"): string {
   return uiMonthlyCloseDownloadPath(month, file, pack);
+}
+
+/** R27.5: Backtest replay */
+export interface BacktestRunPayload {
+  start_date: string;
+  end_date: string;
+  include_paper?: boolean;
+  paper_only?: boolean;
+}
+export interface BacktestRunResponse {
+  status: string;
+  run_id: string;
+  created_ts: string;
+  mode: string;
+  paths: { summary_json: string; trades_csv: string };
+  metrics: {
+    start_date: string;
+    end_date: string;
+    mode: string;
+    total_realized_pl: number;
+    total_fees: number;
+    trade_count: number;
+    win_count: number;
+    loss_count: number;
+    win_rate: number;
+    by_strategy: Record<string, { realized_pl: number; trades: number; wins: number; losses: number }>;
+    max_drawdown_proxy?: number | null;
+  };
+  trades?: Array<{
+    trade_date?: string;
+    symbol?: string;
+    strategy?: string;
+    action?: string;
+    qty?: number;
+    price?: number;
+    premium?: number;
+    fees?: number;
+    realized_pl?: number;
+    is_paper?: boolean;
+    link_id?: string;
+    tags?: string;
+  }>;
+}
+export interface BacktestRunRow {
+  id: string;
+  start_date: string;
+  end_date: string;
+  mode: string;
+  created_ts: string;
+  path_json: string;
+}
+export interface BacktestRunsResponse {
+  runs: BacktestRunRow[];
+}
+export function useBacktestRuns(limit = 50, offset = 0) {
+  return useQuery({
+    queryKey: queryKeys.uiBacktestRuns(limit, offset),
+    queryFn: () => apiGet<BacktestRunsResponse>(uiBacktestRunsPath(limit, offset)),
+  });
+}
+export function useBacktestRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: BacktestRunPayload) =>
+      apiPost<BacktestRunResponse>(uiBacktestRunPath(), payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "backtest", "runs"] });
+    },
+  });
+}
+export async function downloadBacktestFile(run_id: string, file: "summary_json" | "trades_csv"): Promise<void> {
+  const blob = await apiGetBlob(uiBacktestDownloadPath(run_id, file));
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = file === "summary_json" ? "backtest_summary.json" : "backtest_trades.csv";
+  a.click();
+  URL.revokeObjectURL(url);
 }
 export async function downloadMonthlyCloseFile(month: string, file: string, pack: "live" | "paper" = "live"): Promise<void> {
   const blob = await apiGetBlob(uiMonthlyCloseDownloadPath(month, file, pack));

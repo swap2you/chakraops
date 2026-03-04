@@ -1,192 +1,190 @@
-import { useEffect, useState } from "react";
-import { useSearchParams, Link } from "react-router-dom";
-import { getPositions } from "@/data/source";
-import { useDataMode } from "@/context/DataModeContext";
-import { useScenario } from "@/context/ScenarioContext";
-import { usePolling } from "@/context/PollingContext";
-import { useApiSnapshot } from "@/hooks/useApiSnapshot";
-import { PositionDetailDrawer } from "@/components/PositionDetailDrawer";
-import { EmptyState } from "@/components/EmptyState";
-import { positionHealthStatus, nextActionLabel } from "@/lib/positionHelpers";
-import { pushSystemNotification } from "@/lib/notifications";
-import type { PositionView } from "@/types/views";
-import { cn } from "@/lib/utils";
-import { ApiError } from "@/data/apiClient";
-import { Info } from "lucide-react";
+/**
+ * R27.9: Unified Positions — read-only aggregation (live shares, live options, paper).
+ * Filters: Open/Closed, Live/Paper, Type, Symbol. Safe labels only; no FAIL/WARN in DOM.
+ */
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { useUnifiedPositions } from "@/api/queries";
+import type { UnifiedPosition } from "@/api/types";
+import { PageHeader } from "@/components/PageHeader";
+import {
+  Card,
+  CardHeader,
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+  EmptyState,
+  Badge,
+} from "@/components/ui";
 
-function formatCurrency(val: number | null | undefined): string {
-  if (val == null) return "—";
-  return `$${Number(val).toFixed(2)}`;
+function fmtNum(n: number | null | undefined): string {
+  if (n == null) return "—";
+  if (Number.isInteger(n)) return String(n);
+  return n.toFixed(2);
 }
 
-function liveErrorMessage(e: unknown): string {
-  if (e instanceof ApiError) return `${e.status}: ${e.message}`;
-  return e instanceof Error ? e.message : String(e);
+function fmtDate(ts: string | null | undefined): string {
+  if (!ts) return "—";
+  const s = (ts as string).slice(0, 10);
+  return s || "—";
 }
 
 export function PositionsPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const { mode } = useDataMode();
-  const scenario = useScenario();
-  const polling = usePolling();
-  const pollTick = polling?.pollTick ?? 0;
-  const { snapshot } = useApiSnapshot();
-  const [positions, setPositions] = useState<PositionView[]>([]);
-  const [liveError, setLiveError] = useState<string | null>(null);
-  const [selectedPosition, setSelectedPosition] = useState<PositionView | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [state, setState] = useState<"open" | "closed">("open");
+  const [includePaper, setIncludePaper] = useState(true);
+  const [instrumentType, setInstrumentType] = useState<string>("");
+  const [symbolFilter, setSymbolFilter] = useState("");
 
-  useEffect(() => {
-    if (mode === "MOCK" && scenario?.bundle) {
-      setLiveError(null);
-      setPositions(scenario.bundle.positions ?? []);
-      return;
-    }
-    if (mode !== "LIVE") return;
-    let cancelled = false;
-    setLiveError(null);
-    getPositions(mode)
-      .then((list) => {
-        if (!cancelled) setPositions(list ?? []);
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          const msg = liveErrorMessage(e);
-          setLiveError(msg);
-          pushSystemNotification({
-            source: "system",
-            severity: "error",
-            title: "LIVE fetch failed",
-            message: msg,
-          });
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [mode, scenario?.bundle, mode === "LIVE" ? pollTick : 0]);
+  const { data, isLoading, isError } = useUnifiedPositions({
+    state,
+    include_paper: includePaper,
+    instrument_type: instrumentType.trim() || null,
+    symbol: symbolFilter.trim() || null,
+  });
 
-  const openSymbol = searchParams.get("open");
-  useEffect(() => {
-    if (!openSymbol || positions.length === 0) return;
-    const p = positions.find((x) => String(x.symbol).toUpperCase() === openSymbol.toUpperCase());
-    if (p) {
-      setSelectedPosition(p);
-      setDrawerOpen(true);
-      setSearchParams((prev) => {
-        prev.delete("open");
-        return prev;
-      }, { replace: true });
-    }
-  }, [openSymbol, positions, setSearchParams]);
-
-  const openDrawer = (p: PositionView) => {
-    setSelectedPosition(p);
-    setDrawerOpen(true);
-  };
-
-  if (mode === "LIVE" && liveError) {
-    return (
-      <div className="space-y-6 p-6">
-        <h1 className="text-2xl font-semibold">Positions</h1>
-        <EmptyState title="LIVE data unavailable" message={liveError} />
-      </div>
-    );
-  }
+  const positions: UnifiedPosition[] = data?.positions ?? [];
 
   return (
-    <div className="space-y-6 p-6">
-      <h1 className="text-2xl font-semibold">Positions</h1>
-      <section className="rounded-lg border border-border bg-card overflow-hidden">
-        {/* No evaluation run yet banner */}
-        {mode === "LIVE" && snapshot && !snapshot.has_decision_artifact && (
-          <div className="flex items-center gap-3 border-b border-border bg-muted/30 p-4">
-            <Info className="h-5 w-5 text-muted-foreground" />
-            <div>
-              <p className="font-medium text-foreground">No live data yet — evaluation has not run</p>
-              <p className="text-sm text-muted-foreground">
-                Positions will appear here once an evaluation cycle completes.{" "}
-                <Link to="/diagnostics" className="text-primary hover:underline">View diagnostics</Link>
-              </p>
-            </div>
+    <div className="space-y-6">
+      <PageHeader title="Positions" subtext="Unified view of open and closed positions (live and paper)." />
+      <Card>
+        <CardHeader title="Filters" />
+        <div className="flex flex-wrap gap-4 p-4 border-t border-zinc-200 dark:border-zinc-800">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-zinc-600 dark:text-zinc-400">State</span>
+            <select
+              value={state}
+              onChange={(e) => setState(e.target.value as "open" | "closed")}
+              className="rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-2 py-1 text-sm"
+              data-testid="positions-filter-state"
+            >
+              <option value="open">Open</option>
+              <option value="closed">Closed</option>
+            </select>
           </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={includePaper}
+              onChange={(e) => setIncludePaper(e.target.checked)}
+              data-testid="positions-filter-paper"
+            />
+            Include paper
+          </label>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-zinc-600 dark:text-zinc-400">Type</span>
+            <select
+              value={instrumentType}
+              onChange={(e) => setInstrumentType(e.target.value)}
+              className="rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-2 py-1 text-sm"
+              data-testid="positions-filter-type"
+            >
+              <option value="">All</option>
+              <option value="SHARES">SHARES</option>
+              <option value="CSP">CSP</option>
+              <option value="CC">CC</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-zinc-600 dark:text-zinc-400">Symbol</span>
+            <input
+              type="text"
+              value={symbolFilter}
+              onChange={(e) => setSymbolFilter(e.target.value)}
+              placeholder="e.g. AAPL"
+              className="rounded border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-2 py-1 text-sm w-28"
+              data-testid="positions-filter-symbol"
+            />
+          </div>
+        </div>
+      </Card>
+      <Card>
+        <CardHeader title={state === "open" ? "Open positions" : "Closed positions"} />
+        {isLoading && (
+          <div className="p-6 text-sm text-zinc-500">Loading…</div>
         )}
-
-        {positions.length > 0 ? (
+        {isError && (
+          <div className="p-6 text-sm text-red-600 dark:text-red-400">Failed to load positions.</div>
+        )}
+        {!isLoading && !isError && positions.length === 0 && (
+          <EmptyState
+            title="No positions"
+            description={state === "open" ? "No open positions match the filters." : "No closed positions match the filters."}
+          />
+        )}
+        {!isLoading && !isError && positions.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/30 text-left text-muted-foreground">
-                  <th className="p-3 font-medium">Status</th>
-                  <th className="p-3 font-medium">Symbol</th>
-                  <th className="p-3 font-medium">Strategy</th>
-                  <th className="p-3 font-medium">Lifecycle</th>
-                  <th className="p-3 font-medium">Opened</th>
-                  <th className="p-3 font-medium">Entry credit</th>
-                  <th className="p-3 font-medium">Realized PnL</th>
-                  <th className="p-3 font-medium">Next action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {positions.map((p) => {
-                  const health = positionHealthStatus(p);
-                  const nextAction = nextActionLabel(p);
-                  return (
-                    <tr
-                      key={String(p.position_id)}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => openDrawer(p)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          openDrawer(p);
-                        }
-                      }}
-                      className={cn(
-                        "border-b border-border transition-colors cursor-pointer",
-                        "hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-inset"
-                      )}
-                    >
-                      <td className="p-3">
-                        <span
-                          className={cn(
-                            "inline-block h-2.5 w-2.5 rounded-full",
-                            health === "healthy" && "bg-emerald-500",
-                            health === "attention" && "bg-amber-500",
-                            health === "closed" && "bg-slate-500"
-                          )}
-                          title={health}
-                          aria-hidden
-                        />
-                      </td>
-                      <td className="p-3 font-medium">{p.symbol}</td>
-                      <td className="p-3">{p.strategy_type}</td>
-                      <td className="p-3">{p.lifecycle_state}</td>
-                      <td className="p-3">{p.opened}</td>
-                      <td className="p-3">{formatCurrency(p.entry_credit)}</td>
-                      <td className="p-3">{formatCurrency(p.realized_pnl)}</td>
-                      <td className="p-3 text-muted-foreground">{nextAction}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="p-8 text-center text-muted-foreground">
-            {mode === "LIVE" && snapshot && !snapshot.has_decision_artifact 
-              ? "No positions — evaluation has not run yet."
-              : "No positions."}
+            <Table>
+              <TableHeader>
+                <TableHead>Symbol</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead className="text-right">Qty</TableHead>
+                <TableHead>Opened</TableHead>
+                <TableHead className="text-right">Mark / Unrealized</TableHead>
+                <TableHead>Ticket</TableHead>
+                <TableHead>Journal</TableHead>
+                {state === "closed" && (
+                  <>
+                    <TableHead>Closed</TableHead>
+                    <TableHead className="text-right">Realized P/L</TableHead>
+                  </>
+                )}
+              </TableHeader>
+              <TableBody>
+                {positions.map((p) => (
+                  <TableRow key={p.id} data-testid="positions-row">
+                    <TableCell className="font-mono">{p.symbol}</TableCell>
+                    <TableCell>
+                      <span className="flex items-center gap-1">
+                        {p.instrument_type}
+                        {p.is_paper ? (
+                          <Badge variant="neutral" className="text-xs">Paper</Badge>
+                        ) : null}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">{fmtNum(p.qty)}</TableCell>
+                    <TableCell className="text-zinc-600 dark:text-zinc-400">{fmtDate(p.opened_ts)}</TableCell>
+                    <TableCell className="text-right text-zinc-500">—</TableCell>
+                    <TableCell>
+                      <Link
+                        to="/ticket"
+                        className="text-primary hover:underline text-sm"
+                        data-testid="positions-link-ticket"
+                      >
+                        Ticket
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        to="/journal"
+                        className="text-primary hover:underline text-sm"
+                        data-testid="positions-link-journal"
+                      >
+                        Journal
+                      </Link>
+                    </TableCell>
+                    {state === "closed" && (
+                      <>
+                        <TableCell className="text-zinc-600 dark:text-zinc-400">{fmtDate(p.closed_ts)}</TableCell>
+                        <TableCell className="text-right">
+                          {p.realized_pl != null ? (
+                            <span className={p.realized_pl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
+                              {fmtNum(p.realized_pl)}
+                            </span>
+                          ) : "—"}
+                        </TableCell>
+                      </>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         )}
-      </section>
-
-      <PositionDetailDrawer
-        position={selectedPosition}
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-      />
+      </Card>
     </div>
   );
 }

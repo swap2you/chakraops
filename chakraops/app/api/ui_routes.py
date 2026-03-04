@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -167,6 +168,15 @@ def _get_guardrails_health() -> Dict[str, Any]:
             "metrics": {"cash_reserve_pct": 0, "open_options_count": 0, "open_shares_count": 0, "symbols_exposure_count": 0, "max_symbol_notional_pct": 0},
             "limits": {},
         }
+
+
+def _get_positions_unified_health() -> Dict[str, Any]:
+    """R27.9: positions_unified block for system health — open_count, closed_count, last_build_ts. Safe only."""
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import get_positions_unified_health
+        return get_positions_unified_health()
+    except Exception:
+        return {"open_count": 0, "closed_count": 0, "last_build_ts": None}
 
 
 def _get_decision_store_mtime_utc() -> Optional[str]:
@@ -1280,6 +1290,7 @@ def ui_system_health(
         "cadence": {"mode": cadence_mode_health, "eligibility_as_of": eligibility_as_of_health},
         "earnings_probe_symbol": earnings_probe_symbol,
         "guardrails": _get_guardrails_health(),
+        "positions_unified": _get_positions_unified_health(),
     }
 
 
@@ -2009,6 +2020,272 @@ def ui_ops_execution_log_get(
     return {"rows": rows}
 
 
+# ---------------------------------------------------------------------------
+# R27.0: Paper trading (simulated fills + P/L)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/paper/execute")
+async def ui_paper_execute(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R27.0: Execute paper OPEN or CLOSE. Creates position/fill; on success writes journal entry with is_paper=true. No FAIL_/WARN_."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    mode = (body.get("mode") or "").strip().upper()
+    if mode != "PAPER":
+        raise HTTPException(status_code=400, detail="mode must be PAPER")
+    action = (body.get("action") or "").strip().upper()
+    if action not in ("OPEN", "CLOSE"):
+        raise HTTPException(status_code=400, detail="action must be OPEN or CLOSE")
+    symbol = (body.get("symbol") or "").strip().upper()
+    strategy = (body.get("strategy") or "SHARES").strip().upper()
+    if not symbol:
+        raise HTTPException(status_code=400, detail="symbol required")
+    try:
+        qty = int(body.get("qty", 0))
+    except (TypeError, ValueError):
+        qty = 0
+    if qty <= 0:
+        raise HTTPException(status_code=400, detail="qty must be positive")
+    ts = (body.get("ts") or "").strip() or None
+    fees = 0.0
+    if body.get("fees") is not None:
+        try:
+            fees = float(body["fees"])
+        except (TypeError, ValueError):
+            pass
+    from app.core.paper.paper_store_r270 import paper_execute_open, paper_execute_close
+    from app.core.journal.journal_store import journal_create
+
+    try:
+        if action == "OPEN":
+            open_price = 0.0
+            if strategy == "SHARES":
+                if body.get("shares_price") is not None:
+                    try:
+                        open_price = float(body["shares_price"])
+                    except (TypeError, ValueError):
+                        pass
+            else:
+                if body.get("premium") is not None:
+                    try:
+                        open_price = float(body["premium"])
+                    except (TypeError, ValueError):
+                        pass
+            position = paper_execute_open(
+                symbol=symbol,
+                strategy=strategy,
+                qty=qty,
+                open_price=open_price,
+                open_fees=fees,
+                contract_key=(body.get("contract_key") or "").strip() or None,
+                expiry=(body.get("expiry") or "").strip()[:10] or None,
+                strike=float(body["strike"]) if body.get("strike") is not None else None,
+                right=(body.get("right") or "").strip() or None,
+                ts=ts,
+                notes=(body.get("notes") or "").strip()[:500] or None,
+            )
+            trade_date = (position.get("open_ts") or "")[:10] or (datetime.now(timezone.utc).date()).isoformat()
+            tags_parts = [(body.get("tags") or "").strip()]
+            sizing_hit = body.get("sizing_constraints_hit")
+            if isinstance(sizing_hit, list):
+                for c in sizing_hit:
+                    if isinstance(c, str) and c.strip() and "FAIL" not in c and "WARN" not in c:
+                        tags_parts.append("constraint:" + c.strip())
+            journal_tags = ", ".join(p for p in tags_parts if p)[:500]
+            journal_create(
+                trade_date=trade_date,
+                symbol=symbol,
+                strategy=strategy,
+                action="OPEN" if strategy == "SHARES" else "OPEN",
+                qty=float(qty),
+                price=open_price if strategy == "SHARES" else None,
+                premium=open_price if strategy != "SHARES" else None,
+                fees=fees,
+                contract_key=position.get("contract_key"),
+                expiry=position.get("expiry"),
+                strike=position.get("strike"),
+                right=position.get("right"),
+                notes=position.get("notes"),
+                tags=journal_tags or None,
+                link_id=f"paper:{position.get('id')}",
+                is_paper=True,
+            )
+            return {"status": "OK", "reason": "Paper fill recorded", "position": position}
+        else:
+            close_price = 0.0
+            if body.get("shares_price") is not None:
+                try:
+                    close_price = float(body["shares_price"])
+                except (TypeError, ValueError):
+                    pass
+            elif body.get("premium") is not None:
+                try:
+                    close_price = float(body["premium"])
+                except (TypeError, ValueError):
+                    pass
+            position_id = (body.get("position_id") or "").strip() or None
+            position = paper_execute_close(
+                position_id=position_id,
+                symbol=symbol if not position_id else None,
+                strategy=strategy if not position_id else None,
+                contract_key=(body.get("contract_key") or "").strip() or None,
+                close_price=close_price,
+                close_fees=fees,
+                ts=ts,
+            )
+            trade_date = (position.get("close_ts") or "")[:10] or (datetime.now(timezone.utc).date()).isoformat()
+            journal_create(
+                trade_date=trade_date,
+                symbol=symbol,
+                strategy=strategy,
+                action="CLOSE" if strategy == "SHARES" else "CLOSE",
+                qty=float(position.get("qty", 0)),
+                price=close_price if strategy == "SHARES" else None,
+                premium=close_price if strategy != "SHARES" else None,
+                fees=fees,
+                contract_key=position.get("contract_key"),
+                expiry=position.get("expiry"),
+                strike=position.get("strike"),
+                right=position.get("right"),
+                realized_pl=position.get("realized_pl"),
+                link_id=f"paper:{position.get('id')}",
+                is_paper=True,
+            )
+            return {"status": "OK", "reason": "Paper fill recorded", "position": position}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Paper execute error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to execute paper trade")
+
+
+@router.get("/paper/positions")
+def ui_paper_positions(
+    status: str | None = Query(None, description="OPEN or CLOSED"),
+    symbol: str | None = Query(None),
+    strategy: str | None = Query(None),
+    include_marks: bool = Query(True, description="R27.2: Include request-time mark/unrealized for OPEN"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R27.0: List paper positions. R27.1: OPEN positions include mark_value, mark_source, mark_age_sec, quote_ts, unrealized_pl_usd. R27.2: include_marks=false for cheap call. No FAIL_/WARN_."""
+    _require_ui_key(x_ui_key)
+    from app.core.paper.paper_store_r270 import paper_list_positions
+    from app.core.paper.paper_mark_r271 import enrich_paper_positions_with_mark
+    positions = paper_list_positions(status=status, symbol=symbol, strategy=strategy)
+    if include_marks:
+        positions = enrich_paper_positions_with_mark(positions)
+    return {"positions": positions}
+
+
+@router.get("/paper/positions/{position_id}")
+def ui_paper_position_by_id(
+    position_id: str,
+    include_marks: bool = Query(True, description="R27.2: Include request-time mark for OPEN"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R27.2: Single paper position detail (enriched when OPEN and include_marks). No FAIL_/WARN_."""
+    _require_ui_key(x_ui_key)
+    from app.core.paper.paper_store_r270 import paper_get_position
+    from app.core.paper.paper_mark_r271 import enrich_paper_positions_with_mark
+    pos = paper_get_position(position_id.strip())
+    if not pos:
+        raise HTTPException(status_code=404, detail="Position not found")
+    if include_marks and (pos.get("status") or "").upper() == "OPEN":
+        enriched = enrich_paper_positions_with_mark([pos])
+        return enriched[0] if enriched else pos
+    return pos
+
+
+# R27.2: Dedicated close endpoint (journal action CLOSE_CSP/CLOSE_CC/SELL)
+@router.post("/paper/close")
+async def ui_paper_close(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R27.2: Close paper position. Body: position_id, close_price (shares) or close_premium (options), close_fees?, ts?. Journal action SELL|CLOSE_CSP|CLOSE_CC. No FAIL_/WARN_."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    position_id = (body.get("position_id") or "").strip()
+    if not position_id:
+        raise HTTPException(status_code=400, detail="position_id required")
+    close_price = None
+    if body.get("close_price") is not None:
+        try:
+            close_price = float(body["close_price"])
+        except (TypeError, ValueError):
+            pass
+    if close_price is None and body.get("close_premium") is not None:
+        try:
+            close_price = float(body["close_premium"])
+        except (TypeError, ValueError):
+            pass
+    if close_price is None:
+        raise HTTPException(status_code=400, detail="close_price or close_premium required")
+    close_fees = 0.0
+    if body.get("close_fees") is not None:
+        try:
+            close_fees = float(body["close_fees"])
+        except (TypeError, ValueError):
+            pass
+    ts = (body.get("ts") or "").strip() or None
+    from app.core.paper.paper_store_r270 import paper_get_position, paper_execute_close
+    from app.core.journal.journal_store import journal_create
+    pos_before = paper_get_position(position_id)
+    if not pos_before or (pos_before.get("status") or "").upper() != "OPEN":
+        raise HTTPException(status_code=404, detail="Position not found or already closed")
+    strategy = (pos_before.get("strategy") or "SHARES").strip().upper()
+    position = paper_execute_close(position_id=position_id, close_price=close_price, close_fees=close_fees, ts=ts)
+    trade_date = (position.get("close_ts") or "")[:10] or (datetime.now(timezone.utc).date()).isoformat()
+    action = "SELL" if strategy == "SHARES" else ("CLOSE_CSP" if strategy == "CSP" else "CLOSE_CC")
+    existing_tags = (pos_before.get("notes") or "").strip()[:200] or ""
+    tags = "paper" + (f", {existing_tags}" if existing_tags else "")
+    journal_create(
+        trade_date=trade_date,
+        symbol=position.get("symbol", ""),
+        strategy=strategy,
+        action=action,
+        qty=float(position.get("qty", 0)),
+        price=close_price if strategy == "SHARES" else None,
+        premium=close_price if strategy != "SHARES" else None,
+        fees=close_fees,
+        contract_key=position.get("contract_key"),
+        expiry=position.get("expiry"),
+        strike=position.get("strike"),
+        right=position.get("right"),
+        realized_pl=position.get("realized_pl"),
+        link_id=f"paper:{position.get('id')}",
+        is_paper=True,
+        tags=tags[:500] if tags else None,
+    )
+    return {"status": "OK", "reason": "Paper position closed", "position": position}
+
+
+@router.get("/paper/summary")
+def ui_paper_summary(
+    month: str = Query(..., description="YYYY-MM"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R27.0: Paper P/L summary for month. No FAIL_/WARN_."""
+    _require_ui_key(x_ui_key)
+    month_str = (month or "").strip()[:7]
+    if len(month_str) != 7 or month_str[4] != "-":
+        raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+    from app.core.paper.paper_store_r270 import paper_summary_by_month
+    return paper_summary_by_month(month_str)
+
+
 def _eod_summary_for_date(date_str: str) -> Dict[str, Any]:
     """Build eod-summary payload for date. No FAIL_/WARN_."""
     from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2, get_eval_snapshot
@@ -2141,13 +2418,18 @@ def ui_journal_list(
     strategy: str | None = Query(None),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    include_paper: bool = Query(True, description="R27.0: Include paper trades"),
+    paper_only: bool = Query(False, description="R27.2: Only paper entries"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """R25.5: List journal entries (ordered by created_ts desc). Safe response only."""
+    """R25.5: List journal entries (ordered by created_ts desc). R27.0: include_paper. R27.2: paper_only. R27.4: link_target (request-time)."""
     _require_ui_key(x_ui_key)
     try:
         from app.core.journal.journal_store import journal_list
-        entries = journal_list(from_date=from_date, to_date=to_date, symbol=symbol, strategy=strategy, limit=limit, offset=offset)
+        from app.core.journal.journal_links_r274 import parse_link_id
+        entries = journal_list(from_date=from_date, to_date=to_date, symbol=symbol, strategy=strategy, limit=limit, offset=offset, include_paper=include_paper, paper_only=paper_only)
+        for e in entries:
+            e["link_target"] = parse_link_id(e.get("link_id"))
         return {"entries": entries}
     except Exception as e:
         import logging
@@ -2235,6 +2517,83 @@ async def ui_journal_create(
         raise HTTPException(status_code=500, detail="Unable to create entry")
 
 
+# R27.3: Record options close/roll in Journal only (no execution)
+@router.post("/journal/record-close")
+async def ui_journal_record_close(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R27.3: Record CLOSE_CSP/CLOSE_CC/ROLL in Journal. Body: symbol, strategy (CSP|CC), action (CLOSE_CSP|CLOSE_CC|ROLL), qty, premium, contract_key?, expiry?, strike?, right?, fees?, notes?, trade_date?. No execution. No FAIL_/WARN_."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    if not isinstance(body, dict):
+        body = {}
+    symbol = (body.get("symbol") or "").strip().upper()
+    strategy = (body.get("strategy") or "CSP").strip().upper()
+    if strategy not in ("CSP", "CC"):
+        raise HTTPException(status_code=400, detail="strategy must be CSP or CC")
+    action = (body.get("action") or "CLOSE_CSP").strip().upper()
+    if action not in ("CLOSE_CSP", "CLOSE_CC", "ROLL"):
+        raise HTTPException(status_code=400, detail="action must be CLOSE_CSP, CLOSE_CC, or ROLL")
+    try:
+        qty = float(body.get("qty", 0))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="qty required and must be a number")
+    premium = None
+    if body.get("premium") is not None:
+        try:
+            premium = float(body["premium"])
+        except (TypeError, ValueError):
+            pass
+    fees = None
+    if body.get("fees") is not None:
+        try:
+            fees = float(body["fees"])
+        except (TypeError, ValueError):
+            pass
+    trade_date = (body.get("trade_date") or "").strip()[:10] or (datetime.now(timezone.utc).date()).isoformat()
+    contract_key = (body.get("contract_key") or "").strip() or None
+    expiry = (body.get("expiry") or "").strip()[:10] or None
+    strike = None
+    if body.get("strike") is not None:
+        try:
+            strike = float(body["strike"])
+        except (TypeError, ValueError):
+            pass
+    right = (body.get("right") or "").strip() or None
+    notes = (body.get("notes") or "").strip()[:2000] or None
+    if not symbol:
+        raise HTTPException(status_code=400, detail="symbol required")
+    try:
+        from app.core.journal.journal_store import journal_create
+        entry = journal_create(
+            trade_date=trade_date,
+            symbol=symbol,
+            strategy=strategy,
+            action=action,
+            qty=qty,
+            price=None,
+            premium=premium,
+            fees=fees,
+            contract_key=contract_key,
+            expiry=expiry,
+            strike=strike,
+            right=right,
+            realized_pl=None,
+            link_id=None,
+            is_paper=False,
+            notes=notes,
+        )
+        return {"status": "OK", "entry": entry}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Journal record-close error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to create entry")
+
+
 @router.patch("/journal/{entry_id}")
 async def ui_journal_update(
     entry_id: str,
@@ -2303,16 +2662,32 @@ def ui_journal_export(
 @router.get("/reports/monthly")
 def ui_reports_monthly(
     month: str = Query(..., description="YYYY-MM"),
+    include_paper: bool = Query(False, description="R27.0: Include paper trades in aggregate"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """R25.5: Monthly report aggregate (realized P/L, counts, winners/losers). Safe response only."""
+    """R25.5: Monthly report aggregate. R27.0: include_paper. R27.1: response includes included_paper and mode (LIVE_ONLY|PAPER_ONLY|MIXED). Safe response only."""
     _require_ui_key(x_ui_key)
     month = (month or "").strip()[:7]
     if len(month) != 7 or month[4] != "-":
         raise HTTPException(status_code=400, detail="month must be YYYY-MM")
     try:
-        from app.core.journal.journal_store import journal_monthly_aggregate
-        return journal_monthly_aggregate(month)
+        from app.core.journal.journal_store import journal_monthly_aggregate, journal_monthly_paper_live_counts
+        data = journal_monthly_aggregate(month, include_paper=include_paper)
+        data["included_paper"] = include_paper
+        if not include_paper:
+            data["mode"] = "LIVE_ONLY"
+        else:
+            live_count, paper_count = journal_monthly_paper_live_counts(month)
+            if live_count and paper_count:
+                data["mode"] = "MIXED"
+            elif paper_count:
+                data["mode"] = "PAPER_ONLY"
+            else:
+                data["mode"] = "LIVE_ONLY"
+            # R27.2: Split totals when include_paper enabled
+            data["live_totals"] = journal_monthly_aggregate(month, include_paper=False)
+            data["paper_totals"] = journal_monthly_aggregate(month, include_paper=True, paper_only=True)
+        return data
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Monthly report error: %s", e)
@@ -2328,17 +2703,18 @@ def _monthly_close_allowlist() -> frozenset:
 @router.post("/reports/monthly/close")
 def ui_reports_monthly_close(
     month: str = Query(..., description="YYYY-MM"),
+    include_paper: bool = Query(False, description="R27.1: Generate paper pack (data/reports/<month>/paper/)"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """R26.5: Generate monthly close pack under data/reports/<month>/; deterministic."""
+    """R26.5: Generate monthly close pack. R27.1: include_paper=false -> live/ subdir, true -> paper/ subdir."""
     _require_ui_key(x_ui_key)
     month = (month or "").strip()[:7]
     if len(month) != 7 or month[4] != "-":
         raise HTTPException(status_code=400, detail="month must be YYYY-MM")
     try:
         from app.core.ops.monthly_close_store_r265 import generate_monthly_close_pack
-        result = generate_monthly_close_pack(month)
-        return {"status": "OK", "month": result["month"], "generated_ts": result["generated_ts"], "paths": result["paths"]}
+        result = generate_monthly_close_pack(month, include_paper=include_paper)
+        return {"status": "OK", "month": result["month"], "pack": result.get("pack", "live"), "generated_ts": result["generated_ts"], "paths": result["paths"]}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -2350,25 +2726,29 @@ def ui_reports_monthly_close(
 @router.get("/reports/monthly/close/files")
 def ui_reports_monthly_close_files(
     month: str = Query(..., description="YYYY-MM"),
+    pack: str = Query("live", description="R27.1: live or paper"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """R26.5: List available close pack files and sizes for month."""
+    """R26.5: List available close pack files and sizes for month. R27.1: pack=live|paper for subdir."""
     _require_ui_key(x_ui_key)
     month = (month or "").strip()[:7]
     if len(month) != 7 or month[4] != "-":
         raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+    pack = (pack or "live").strip().lower()
+    if pack not in ("live", "paper"):
+        pack = "live"
     try:
         from app.core.ops.monthly_close_store_r265 import _reports_base_path, ALLOWED_FILES, monthly_close_get
         base = _reports_base_path()
-        month_dir = base / month
+        month_dir = base / month / pack
         files: List[Dict[str, Any]] = []
         if month_dir.exists():
             for name in sorted(ALLOWED_FILES):
                 p = month_dir / name
                 if p.is_file():
                     files.append({"name": name, "size": p.stat().st_size})
-        state = monthly_close_get(month)
-        out: Dict[str, Any] = {"month": month, "files": files}
+        state = monthly_close_get(month, pack=pack)
+        out: Dict[str, Any] = {"month": month, "pack": pack, "files": files}
         if state:
             out["generated_ts"] = state.get("generated_ts")
             out["paths"] = state.get("paths_json") or []
@@ -2383,31 +2763,127 @@ def ui_reports_monthly_close_files(
 def ui_reports_monthly_close_download(
     month: str = Query(..., description="YYYY-MM"),
     file: str = Query(..., description="File name (allowlist)"),
+    pack: str = Query("live", description="R27.1: live or paper"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ):
-    """R26.5: Stream close pack file; file param validated against allowlist."""
+    """R26.5: Stream close pack file; file validated against allowlist. R27.1: pack=live|paper for subdir; no path traversal."""
     _require_ui_key(x_ui_key)
     month = (month or "").strip()[:7]
     if len(month) != 7 or month[4] != "-":
         raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+    pack = (pack or "live").strip().lower()
+    if pack not in ("live", "paper"):
+        pack = "live"
     allowlist = _monthly_close_allowlist()
-    if (file or "").strip() not in allowlist:
+    file_name = (file or "").strip()
+    if file_name not in allowlist:
         raise HTTPException(status_code=400, detail="Invalid file name")
     try:
         from app.core.ops.monthly_close_store_r265 import _reports_base_path
         from fastapi.responses import FileResponse
         base = _reports_base_path()
-        path = (base / month / file.strip()).resolve()
-        expected_dir = (base / month).resolve()
-        if not path.is_file() or path.parent != expected_dir or path.name != file.strip():
+        path = (base / month / pack / file_name).resolve()
+        expected_dir = (base / month / pack).resolve()
+        if not path.is_file() or path.parent != expected_dir or path.name != file_name:
             raise HTTPException(status_code=404, detail="File not found")
-        media = "application/json" if file.endswith(".json") else "text/csv" if file.endswith(".csv") else "text/plain"
-        return FileResponse(path, media_type=media, filename=file)
+        media = "application/json" if file_name.endswith(".json") else "text/csv" if file_name.endswith(".csv") else "text/plain"
+        return FileResponse(path, media_type=media, filename=file_name)
     except HTTPException:
         raise
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Monthly close download error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to download")
+
+
+# R27.5: Journal-driven backtest replay
+BACKTEST_FILE_ALLOWLIST = frozenset({"summary_json", "trades_csv"})
+
+
+@router.post("/backtest/run")
+async def ui_backtest_run(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R27.5: Run backtest for date range. Body: start_date, end_date, include_paper, paper_only. Returns run_id, paths, metrics."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json()
+        start_date = (body.get("start_date") or "").strip()[:10]
+        end_date = (body.get("end_date") or "").strip()[:10]
+        if not start_date or not end_date or len(start_date) != 10 or len(end_date) != 10:
+            raise HTTPException(status_code=400, detail="start_date and end_date required (YYYY-MM-DD)")
+        include_paper = bool(body.get("include_paper", False))
+        paper_only = bool(body.get("paper_only", False))
+        from app.core.backtest.backtest_store_r275 import run_and_persist
+        out = run_and_persist(start_date, end_date, include_paper=include_paper, paper_only=paper_only)
+        return {"status": "OK", **out}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Backtest run error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to run backtest")
+
+
+@router.get("/backtest/runs")
+def ui_backtest_runs(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R27.5: List backtest runs (created_ts desc)."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.backtest.backtest_store_r275 import list_runs
+        runs = list_runs(limit=limit, offset=offset)
+        return {"runs": runs}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Backtest runs list error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to list runs")
+
+
+@router.get("/backtest/download")
+def ui_backtest_download(
+    run_id: str = Query(..., description="Run UUID"),
+    file: str = Query(..., description="summary_json or trades_csv"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+):
+    """R27.5: Stream backtest file. Allowlist only; no path traversal."""
+    _require_ui_key(x_ui_key)
+    file = (file or "").strip()
+    if file not in BACKTEST_FILE_ALLOWLIST:
+        raise HTTPException(status_code=400, detail="Invalid file name")
+    try:
+        from app.core.backtest.backtest_store_r275 import get_run
+        from fastapi.responses import FileResponse
+        run = get_run(run_id)
+        if not run:
+            raise HTTPException(status_code=404, detail="Run not found")
+        path_json = run.get("path_json")
+        if not path_json:
+            raise HTTPException(status_code=404, detail="Run paths not found")
+        paths = json.loads(path_json)
+        path_key = "summary_json" if file == "summary_json" else "trades_csv"
+        path_str = paths.get(path_key)
+        if not path_str:
+            raise HTTPException(status_code=404, detail="File not found")
+        path_obj = Path(path_str).resolve()
+        if not path_obj.is_file():
+            raise HTTPException(status_code=404, detail="File not found")
+        run_dir = paths.get("run_dir")
+        if run_dir:
+            expected_dir = Path(run_dir).resolve()
+            if path_obj.parent != expected_dir:
+                raise HTTPException(status_code=403, detail="Path not allowed")
+        media = "application/json" if file == "summary_json" else "text/csv"
+        return FileResponse(path_obj, media_type=media, filename="backtest_summary.json" if file == "summary_json" else "backtest_trades.csv")
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Backtest download error: %s", e)
         raise HTTPException(status_code=500, detail="Unable to download")
 
 
@@ -2632,42 +3108,57 @@ def ui_portfolio(
                 elif p.strike and p.contracts:
                     capital_deployed += float(p.strike) * 100 * int(p.contracts)
             out.append(enriched)
-        # R23.0: Include share positions (qty, avg_cost, last_price when available from artifact)
+        # R23.0: Include share positions. R27.4: mark/unrealized. R27.8: options_positions (enriched open CSP/CC).
         shares_positions_out: List[Dict[str, Any]] = []
+        options_positions_out: List[Dict[str, Any]] = []
         try:
             from app.core.accounts.holdings_db import list_share_positions
             from app.core.accounts.holdings_db import _DEFAULT_ACCOUNT_ID
             from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
+            from app.core.portfolio.live_shares_mark_r274 import enrich_live_shares_positions_with_mark
+            from app.core.portfolio.options_enrichment_r278 import enrich_options_positions_for_portfolio
             store = get_evaluation_store_v2()
             store.reload_from_disk()
             artifact = store.get_latest()
             price_by_symbol: Dict[str, float] = {}
-            if artifact and getattr(artifact, "symbols", None):
-                for s in artifact.symbols:
-                    sym = (getattr(s, "symbol", "") or "").strip().upper()
-                    if not sym:
-                        continue
-                    p = getattr(s, "price", None) or getattr(s, "underlying_price", None)
-                    if p is not None:
-                        try:
-                            price_by_symbol[sym] = float(p)
-                        except (TypeError, ValueError):
-                            pass
+            quote_ts_iso: Optional[str] = None
+            if artifact:
+                meta = getattr(artifact, "metadata", None) or {}
+                quote_ts_iso = meta.get("pipeline_timestamp")
+                if getattr(artifact, "symbols", None):
+                    for s in artifact.symbols:
+                        sym = (getattr(s, "symbol", "") or "").strip().upper()
+                        if not sym:
+                            continue
+                        p = getattr(s, "price", None) or getattr(s, "underlying_price", None)
+                        if p is not None:
+                            try:
+                                price_by_symbol[sym] = float(p)
+                            except (TypeError, ValueError):
+                                pass
+            raw_shares: List[Dict[str, Any]] = []
             for pos in list_share_positions(_DEFAULT_ACCOUNT_ID):
                 last_price = price_by_symbol.get(pos["symbol"])
                 qty = pos.get("quantity") or 0
                 avg_cost = pos.get("avg_cost")
                 market_value = (last_price * qty) if last_price is not None and qty else None
                 unrealized_pnl = (last_price - avg_cost) * qty if (last_price is not None and avg_cost is not None and qty) else None
-                shares_positions_out.append({
+                raw_shares.append({
                     "symbol": pos["symbol"],
                     "quantity": qty,
                     "avg_cost": pos.get("avg_cost"),
+                    "opened_at": pos.get("opened_at"),
                     "last_price": last_price,
                     "market_value": round(market_value, 2) if market_value is not None else None,
                     "unrealized_pnl": round(unrealized_pnl, 2) if unrealized_pnl is not None else None,
                     "updated_at": pos.get("updated_at"),
                 })
+            shares_positions_out = enrich_live_shares_positions_with_mark(raw_shares, price_by_symbol, quote_ts_iso)
+            from app.api.notifications_store import maybe_append_cc_eligible_notification
+            for row in shares_positions_out:
+                if row.get("cc_eligible") is True and row.get("symbol"):
+                    maybe_append_cc_eligible_notification(row["symbol"])
+            options_positions_out = enrich_options_positions_for_portfolio(positions, price_by_symbol, quote_ts_iso)
         except Exception:
             pass
         return {
@@ -2675,11 +3166,56 @@ def ui_portfolio(
             "capital_deployed": round(capital_deployed, 2),
             "open_positions_count": open_count,
             "shares_positions": shares_positions_out,
+            "options_positions": options_positions_out,
         }
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Error loading portfolio: %s", e)
-        return {"positions": [], "capital_deployed": 0, "open_positions_count": 0, "shares_positions": []}
+        return {"positions": [], "capital_deployed": 0, "open_positions_count": 0, "shares_positions": [], "options_positions": []}
+
+
+@router.get("/portfolio/options")
+def ui_portfolio_options(
+    exclude_test: bool = Query(default=True),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """
+    R27.8: Enriched open option positions (CSP/CC) for portfolio Options tab.
+    Same data as options_positions in GET /portfolio; deterministic sort.
+    """
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.positions.service import list_positions
+        from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
+        from app.core.portfolio.options_enrichment_r278 import enrich_options_positions_for_portfolio
+        positions = list_positions(status=None, symbol=None, exclude_test=exclude_test)
+        price_by_symbol: Dict[str, float] = {}
+        quote_ts_iso: Optional[str] = None
+        try:
+            store = get_evaluation_store_v2()
+            store.reload_from_disk()
+            artifact = store.get_latest()
+            if artifact:
+                quote_ts_iso = (getattr(artifact, "metadata", None) or {}).get("pipeline_timestamp")
+                if getattr(artifact, "symbols", None):
+                    for s in artifact.symbols:
+                        sym = (getattr(s, "symbol", "") or "").strip().upper()
+                        if not sym:
+                            continue
+                        p = getattr(s, "price", None) or getattr(s, "underlying_price", None)
+                        if p is not None:
+                            try:
+                                price_by_symbol[sym] = float(p)
+                            except (TypeError, ValueError):
+                                pass
+        except Exception:
+            pass
+        options_positions_out = enrich_options_positions_for_portfolio(positions, price_by_symbol, quote_ts_iso)
+        return {"options_positions": options_positions_out}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error loading portfolio options: %s", e)
+        return {"options_positions": []}
 
 
 @router.get("/portfolio/metrics")
@@ -3332,7 +3868,7 @@ async def ui_shares_position_close(
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
     request: Request = None,
 ) -> Dict[str, Any]:
-    """R23.5.0: Close share position. Body: { account_id?, exit_price, exit_date?, notes? }. Moves to closed history and returns closed record with realized_pnl."""
+    """R23.5.0: Close share position. R27.3: Body exit_price, exit_date? (ts), fees?, notes?; auto-create journal entry is_paper=false, SELL, link_id=shares:{symbol}:{id}. No FAIL_/WARN_."""
     _require_ui_key(x_ui_key)
     try:
         body: Dict[str, Any] = {}
@@ -3348,14 +3884,36 @@ async def ui_shares_position_close(
             exit_price_f = float(exit_price)
         except (TypeError, ValueError):
             raise HTTPException(status_code=400, detail="exit_price must be a number")
-        exit_date = body.get("exit_date")
+        exit_date = body.get("exit_date") or body.get("ts")
         if exit_date is not None and not isinstance(exit_date, str):
             exit_date = None
         notes = body.get("notes")
         if notes is not None and not isinstance(notes, str):
             notes = None
+        fees_val = 0.0
+        if body.get("fees") is not None:
+            try:
+                fees_val = float(body["fees"])
+            except (TypeError, ValueError):
+                pass
         from app.core.accounts.holdings_db import close_share_position
-        closed = close_share_position(aid, symbol, exit_price_f, exit_date=exit_date, notes=notes)
+        from app.core.journal.journal_store import journal_create
+        closed = close_share_position(aid, symbol.strip().upper(), exit_price_f, exit_date=exit_date, notes=notes)
+        trade_date = (closed.get("closed_at") or "")[:10] or (datetime.now(timezone.utc).date()).isoformat()
+        realized_for_journal = (closed.get("realized_pnl") or 0) - fees_val
+        journal_create(
+            trade_date=trade_date,
+            symbol=closed.get("symbol", symbol.strip().upper()),
+            strategy="SHARES",
+            action="SELL",
+            qty=float(closed.get("quantity", 0)),
+            price=exit_price_f,
+            fees=fees_val,
+            realized_pl=round(realized_for_journal, 2),
+            link_id=f"shares:{closed.get('symbol', symbol)}:{closed.get('id')}",
+            is_paper=False,
+            notes=(notes or "").strip()[:2000] or None,
+        )
         return closed
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -3394,6 +3952,31 @@ def ui_alerts(
         import logging
         logging.getLogger(__name__).exception("Error loading alerts: %s", e)
         return {"alerts": []}
+
+
+@router.get("/positions/unified")
+def ui_positions_unified(
+    state: str = Query(default="open", description="open | closed"),
+    include_paper: bool = Query(default=True, description="Include paper positions"),
+    instrument_type: str | None = Query(default=None, description="Filter: SHARES | CSP | CC"),
+    symbol: str | None = Query(default=None, description="Filter by symbol"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R27.9: Unified positions (read-only aggregation from live shares, live options, paper). Safe labels only."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import build_unified_positions
+        positions = build_unified_positions(
+            state=state,
+            include_paper=include_paper,
+            instrument_type=instrument_type,
+            symbol=symbol,
+        )
+        return {"positions": positions, "state": state, "include_paper": include_paper}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error building unified positions: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/positions")

@@ -26,6 +26,7 @@ import type {
   SharesPositionsListResponse,
   ClosedSharePosition,
   ClosedSharePositionsListResponse,
+  UiPositionsUnifiedResponse,
 } from "./types";
 import type { DecisionMode, DecisionRef } from "./types";
 export type { DecisionRef };
@@ -138,6 +139,22 @@ function uiAccountsPath(): string {
 
 function uiPositionsPath(): string {
   return `/api/ui/positions`;
+}
+
+/** R27.9: GET /api/ui/positions/unified */
+function uiPositionsUnifiedPath(params: {
+  state?: string;
+  include_paper?: boolean;
+  instrument_type?: string | null;
+  symbol?: string | null;
+}): string {
+  const q = new URLSearchParams();
+  if (params.state) q.set("state", params.state);
+  if (params.include_paper !== undefined) q.set("include_paper", String(params.include_paper));
+  if (params.instrument_type?.trim()) q.set("instrument_type", params.instrument_type.trim());
+  if (params.symbol?.trim()) q.set("symbol", params.symbol.trim());
+  const s = q.toString();
+  return s ? `/api/ui/positions/unified?${s}` : "/api/ui/positions/unified";
 }
 
 function uiPositionsManualExecutePath(): string {
@@ -328,7 +345,7 @@ function tradeTicketPath(symbol: string, strategy: string, action: string): stri
   return `/api/ui/trade-ticket?${p.toString()}`;
 }
 
-function uiJournalPath(params: { from_date?: string; to_date?: string; symbol?: string; strategy?: string; limit?: number; offset?: number }): string {
+function uiJournalPath(params: { from_date?: string; to_date?: string; symbol?: string; strategy?: string; limit?: number; offset?: number; include_paper?: boolean; paper_only?: boolean }): string {
   const p = new URLSearchParams();
   if (params.from_date) p.set("from_date", params.from_date);
   if (params.to_date) p.set("to_date", params.to_date);
@@ -336,6 +353,8 @@ function uiJournalPath(params: { from_date?: string; to_date?: string; symbol?: 
   if (params.strategy) p.set("strategy", params.strategy);
   if (params.limit != null) p.set("limit", String(params.limit));
   if (params.offset != null) p.set("offset", String(params.offset));
+  if (params.include_paper !== undefined) p.set("include_paper", String(params.include_paper));
+  if (params.paper_only !== undefined) p.set("paper_only", String(params.paper_only));
   const q = p.toString();
   return q ? `/api/ui/journal?${q}` : "/api/ui/journal";
 }
@@ -348,19 +367,77 @@ function uiJournalExportPath(from_date: string, to_date: string): string {
 function uiJournalEntryPath(id: string): string {
   return `/api/ui/journal/${encodeURIComponent(id)}`;
 }
-/** R25.5: Reports monthly */
-function uiReportsMonthlyPath(month: string): string {
-  return `/api/ui/reports/monthly?month=${encodeURIComponent(month)}`;
+/** R25.5: Reports monthly. R27.0: include_paper */
+function uiReportsMonthlyPath(month: string, include_paper?: boolean): string {
+  const p = new URLSearchParams();
+  p.set("month", month);
+  if (include_paper !== undefined) p.set("include_paper", String(include_paper));
+  return `/api/ui/reports/monthly?${p.toString()}`;
 }
-/** R26.5: Monthly close pack */
-function uiMonthlyCloseFilesPath(month: string): string {
-  return `/api/ui/reports/monthly/close/files?month=${encodeURIComponent(month)}`;
+/** R27.0: Paper trading */
+function paperExecutePath(): string {
+  return "/api/ui/paper/execute";
 }
-function uiMonthlyCloseDownloadPath(month: string, file: string): string {
-  return `/api/ui/reports/monthly/close/download?month=${encodeURIComponent(month)}&file=${encodeURIComponent(file)}`;
+function paperPositionsPath(params: { status?: string; symbol?: string; strategy?: string; include_marks?: boolean }): string {
+  const p = new URLSearchParams();
+  if (params.status) p.set("status", params.status);
+  if (params.symbol) p.set("symbol", params.symbol);
+  if (params.strategy) p.set("strategy", params.strategy);
+  if (params.include_marks !== undefined) p.set("include_marks", String(params.include_marks));
+  const q = p.toString();
+  return q ? `/api/ui/paper/positions?${q}` : "/api/ui/paper/positions";
 }
-function uiMonthlyCloseGeneratePath(month: string): string {
-  return `/api/ui/reports/monthly/close?month=${encodeURIComponent(month)}`;
+/** R27.2: Single paper position by id */
+function paperPositionByIdPath(positionId: string, include_marks?: boolean): string {
+  const p = new URLSearchParams();
+  if (include_marks !== undefined) p.set("include_marks", String(include_marks));
+  const q = p.toString();
+  const base = `/api/ui/paper/positions/${encodeURIComponent(positionId)}`;
+  return q ? `${base}?${q}` : base;
+}
+/** R27.2: Close paper position */
+function paperClosePath(): string {
+  return "/api/ui/paper/close";
+}
+function paperSummaryPath(month: string): string {
+  return `/api/ui/paper/summary?month=${encodeURIComponent(month)}`;
+}
+/** R26.5: Monthly close pack. R27.1: pack=live|paper, include_paper for generate */
+function uiMonthlyCloseFilesPath(month: string, pack?: "live" | "paper"): string {
+  const p = new URLSearchParams();
+  p.set("month", month);
+  if (pack) p.set("pack", pack);
+  return `/api/ui/reports/monthly/close/files?${p.toString()}`;
+}
+function uiMonthlyCloseDownloadPath(month: string, file: string, pack?: "live" | "paper"): string {
+  const p = new URLSearchParams();
+  p.set("month", month);
+  p.set("file", file);
+  if (pack) p.set("pack", pack);
+  return `/api/ui/reports/monthly/close/download?${p.toString()}`;
+}
+function uiMonthlyCloseGeneratePath(month: string, include_paper?: boolean): string {
+  const p = new URLSearchParams();
+  p.set("month", month);
+  if (include_paper) p.set("include_paper", "true");
+  return `/api/ui/reports/monthly/close?${p.toString()}`;
+}
+/** R27.5: Backtest replay */
+function uiBacktestRunPath(): string {
+  return "/api/ui/backtest/run";
+}
+function uiBacktestRunsPath(limit?: number, offset?: number): string {
+  const p = new URLSearchParams();
+  if (limit != null) p.set("limit", String(limit));
+  if (offset != null) p.set("offset", String(offset));
+  const q = p.toString();
+  return q ? `/api/ui/backtest/runs?${q}` : "/api/ui/backtest/runs";
+}
+function uiBacktestDownloadPath(run_id: string, file: "summary_json" | "trades_csv"): string {
+  const p = new URLSearchParams();
+  p.set("run_id", run_id);
+  p.set("file", file);
+  return `/api/ui/backtest/download?${p.toString()}`;
 }
 /** R25.6: Universe Admin */
 function uiUniverseAdminPath(params: { limit?: number; offset?: number; status?: string }): string {
@@ -408,7 +485,11 @@ export const queryKeys = {
   opsChecklist: (kind: string, key: string) => ["ui", "opsChecklist", kind, key] as const,
   opsEodSummary: (date: string) => ["ui", "opsEodSummary", date] as const,
   opsWeeklySummary: (week: string) => ["ui", "opsWeeklySummary", week] as const,
+  paperPositions: (params: Record<string, unknown>) => ["ui", "paper", "positions", params] as const,
+  paperSummary: (month: string) => ["ui", "paper", "summary", month] as const,
   uiPositions: () => ["ui", "positions"] as const,
+  /** R27.9 */
+  uiPositionsUnified: (params: Record<string, unknown>) => ["ui", "positions", "unified", params] as const,
   uiTrackedPositions: () => ["ui", "positions", "tracked"] as const,
   uiAccountsDefault: () => ["ui", "accounts", "default"] as const,
   uiAccounts: () => ["ui", "accounts"] as const,
@@ -442,7 +523,9 @@ export const queryKeys = {
   tradeTicket: (symbol: string, strategy: string, action: string) =>
     ["ui", "tradeTicket", symbol, strategy, action] as const,
   uiReportsMonthly: (month: string) => ["ui", "reports", "monthly", month] as const,
-  uiMonthlyCloseFiles: (month: string) => ["ui", "reports", "monthly", "close", "files", month] as const,
+  uiMonthlyCloseFiles: (month: string, pack?: "live" | "paper") => ["ui", "reports", "monthly", "close", "files", month, pack ?? "live"] as const,
+  /** R27.5 */
+  uiBacktestRuns: (limit?: number, offset?: number) => ["ui", "backtest", "runs", limit ?? 50, offset ?? 0] as const,
   /** R25.6 */
   uiUniverseAdmin: (params?: Record<string, unknown>) => ["ui", "universe", "admin", params ?? ""] as const,
   uiUniverseHealth: () => ["ui", "universe", "health"] as const,
@@ -752,6 +835,98 @@ export function useExecutionLogPost() {
   });
 }
 
+/** R27.0: Paper trading */
+export interface PaperExecutePayload {
+  mode: "PAPER";
+  symbol: string;
+  strategy: string;
+  action: "OPEN" | "CLOSE";
+  qty: number;
+  shares_price?: number;
+  premium?: number;
+  fees?: number;
+  position_id?: string;
+  contract_key?: string;
+  expiry?: string;
+  strike?: number;
+  right?: string;
+  notes?: string;
+  /** R27.1: Safe constraint codes for journal tags */
+  sizing_constraints_hit?: string[];
+}
+export interface PaperPosition {
+  id: string;
+  symbol: string;
+  strategy: string;
+  qty: number;
+  open_price: number;
+  open_ts: string;
+  status: string;
+  realized_pl?: number;
+  close_ts?: string;
+  contract_key?: string;
+  expiry?: string;
+  strike?: number;
+  right?: string;
+  /** R27.1: Request-time mark (not persisted) */
+  mark_value?: number | null;
+  mark_source?: string | null;
+  mark_age_sec?: number | null;
+  quote_ts?: string | null;
+  unrealized_pl_usd?: number | null;
+}
+export function usePaperExecute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: PaperExecutePayload) =>
+      apiPost<{ status: string; reason?: string; position: PaperPosition }>(paperExecutePath(), payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "paper"] });
+      qc.invalidateQueries({ queryKey: ["ui", "journal"] });
+    },
+  });
+}
+export function usePaperPositions(params: { status?: string; symbol?: string; strategy?: string; include_marks?: boolean }) {
+  return useQuery({
+    queryKey: queryKeys.paperPositions(params),
+    queryFn: () => apiGet<{ positions: PaperPosition[] }>(paperPositionsPath(params)),
+  });
+}
+/** R27.2: Single paper position (enriched when OPEN and include_marks) */
+export function usePaperPositionById(positionId: string | null, include_marks = true) {
+  return useQuery({
+    queryKey: ["ui", "paper", "position", positionId, include_marks] as const,
+    queryFn: () => apiGet<PaperPosition>(paperPositionByIdPath(positionId!, include_marks)),
+    enabled: !!positionId?.trim(),
+  });
+}
+/** R27.2: Close paper position mutation. Payload: position_id, close_price (shares) or close_premium (options), close_fees?, ts? */
+export interface PaperClosePayload {
+  position_id: string;
+  close_price?: number;
+  close_premium?: number;
+  close_fees?: number;
+  ts?: string;
+}
+export function usePaperClose() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: PaperClosePayload) =>
+      apiPost<{ status: string; reason?: string; position: PaperPosition }>(paperClosePath(), payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "paper"] });
+      qc.invalidateQueries({ queryKey: ["ui", "journal"] });
+    },
+  });
+}
+export function usePaperSummary(month: string) {
+  return useQuery({
+    queryKey: queryKeys.paperSummary(month),
+    queryFn: () => apiGet<{ month: string; realized_pl: number; trade_count: number; win_rate: number; fees_total: number; by_strategy: Record<string, number> }>(paperSummaryPath(month)),
+    enabled: !!month && month.length === 7 && month[4] === "-",
+  });
+}
+
 /** R26.4: EOD summary for a date. */
 export interface OpsEodSummaryResponse {
   date: string;
@@ -1014,6 +1189,23 @@ export function usePortfolio() {
   });
 }
 
+/** R27.9: GET /api/ui/positions/unified — read-only aggregation (live shares, live options, paper). */
+export function useUnifiedPositions(params: {
+  state?: "open" | "closed";
+  include_paper?: boolean;
+  instrument_type?: string | null;
+  symbol?: string | null;
+} = {}) {
+  const { state = "open", include_paper = true, instrument_type, symbol } = params;
+  return useQuery({
+    queryKey: queryKeys.uiPositionsUnified({ state, include_paper, instrument_type, symbol }),
+    queryFn: () =>
+      apiGet<UiPositionsUnifiedResponse>(
+        uiPositionsUnifiedPath({ state, include_paper, instrument_type, symbol })
+      ),
+  });
+}
+
 /** Phase 21.1: GET /api/ui/account/summary */
 export function useAccountSummary() {
   return useQuery({
@@ -1116,18 +1308,66 @@ export function useDeleteSharePosition() {
   });
 }
 
-/** R23.5.0: POST /api/ui/shares/positions/{symbol}/close — close position (exit_price, exit_date?, notes?). */
+/** R23.5.0/R27.3: POST /api/ui/shares/positions/{symbol}/close — exit_price, exit_date? (ts), fees?, notes?; creates journal entry. */
 export function useCloseSharePosition(symbol: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (payload: { account_id: string; exit_price: number; exit_date?: string | null; notes?: string | null }) =>
-      apiPost<ClosedSharePosition>(uiSharePositionClosePath(symbol!), payload),
+    mutationFn: (payload: {
+      account_id: string;
+      exit_price: number;
+      exit_date?: string | null;
+      ts?: string | null;
+      fees?: number | null;
+      notes?: string | null;
+    }) =>
+      apiPost<ClosedSharePosition>(
+        uiSharePositionClosePath(symbol!),
+        {
+          account_id: payload.account_id,
+          exit_price: payload.exit_price,
+          exit_date: payload.exit_date ?? payload.ts ?? undefined,
+          fees: payload.fees ?? undefined,
+          notes: payload.notes ?? undefined,
+        }
+      ),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ["ui", "shares"] });
       qc.invalidateQueries({ queryKey: queryKeys.uiSharesPositions(variables.account_id) });
       qc.invalidateQueries({ queryKey: queryKeys.uiClosedSharePositions(variables.account_id) });
       qc.invalidateQueries({ queryKey: queryKeys.uiPortfolio() });
       qc.invalidateQueries({ queryKey: ["ui", "symbolDiagnostics"] });
+      qc.invalidateQueries({ queryKey: ["ui", "journal"] });
+    },
+  });
+}
+
+/** R27.3: POST /api/ui/journal/record-close — record options close/roll in Journal only (no execution). */
+export function uiJournalRecordClosePath(): string {
+  return "/api/ui/journal/record-close";
+}
+
+export interface RecordClosePayload {
+  symbol: string;
+  strategy: "CSP" | "CC";
+  action: "CLOSE_CSP" | "CLOSE_CC" | "ROLL";
+  qty: number;
+  premium?: number | null;
+  contract_key?: string | null;
+  expiry?: string | null;
+  strike?: number | null;
+  right?: string | null;
+  fees?: number | null;
+  notes?: string | null;
+  trade_date?: string | null;
+}
+
+export function useJournalRecordClose() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: RecordClosePayload) =>
+      apiPost<{ status: string; entry: JournalEntry }>(uiJournalRecordClosePath(), payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "journal"] });
     },
   });
 }
@@ -1700,6 +1940,10 @@ export interface JournalEntry {
   tags?: string | null;
   realized_pl?: number | null;
   link_id?: string | null;
+  /** R27.4: Request-time deep-link hint; { kind, id } when link_id recognized */
+  link_target?: { kind: string; id: string } | null;
+  /** R27.0: Paper trade flag (0/1 from API) */
+  is_paper?: number | null;
 }
 export interface JournalListResponse {
   entries: JournalEntry[];
@@ -1707,7 +1951,8 @@ export interface JournalListResponse {
 export interface JournalCreateResponse {
   entry: JournalEntry;
 }
-export interface MonthlyReportResponse {
+/** R27.2: Same shape as aggregate for live/paper split */
+export interface MonthlyReportTotals {
   month: string;
   total_realized_pl: number;
   by_strategy: Record<string, number>;
@@ -1720,6 +1965,14 @@ export interface MonthlyReportResponse {
   top_losers: { symbol: string; realized_pl: number | null; strategy: string }[];
   fees_total: number;
 }
+export interface MonthlyReportResponse extends MonthlyReportTotals {
+  /** R27.1 */
+  included_paper?: boolean;
+  mode?: "LIVE_ONLY" | "PAPER_ONLY" | "MIXED";
+  /** R27.2: When include_paper enabled */
+  live_totals?: MonthlyReportTotals;
+  paper_totals?: MonthlyReportTotals;
+}
 
 export function useJournal(params: {
   from_date?: string;
@@ -1728,6 +1981,8 @@ export function useJournal(params: {
   strategy?: string;
   limit?: number;
   offset?: number;
+  include_paper?: boolean;
+  paper_only?: boolean;
 }) {
   return useQuery({
     queryKey: queryKeys.uiJournal(params),
@@ -1798,10 +2053,10 @@ export function useJournalExport() {
   });
 }
 
-export function useReportsMonthly(month: string) {
+export function useReportsMonthly(month: string, include_paper?: boolean) {
   return useQuery({
-    queryKey: queryKeys.uiReportsMonthly(month),
-    queryFn: () => apiGet<MonthlyReportResponse>(uiReportsMonthlyPath(month)),
+    queryKey: [...queryKeys.uiReportsMonthly(month), include_paper ?? false] as const,
+    queryFn: () => apiGet<MonthlyReportResponse>(uiReportsMonthlyPath(month, include_paper)),
     enabled: !!month && month.length === 7 && month[4] === "-",
   });
 }
@@ -1809,34 +2064,114 @@ export function useReportsMonthly(month: string) {
 /** R26.5: Monthly close pack — files list + generate + download */
 export interface MonthlyCloseFilesResponse {
   month: string;
+  pack?: "live" | "paper";
   files: { name: string; size: number }[];
   generated_ts?: string | null;
   paths?: string[];
 }
-export function useMonthlyCloseFiles(month: string) {
+export function useMonthlyCloseFiles(month: string, pack: "live" | "paper" = "live") {
   return useQuery({
-    queryKey: queryKeys.uiMonthlyCloseFiles(month),
-    queryFn: () => apiGet<MonthlyCloseFilesResponse>(uiMonthlyCloseFilesPath(month)),
+    queryKey: queryKeys.uiMonthlyCloseFiles(month, pack),
+    queryFn: () => apiGet<MonthlyCloseFilesResponse>(uiMonthlyCloseFilesPath(month, pack)),
     enabled: !!month && month.length === 7 && month[4] === "-",
   });
 }
 export function useMonthlyCloseGenerate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (month: string) =>
-      apiPostNoBody<{ status: string; month: string; generated_ts: string; paths: string[] }>(
-        uiMonthlyCloseGeneratePath(month)
+    mutationFn: (arg: { month: string; include_paper?: boolean }) =>
+      apiPostNoBody<{ status: string; month: string; pack?: string; generated_ts: string; paths: string[] }>(
+        uiMonthlyCloseGeneratePath(arg.month, arg.include_paper)
       ),
-    onSuccess: (_, month) => {
-      qc.invalidateQueries({ queryKey: queryKeys.uiMonthlyCloseFiles(month) });
+    onSuccess: (_, arg) => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiMonthlyCloseFiles(arg.month, "live") });
+      qc.invalidateQueries({ queryKey: queryKeys.uiMonthlyCloseFiles(arg.month, "paper") });
     },
   });
 }
-export function getMonthlyCloseDownloadPath(month: string, file: string): string {
-  return uiMonthlyCloseDownloadPath(month, file);
+export function getMonthlyCloseDownloadPath(month: string, file: string, pack?: "live" | "paper"): string {
+  return uiMonthlyCloseDownloadPath(month, file, pack);
 }
-export async function downloadMonthlyCloseFile(month: string, file: string): Promise<void> {
-  const blob = await apiGetBlob(uiMonthlyCloseDownloadPath(month, file));
+
+/** R27.5: Backtest replay */
+export interface BacktestRunPayload {
+  start_date: string;
+  end_date: string;
+  include_paper?: boolean;
+  paper_only?: boolean;
+}
+export interface BacktestRunResponse {
+  status: string;
+  run_id: string;
+  created_ts: string;
+  mode: string;
+  paths: { summary_json: string; trades_csv: string };
+  metrics: {
+    start_date: string;
+    end_date: string;
+    mode: string;
+    total_realized_pl: number;
+    total_fees: number;
+    trade_count: number;
+    win_count: number;
+    loss_count: number;
+    win_rate: number;
+    by_strategy: Record<string, { realized_pl: number; trades: number; wins: number; losses: number }>;
+    max_drawdown_proxy?: number | null;
+  };
+  trades?: Array<{
+    trade_date?: string;
+    symbol?: string;
+    strategy?: string;
+    action?: string;
+    qty?: number;
+    price?: number;
+    premium?: number;
+    fees?: number;
+    realized_pl?: number;
+    is_paper?: boolean;
+    link_id?: string;
+    tags?: string;
+  }>;
+}
+export interface BacktestRunRow {
+  id: string;
+  start_date: string;
+  end_date: string;
+  mode: string;
+  created_ts: string;
+  path_json: string;
+}
+export interface BacktestRunsResponse {
+  runs: BacktestRunRow[];
+}
+export function useBacktestRuns(limit = 50, offset = 0) {
+  return useQuery({
+    queryKey: queryKeys.uiBacktestRuns(limit, offset),
+    queryFn: () => apiGet<BacktestRunsResponse>(uiBacktestRunsPath(limit, offset)),
+  });
+}
+export function useBacktestRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: BacktestRunPayload) =>
+      apiPost<BacktestRunResponse>(uiBacktestRunPath(), payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "backtest", "runs"] });
+    },
+  });
+}
+export async function downloadBacktestFile(run_id: string, file: "summary_json" | "trades_csv"): Promise<void> {
+  const blob = await apiGetBlob(uiBacktestDownloadPath(run_id, file));
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = file === "summary_json" ? "backtest_summary.json" : "backtest_trades.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+export async function downloadMonthlyCloseFile(month: string, file: string, pack: "live" | "paper" = "live"): Promise<void> {
+  const blob = await apiGetBlob(uiMonthlyCloseDownloadPath(month, file, pack));
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

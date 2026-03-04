@@ -607,6 +607,87 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend full suite 869 passed, 3 skipped; frontend tests 212 passed, 18 skipped; build built in 20.52s
 - **Scope:** Execution log store + API; TodayPage queue Mark Done gate (journal or skip); EOD mark-done block when NEW notifications unless override; safe UI. Branch: release/R26.9.
 
+### R27.0 — Paper Trading Mode (simulated fills + P/L)
+
+- [x] **Requirements** — chakraops/docs/releases/R27.0_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R27.0_release_notes.md
+- [x] **Verification** — out/verification/R27.0/notes.md (gate tails + UAT)
+- [x] **Gate** — Backend pytest full suite pass; frontend tests + build pass (evidence in notes.md)
+- **Scope:** Paper store + API (execute, positions, summary); journal is_paper + include_paper; TradeTicketPage paper execute; Paper page; Journal/Reports include paper toggle. Branch: release/R27.0.
+
+### R27.1 — Paper-to-live parity + analysis hygiene
+
+- [x] **Requirements** — chakraops/docs/releases/R27.1_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R27.1_release_notes.md
+- [x] **Verification** — [out/verification/R27.1/notes.md](../../../out/verification/R27.1/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend 883 passed, 1 skipped (129.44s); frontend 223 passed, 18 skipped (39.10s); build 10.29s (evidence in notes.md)
+- **Scope:** Paper positions API mark/unrealized (request-time); reports monthly included_paper/mode; monthly close live/paper subdir; paper execute sizing tags; PaperPage Mark/Unrealized; Reports mode; close pack toggle. Branch: release/R27.1.
+
+### R27.2 — Paper portfolio realism + close workflow parity
+
+- [x] **Requirements** — chakraops/docs/releases/R27.2_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R27.2_release_notes.md
+- [x] **Verification** — [out/verification/R27.2/notes.md](../../../out/verification/R27.2/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend 887 passed, 1 skipped (114.80s); frontend 225 passed, 18 skipped (45.40s); build 11.43s (evidence in notes.md)
+- **Scope:** Paper positions include_marks + GET /paper/positions/{id}; POST /paper/close + journal CLOSE_*; PaperPage close modal, filters, refresh; Journal paper-only + Paper badge; Reports split Live/Paper totals. Branch: release/R27.2.
+
+### R27.3 — Live position close workflow parity + position realism
+
+- [x] **Requirements** — chakraops/docs/releases/R27.3_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R27.3_release_notes.md
+- [x] **Verification** — [out/verification/R27.3/notes.md](../../../out/verification/R27.3/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend 890 passed, 1 skipped (105.63s); frontend 228 passed, 18 skipped (42.63s); build 12.61s (evidence in notes.md)
+- **Scope:** Live shares close from UI (journal SELL, link_id); options close/roll record-only journaling; Reports hygiene; Close modal + Record close UI. Branch: release/R27.3.
+
+### R27.4 — Live portfolio realism + mark/unrealized parity
+
+- [x] **Requirements** — chakraops/docs/releases/R27.4_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R27.4_release_notes.md
+- [x] **Verification** — [out/verification/R27.4/notes.md](../../../out/verification/R27.4/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend 895 passed, 3 skipped (56.45s); frontend 232 passed, 18 skipped (29.43s); build 7.14s (evidence in notes.md)
+- **Scope:** Live shares mark/unrealized in portfolio; journal link_target; Portfolio + Journal UX. Branch: release/R27.4.
+
+### R27.5 — Journal-driven backtesting baseline (replay)
+
+- [x] **Requirements** — chakraops/docs/releases/R27.5_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R27.5_release_notes.md
+- [x] **Verification** — [out/verification/R27.5/notes.md](../../../out/verification/R27.5/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend 902 passed, 1 skipped (62.21s); frontend 236 passed, 18 skipped (31.42s); build 7.12s (evidence in notes.md)
+- **Scope:** Backtest replay from journal (live/paper/mixed); summary + trades; JSON/CSV export; BacktestPage + API. Branch: release/R27.5.
+
+### R27.6 — Learn / Operator Guide (wife-friendly)
+
+- [x] **Requirements** — chakraops/docs/releases/R27.6_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R27.6_release_notes.md
+- [x] **Verification** — [out/verification/R27.6/notes.md](../../../out/verification/R27.6/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend 902 passed, 1 skipped (47.02s); frontend 239 passed, 18 skipped (27.28s); build 6.50s (evidence in notes.md)
+- **Scope:** Learn page at /learn (daily routine, key terms, links); sidebar Learn nav; frontend-only. Branch: release/R27.6.
+
+### R27.7 — Phase 8 Portfolio & Position Management v1 (shares + CC readiness + portfolio snapshot)
+
+- [x] **Requirements** — chakraops/docs/releases/R27.7_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R27.7_release_notes.md
+- [x] **Verification** — [out/verification/R27.7/notes.md](../../../out/verification/R27.7/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend 906 passed, 1 skipped (54.01s); frontend 242 passed, 18 skipped (38.43s); build 7.75s (evidence in notes.md)
+- **Scope:** Shares store (cost basis/unrealized P/L); enrichment (mark_value, pct_return, days_held, cc_eligible); CC_ELIGIBLE notification; Portfolio CC badge/filter + Ticket link; Notifications CC_ELIGIBLE safe label + deep link. Branch: release/R27.7.
+
+### R27.8 — Options Position Management v1 (portfolio + ticket parity)
+
+- [x] **Requirements** — chakraops/docs/releases/R27.8_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R27.8_release_notes.md
+- [x] **Verification** — [out/verification/R27.8/notes.md](../../../out/verification/R27.8/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend 911 passed, 1 skipped (77.78s); frontend 244 passed, 18 skipped (47.38s); build 10.21s (evidence in notes.md)
+- **Scope:** Request-time options enrichment (mark_value/source/age, unrealized proxy, dte, pct_max_profit, lifecycle recommend+reason); GET /portfolio/options or options_positions in /portfolio; Portfolio Options tab + links; Notifications Open Ticket for options lifecycle. Branch: release/R27.8.
+
+### R27.9 — Unified Positions DB v1 (read-only aggregation first)
+
+- [x] **Requirements** — chakraops/docs/releases/R27.9_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R27.9_release_notes.md
+- [x] **Verification** — [out/verification/R27.9/notes.md](../../../out/verification/R27.9/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend 917 passed, 3 skipped; frontend tests 245 passed, 18 skipped; build built in 8.33s. Evidence: out/verification/R27.9/notes.md
+- [x] **UAT** — Checklist completed in out/verification/R27.9/notes.md (grep proof recorded; file not present expected)
+- **Scope:** Unified positions store (positions_open/positions_closed); read-only aggregation from holdings_db + tracked positions + paper; GET /api/ui/positions/unified; system-health positions_unified; Positions page with filters and safe labels. Branch: release/R27.9.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

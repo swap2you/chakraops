@@ -484,12 +484,36 @@ export interface PortfolioPosition {
   realized_pnl?: number | null;
 }
 
+/** R27.8: Enriched option position for portfolio Options tab (mark_value/source/age, dte, pct_max_profit, lifecycle_recommend/reason). */
+export interface OptionsPositionSummary {
+  position_id: string;
+  symbol: string;
+  strategy: string;
+  strike?: number | null;
+  expiration?: string | null;
+  contracts?: number;
+  mark_value?: number | null;
+  mark_source?: string | null;
+  mark_age_sec?: number | null;
+  quote_ts?: string | null;
+  unrealized_pnl?: number | null;
+  dte?: number | null;
+  pct_max_profit?: number | null;
+  lifecycle_recommend?: string | null;
+  lifecycle_reason?: string | null;
+  premium_captured_pct?: number | null;
+  alert_flags?: string[];
+  [key: string]: unknown;
+}
+
 export interface PortfolioResponse {
   positions: PortfolioPosition[];
   capital_deployed?: number;
   open_positions_count?: number;
   /** R23.0: Share positions (qty, avg_cost, last_price, market_value, unrealized_pnl when price available). */
   shares_positions?: SharePositionSummary[];
+  /** R27.8: Enriched open option positions (CSP/CC) for Options tab. */
+  options_positions?: OptionsPositionSummary[];
 }
 
 /** Phase 12.0: GET /api/ui/portfolio/metrics */
@@ -547,7 +571,7 @@ export interface SharePosition {
   stop_price?: number | null;
 }
 
-/** R23.0: Share position with optional MTM (from portfolio/symbol-diagnostics). */
+/** R23.0: Share position with optional MTM. R27.4: mark_value, mark_source, quote_ts, mark_age_sec, unrealized_pl. R27.7: pct_return, days_held, cc_eligible, cc_eligible_reason. */
 export interface SharePositionSummary {
   symbol: string;
   quantity: number;
@@ -555,6 +579,21 @@ export interface SharePositionSummary {
   last_price?: number | null;
   market_value?: number | null;
   unrealized_pnl?: number | null;
+  /** R27.4: Request-time mark (MID→LAST→BID→ASK); null when missing */
+  mark_value?: number | null;
+  mark_source?: string | null;
+  quote_ts?: string | null;
+  mark_age_sec?: number | null;
+  /** R27.4: Unrealized P/L when open; null when missing */
+  unrealized_pl?: number | null;
+  /** R27.7: Percent return (request-time); null when missing */
+  pct_return?: number | null;
+  /** R27.7: Days held from opened_at; null when missing */
+  days_held?: number | null;
+  /** R27.7: True when quantity >= 100 (CC readiness) */
+  cc_eligible?: boolean | null;
+  /** R27.7: Safe label only (e.g. "Standard lot (100+ shares)") */
+  cc_eligible_reason?: string | null;
   updated_at?: string | null;
 }
 
@@ -913,4 +952,31 @@ export interface SharesPlan {
   support_resistance?: Record<string, { support?: number | null; resistance?: number | null; bar_count?: number | null; as_of?: string; method?: string } | null>;
   indicators_used?: Record<string, unknown>;
   as_of_inputs?: Record<string, unknown>;
+}
+
+/** R27.9: Unified position row (read-only aggregation). Safe labels only; no FAIL_/WARN_. */
+export interface UnifiedPosition {
+  id: string;
+  symbol: string;
+  instrument_type: string;
+  is_paper: number;
+  qty: number;
+  avg_price?: number | null;
+  strike?: number | null;
+  expiry?: string | null;
+  right?: string | null;
+  opened_ts: string;
+  link_id?: string | null;
+  notes?: string | null;
+  tags?: string | null;
+  closed_ts?: string | null;
+  realized_pl?: number | null;
+  fees?: number | null;
+}
+
+/** R27.9: GET /api/ui/positions/unified response */
+export interface UiPositionsUnifiedResponse {
+  positions: UnifiedPosition[];
+  state: string;
+  include_paper: boolean;
 }

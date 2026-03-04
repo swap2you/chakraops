@@ -1,29 +1,105 @@
-import { describe, it, expect } from "vitest";
-import { render, screen, fireEvent } from "@/test/test-utils";
+/**
+ * R27.9: Positions page — unified list, filters (open/closed, live/paper, type, symbol);
+ * mocked API; no FAIL/WARN in document.
+ */
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { render, screen } from "@/test/test-utils";
 import { PositionsPage } from "./PositionsPage";
 
+const mockPositions = [
+  {
+    id: "live_shares_1",
+    symbol: "AAPL",
+    instrument_type: "SHARES",
+    is_paper: 0,
+    qty: 100,
+    avg_price: 150.5,
+    strike: null,
+    expiry: null,
+    right: null,
+    opened_ts: "2026-02-20T12:00:00",
+    link_id: "1",
+    notes: null,
+    tags: null,
+  },
+  {
+    id: "paper_2",
+    symbol: "SPY",
+    instrument_type: "CSP",
+    is_paper: 1,
+    qty: 2,
+    avg_price: 3.5,
+    strike: 450,
+    expiry: "2026-03-21",
+    right: "PUT",
+    opened_ts: "2026-02-15T10:00:00",
+    link_id: "2",
+    notes: null,
+    tags: null,
+  },
+];
+
+const mockUseUnifiedPositions = vi.fn(() => ({
+  data: { positions: mockPositions, state: "open", include_paper: true },
+  isLoading: false,
+  isError: false,
+}));
+
+vi.mock("@/api/queries", () => ({
+  useUnifiedPositions: (params: Record<string, unknown>) => mockUseUnifiedPositions(params),
+}));
+
 describe("PositionsPage", () => {
-  it("renders without throwing", () => {
-    expect(() => render(<PositionsPage />)).not.toThrow();
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseUnifiedPositions.mockReturnValue({
+      data: { positions: mockPositions, state: "open", include_paper: true },
+      isLoading: false,
+      isError: false,
+    });
   });
 
-  it("shows Positions heading", () => {
+  it("renders Positions header and filters", () => {
     render(<PositionsPage />);
-    expect(screen.getByRole("heading", { name: /positions/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^Positions$/i })).toBeInTheDocument();
+    expect(screen.getByTestId("positions-filter-state")).toBeInTheDocument();
+    expect(screen.getByTestId("positions-filter-paper")).toBeInTheDocument();
+    expect(screen.getByTestId("positions-filter-type")).toBeInTheDocument();
+    expect(screen.getByTestId("positions-filter-symbol")).toBeInTheDocument();
   });
 
-  it("shows table or empty state", () => {
+  it("renders positions table with Symbol, Type, Qty, Opened, Ticket, Journal", () => {
     render(<PositionsPage />);
-    const table = document.querySelector("table");
-    const empty = screen.queryByText(/no positions/i);
-    expect(table != null || empty != null).toBe(true);
+    expect(screen.getByText("AAPL")).toBeInTheDocument();
+    expect(screen.getByText("SPY")).toBeInTheDocument();
+    expect(screen.getAllByText("SHARES").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("CSP").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByTestId("positions-row").length).toBe(2);
+    expect(screen.getAllByTestId("positions-link-ticket").length).toBe(2);
+    expect(screen.getAllByTestId("positions-link-journal").length).toBe(2);
   });
 
-  it("clicking a row opens position detail drawer", () => {
+  it("calls useUnifiedPositions with state and include_paper", () => {
     render(<PositionsPage />);
-    const rowButton = screen.getByRole("button", { name: /SPY.*CSP.*OPEN/i });
-    fireEvent.click(rowButton);
-    const dialog = screen.getByRole("dialog", { name: /position detail/i });
-    expect(dialog).toBeInTheDocument();
+    expect(mockUseUnifiedPositions).toHaveBeenCalledWith(
+      expect.objectContaining({ state: "open", include_paper: true })
+    );
+  });
+
+  it("document textContent has no FAIL or WARN (R27.9)", () => {
+    const { container } = render(<PositionsPage />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\bFAIL\b/);
+    expect(text).not.toMatch(/\bWARN\b/);
+  });
+
+  it("filter state change triggers new request", async () => {
+    render(<PositionsPage />);
+    const stateSelect = screen.getByTestId("positions-filter-state");
+    await userEvent.selectOptions(stateSelect, "closed");
+    expect(mockUseUnifiedPositions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ state: "closed" })
+    );
   });
 });

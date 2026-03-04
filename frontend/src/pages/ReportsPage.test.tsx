@@ -24,6 +24,8 @@ const mockReport = {
     { symbol: "IWM", realized_pl: -50, strategy: "CC" },
   ],
   fees_total: 10.0,
+  included_paper: false,
+  mode: "LIVE_ONLY" as const,
 };
 
 const mockCloseFiles = {
@@ -68,19 +70,31 @@ describe("ReportsPage", () => {
     expect(screen.getByText("IWM")).toBeInTheDocument();
   });
 
-  it("renders Monthly Close panel with Generate button and download links (R26.5)", () => {
+  it("renders Monthly Close panel with Generate live/paper buttons and download links (R26.5, R27.1)", () => {
     render(<ReportsPage />);
     expect(screen.getByTestId("monthly-close-panel")).toBeInTheDocument();
-    expect(screen.getByTestId("monthly-close-generate")).toHaveTextContent("Generate close pack");
-    expect(screen.getByText("Download monthly_report.json")).toBeInTheDocument();
-    expect(screen.getByText("Download summary.txt")).toBeInTheDocument();
+    expect(screen.getByTestId("monthly-close-generate-live")).toHaveTextContent("Generate live pack");
+    expect(screen.getByTestId("monthly-close-generate-paper")).toHaveTextContent("Generate paper pack");
+    expect(screen.getByTestId("monthly-close-download-live-monthly_report-json")).toBeInTheDocument();
+    expect(screen.getByTestId("monthly-close-download-live-summary-txt")).toBeInTheDocument();
   });
 
-  it("Generate close pack triggers mutation with month (R26.5)", async () => {
+  it("Generate live pack triggers mutation with month and include_paper false (R26.5, R27.1)", async () => {
     render(<ReportsPage />);
-    await userEvent.click(screen.getByTestId("monthly-close-generate"));
+    await userEvent.click(screen.getByTestId("monthly-close-generate-live"));
     expect(mockMutate).toHaveBeenCalledTimes(1);
-    expect(mockMutate).toHaveBeenCalledWith(expect.stringMatching(/^\d{4}-\d{2}$/));
+    expect(mockMutate).toHaveBeenCalledWith(expect.objectContaining({ month: expect.stringMatching(/^\d{4}-\d{2}$/), include_paper: false }));
+  });
+
+  it("Generate paper pack calls API with include_paper true (R27.1)", async () => {
+    render(<ReportsPage />);
+    await userEvent.click(screen.getByTestId("monthly-close-generate-paper"));
+    expect(mockMutate).toHaveBeenCalledWith(expect.objectContaining({ include_paper: true }));
+  });
+
+  it("shows Mode label from report (R27.1)", () => {
+    render(<ReportsPage />);
+    expect(screen.getByTestId("reports-mode-label")).toHaveTextContent("Mode: Live only");
   });
 
   it("document text does not contain FAIL or WARN (R25.5 safety)", () => {
@@ -88,5 +102,11 @@ describe("ReportsPage", () => {
     const text = container.textContent ?? "";
     expect(text).not.toMatch(/\bFAIL\b/);
     expect(text).not.toMatch(/\bWARN\b/);
+  });
+
+  it("shows Include paper toggle (R27.0)", () => {
+    render(<ReportsPage />);
+    expect(screen.getByTestId("reports-include-paper")).toBeInTheDocument();
+    expect(screen.getByText(/Include paper/)).toBeInTheDocument();
   });
 });

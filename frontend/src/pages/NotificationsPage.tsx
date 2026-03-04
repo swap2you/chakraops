@@ -170,7 +170,9 @@ export function NotificationsPage() {
                       <td className="py-2 pr-2">
                         <StatusBadge status={n.severity ?? "—"} />
                       </td>
-                      <td className="py-2 pr-2 font-medium text-zinc-700 dark:text-zinc-300">{n.type ?? "—"}</td>
+                      <td className="py-2 pr-2 font-medium text-zinc-700 dark:text-zinc-300">
+                        {n.type === "CC_ELIGIBLE" ? "Covered call eligible" : n.type ?? "—"}
+                      </td>
                       <td className="py-2 pr-2 text-zinc-600 dark:text-zinc-400">{n.subtype ?? "—"}</td>
                       <td className="py-2 pr-2 font-mono text-zinc-600 dark:text-zinc-400">{n.symbol ?? "—"}</td>
                       <td className="py-2 pr-2 text-zinc-600 dark:text-zinc-400 truncate max-w-xs" title={n.message ?? undefined}>
@@ -318,7 +320,9 @@ export function NotificationsPage() {
                     ? "Options: Roll window"
                     : selected.type === "OPTIONS_ASSIGNMENT_RISK"
                       ? "Options: Assignment risk"
-                      : (selected.type ?? "—")}
+                      : selected.type === "CC_ELIGIBLE"
+                        ? "Covered call eligible"
+                        : (selected.type ?? "—")}
             </p>
             <p>
               <span className="text-zinc-500 dark:text-zinc-500">Message: </span>
@@ -350,7 +354,23 @@ export function NotificationsPage() {
               </pre>
             )}
             {selected.symbol && (
-              <p className="mt-3">
+              <p className="mt-3 flex flex-wrap gap-3">
+                {selected.type === "CC_ELIGIBLE" ? (
+                  <Link
+                    to={`/ticket?symbol=${encodeURIComponent(selected.symbol)}&strategy=CC&action=OPEN`}
+                    className="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
+                  >
+                    Open CC ticket for {selected.symbol}
+                  </Link>
+                ) : null}
+                {/^OPTIONS_/.test(selected.type ?? "") ? (
+                  <Link
+                    to={`/ticket?symbol=${encodeURIComponent(selected.symbol)}&strategy=CSP&action=CLOSE`}
+                    className="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
+                  >
+                    Open Ticket
+                  </Link>
+                ) : null}
                 <Link
                   to={
                     selected.type === "SHARES_EXIT_SIGNAL"

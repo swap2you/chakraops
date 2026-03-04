@@ -421,6 +421,32 @@ OPS_EOD_CHECKLIST_REMINDER = "OPS_EOD_CHECKLIST_REMINDER"
 OPS_WEEKLY_REVIEW_REMINDER = "OPS_WEEKLY_REVIEW_REMINDER"
 
 
+# R27.7: CC eligibility advisory (safe labels only; dedupe by symbol while NEW/ACKED)
+CC_ELIGIBLE = "CC_ELIGIBLE"
+
+
+def maybe_append_cc_eligible_notification(symbol: str) -> bool:
+    """
+    R27.7: Append CC_ELIGIBLE advisory only if no active (NEW/ACKED) for same symbol.
+    Dedupe: one per symbol until acked/archived; then re-trigger allowed. Safe labels only.
+    Returns True if appended, False if deduped.
+    """
+    symbol = (symbol or "").strip().upper()
+    if not symbol:
+        return False
+    recent = load_notifications(limit=500, state_filter=None)
+    for rec in recent:
+        if rec.get("type") != CC_ELIGIBLE:
+            continue
+        if (rec.get("symbol") or "").strip().upper() != symbol:
+            continue
+        if rec.get("state") in ("NEW", "ACKED"):
+            return False
+    message = f"Shares eligible for covered call: {symbol}. Consider opening CC ticket."
+    append_notification("INFO", CC_ELIGIBLE, message, symbol=symbol, details={"symbol": symbol}, subtype=CC_ELIGIBLE)
+    return True
+
+
 def maybe_append_ops_checklist_reminder(reminder_type: str, key: str) -> bool:
     """
     R26.4: Append EOD or Weekly reminder only if no active (NEW/ACKED) for same type+key.

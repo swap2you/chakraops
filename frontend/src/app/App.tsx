@@ -8,12 +8,16 @@ import { SymbolDiagnosticsPage } from "@/pages/SymbolDiagnosticsPage";
 import { SystemDiagnosticsPage } from "@/pages/SystemDiagnosticsPage";
 import { NotificationsPage } from "@/pages/NotificationsPage";
 import { PortfolioPage } from "@/pages/PortfolioPage";
+import { PositionsPage } from "@/pages/PositionsPage";
 import { WheelPage } from "@/pages/WheelPage";
 import { JournalPage } from "@/pages/JournalPage";
 import { TradeTicketPage } from "@/pages/TradeTicketPage";
 import { TodayPage } from "@/pages/TodayPage";
 import { WeeklyReviewPage } from "@/pages/WeeklyReviewPage";
 import { ReportsPage } from "@/pages/ReportsPage";
+import { BacktestPage } from "@/pages/BacktestPage";
+import { LearnPage } from "@/pages/LearnPage";
+import { PaperPage } from "@/pages/PaperPage";
 import { UniverseAdminPage } from "@/pages/UniverseAdminPage";
 import { UniverseHealthPage } from "@/pages/UniverseHealthPage";
 import { getWheelPageMode } from "@/config/features";
@@ -40,13 +44,17 @@ export function App() {
               <Route path="/system" element={<SystemDiagnosticsPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/journal" element={<JournalPage />} />
+              <Route path="/learn" element={<LearnPage />} />
               <Route path="/ticket" element={<TradeTicketPage />} />
               <Route path="/today" element={<TodayPage />} />
               <Route path="/weekly" element={<WeeklyReviewPage />} />
               <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/backtest" element={<BacktestPage />} />
+              <Route path="/paper" element={<PaperPage />} />
               <Route path="/universe-admin" element={<UniverseAdminPage />} />
               <Route path="/universe-health" element={<UniverseHealthPage />} />
               <Route path="/portfolio" element={<PortfolioPage />} />
+              <Route path="/positions" element={<PositionsPage />} />
               {getWheelPageMode() !== "hidden" ? (
                 <Route path="/wheel" element={<WheelPage />} />
               ) : (

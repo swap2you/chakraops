@@ -317,7 +317,8 @@ def get_total_shares_for_evaluation(account_id: str) -> Dict[str, int]:
 
 
 # ---------------------------------------------------------------------------
-# Share positions (R23.0)
+# Share positions (R23.0). R27.7: Cost basis = avg_cost * quantity (stored);
+# unrealized P/L computed at request time from mark; opened_at used for days_held.
 # ---------------------------------------------------------------------------
 
 

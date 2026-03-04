@@ -20,7 +20,9 @@ import {
   TableCell,
   EmptyState,
   Button,
+  Badge,
 } from "@/components/ui";
+import { Link } from "react-router-dom";
 import { Plus, Download, Loader2, Pencil, Check, X } from "lucide-react";
 
 function formatCurrency(val: number | null | undefined): string {
@@ -62,6 +64,8 @@ export function JournalPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editNotes, setEditNotes] = useState("");
   const [editTags, setEditTags] = useState("");
+  const [includePaper, setIncludePaper] = useState(false);
+  const [paperOnly, setPaperOnly] = useState(false);
 
   const { from_date, to_date } = useMemo(() => monthToRange(month), [month]);
   const { data, isLoading, isError, error } = useJournal({
@@ -70,6 +74,8 @@ export function JournalPage() {
     symbol: symbolFilter.trim() || undefined,
     strategy: strategyFilter.trim() || undefined,
     limit: 200,
+    include_paper: paperOnly ? true : includePaper,
+    paper_only: paperOnly,
   });
   const createMutation = useJournalCreate();
   const updateMutation = useJournalUpdate();
@@ -162,6 +168,24 @@ export function JournalPage() {
             className="w-24 rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
           />
         </label>
+        <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="journal-include-paper">
+          <input
+            type="checkbox"
+            checked={includePaper}
+            onChange={(e) => setIncludePaper(e.target.checked)}
+            className="rounded border-zinc-300 dark:border-zinc-600"
+          />
+          Include paper
+        </label>
+        <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="journal-paper-only">
+          <input
+            type="checkbox"
+            checked={paperOnly}
+            onChange={(e) => setPaperOnly(e.target.checked)}
+            className="rounded border-zinc-300 dark:border-zinc-600"
+          />
+          Paper only
+        </label>
         <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
           Strategy
           <select
@@ -201,11 +225,12 @@ export function JournalPage() {
         <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
           <Table>
             <TableHeader>
-              <TableRow>
+                <TableRow>
                 <TableHead>Date</TableHead>
                 <TableHead>Symbol</TableHead>
                 <TableHead>Strategy</TableHead>
                 <TableHead>Action</TableHead>
+                <TableHead>Paper</TableHead>
                 <TableHead className="text-right">Qty</TableHead>
                 <TableHead className="text-right">Price</TableHead>
                 <TableHead className="text-right">Premium</TableHead>
@@ -213,16 +238,26 @@ export function JournalPage() {
                 <TableHead className="text-right">Realized P/L</TableHead>
                 <TableHead>Notes</TableHead>
                 <TableHead>Tags</TableHead>
+                <TableHead className="w-20">Open</TableHead>
                 <TableHead className="w-20">Edit</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {entries.map((e) => (
+              {entries.map((e) => {
+                const linkTarget = e.link_target;
+                const openUrl =
+                  linkTarget?.kind === "shares" && linkTarget?.id
+                    ? `/symbol-diagnostics?symbol=${encodeURIComponent(linkTarget.id.split(":")[0])}`
+                    : linkTarget
+                      ? "/portfolio"
+                      : null;
+                return (
                 <TableRow key={e.id}>
                   <TableCell>{formatDate(e.trade_date)}</TableCell>
                   <TableCell className="font-medium">{e.symbol}</TableCell>
                   <TableCell>{e.strategy}</TableCell>
                   <TableCell>{e.action}</TableCell>
+                  <TableCell>{e.is_paper ? <Badge variant="neutral" data-testid="journal-paper-badge">Paper</Badge> : "—"}</TableCell>
                   <TableCell className="text-right">{e.qty}</TableCell>
                   <TableCell className="text-right">{e.price != null ? formatCurrency(e.price) : "—"}</TableCell>
                   <TableCell className="text-right">{e.premium != null ? formatCurrency(e.premium) : "—"}</TableCell>
@@ -252,6 +287,15 @@ export function JournalPage() {
                       />
                     ) : (
                       <span className="truncate text-zinc-600 dark:text-zinc-400">{e.tags ?? "—"}</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {openUrl ? (
+                      <Link to={openUrl} className="text-sm text-emerald-600 hover:underline dark:text-emerald-400" data-testid="journal-open-link">
+                        Open
+                      </Link>
+                    ) : (
+                      "—"
                     )}
                   </TableCell>
                   <TableCell>
@@ -287,7 +331,8 @@ export function JournalPage() {
                     )}
                   </TableCell>
                 </TableRow>
-              ))}
+              );
+              })}
             </TableBody>
           </Table>
         </div>

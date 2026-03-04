@@ -270,4 +270,49 @@ describe("PortfolioPage", () => {
     expect(text).not.toMatch(/\bFAIL\b/);
     expect(text).not.toMatch(/\bWARN\b/);
   });
+
+  it("R27.7: shows CC eligible badge and Open CC ticket link when cc_eligible is true", () => {
+    usePortfolio.mockReturnValue({
+      data: {
+        ...mockPortfolioOpen,
+        shares_positions: [
+          {
+            symbol: "SPY",
+            quantity: 100,
+            avg_cost: 100,
+            mark_value: 105,
+            mark_source: "LAST",
+            mark_age_sec: 30,
+            unrealized_pl: 500,
+            pct_return: 5,
+            cc_eligible: true,
+            cc_eligible_reason: "Standard lot (100+ shares)",
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<PortfolioPage />);
+    expect(screen.getByText("Eligible")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /open cc ticket/i })).toBeInTheDocument();
+    expect(screen.getByText("CC eligible")).toBeInTheDocument();
+  });
+
+  it("R27.7: document has no raw FAIL or WARN in portfolio shares section", () => {
+    usePortfolio.mockReturnValue({
+      data: {
+        ...mockPortfolioOpen,
+        shares_positions: [
+          { symbol: "SPY", quantity: 50, cc_eligible: false, cc_eligible_reason: "Fewer than 100 shares" },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<PortfolioPage />);
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/FAIL_/);
+    expect(text).not.toMatch(/WARN_/);
+  });
 });

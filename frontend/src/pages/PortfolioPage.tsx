@@ -71,6 +71,7 @@ export function PortfolioPage() {
   const [detailDrawerPosition, setDetailDrawerPosition] = useState<PortfolioPosition | null>(null);
   const [balancesEdit, setBalancesEdit] = useState<{ cash: string; buying_power: string } | null>(null);
   const [holdingForm, setHoldingForm] = useState<{ symbol: string; shares: string; avg_cost: string } | null>(null);
+  const [sharesFilter, setSharesFilter] = useState<"all" | "cc_eligible">("all");
 
   const positions = data?.positions ?? [];
   const capitalDeployed = data?.capital_deployed ?? 0;
@@ -331,7 +332,28 @@ export function PortfolioPage() {
 
       {sharesPositions.length > 0 && (
         <Card>
-          <CardHeader title="Shares Positions" description="R23.0: Share positions. R27.4: Mark (value+source+age) and Unrealized P/L." />
+          <CardHeader
+            title="Shares Positions"
+            description="R27.4: Mark and Unrealized P/L. R27.7: CC eligible badge and filter; link to Ticket (CC) when eligible."
+            actions={
+              <div className="flex gap-1 rounded border border-zinc-200 dark:border-zinc-700 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setSharesFilter("all")}
+                  className={`rounded px-2 py-1 text-sm ${sharesFilter === "all" ? "bg-zinc-200 dark:bg-zinc-700 font-medium" : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"}`}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSharesFilter("cc_eligible")}
+                  className={`rounded px-2 py-1 text-sm ${sharesFilter === "cc_eligible" ? "bg-zinc-200 dark:bg-zinc-700 font-medium" : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"}`}
+                >
+                  CC eligible
+                </button>
+              </div>
+            }
+          />
           <Table>
             <TableHeader>
               <TableRow>
@@ -342,39 +364,69 @@ export function PortfolioPage() {
                 <TableHead>Last price</TableHead>
                 <TableHead>Market value</TableHead>
                 <TableHead>Unrealized P/L</TableHead>
+                <TableHead>Unrealized %</TableHead>
+                <TableHead>CC</TableHead>
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sharesPositions.map((row: SharePositionSummary) => {
-                const unrealizedPl = row.unrealized_pl ?? row.unrealized_pnl;
-                const markStr =
-                  row.mark_value != null
-                    ? [fmtCurrency(row.mark_value), row.mark_source ?? "", row.mark_age_sec != null ? `(${row.mark_age_sec}s)` : ""].filter(Boolean).join(" ")
-                    : "—";
-                return (
-                  <TableRow key={row.symbol}>
-                    <TableCell>
-                      <Link
-                        to={`/symbol-diagnostics?symbol=${encodeURIComponent(row.symbol)}`}
-                        className="font-mono font-medium text-zinc-900 dark:text-zinc-200 hover:underline"
+              {sharesPositions
+                .filter((row: SharePositionSummary) => sharesFilter === "all" || row.cc_eligible === true)
+                .map((row: SharePositionSummary) => {
+                  const unrealizedPl = row.unrealized_pl ?? row.unrealized_pnl;
+                  const markStr =
+                    row.mark_value != null
+                      ? [fmtCurrency(row.mark_value), row.mark_source ?? "", row.mark_age_sec != null ? `(${row.mark_age_sec}s)` : ""].filter(Boolean).join(" ")
+                      : "—";
+                  return (
+                    <TableRow key={row.symbol}>
+                      <TableCell>
+                        <Link
+                          to={`/symbol-diagnostics?symbol=${encodeURIComponent(row.symbol)}`}
+                          className="font-mono font-medium text-zinc-900 dark:text-zinc-200 hover:underline"
+                        >
+                          {row.symbol}
+                        </Link>
+                      </TableCell>
+                      <TableCell numeric className="font-mono">{row.quantity}</TableCell>
+                      <TableCell numeric className="font-mono">{row.avg_cost != null ? fmtNum(row.avg_cost) : "—"}</TableCell>
+                      <TableCell className="font-mono text-zinc-700 dark:text-zinc-300">{markStr}</TableCell>
+                      <TableCell numeric className="font-mono">{row.last_price != null ? fmtNum(row.last_price) : "—"}</TableCell>
+                      <TableCell numeric className="font-mono">{row.market_value != null ? fmtCurrency(row.market_value) : "—"}</TableCell>
+                      <TableCell
+                        numeric
+                        className={`font-mono ${unrealizedPl != null ? (unrealizedPl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400") : ""}`}
                       >
-                        {row.symbol}
-                      </Link>
-                    </TableCell>
-                    <TableCell numeric className="font-mono">{row.quantity}</TableCell>
-                    <TableCell numeric className="font-mono">{row.avg_cost != null ? fmtNum(row.avg_cost) : "—"}</TableCell>
-                    <TableCell className="font-mono text-zinc-700 dark:text-zinc-300">{markStr}</TableCell>
-                    <TableCell numeric className="font-mono">{row.last_price != null ? fmtNum(row.last_price) : "—"}</TableCell>
-                    <TableCell numeric className="font-mono">{row.market_value != null ? fmtCurrency(row.market_value) : "—"}</TableCell>
-                    <TableCell
-                      numeric
-                      className={`font-mono ${unrealizedPl != null ? (unrealizedPl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400") : ""}`}
-                    >
-                      {unrealizedPl != null ? fmtCurrency(unrealizedPl) : "—"}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
+                        {unrealizedPl != null ? fmtCurrency(unrealizedPl) : "—"}
+                      </TableCell>
+                      <TableCell
+                        numeric
+                        className={`font-mono ${row.pct_return != null ? (row.pct_return >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400") : ""}`}
+                      >
+                        {row.pct_return != null ? fmtPct(row.pct_return) : "—"}
+                      </TableCell>
+                      <TableCell>
+                        {row.cc_eligible === true ? (
+                          <Badge variant="success">Eligible</Badge>
+                        ) : (
+                          <span className="text-zinc-400 dark:text-zinc-500 text-xs">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {row.cc_eligible === true ? (
+                          <Link
+                            to={`/ticket?symbol=${encodeURIComponent(row.symbol)}&strategy=CC&action=OPEN`}
+                            className="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
+                          >
+                            Open CC ticket
+                          </Link>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
             </TableBody>
           </Table>
         </Card>

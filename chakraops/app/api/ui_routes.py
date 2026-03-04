@@ -3135,12 +3135,17 @@ def ui_portfolio(
                     "symbol": pos["symbol"],
                     "quantity": qty,
                     "avg_cost": pos.get("avg_cost"),
+                    "opened_at": pos.get("opened_at"),
                     "last_price": last_price,
                     "market_value": round(market_value, 2) if market_value is not None else None,
                     "unrealized_pnl": round(unrealized_pnl, 2) if unrealized_pnl is not None else None,
                     "updated_at": pos.get("updated_at"),
                 })
             shares_positions_out = enrich_live_shares_positions_with_mark(raw_shares, price_by_symbol, quote_ts_iso)
+            from app.api.notifications_store import maybe_append_cc_eligible_notification
+            for row in shares_positions_out:
+                if row.get("cc_eligible") is True and row.get("symbol"):
+                    maybe_append_cc_eligible_notification(row["symbol"])
         except Exception:
             pass
         return {

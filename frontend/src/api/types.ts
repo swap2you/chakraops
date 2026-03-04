@@ -547,7 +547,7 @@ export interface SharePosition {
   stop_price?: number | null;
 }
 
-/** R23.0: Share position with optional MTM. R27.4: mark_value, mark_source, quote_ts, mark_age_sec, unrealized_pl. */
+/** R23.0: Share position with optional MTM. R27.4: mark_value, mark_source, quote_ts, mark_age_sec, unrealized_pl. R27.7: pct_return, days_held, cc_eligible, cc_eligible_reason. */
 export interface SharePositionSummary {
   symbol: string;
   quantity: number;
@@ -562,6 +562,14 @@ export interface SharePositionSummary {
   mark_age_sec?: number | null;
   /** R27.4: Unrealized P/L when open; null when missing */
   unrealized_pl?: number | null;
+  /** R27.7: Percent return (request-time); null when missing */
+  pct_return?: number | null;
+  /** R27.7: Days held from opened_at; null when missing */
+  days_held?: number | null;
+  /** R27.7: True when quantity >= 100 (CC readiness) */
+  cc_eligible?: boolean | null;
+  /** R27.7: Safe label only (e.g. "Standard lot (100+ shares)") */
+  cc_eligible_reason?: string | null;
   updated_at?: string | null;
 }
 

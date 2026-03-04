@@ -30,3 +30,4 @@ logs/
 out/
 # R26.6: data/ contains journal DBs, checklists, reports (back up with scripts/backup_data.sh)
 data/
+*out/*

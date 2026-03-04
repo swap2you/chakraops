@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@/test/test-utils";
+import { useNotifications } from "@/api/queries";
 import { NotificationsPage } from "./NotificationsPage";
 
 const mockNotifications = {
@@ -30,12 +31,12 @@ const { mockAckBulk, mockArchiveBulk } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/api/queries", () => ({
-  useNotifications: () => ({
+  useNotifications: vi.fn(() => ({
     data: mockNotifications,
     isLoading: false,
     isError: false,
     refetch: vi.fn(),
-  }),
+  })),
   useAckNotification: () => mockAck,
   useArchiveNotification: () => mockArchive,
   useDeleteNotification: () => mockDelete,
@@ -110,5 +111,33 @@ describe("NotificationsPage", () => {
     const text = container.textContent ?? "";
     expect(text).not.toMatch(/\bFAIL\b/);
     expect(text).not.toMatch(/\bWARN\b/);
+  });
+
+  it("R27.7: renders CC_ELIGIBLE with safe label and Open CC ticket link", () => {
+    vi.mocked(useNotifications).mockReturnValueOnce({
+      data: {
+        notifications: [
+          {
+            id: "n-cc1",
+            timestamp_utc: "2026-02-01T12:00:00Z",
+            severity: "INFO",
+            type: "CC_ELIGIBLE",
+            subtype: "CC_ELIGIBLE",
+            symbol: "SPY",
+            message: "Shares eligible for covered call: SPY. Consider opening CC ticket.",
+            details: { symbol: "SPY" },
+            state: "NEW" as const,
+            updated_at: "2026-02-01T12:00:00Z",
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    render(<NotificationsPage />);
+    expect(screen.getByText("Covered call eligible")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Covered call eligible"));
+    expect(screen.getByRole("link", { name: /open cc ticket for spy/i })).toBeInTheDocument();
   });
 });

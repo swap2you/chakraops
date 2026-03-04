@@ -663,6 +663,14 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Gate** — Backend 902 passed, 1 skipped (47.02s); frontend 239 passed, 18 skipped (27.28s); build 6.50s (evidence in notes.md)
 - **Scope:** Learn page at /learn (daily routine, key terms, links); sidebar Learn nav; frontend-only. Branch: release/R27.6.
 
+### R27.7 — Phase 8 Portfolio & Position Management v1 (shares + CC readiness + portfolio snapshot)
+
+- [x] **Requirements** — chakraops/docs/releases/R27.7_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R27.7_release_notes.md
+- [x] **Verification** — [out/verification/R27.7/notes.md](../../../out/verification/R27.7/notes.md) (gate tails + UAT)
+- [x] **Gate** — Backend 906 passed, 1 skipped (54.01s); frontend 242 passed, 18 skipped (38.43s); build 7.75s (evidence in notes.md)
+- **Scope:** Shares store (cost basis/unrealized P/L); enrichment (mark_value, pct_return, days_held, cc_eligible); CC_ELIGIBLE notification; Portfolio CC badge/filter + Ticket link; Notifications CC_ELIGIBLE safe label + deep link. Branch: release/R27.7.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

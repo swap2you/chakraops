@@ -361,3 +361,4 @@
 {"event": "state", "ref_id": "8e11fa58-ec71-4c25-9847-14b06dadd294", "state": "ARCHIVED", "updated_at": "2026-03-02T19:24:07.615529+00:00"}
 {"event": "state", "ref_id": "3fb1c172-eb7b-4894-a44b-5ec7230bd5be", "state": "ARCHIVED", "updated_at": "2026-03-02T19:24:07.631536+00:00"}
 {"event": "state", "ref_id": "14529f96-be1c-477b-bc79-b006bb19c496", "state": "ARCHIVED", "updated_at": "2026-03-02T19:24:07.649670+00:00"}
+{"id": "4872c299-868d-4dee-82c0-91e753fda422", "timestamp_utc": "2026-03-04T16:34:33.292190+00:00", "severity": "INFO", "type": "CC_ELIGIBLE", "subtype": "CC_ELIGIBLE", "symbol": "SPY", "message": "Shares eligible for covered call: SPY. Consider opening CC ticket.", "details": {"symbol": "SPY"}}

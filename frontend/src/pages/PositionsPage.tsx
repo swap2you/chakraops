@@ -1,6 +1,6 @@
 /**
- * R27.9: Unified Positions — read-only aggregation (live shares, live options, paper).
- * Filters: Open/Closed, Live/Paper, Type, Symbol. Safe labels only; no FAIL/WARN in DOM.
+ * R27.9/R28.0: Unified Positions — read-only aggregation (live shares, live options, paper).
+ * Source column (LIVE/PAPER); Mark/Unrealized when API provides; safe labels only; no FAIL/WARN in DOM.
  */
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -120,12 +120,14 @@ export function PositionsPage() {
             <Table>
               <TableHeader>
                 <TableHead>Symbol</TableHead>
+                <TableHead data-testid="positions-th-source">Source</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead className="text-right">Qty</TableHead>
                 <TableHead>Opened</TableHead>
-                <TableHead className="text-right">Mark / Unrealized</TableHead>
+                <TableHead className="text-right" data-testid="positions-th-mark">Mark / Unrealized</TableHead>
                 <TableHead>Ticket</TableHead>
                 <TableHead>Journal</TableHead>
+                <TableHead>Paper</TableHead>
                 {state === "closed" && (
                   <>
                     <TableHead>Closed</TableHead>
@@ -137,6 +139,7 @@ export function PositionsPage() {
                 {positions.map((p) => (
                   <TableRow key={p.id} data-testid="positions-row">
                     <TableCell className="font-mono">{p.symbol}</TableCell>
+                    <TableCell data-testid="positions-cell-source">{p.is_paper ? "PAPER" : "LIVE"}</TableCell>
                     <TableCell>
                       <span className="flex items-center gap-1">
                         {p.instrument_type}
@@ -147,7 +150,11 @@ export function PositionsPage() {
                     </TableCell>
                     <TableCell className="text-right">{fmtNum(p.qty)}</TableCell>
                     <TableCell className="text-zinc-600 dark:text-zinc-400">{fmtDate(p.opened_ts)}</TableCell>
-                    <TableCell className="text-right text-zinc-500">—</TableCell>
+                    <TableCell className="text-right text-zinc-500" data-testid="positions-cell-mark">
+                      {p.mark_value != null || p.unrealized_pl != null
+                        ? [p.mark_value != null ? fmtNum(p.mark_value) : "", p.unrealized_pl != null ? fmtNum(p.unrealized_pl) : ""].filter(Boolean).join(" / ") || "—"
+                        : "—"}
+                    </TableCell>
                     <TableCell>
                       <Link
                         to="/ticket"
@@ -165,6 +172,19 @@ export function PositionsPage() {
                       >
                         Journal
                       </Link>
+                    </TableCell>
+                    <TableCell>
+                      {p.is_paper ? (
+                        <Link
+                          to="/paper"
+                          className="text-primary hover:underline text-sm"
+                          data-testid="positions-link-paper"
+                        >
+                          Paper
+                        </Link>
+                      ) : (
+                        <span className="text-zinc-400">—</span>
+                      )}
                     </TableCell>
                     {state === "closed" && (
                       <>

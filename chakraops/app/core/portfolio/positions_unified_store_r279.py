@@ -368,3 +368,119 @@ def get_positions_unified_health() -> Dict[str, Any]:
             "closed_count": 0,
             "last_build_ts": datetime.now(timezone.utc).isoformat(),
         }
+
+
+# --- R28.0: Paper write mirror (idempotent upsert) ---
+
+def _paper_pos_to_instrument_type(p: Dict[str, Any]) -> str:
+    strat = (p.get("strategy") or "SHARES").strip().upper()
+    if strat == "SHARES":
+        return INSTRUMENT_SHARES
+    if strat == "CSP":
+        return INSTRUMENT_CSP
+    if strat == "CC":
+        return INSTRUMENT_CC
+    return INSTRUMENT_CC  # OPTION fallback
+
+
+def mirror_paper_open_to_unified(pos: Dict[str, Any]) -> None:
+    """R28.0: Idempotent upsert of paper open position into positions_open. Stable id = paper_{pos[id]}."""
+    pid = (pos.get("id") or "").strip()
+    if not pid:
+        return
+    init_db()
+    sym = (pos.get("symbol") or "").strip().upper()
+    itype = _paper_pos_to_instrument_type(pos)
+    qty = int(pos.get("qty") or 0)
+    opened_ts = (pos.get("open_ts") or "")[:26]
+    if not opened_ts:
+        return
+    row_id = f"paper_{pid}"
+    with _LOCK:
+        conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+        try:
+            conn.execute(
+                """INSERT OR REPLACE INTO positions_open (
+                    id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags
+                ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    row_id, sym, itype, qty,
+                    pos.get("open_price"), pos.get("strike"), (pos.get("expiry") or "")[:10] or None, pos.get("right"),
+                    opened_ts, pid, _safe_str(pos.get("notes")), None,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    logger.debug("[R28.0] mirrored paper open %s to unified", row_id)
+
+
+def mirror_paper_close_to_unified(pos: Dict[str, Any]) -> None:
+    """R28.0: Idempotent upsert of paper closed position into positions_closed; remove from positions_open. Stable id = paper_closed_{pos[id]}."""
+    pid = (pos.get("id") or "").strip()
+    if not pid:
+        return
+    init_db()
+    sym = (pos.get("symbol") or "").strip().upper()
+    itype = _paper_pos_to_instrument_type(pos)
+    qty = int(pos.get("qty") or 0)
+    opened_ts = (pos.get("open_ts") or "")[:26]
+    closed_ts = (pos.get("close_ts") or "")[:26]
+    if not closed_ts:
+        return
+    open_row_id = f"paper_{pid}"
+    closed_row_id = f"paper_closed_{pid}"
+    fees = (float(pos.get("open_fees") or 0) + float(pos.get("close_fees") or 0)) or None
+    with _LOCK:
+        conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+        try:
+            conn.execute("DELETE FROM positions_open WHERE id = ?", (open_row_id,))
+            conn.execute(
+                """INSERT OR REPLACE INTO positions_closed (
+                    id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags,
+                    closed_ts, realized_pl, fees
+                ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    closed_row_id, sym, itype, qty,
+                    pos.get("open_price"), pos.get("strike"), (pos.get("expiry") or "")[:10] or None, pos.get("right"),
+                    opened_ts, pid, _safe_str(pos.get("notes")), None,
+                    closed_ts, pos.get("realized_pl"), fees,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    logger.debug("[R28.0] mirrored paper close %s to unified", closed_row_id)
+
+
+def get_positions_unified_reconcile_health() -> Dict[str, Any]:
+    """R28.0: Reconcile health — paper source counts vs unified DB. Status OK or Review (safe labels only; no FAIL/WARN)."""
+    try:
+        from app.core.paper.paper_store_r270 import paper_list_positions, STATUS_OPEN, STATUS_CLOSED
+        paper_open = paper_list_positions(status=STATUS_OPEN)
+        paper_closed = paper_list_positions(status=STATUS_CLOSED)
+        paper_open_count = len([p for p in paper_open if (p.get("id") or "").strip()])
+        paper_closed_count = len([p for p in paper_closed if (p.get("id") or "").strip()])
+    except Exception as e:
+        logger.warning("[R28.0] reconcile: paper source failed: %s", e)
+        return {"paper_open_count": 0, "paper_closed_count": 0, "unified_open_paper_count": 0, "unified_closed_paper_count": 0, "status": "Review"}
+    init_db()
+    with _LOCK:
+        conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+        try:
+            unified_open_paper = conn.execute(
+                "SELECT COUNT(*) FROM positions_open WHERE is_paper = 1"
+            ).fetchone()[0]
+            unified_closed_paper = conn.execute(
+                "SELECT COUNT(*) FROM positions_closed WHERE is_paper = 1"
+            ).fetchone()[0]
+        finally:
+            conn.close()
+    status = "OK" if (unified_open_paper == paper_open_count and unified_closed_paper == paper_closed_count) else "Review"
+    return {
+        "paper_open_count": paper_open_count,
+        "paper_closed_count": paper_closed_count,
+        "unified_open_paper_count": unified_open_paper,
+        "unified_closed_paper_count": unified_closed_paper,
+        "status": status,
+    }

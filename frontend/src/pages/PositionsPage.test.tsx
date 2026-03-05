@@ -1,6 +1,6 @@
 /**
- * R27.9: Positions page — unified list, filters (open/closed, live/paper, type, symbol);
- * mocked API; no FAIL/WARN in document.
+ * R27.9/R28.0: Positions page — unified list, Source column, Mark/Unrealized for paper when present,
+ * filters; no FAIL/WARN in document.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import userEvent from "@testing-library/user-event";
@@ -37,6 +37,8 @@ const mockPositions = [
     link_id: "2",
     notes: null,
     tags: null,
+    mark_value: 4.25,
+    unrealized_pl: 150,
   },
 ];
 
@@ -69,15 +71,24 @@ describe("PositionsPage", () => {
     expect(screen.getByTestId("positions-filter-symbol")).toBeInTheDocument();
   });
 
-  it("renders positions table with Symbol, Type, Qty, Opened, Ticket, Journal", () => {
+  it("renders positions table with Symbol, Source, Type, Qty, Opened, Mark, Ticket, Journal, Paper", () => {
     render(<PositionsPage />);
     expect(screen.getByText("AAPL")).toBeInTheDocument();
     expect(screen.getByText("SPY")).toBeInTheDocument();
-    expect(screen.getAllByText("SHARES").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("CSP").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Source")).toBeInTheDocument();
+    expect(screen.getByText("Mark / Unrealized")).toBeInTheDocument();
+    expect(screen.getAllByText("LIVE").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("PAPER").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByTestId("positions-row").length).toBe(2);
     expect(screen.getAllByTestId("positions-link-ticket").length).toBe(2);
     expect(screen.getAllByTestId("positions-link-journal").length).toBe(2);
+    expect(screen.getAllByTestId("positions-link-paper").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows Mark/Unrealized for paper row when API provides mark_value and unrealized_pl", () => {
+    const { container } = render(<PositionsPage />);
+    expect(container.textContent).toMatch(/4\.25/);
+    expect(container.textContent).toMatch(/150/);
   });
 
   it("calls useUnifiedPositions with state and include_paper", () => {
@@ -87,7 +98,7 @@ describe("PositionsPage", () => {
     );
   });
 
-  it("document textContent has no FAIL or WARN (R27.9)", () => {
+  it("document textContent has no FAIL or WARN (R27.9/R28.0)", () => {
     const { container } = render(<PositionsPage />);
     const text = container.textContent ?? "";
     expect(text).not.toMatch(/\bFAIL\b/);

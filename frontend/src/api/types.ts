@@ -954,7 +954,7 @@ export interface SharesPlan {
   as_of_inputs?: Record<string, unknown>;
 }
 
-/** R27.9: Unified position row (read-only aggregation). Safe labels only; no FAIL_/WARN_. */
+/** R27.9/R28.0: Unified position row (read-only aggregation). Safe labels only; no FAIL_/WARN_. */
 export interface UnifiedPosition {
   id: string;
   symbol: string;
@@ -972,6 +972,9 @@ export interface UnifiedPosition {
   closed_ts?: string | null;
   realized_pl?: number | null;
   fees?: number | null;
+  /** R28.0: optional mark / unrealized when API provides (e.g. paper) */
+  mark_value?: number | null;
+  unrealized_pl?: number | null;
 }
 
 /** R27.9: GET /api/ui/positions/unified response */

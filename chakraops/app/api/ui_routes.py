@@ -179,6 +179,15 @@ def _get_positions_unified_health() -> Dict[str, Any]:
         return {"open_count": 0, "closed_count": 0, "last_build_ts": None}
 
 
+def _get_positions_unified_reconcile_health() -> Dict[str, Any]:
+    """R28.0: positions_unified_reconcile — paper vs unified counts; status OK or Review. Safe labels only."""
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import get_positions_unified_reconcile_health
+        return get_positions_unified_reconcile_health()
+    except Exception:
+        return {"paper_open_count": 0, "paper_closed_count": 0, "unified_open_paper_count": 0, "unified_closed_paper_count": 0, "status": "Review"}
+
+
 def _get_decision_store_mtime_utc() -> Optional[str]:
     """Return active decision store file mtime as ISO UTC string, or None."""
     try:
@@ -1291,6 +1300,7 @@ def ui_system_health(
         "earnings_probe_symbol": earnings_probe_symbol,
         "guardrails": _get_guardrails_health(),
         "positions_unified": _get_positions_unified_health(),
+        "positions_unified_reconcile": _get_positions_unified_reconcile_health(),
     }
 
 
@@ -2090,6 +2100,11 @@ async def ui_paper_execute(
                 ts=ts,
                 notes=(body.get("notes") or "").strip()[:500] or None,
             )
+            try:
+                from app.core.portfolio.positions_unified_store_r279 import mirror_paper_open_to_unified
+                mirror_paper_open_to_unified(position)
+            except Exception:
+                pass
             trade_date = (position.get("open_ts") or "")[:10] or (datetime.now(timezone.utc).date()).isoformat()
             tags_parts = [(body.get("tags") or "").strip()]
             sizing_hit = body.get("sizing_constraints_hit")
@@ -2139,6 +2154,11 @@ async def ui_paper_execute(
                 close_fees=fees,
                 ts=ts,
             )
+            try:
+                from app.core.portfolio.positions_unified_store_r279 import mirror_paper_close_to_unified
+                mirror_paper_close_to_unified(position)
+            except Exception:
+                pass
             trade_date = (position.get("close_ts") or "")[:10] or (datetime.now(timezone.utc).date()).isoformat()
             journal_create(
                 trade_date=trade_date,
@@ -2247,6 +2267,11 @@ async def ui_paper_close(
         raise HTTPException(status_code=404, detail="Position not found or already closed")
     strategy = (pos_before.get("strategy") or "SHARES").strip().upper()
     position = paper_execute_close(position_id=position_id, close_price=close_price, close_fees=close_fees, ts=ts)
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import mirror_paper_close_to_unified
+        mirror_paper_close_to_unified(position)
+    except Exception:
+        pass
     trade_date = (position.get("close_ts") or "")[:10] or (datetime.now(timezone.utc).date()).isoformat()
     action = "SELL" if strategy == "SHARES" else ("CLOSE_CSP" if strategy == "CSP" else "CLOSE_CC")
     existing_tags = (pos_before.get("notes") or "").strip()[:200] or ""

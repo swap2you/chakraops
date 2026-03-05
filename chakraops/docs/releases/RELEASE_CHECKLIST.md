@@ -688,6 +688,15 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Checklist completed in out/verification/R27.9/notes.md (grep proof recorded; file not present expected)
 - **Scope:** Unified positions store (positions_open/positions_closed); read-only aggregation from holdings_db + tracked positions + paper; GET /api/ui/positions/unified; system-health positions_unified; Positions page with filters and safe labels. Branch: release/R27.9.
 
+### R28.0 — Paper write mirror + reconcile health + Positions UI upgrades
+
+- [x] **Requirements** — chakraops/docs/releases/R28.0_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R28.0_release_notes.md
+- [x] **Verification** — out/verification/R28.0/notes.md (gate tails + UAT)
+- [x] **Gate** — Backend 921 passed, 3 skipped; frontend 246 passed, 18 skipped; build 7.49s. Evidence: out/verification/R28.0/notes.md
+- [x] **UAT** — Checklist completed in out/verification/R28.0/notes.md (grep proof: file not present)
+- **Scope:** Paper open/close mirror to unified DB (idempotent); positions_unified_reconcile health block; Positions page Source column, Mark/Unrealized for paper, safe labels. Branch: release/R28.0.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

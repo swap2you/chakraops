@@ -130,22 +130,23 @@ def _get_copilot_status_health() -> Dict[str, Any]:
 
 
 def _get_mark_refresh_health() -> Dict[str, Any]:
-    """Phase 16.0: Mark refresh state for system health."""
+    """Phase 16.0/R28.2: Mark refresh state for system health. Only safe status/status_label (no PASS/FAIL/WARN)."""
     try:
         from app.core.portfolio.mark_refresh_state import load_mark_refresh_state
         state = load_mark_refresh_state()
         if state is None:
-            return {"last_run_at_utc": None, "last_result": None, "updated_count": None, "skipped_count": None, "error_count": None, "errors_sample": []}
+            return {"last_run_at_utc": None, "status": None, "status_label": None, "updated_count": None, "skipped_count": None, "error_count": None, "errors_sample": []}
         return {
             "last_run_at_utc": state.get("last_run_at_utc"),
-            "last_result": state.get("last_result"),
+            "status": state.get("status"),
+            "status_label": state.get("status_label"),
             "updated_count": state.get("updated_count"),
             "skipped_count": state.get("skipped_count"),
             "error_count": state.get("error_count"),
             "errors_sample": state.get("errors_sample") or [],
         }
     except Exception:
-        return {"last_run_at_utc": None, "last_result": None, "updated_count": None, "skipped_count": None, "error_count": None, "errors_sample": []}
+        return {"last_run_at_utc": None, "status": None, "status_label": None, "updated_count": None, "skipped_count": None, "error_count": None, "errors_sample": []}
 
 
 def _get_portfolio_risk_notifier_health() -> Dict[str, Any]:

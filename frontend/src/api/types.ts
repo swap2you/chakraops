@@ -342,10 +342,14 @@ export interface UiSystemHealthDecisionStore {
   decision_store_mtime_utc?: string | null;
 }
 
-/** Phase 16.0: Mark refresh state from out/mark_refresh_state.json */
+/** Phase 16.0/R28.2: Mark refresh state from out/mark_refresh_state.json. Safe status only (no PASS/FAIL/WARN). */
 export interface UiSystemHealthMarkRefresh {
   last_run_at_utc?: string | null;
-  last_result?: "PASS" | "WARN" | "FAIL" | null;
+  /** R28.2: Safe status (OK | Blocked | Degraded | Review). Prefer over last_result. */
+  status?: "OK" | "Blocked" | "Degraded" | "Review" | null;
+  status_label?: string | null;
+  /** @deprecated Use status. Kept for backward compat. */
+  last_result?: string | null;
   updated_count?: number | null;
   skipped_count?: number | null;
   error_count?: number | null;

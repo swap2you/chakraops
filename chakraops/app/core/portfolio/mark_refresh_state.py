@@ -33,21 +33,24 @@ def write_mark_refresh_state(
 ) -> None:
     """
     Write out/mark_refresh_state.json after marks refresh run.
-    last_result: PASS if errors=0; WARN if errors>0 but updated_count>0; FAIL if updated_count==0 and errors>0.
+    R28.2: Persist only safe status + status_label (no PASS/FAIL/WARN in file).
     """
+    from app.core.portfolio.runtime_state_safe_labels import normalize_mark_refresh_result
     now = datetime.now(timezone.utc).isoformat()
     error_count = len(errors)
     if error_count == 0:
-        last_result = "PASS"
+        raw_result = "PASS"
     elif updated_count > 0:
-        last_result = "WARN"
+        raw_result = "WARN"
     else:
-        last_result = "FAIL"
+        raw_result = "FAIL"
+    status, status_label = normalize_mark_refresh_result(raw_result)
 
     errors_sample = errors[:10] if errors else []
     data = {
         "last_run_at_utc": now,
-        "last_result": last_result,
+        "status": status,
+        "status_label": status_label,
         "updated_count": updated_count,
         "skipped_count": skipped_count,
         "error_count": error_count,
@@ -62,13 +65,27 @@ def write_mark_refresh_state(
 
 
 def load_mark_refresh_state() -> Optional[Dict[str, Any]]:
-    """Load mark refresh state for system health. Returns None if file missing."""
+    """Load mark refresh state for system health. Returns None if file missing. R28.2: backward compat with last_result."""
     path = _mark_refresh_state_path()
     if not path.exists():
         return None
     try:
         with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            state = json.load(f)
+        # R28.2: Expose safe status; for backward compat return last_result = status so readers get safe value
+        if isinstance(state, dict) and "status" in state:
+            state = dict(state)
+            state["last_result"] = state.get("status")
+        elif isinstance(state, dict) and "last_result" in state:
+            # Old file: normalize for API so we never return raw PASS/FAIL/WARN
+            from app.core.portfolio.runtime_state_safe_labels import normalize_mark_refresh_result
+            raw = state.get("last_result") or ""
+            status, status_label = normalize_mark_refresh_result(raw)
+            state = dict(state)
+            state["status"] = status
+            state["status_label"] = status_label
+            state["last_result"] = status
+        return state
     except Exception as e:
         logger.debug("Failed to load mark_refresh_state: %s", e)
         return None

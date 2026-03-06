@@ -31,7 +31,7 @@ const mockHealth = {
     },
   },
   eod_freeze: { enabled: true, scheduled_time_et: "15:58", last_run_at_utc: null, last_snapshot_dir: null },
-  mark_refresh: { last_run_at_utc: null, last_result: null, updated_count: null, skipped_count: null, error_count: null, errors_sample: [] },
+  mark_refresh: { last_run_at_utc: null, status: null, status_label: null, updated_count: null, skipped_count: null, error_count: null, errors_sample: [] },
   cadence: { mode: "EOD_BIASED", eligibility_as_of: "2026-02-27T18:00:00Z" },
   earnings_probe_symbol: "SPY",
   positions_unified_reconcile: {
@@ -236,13 +236,14 @@ describe("SystemDiagnosticsPage", () => {
     expect(btn).toBeDisabled();
   });
 
-  it("shows Mark Refresh card (Phase 16.0)", () => {
+  it("shows Mark Refresh card (Phase 16.0); R28.2 uses safe status only", () => {
     mockUseUiSystemHealth.mockReturnValueOnce({
       data: {
         ...mockHealth,
         mark_refresh: {
           last_run_at_utc: "2026-01-01T14:00:00Z",
-          last_result: "PASS",
+          status: "OK",
+          status_label: "OK",
           updated_count: 2,
           skipped_count: 0,
           error_count: 0,
@@ -254,6 +255,38 @@ describe("SystemDiagnosticsPage", () => {
     });
     render(<SystemDiagnosticsPage />);
     expect(screen.getByText(/Mark Refresh/i)).toBeInTheDocument();
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/\bFAIL\b/);
+    expect(text).not.toMatch(/\bWARN\b/);
+    expect(text).not.toMatch(/\bPASS\b/);
+  });
+
+  it("R28.2: Mark refresh and portfolio risk notifier render safe labels only; no FAIL/WARN/PASS in document", () => {
+    mockUseUiSystemHealth.mockReturnValueOnce({
+      data: {
+        ...mockHealth,
+        mark_refresh: {
+          last_run_at_utc: "2026-01-01T14:00:00Z",
+          status: "Blocked",
+          status_label: "No update",
+          updated_count: 0,
+          skipped_count: 0,
+          error_count: 1,
+          errors_sample: ["err1"],
+        },
+        portfolio_risk_notifier: { status: "Degraded", label: "Advisory" },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<SystemDiagnosticsPage />);
+    expect(screen.getByText(/Mark Refresh/i)).toBeInTheDocument();
+    expect(screen.getByText("Blocked")).toBeInTheDocument();
+    expect(screen.getByText("No update")).toBeInTheDocument();
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/\bFAIL\b/);
+    expect(text).not.toMatch(/\bWARN\b/);
+    expect(text).not.toMatch(/\bPASS\b/);
   });
 
   it("shows eod_freeze last_error when present (Phase 11.3)", () => {

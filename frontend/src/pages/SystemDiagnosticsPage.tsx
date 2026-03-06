@@ -534,10 +534,13 @@ export function SystemDiagnosticsPage() {
               <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{formatTimestampEt(markRefresh?.last_run_at_utc)}</p>
             </div>
             <div>
-              <span className="block text-xs text-zinc-500 dark:text-zinc-500">last_result</span>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Status</span>
               <p className="mt-1">
-                <StatusBadge status={markRefresh?.last_result ?? "—"} />
+                <StatusBadge status={markRefresh?.status ?? markRefresh?.last_result ?? "—"} />
               </p>
+              {markRefresh?.status_label != null && markRefresh.status_label !== "" && (
+                <p className="mt-0.5 text-xs text-zinc-600 dark:text-zinc-400">{markRefresh.status_label}</p>
+              )}
             </div>
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">updated / skipped / errors</span>

@@ -706,6 +706,15 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Live close/roll → unified row; reconcile Review → one notification; no FAIL/WARN
 - **Scope:** Mirror live close/roll to unified DB (idempotent); single deduped advisory when reconcile Review; reconcile block on System Diagnostics. Branch: release/R28.1.
 
+### R28.2 — Safe labels in UI-facing runtime state files (out/)
+
+- [x] **Requirements** — chakraops/docs/releases/R28.2_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R28.2_release_notes.md
+- [x] **Verification** — out/verification/R28.2/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend 931 passed, 3 skipped; frontend 248 passed, 18 skipped; build 11.52s. Evidence: out/verification/R28.2/notes.md
+- [x] **UAT** — Runtime state files contain no FAIL/WARN/PASS; API/UI safe labels only
+- **Scope:** mark_refresh_state.json and portfolio_risk_notify_state.json persist only safe status/label; normalize helper; backward compat. Branch: release/R28.2.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

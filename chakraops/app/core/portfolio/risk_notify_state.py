@@ -53,20 +53,23 @@ def _load_state() -> Dict[str, Any]:
         return {}
 
 
-def _status_to_label(status: str) -> str:
-    """R24.3.1: Safe display label (no raw FAIL/WARN in persisted/UI)."""
-    return {"FAIL": "Limit breach", "WARN": "Advisory"}.get(status, "OK")
+def _normalize_for_save(raw_status: str) -> tuple:
+    """R28.2: Map raw FAIL/WARN to (safe_status, safe_label) for persistence. No raw tokens in file."""
+    from app.core.portfolio.runtime_state_safe_labels import normalize_runtime_status
+    return normalize_runtime_status(raw_status or "PASS")
 
 
-def _save_state(last_signature: str, last_notified_at_utc: str, last_status: str) -> None:
+def _save_state(last_signature: str, last_notified_at_utc: str, raw_status: str) -> None:
+    """R28.2: Persist only safe status + status_label (no FAIL/WARN in file)."""
     path = _risk_notify_state_path()
     try:
         from app.core.io.atomic import atomic_write_json
+        status, status_label = _normalize_for_save(raw_status)
         data = {
             "last_signature": last_signature,
             "last_notified_at_utc": last_notified_at_utc,
-            "last_status": last_status,
-            "last_status_label": _status_to_label(last_status),
+            "status": status,
+            "status_label": status_label,
         }
         atomic_write_json(path, data, indent=0)
     except Exception as e:
@@ -74,17 +77,16 @@ def _save_state(last_signature: str, last_notified_at_utc: str, last_status: str
 
 
 def get_portfolio_risk_notifier_display() -> Dict[str, Any]:
-    """R24.3.1: Safe status for System Health UI (OK/Degraded/Advisory, no raw FAIL/WARN)."""
+    """R24.3.1/R28.2: Safe status for System Health UI. Reads status/status_label (or legacy last_status for compat)."""
     state = _load_state()
+    status = state.get("status") or ""
+    label = state.get("status_label") or ""
+    if status or label:
+        return {"status": status or "OK", "label": label or "OK"}
+    # Backward compat: old file had last_status (raw)
     raw = (state.get("last_status") or "").strip().upper()
-    label = state.get("last_status_label") or _status_to_label(raw or "PASS")
-    if not raw or raw == "PASS":
-        return {"status": "OK", "label": label}
-    if raw == "FAIL":
-        return {"status": "Degraded", "label": label}
-    if raw == "WARN":
-        return {"status": "Advisory", "label": label}
-    return {"status": "OK", "label": label}
+    safe_status, safe_label = _normalize_for_save(raw or "PASS")
+    return {"status": safe_status, "label": safe_label}
 
 
 def should_emit_portfolio_risk_notification(
@@ -94,24 +96,27 @@ def should_emit_portfolio_risk_notification(
     """
     Return True if we should emit a notification.
     Emit only if: signature changed OR >60 min since last emit OR status transition (e.g. PASS->FAIL).
+    R28.2: Compares safe status for transition; persists only safe status.
     """
     if status not in ("FAIL", "WARN") or not breaches:
         return False
     sig = _breach_signature(breaches)
     state = _load_state()
     prev_sig = state.get("last_signature", "")
-    prev_status = state.get("last_status", "")
+    prev_status_safe = state.get("status") or (state.get("last_status") and _normalize_for_save(state["last_status"])[0]) or "OK"
     prev_ts_str = state.get("last_notified_at_utc", "")
     now_ts = time.time()
     now_utc = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
+
+    current_safe, _ = _normalize_for_save(status)
 
     # Signature changed: always emit
     if sig != prev_sig:
         _save_state(sig, now_utc, status)
         return True
 
-    # Status transition (e.g. was PASS, now FAIL)
-    if prev_status != status:
+    # Status transition (e.g. was OK, now Blocked)
+    if prev_status_safe != current_safe:
         _save_state(sig, now_utc, status)
         return True
 

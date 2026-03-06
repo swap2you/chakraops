@@ -720,7 +720,7 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **Requirements** — chakraops/docs/releases/R28.3_requirements.md
 - [x] **Release notes** — chakraops/docs/releases/R28.3_release_notes.md
 - [x] **Verification** — out/verification/R28.3/notes.md (gate tails + UAT + grep proof)
-- [ ] **Gate** — Backend full suite: 2 failed, 937 passed, 1 skipped in 357.95s; frontend 249 passed, 18 skipped; build 13.03s. Evidence: out/verification/R28.3/notes.md. Gate unchecked until full backend pass (failures in test_ui_routes.py, non-R28.3).
+- [x] **Gate** — Backend 939 passed, 1 skipped in 417.65s; frontend 249 passed, 18 skipped; build 13.03s. Evidence: out/verification/R28.3/notes.md.
 - [x] **UAT** — Notifications page no raw FAIL/WARN/PASS; legacy normalized; no decision writes
 - **Scope:** Notifications persist/return safe severity/labels; normalize on read; UI safe only. Branch: release/R28.3.
 

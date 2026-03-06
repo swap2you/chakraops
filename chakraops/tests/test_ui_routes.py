@@ -1483,8 +1483,10 @@ def test_phase16_mark_refresh_writes_state_and_system_health_includes_it(tmp_pat
     assert state_path.exists()
     state = json.loads(state_path.read_text(encoding="utf-8"))
     assert "last_run_at_utc" in state
-    assert "last_result" in state
+    assert "status" in state
+    assert "status_label" in state
     assert "updated_count" in state
+    assert "last_result" not in state
 
     with patch("app.core.eval.evaluation_store_v2.get_decision_store_path", return_value=store_path):
         client = TestClient(app)
@@ -1495,6 +1497,7 @@ def test_phase16_mark_refresh_writes_state_and_system_health_includes_it(tmp_pat
     mr = health["mark_refresh"]
     assert "last_run_at_utc" in mr
     assert "last_result" in mr
+    assert mr.get("last_result") not in ("FAIL", "WARN", "PASS")
 
 
 def test_phase16_portfolio_risk_notification_throttled(tmp_path):
@@ -1582,6 +1585,9 @@ def test_r2431_portfolio_risk_notifier_display_safe_labels(tmp_path):
         display = get_portfolio_risk_notifier_display()
         assert display.get("status") == "Degraded"
         assert display.get("label") == "Limit breach"
+        assert "FAIL" not in str(display)
+        assert "WARN" not in str(display)
+        assert "PASS" not in str(display)
 
 
 def test_phase16_diagnostics_includes_recommended_action(tmp_path):

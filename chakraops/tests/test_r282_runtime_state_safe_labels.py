@@ -100,7 +100,7 @@ def test_normalize_runtime_status() -> None:
     """normalize_runtime_status maps PASS/FAIL/WARN to safe (status, label)."""
     from app.core.portfolio.runtime_state_safe_labels import normalize_runtime_status, normalize_mark_refresh_result
     assert normalize_runtime_status("PASS") == ("OK", "OK")
-    assert normalize_runtime_status("FAIL") == ("Blocked", "Limit breach")
+    assert normalize_runtime_status("FAIL") == ("Degraded", "Limit breach")
     assert normalize_runtime_status("WARN") == ("Degraded", "Advisory")
     assert normalize_mark_refresh_result("PASS") == ("OK", "OK")
     assert normalize_mark_refresh_result("FAIL") == ("Blocked", "No update")

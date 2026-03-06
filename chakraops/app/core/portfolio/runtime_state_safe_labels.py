@@ -14,12 +14,13 @@ def normalize_runtime_status(raw: str) -> Tuple[str, str]:
     """
     Map raw status to (safe_status, safe_label) for persistence and UI.
     Raw PASS/FAIL/WARN must not appear in out/ runtime state files.
+    R28.3: FAIL (limit breach) -> Degraded; Blocked reserved for truly blocked/stop conditions.
     """
     r = (raw or "").strip().upper()
     if r == "PASS":
         return ("OK", "OK")
     if r == "FAIL":
-        return ("Blocked", "Limit breach")
+        return ("Degraded", "Limit breach")
     if r == "WARN":
         return ("Degraded", "Advisory")
     return ("OK", "OK")

@@ -389,13 +389,18 @@ export interface UiSystemHealthResponse {
   cadence?: { mode?: string; eligibility_as_of?: string | null };
   /** R25.8 — Probe symbol for earnings debug card (default SPY). */
   earnings_probe_symbol?: string;
-  /** R28.0/R28.1 — Unified positions reconcile: paper vs unified counts; status OK or Review. Safe labels only. */
+  /** R28.0/R28.1/R28.4 — Unified positions reconcile: paper + live vs unified counts; status OK or Review. Safe labels only. */
   positions_unified_reconcile?: {
     status?: "OK" | "Review";
     paper_open_count?: number;
     paper_closed_count?: number;
     unified_open_paper_count?: number;
     unified_closed_paper_count?: number;
+    /** R28.4 — Live shares open count from source; unified_open_live_shares_count from DB. */
+    live_shares_open_count?: number;
+    live_options_open_count?: number;
+    unified_open_live_shares_count?: number;
+    unified_open_live_options_count?: number;
   };
   /** R25.9 — Portfolio guardrails: status (OK/Advisory/Blocked), metrics, limits. Safe labels only. */
   guardrails?: {

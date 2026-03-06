@@ -454,7 +454,11 @@ def mirror_paper_close_to_unified(pos: Dict[str, Any]) -> None:
 
 
 def get_positions_unified_reconcile_health() -> Dict[str, Any]:
-    """R28.0: Reconcile health — paper source counts vs unified DB. Status OK or Review (safe labels only; no FAIL/WARN)."""
+    """R28.0/R28.4: Reconcile health — paper + live open source counts vs unified DB. Status OK or Review (safe labels only; no FAIL/WARN)."""
+    paper_open_count = 0
+    paper_closed_count = 0
+    live_shares_open_count = 0
+    live_options_open_count = 0
     try:
         from app.core.paper.paper_store_r270 import paper_list_positions, STATUS_OPEN, STATUS_CLOSED
         paper_open = paper_list_positions(status=STATUS_OPEN)
@@ -463,8 +467,23 @@ def get_positions_unified_reconcile_health() -> Dict[str, Any]:
         paper_closed_count = len([p for p in paper_closed if (p.get("id") or "").strip()])
     except Exception as e:
         logger.warning("[R28.0] reconcile: paper source failed: %s", e)
-        return {"paper_open_count": 0, "paper_closed_count": 0, "unified_open_paper_count": 0, "unified_closed_paper_count": 0, "status": "Review"}
+    try:
+        from app.core.accounts.holdings_db import list_share_positions, _DEFAULT_ACCOUNT_ID
+        live_shares = list_share_positions(_DEFAULT_ACCOUNT_ID)
+        live_shares_open_count = len([s for s in live_shares if int(s.get("quantity") or 0) > 0])
+    except Exception as e:
+        logger.warning("[R28.4] reconcile: live shares source failed: %s", e)
+    try:
+        from app.core.positions.store import list_positions as list_tracked
+        live_options = list_tracked(status="OPEN")
+        live_options_open_count = len([p for p in live_options if (getattr(p, "strategy", "") or "").strip().upper() in ("CSP", "CC")])
+    except Exception as e:
+        logger.warning("[R28.4] reconcile: live options source failed: %s", e)
     init_db()
+    unified_open_paper = 0
+    unified_closed_paper = 0
+    unified_open_live_shares_count = 0
+    unified_open_live_options_count = 0
     with _LOCK:
         conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
         try:
@@ -474,14 +493,29 @@ def get_positions_unified_reconcile_health() -> Dict[str, Any]:
             unified_closed_paper = conn.execute(
                 "SELECT COUNT(*) FROM positions_closed WHERE is_paper = 1"
             ).fetchone()[0]
+            unified_open_live_shares_count = conn.execute(
+                "SELECT COUNT(*) FROM positions_open WHERE is_paper = 0 AND instrument_type = ?",
+                (INSTRUMENT_SHARES,),
+            ).fetchone()[0]
+            unified_open_live_options_count = conn.execute(
+                "SELECT COUNT(*) FROM positions_open WHERE is_paper = 0 AND instrument_type IN (?, ?)",
+                (INSTRUMENT_CSP, INSTRUMENT_CC),
+            ).fetchone()[0]
         finally:
             conn.close()
-    status = "OK" if (unified_open_paper == paper_open_count and unified_closed_paper == paper_closed_count) else "Review"
+    paper_ok = unified_open_paper == paper_open_count and unified_closed_paper == paper_closed_count
+    live_shares_ok = unified_open_live_shares_count == live_shares_open_count
+    live_options_ok = unified_open_live_options_count == live_options_open_count
+    status = "OK" if (paper_ok and live_shares_ok and live_options_ok) else "Review"
     return {
         "paper_open_count": paper_open_count,
         "paper_closed_count": paper_closed_count,
         "unified_open_paper_count": unified_open_paper,
         "unified_closed_paper_count": unified_closed_paper,
+        "live_shares_open_count": live_shares_open_count,
+        "live_options_open_count": live_options_open_count,
+        "unified_open_live_shares_count": unified_open_live_shares_count,
+        "unified_open_live_options_count": unified_open_live_options_count,
         "status": status,
     }
 
@@ -517,8 +551,10 @@ def mirror_live_close_to_unified(payload_or_position: Dict[str, Any]) -> None:
 
 
 def _mirror_live_shares_close(p: Dict[str, Any], closed_id: str) -> None:
-    """Mirror live shares closed row. Stable id = live_shares_closed_{closed_id}."""
+    """Mirror live shares closed row. Stable id = live_shares_closed_{closed_id}. R28.4: Remove corresponding open row (one per symbol for live SHARES)."""
     sym = (p.get("symbol") or "").strip().upper()
+    if not sym:
+        return
     qty = int(p.get("quantity") or 0)
     opened_ts = (p.get("opened_at") or "")[:26]
     closed_ts = (p.get("closed_at") or "")[:26]
@@ -530,6 +566,10 @@ def _mirror_live_shares_close(p: Dict[str, Any], closed_id: str) -> None:
     with _LOCK:
         conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
         try:
+            conn.execute(
+                "DELETE FROM positions_open WHERE symbol = ? AND is_paper = 0 AND instrument_type = ?",
+                (sym, INSTRUMENT_SHARES),
+            )
             conn.execute(
                 """INSERT OR REPLACE INTO positions_closed (
                     id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags,
@@ -587,8 +627,43 @@ def _mirror_live_options_close(p: Dict[str, Any]) -> None:
     logger.debug("[R28.1] mirrored live options close %s to unified", closed_row_id)
 
 
+def mirror_live_shares_open_to_unified(share_position: Dict[str, Any]) -> None:
+    """R28.4: Idempotent mirror of a live SHARES open position into positions_open. Stable id = live_shares_{id}. Source=LIVE."""
+    sid = (share_position.get("id") or "").strip()
+    if not sid:
+        return
+    sym = (share_position.get("symbol") or "").strip().upper()
+    if not sym:
+        return
+    qty = int(share_position.get("quantity") or 0)
+    if qty <= 0:
+        return
+    opened_ts = (share_position.get("opened_at") or share_position.get("created_at") or "")[:26]
+    if not opened_ts:
+        return
+    init_db()
+    row_id = f"live_shares_{sid}"
+    with _LOCK:
+        conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+        try:
+            conn.execute(
+                """INSERT OR REPLACE INTO positions_open (
+                    id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags
+                ) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    row_id, sym, INSTRUMENT_SHARES, qty,
+                    share_position.get("avg_cost"), None, None, None,
+                    opened_ts, sid, _safe_str(share_position.get("notes")), None,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    logger.debug("[R28.4] mirrored live shares open %s to unified", row_id)
+
+
 def mirror_live_open_to_unified(payload_or_position: Dict[str, Any]) -> None:
-    """R28.1: Idempotent mirror of a live options OPEN position into positions_open (e.g. after roll). Stable id = live_options_{position_id}."""
+    """R28.1: Idempotent mirror of a live options OPEN position into positions_open (e.g. after roll). Stable id = live_options_{position_id}. R28.4: For SHARES use mirror_live_shares_open_to_unified."""
     p = payload_or_position if isinstance(payload_or_position, dict) else getattr(payload_or_position, "to_dict", lambda: {})()
     if not p:
         return

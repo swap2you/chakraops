@@ -724,6 +724,15 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Notifications page no raw FAIL/WARN/PASS; legacy normalized; no decision writes
 - **Scope:** Notifications persist/return safe severity/labels; normalize on read; UI safe only. Branch: release/R28.3.
 
+### R28.4 — Live open mirror to unified positions DB
+
+- [x] **Requirements** — chakraops/docs/releases/R28.4_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R28.4_release_notes.md
+- [x] **Verification** — out/verification/R28.4/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend 943 passed, 1 skipped in 127.06s; frontend 249 passed, 18 skipped; build 8.08s. Evidence: out/verification/R28.4/notes.md.
+- [x] **UAT** — Live shares/options open mirror idempotent; reconcile includes live counts; safe labels only
+- **Scope:** Mirror live SHARES/OPTIONS open to positions_open; reconcile health live counts; safe labels only. Branch: release/R28.4.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

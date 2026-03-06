@@ -188,12 +188,18 @@ def _get_positions_unified_health() -> Dict[str, Any]:
 
 
 def _get_positions_unified_reconcile_health() -> Dict[str, Any]:
-    """R28.0: positions_unified_reconcile — paper vs unified counts; status OK or Review. Safe labels only."""
+    """R28.0/R28.4: positions_unified_reconcile — paper + live vs unified counts; status OK or Review. Safe labels only."""
     try:
         from app.core.portfolio.positions_unified_store_r279 import get_positions_unified_reconcile_health
         return get_positions_unified_reconcile_health()
     except Exception:
-        return {"paper_open_count": 0, "paper_closed_count": 0, "unified_open_paper_count": 0, "unified_closed_paper_count": 0, "status": "Review"}
+        return {
+            "paper_open_count": 0, "paper_closed_count": 0,
+            "unified_open_paper_count": 0, "unified_closed_paper_count": 0,
+            "live_shares_open_count": 0, "live_options_open_count": 0,
+            "unified_open_live_shares_count": 0, "unified_open_live_options_count": 0,
+            "status": "Review",
+        }
 
 
 def _get_decision_store_mtime_utc() -> Optional[str]:
@@ -3861,6 +3867,12 @@ async def ui_shares_position_upsert(
                 stop_price = None
         from app.core.accounts.holdings_db import upsert_share_position
         pos = upsert_share_position(aid, symbol, qty, avg_cost=avg_cost, opened_at=opened_at, target_price=target_price, stop_price=stop_price)
+        try:
+            from app.core.portfolio.positions_unified_store_r279 import mirror_live_shares_open_to_unified, ensure_reconcile_advisory_notification
+            mirror_live_shares_open_to_unified(pos)
+            ensure_reconcile_advisory_notification()
+        except Exception:
+            pass
         return pos
     except HTTPException:
         raise

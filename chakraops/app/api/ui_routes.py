@@ -3100,7 +3100,7 @@ async def ui_positions_manual_execute(
     request: Request,
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """Record a manual execution (creates a tracked position). UI-safe wrapper."""
+    """Record a manual execution (creates a tracked position). UI-safe wrapper. R28.5: Mirror live options open to unified + reconcile advisory."""
     _require_ui_key(x_ui_key)
     try:
         from app.core.positions.service import manual_execute
@@ -3108,6 +3108,15 @@ async def ui_positions_manual_execute(
         position, errors = manual_execute(body)
         if errors:
             raise HTTPException(status_code=400, detail={"errors": errors})
+        try:
+            account_id = (getattr(position, "account_id", None) or "").strip().lower()
+            strategy = (getattr(position, "strategy", None) or "").strip().upper()
+            if account_id != "paper" and strategy in ("CSP", "CC"):
+                from app.core.portfolio.positions_unified_store_r279 import mirror_live_open_to_unified, ensure_reconcile_advisory_notification
+                mirror_live_open_to_unified(position.to_dict())
+                ensure_reconcile_advisory_notification()
+        except Exception:
+            pass
         return position.to_dict()
     except HTTPException:
         raise

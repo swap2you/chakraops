@@ -484,3 +484,164 @@ def get_positions_unified_reconcile_health() -> Dict[str, Any]:
         "unified_closed_paper_count": unified_closed_paper,
         "status": status,
     }
+
+
+# --- R28.1: Live close/roll mirror (idempotent) ---
+
+def _live_options_pos_to_instrument_type(p: Dict[str, Any]) -> str:
+    strat = (p.get("strategy") or "").strip().upper()
+    if strat == "CSP":
+        return INSTRUMENT_CSP
+    if strat == "CC":
+        return INSTRUMENT_CC
+    return INSTRUMENT_CC  # OPTION fallback
+
+
+def mirror_live_close_to_unified(payload_or_position: Dict[str, Any]) -> None:
+    """R28.1: Idempotent mirror of a live close into positions_closed. Handles shares (dict from close_share_position) or options (Position.to_dict() or equivalent)."""
+    p = payload_or_position if isinstance(payload_or_position, dict) else getattr(payload_or_position, "to_dict", lambda: {})()
+    if not p:
+        return
+    # Options: has position_id and strategy CSP/CC
+    position_id = (p.get("position_id") or p.get("id") or "").strip()
+    strategy = (p.get("strategy") or "").strip().upper()
+    is_options = bool(position_id and strategy in ("CSP", "CC"))
+    if is_options:
+        _mirror_live_options_close(p)
+        return
+    # Shares: id = closed row id, symbol, quantity, opened_at, closed_at, exit_price, realized_pnl
+    closed_id = (p.get("id") or "").strip()
+    if not closed_id or not (p.get("symbol") or "").strip():
+        return
+    _mirror_live_shares_close(p, closed_id)
+
+
+def _mirror_live_shares_close(p: Dict[str, Any], closed_id: str) -> None:
+    """Mirror live shares closed row. Stable id = live_shares_closed_{closed_id}."""
+    sym = (p.get("symbol") or "").strip().upper()
+    qty = int(p.get("quantity") or 0)
+    opened_ts = (p.get("opened_at") or "")[:26]
+    closed_ts = (p.get("closed_at") or "")[:26]
+    if not closed_ts:
+        return
+    init_db()
+    row_id = f"live_shares_closed_{closed_id}"
+    avg_price = p.get("avg_cost") or p.get("exit_price")
+    with _LOCK:
+        conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+        try:
+            conn.execute(
+                """INSERT OR REPLACE INTO positions_closed (
+                    id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags,
+                    closed_ts, realized_pl, fees
+                ) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    row_id, sym, INSTRUMENT_SHARES, qty, avg_price, None, None, None, opened_ts, closed_id, _safe_str(p.get("close_notes")), None,
+                    closed_ts, p.get("realized_pnl"), None,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    logger.debug("[R28.1] mirrored live shares close %s to unified", row_id)
+
+
+def _mirror_live_options_close(p: Dict[str, Any]) -> None:
+    """Mirror live options closed: remove from positions_open, upsert into positions_closed. Stable id = live_options_closed_{position_id}."""
+    pid = (p.get("position_id") or p.get("id") or "").strip()
+    if not pid:
+        return
+    init_db()
+    sym = (p.get("symbol") or "").strip().upper()
+    itype = _live_options_pos_to_instrument_type(p)
+    contracts = int(p.get("contracts") or 0)
+    qty = contracts * 100 if contracts else (int(p.get("quantity") or 0))
+    opened_ts = (p.get("opened_at") or p.get("open_time_utc") or "")[:26]
+    closed_ts = (p.get("closed_at") or p.get("close_time_utc") or "")[:26]
+    if not closed_ts:
+        return
+    open_row_id = f"live_options_{pid}"
+    closed_row_id = f"live_options_closed_{pid}"
+    open_f = float(p.get("open_fees") or 0)
+    close_f = float(p.get("close_fees") or 0)
+    fees = (open_f + close_f) or None
+    with _LOCK:
+        conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+        try:
+            conn.execute("DELETE FROM positions_open WHERE id = ?", (open_row_id,))
+            conn.execute(
+                """INSERT OR REPLACE INTO positions_closed (
+                    id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags,
+                    closed_ts, realized_pl, fees
+                ) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    closed_row_id, sym, itype, qty,
+                    p.get("open_credit") or p.get("credit_expected"), p.get("strike"), (p.get("expiration") or p.get("expiry") or "")[:10] or None, p.get("option_type") or p.get("right"),
+                    opened_ts, pid, _safe_str(p.get("notes")), None,
+                    closed_ts, p.get("realized_pnl"), fees,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    logger.debug("[R28.1] mirrored live options close %s to unified", closed_row_id)
+
+
+def mirror_live_open_to_unified(payload_or_position: Dict[str, Any]) -> None:
+    """R28.1: Idempotent mirror of a live options OPEN position into positions_open (e.g. after roll). Stable id = live_options_{position_id}."""
+    p = payload_or_position if isinstance(payload_or_position, dict) else getattr(payload_or_position, "to_dict", lambda: {})()
+    if not p:
+        return
+    pid = (p.get("position_id") or p.get("id") or "").strip()
+    if not pid:
+        return
+    strat = (p.get("strategy") or "").strip().upper()
+    if strat not in ("CSP", "CC"):
+        return
+    init_db()
+    sym = (p.get("symbol") or "").strip().upper()
+    itype = _live_options_pos_to_instrument_type(p)
+    contracts = int(p.get("contracts") or 0)
+    qty = contracts * 100 if contracts else (int(p.get("quantity") or 0))
+    opened_ts = (p.get("opened_at") or p.get("open_time_utc") or "")[:26]
+    if not opened_ts:
+        return
+    row_id = f"live_options_{pid}"
+    with _LOCK:
+        conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+        try:
+            conn.execute(
+                """INSERT OR REPLACE INTO positions_open (
+                    id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags
+                ) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    row_id, sym, itype, qty,
+                    p.get("open_credit") or p.get("credit_expected"), p.get("strike"), (p.get("expiration") or p.get("expiry") or "")[:10] or None, p.get("option_type") or p.get("right"),
+                    opened_ts, pid, _safe_str(p.get("notes")), None,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    logger.debug("[R28.1] mirrored live options open %s to unified", row_id)
+
+
+def ensure_reconcile_advisory_notification() -> None:
+    """R28.1: If reconcile status is Review, ensure exactly one advisory notification (deduped). Safe labels only; no FAIL/WARN."""
+    try:
+        health = get_positions_unified_reconcile_health()
+        if (health.get("status") or "").strip() != "Review":
+            return
+    except Exception as e:
+        logger.warning("[R28.1] reconcile health check failed: %s", e)
+        return
+    try:
+        from app.api.notifications_store import load_notifications, append_notification
+        existing = load_notifications(limit=200, state_filter=None, type_filter="POSITIONS_RECONCILE_REVIEW")
+        for rec in existing:
+            if rec.get("state") in ("NEW", "ACKED"):
+                return  # Already have an active one; do not create another
+        message = "Unified positions reconcile needs attention (counts differ)."
+        append_notification("INFO", "POSITIONS_RECONCILE_REVIEW", message, symbol=None, details={"advisory": True})
+    except Exception as e:
+        logger.warning("[R28.1] reconcile advisory notification failed: %s", e)

@@ -697,6 +697,15 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Checklist completed in out/verification/R28.0/notes.md (grep proof: file not present)
 - **Scope:** Paper open/close mirror to unified DB (idempotent); positions_unified_reconcile health block; Positions page Source column, Mark/Unrealized for paper, safe labels. Branch: release/R28.0.
 
+### R28.1 — Live close/roll mirror + reconcile advisory + System Health reconcile block
+
+- [x] **Requirements** — chakraops/docs/releases/R28.1_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R28.1_release_notes.md
+- [x] **Verification** — out/verification/R28.1/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend 925 passed, 3 skipped; frontend 247 passed, 18 skipped; build 9.52s. Evidence: out/verification/R28.1/notes.md
+- [x] **UAT** — Live close/roll → unified row; reconcile Review → one notification; no FAIL/WARN
+- **Scope:** Mirror live close/roll to unified DB (idempotent); single deduped advisory when reconcile Review; reconcile block on System Diagnostics. Branch: release/R28.1.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

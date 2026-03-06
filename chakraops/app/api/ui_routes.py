@@ -3939,6 +3939,12 @@ async def ui_shares_position_close(
             is_paper=False,
             notes=(notes or "").strip()[:2000] or None,
         )
+        try:
+            from app.core.portfolio.positions_unified_store_r279 import mirror_live_close_to_unified, ensure_reconcile_advisory_notification
+            mirror_live_close_to_unified(closed)
+            ensure_reconcile_advisory_notification()
+        except Exception:
+            pass
         return closed
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -4103,6 +4109,12 @@ async def ui_positions_close(
             raise HTTPException(status_code=400, detail={"errors": errors})
         if position is None:
             raise HTTPException(status_code=404, detail="Position not found")
+        try:
+            from app.core.portfolio.positions_unified_store_r279 import mirror_live_close_to_unified, ensure_reconcile_advisory_notification
+            mirror_live_close_to_unified(position.to_dict())
+            ensure_reconcile_advisory_notification()
+        except Exception:
+            pass
         return position.to_dict()
     except HTTPException:
         raise
@@ -4230,6 +4242,20 @@ async def ui_positions_roll(
             raise HTTPException(status_code=status, detail={"errors": errors})
         if new_pos is None:
             raise HTTPException(status_code=404, detail="Position not found")
+        try:
+            from app.core.positions.service import get_position
+            from app.core.portfolio.positions_unified_store_r279 import (
+                mirror_live_close_to_unified,
+                mirror_live_open_to_unified,
+                ensure_reconcile_advisory_notification,
+            )
+            closed_pos = get_position(position_id)
+            if closed_pos:
+                mirror_live_close_to_unified(closed_pos.to_dict())
+            mirror_live_open_to_unified(new_pos.to_dict())
+            ensure_reconcile_advisory_notification()
+        except Exception:
+            pass
         return {"closed_position_id": position_id, "new_position": new_pos.to_dict()}
     except HTTPException:
         raise

@@ -34,6 +34,13 @@ const mockHealth = {
   mark_refresh: { last_run_at_utc: null, last_result: null, updated_count: null, skipped_count: null, error_count: null, errors_sample: [] },
   cadence: { mode: "EOD_BIASED", eligibility_as_of: "2026-02-27T18:00:00Z" },
   earnings_probe_symbol: "SPY",
+  positions_unified_reconcile: {
+    status: "OK",
+    paper_open_count: 0,
+    paper_closed_count: 0,
+    unified_open_paper_count: 0,
+    unified_closed_paper_count: 0,
+  },
   guardrails: {
     status: "OK",
     metrics: { cash_reserve_pct: 40, open_options_count: 1, open_shares_count: 0, symbols_exposure_count: 2, max_symbol_notional_pct: 10 },
@@ -117,6 +124,16 @@ describe("SystemDiagnosticsPage", () => {
     expect(screen.getByTestId("earnings-probe-card")).toBeInTheDocument();
     expect(screen.getByText(/Earnings probe/i)).toBeInTheDocument();
     expect(screen.getByText(/Probe symbol SPY/i)).toBeInTheDocument();
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/\bFAIL\b/);
+    expect(text).not.toMatch(/\bWARN\b/);
+  });
+
+  it("R28.1: Unified Positions Reconcile card renders when present; no FAIL/WARN in document", () => {
+    render(<SystemDiagnosticsPage />);
+    expect(screen.getByTestId("positions-unified-reconcile-card")).toBeInTheDocument();
+    expect(screen.getByText(/Unified Positions Reconcile/i)).toBeInTheDocument();
+    expect(screen.getByText(/Paper open/i)).toBeInTheDocument();
     const text = document.body.textContent ?? "";
     expect(text).not.toMatch(/\bFAIL\b/);
     expect(text).not.toMatch(/\bWARN\b/);

@@ -607,6 +607,36 @@ export function SystemDiagnosticsPage() {
             </div>
           </div>
         </Card>
+        {/* R28.1: Unified Positions Reconcile — status OK/Review, counts; safe labels only. */}
+        {data?.positions_unified_reconcile != null && (
+          <Card data-testid="positions-unified-reconcile-card">
+            <CardHeader title="Unified Positions Reconcile" description="Paper vs unified counts; safe labels only." />
+            <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Status</span>
+                <p className="mt-1">
+                  <StatusBadge status={data.positions_unified_reconcile.status ?? "Review"} />
+                </p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Paper open</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.positions_unified_reconcile.paper_open_count ?? "—"}</p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Paper closed</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.positions_unified_reconcile.paper_closed_count ?? "—"}</p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Unified open (paper)</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.positions_unified_reconcile.unified_open_paper_count ?? "—"}</p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Unified closed (paper)</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.positions_unified_reconcile.unified_closed_paper_count ?? "—"}</p>
+              </div>
+            </div>
+          </Card>
+        )}
         {/* R25.9: Guardrails — status (OK/Advisory/Blocked), metrics, limits; safe labels only. */}
         {data?.guardrails != null && (
           <Card data-testid="guardrails-card">

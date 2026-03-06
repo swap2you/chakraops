@@ -8,11 +8,12 @@ const mockNotifications = {
     {
       id: "n-abc123",
       timestamp_utc: "2026-01-01T12:00:00Z",
-      severity: "WARN",
+      severity: "Medium",
+      severity_label: "Advisory",
       type: "ORATS_WARN",
       subtype: "ORATS_STALE",
       symbol: null,
-      message: "ORATS status WARN; data may be stale",
+      message: "ORATS data may be stale",
       details: {},
       state: "NEW" as const,
       updated_at: "2026-01-01T12:00:00Z",
@@ -67,7 +68,7 @@ describe("NotificationsPage", () => {
   it("shows notification row", () => {
     render(<NotificationsPage />);
     expect(screen.getByText(/ORATS_WARN/i)).toBeInTheDocument();
-    expect(screen.getByText(/ORATS status Degraded/i)).toBeInTheDocument();
+    expect(screen.getByText(/ORATS data may be stale/i)).toBeInTheDocument();
   });
 
   it("shows subtype in table and filter includes subtype", () => {
@@ -101,16 +102,45 @@ describe("NotificationsPage", () => {
 
   it("shows Ack button in detail when notification state NEW (Phase 10.3)", () => {
     render(<NotificationsPage />);
-    fireEvent.click(screen.getByText(/ORATS status Degraded/i));
+    fireEvent.click(screen.getByText(/ORATS data may be stale/i));
     const ackButtons = screen.getAllByRole("button", { name: /^Ack$/i });
     expect(ackButtons.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("R25.4: does not display raw FAIL or WARN in document (safe labels only)", () => {
+  it("R25.4/R28.3: does not display raw FAIL, WARN, or PASS in document (safe labels only)", () => {
     const { container } = render(<NotificationsPage />);
     const text = container.textContent ?? "";
     expect(text).not.toMatch(/\bFAIL\b/);
     expect(text).not.toMatch(/\bWARN\b/);
+    expect(text).not.toMatch(/\bPASS\b/);
+  });
+
+  it("R28.3: legacy payload with raw severity is shown as safe label; no FAIL/WARN/PASS in DOM", () => {
+    vi.mocked(useNotifications).mockReturnValueOnce({
+      data: {
+        notifications: [
+          {
+            id: "legacy-1",
+            timestamp_utc: "2026-01-01T12:00:00Z",
+            severity: "WARN",
+            type: "LEGACY_TEST",
+            message: "Legacy message",
+            details: {},
+            state: "NEW" as const,
+            updated_at: "2026-01-01T12:00:00Z",
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    const { container } = render(<NotificationsPage />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\bFAIL\b/);
+    expect(text).not.toMatch(/\bWARN\b/);
+    expect(text).not.toMatch(/\bPASS\b/);
+    expect(screen.getByText(/LEGACY_TEST/i)).toBeInTheDocument();
   });
 
   it("R27.7: renders CC_ELIGIBLE with safe label and Open CC ticket link", () => {

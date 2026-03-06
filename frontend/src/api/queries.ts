@@ -1795,7 +1795,10 @@ export interface UiNotification {
   timestamp_utc: string;
   /** R25.4: Alias for timestamp_utc */
   created_ts?: string | null;
+  /** R28.3: Safe severity (Low/Medium/High). Never FAIL/WARN/PASS. */
   severity: string;
+  /** R28.3: Human-safe label for severity (e.g. Advisory, Review). */
+  severity_label?: string | null;
   type: string;
   /** Phase 8.6: Subtype (RUN_ERRORS, LOW_COMPLETENESS, ORATS_STALE, etc.) */
   subtype?: string | null;

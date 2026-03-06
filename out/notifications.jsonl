@@ -405,3 +405,50 @@
 {"id": "929a21e4-4732-4a67-a529-6c15bce351aa", "timestamp_utc": "2026-03-06T15:02:31.143316+00:00", "severity": "INFO", "type": "CC_ELIGIBLE", "subtype": "CC_ELIGIBLE", "symbol": "SPY", "message": "Shares eligible for covered call: SPY. Consider opening CC ticket.", "details": {"symbol": "SPY"}}
 {"id": "b2ad54a7-6aa7-4e68-9b6e-d00c34037236", "timestamp_utc": "2026-03-06T15:02:31.959055+00:00", "severity": "INFO", "type": "POSITIONS_RECONCILE_REVIEW", "subtype": null, "symbol": null, "message": "Unified positions reconcile needs attention (counts differ).", "details": {"advisory": true}}
 {"id": "97df94c7-0803-446d-aea5-778423b08873", "timestamp_utc": "2026-03-06T15:02:31.975040+00:00", "severity": "INFO", "type": "POSITIONS_RECONCILE_REVIEW", "subtype": null, "symbol": null, "message": "Unified positions reconcile needs attention (counts differ).", "details": {"advisory": true}}
+{"event": "ack", "ref_id": "97df94c7-0803-446d-aea5-778423b08873", "ack_at_utc": "2026-03-06T16:19:20.446340+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "b2ad54a7-6aa7-4e68-9b6e-d00c34037236", "ack_at_utc": "2026-03-06T16:19:20.462637+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "929a21e4-4732-4a67-a529-6c15bce351aa", "ack_at_utc": "2026-03-06T16:19:20.478355+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "769ad5c4-4712-4309-9d70-afea680b64a0", "ack_at_utc": "2026-03-06T16:19:20.494535+00:00", "ack_by": "ui"}
+{"event": "state", "ref_id": "97df94c7-0803-446d-aea5-778423b08873", "state": "ARCHIVED", "updated_at": "2026-03-06T16:19:20.521504+00:00"}
+{"event": "state", "ref_id": "b2ad54a7-6aa7-4e68-9b6e-d00c34037236", "state": "ARCHIVED", "updated_at": "2026-03-06T16:19:20.537691+00:00"}
+{"event": "state", "ref_id": "929a21e4-4732-4a67-a529-6c15bce351aa", "state": "ARCHIVED", "updated_at": "2026-03-06T16:19:20.553285+00:00"}
+{"event": "state", "ref_id": "769ad5c4-4712-4309-9d70-afea680b64a0", "state": "ARCHIVED", "updated_at": "2026-03-06T16:19:20.568975+00:00"}
+{"id": "13b0f256-b22d-47e6-9157-d45b21e95fdc", "timestamp_utc": "2026-03-06T16:19:24.115824+00:00", "severity": "Low", "severity_label": "Info", "type": "POSITIONS_RECONCILE_REVIEW", "subtype": null, "symbol": null, "message": "Unified positions reconcile needs attention (counts differ).", "details": {"advisory": true}}
+{"id": "0c68c018-e6fe-4b75-a8f4-bfc276307df4", "timestamp_utc": "2026-03-06T16:19:24.830152+00:00", "severity": "Low", "severity_label": "Info", "type": "CC_ELIGIBLE", "subtype": "CC_ELIGIBLE", "symbol": "SPY", "message": "Shares eligible for covered call: SPY. Consider opening CC ticket.", "details": {"symbol": "SPY"}}
+{"id": "89cbdb4a-4984-441f-ac7e-4f3a50d80240", "timestamp_utc": "2026-03-06T16:19:25.564984+00:00", "severity": "Low", "severity_label": "Info", "type": "POSITIONS_RECONCILE_REVIEW", "subtype": null, "symbol": null, "message": "Unified positions reconcile needs attention (counts differ).", "details": {"advisory": true}}
+{"event": "ack", "ref_id": "89cbdb4a-4984-441f-ac7e-4f3a50d80240", "ack_at_utc": "2026-03-06T16:20:55.729607+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "0c68c018-e6fe-4b75-a8f4-bfc276307df4", "ack_at_utc": "2026-03-06T16:20:55.774051+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "13b0f256-b22d-47e6-9157-d45b21e95fdc", "ack_at_utc": "2026-03-06T16:20:55.798912+00:00", "ack_by": "ui"}
+{"event": "state", "ref_id": "89cbdb4a-4984-441f-ac7e-4f3a50d80240", "state": "ARCHIVED", "updated_at": "2026-03-06T16:20:55.841127+00:00"}
+{"event": "state", "ref_id": "0c68c018-e6fe-4b75-a8f4-bfc276307df4", "state": "ARCHIVED", "updated_at": "2026-03-06T16:20:55.865164+00:00"}
+{"event": "state", "ref_id": "13b0f256-b22d-47e6-9157-d45b21e95fdc", "state": "ARCHIVED", "updated_at": "2026-03-06T16:20:55.890273+00:00"}
+{"id": "2bf86adc-54a1-42fe-8604-35f9255c23f6", "timestamp_utc": "2026-03-06T16:20:59.948944+00:00", "severity": "Low", "severity_label": "Info", "type": "POSITIONS_RECONCILE_REVIEW", "subtype": null, "symbol": null, "message": "Unified positions reconcile needs attention (counts differ).", "details": {"advisory": true}}
+{"id": "e48b7833-5fa6-485a-a128-61e9b42a7fa9", "timestamp_utc": "2026-03-06T16:21:00.805020+00:00", "severity": "Low", "severity_label": "Info", "type": "CC_ELIGIBLE", "subtype": "CC_ELIGIBLE", "symbol": "SPY", "message": "Shares eligible for covered call: SPY. Consider opening CC ticket.", "details": {"symbol": "SPY"}}
+{"id": "887bc0ad-ac86-464d-b6e5-16f72a82b614", "timestamp_utc": "2026-03-06T16:21:01.701494+00:00", "severity": "Low", "severity_label": "Info", "type": "POSITIONS_RECONCILE_REVIEW", "subtype": null, "symbol": null, "message": "Unified positions reconcile needs attention (counts differ).", "details": {"advisory": true}}
+{"event": "ack", "ref_id": "887bc0ad-ac86-464d-b6e5-16f72a82b614", "ack_at_utc": "2026-03-06T16:24:14.215699+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "e48b7833-5fa6-485a-a128-61e9b42a7fa9", "ack_at_utc": "2026-03-06T16:24:14.231069+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "2bf86adc-54a1-42fe-8604-35f9255c23f6", "ack_at_utc": "2026-03-06T16:24:14.245687+00:00", "ack_by": "ui"}
+{"event": "state", "ref_id": "887bc0ad-ac86-464d-b6e5-16f72a82b614", "state": "ARCHIVED", "updated_at": "2026-03-06T16:24:14.288560+00:00"}
+{"event": "state", "ref_id": "e48b7833-5fa6-485a-a128-61e9b42a7fa9", "state": "ARCHIVED", "updated_at": "2026-03-06T16:24:14.318502+00:00"}
+{"event": "state", "ref_id": "2bf86adc-54a1-42fe-8604-35f9255c23f6", "state": "ARCHIVED", "updated_at": "2026-03-06T16:24:14.352003+00:00"}
+{"id": "686df2df-89a5-4bf1-a8b6-0031ec4448f2", "timestamp_utc": "2026-03-06T16:24:17.496874+00:00", "severity": "Low", "severity_label": "Info", "type": "POSITIONS_RECONCILE_REVIEW", "subtype": null, "symbol": null, "message": "Unified positions reconcile needs attention (counts differ).", "details": {"advisory": true}}
+{"id": "ea8f414f-94ff-419e-9488-d622e8003f01", "timestamp_utc": "2026-03-06T16:24:18.116415+00:00", "severity": "Low", "severity_label": "Info", "type": "CC_ELIGIBLE", "subtype": "CC_ELIGIBLE", "symbol": "SPY", "message": "Shares eligible for covered call: SPY. Consider opening CC ticket.", "details": {"symbol": "SPY"}}
+{"id": "a01efc12-7956-47a4-998d-96b59c66a898", "timestamp_utc": "2026-03-06T16:24:18.833181+00:00", "severity": "Low", "severity_label": "Info", "type": "POSITIONS_RECONCILE_REVIEW", "subtype": null, "symbol": null, "message": "Unified positions reconcile needs attention (counts differ).", "details": {"advisory": true}}
+{"event": "ack", "ref_id": "a01efc12-7956-47a4-998d-96b59c66a898", "ack_at_utc": "2026-03-06T16:56:48.285585+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "ea8f414f-94ff-419e-9488-d622e8003f01", "ack_at_utc": "2026-03-06T16:56:48.302975+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "686df2df-89a5-4bf1-a8b6-0031ec4448f2", "ack_at_utc": "2026-03-06T16:56:48.320387+00:00", "ack_by": "ui"}
+{"event": "state", "ref_id": "a01efc12-7956-47a4-998d-96b59c66a898", "state": "ARCHIVED", "updated_at": "2026-03-06T16:56:48.348298+00:00"}
+{"event": "state", "ref_id": "ea8f414f-94ff-419e-9488-d622e8003f01", "state": "ARCHIVED", "updated_at": "2026-03-06T16:56:48.363713+00:00"}
+{"event": "state", "ref_id": "686df2df-89a5-4bf1-a8b6-0031ec4448f2", "state": "ARCHIVED", "updated_at": "2026-03-06T16:56:48.380337+00:00"}
+{"id": "76b44931-aa8e-4cb6-98a1-b6ea05749f27", "timestamp_utc": "2026-03-06T16:56:51.960361+00:00", "severity": "Low", "severity_label": "Info", "type": "POSITIONS_RECONCILE_REVIEW", "subtype": null, "symbol": null, "message": "Unified positions reconcile needs attention (counts differ).", "details": {"advisory": true}}
+{"id": "9d79cb76-d10a-4d79-8033-002f95cb2fc8", "timestamp_utc": "2026-03-06T16:56:52.714062+00:00", "severity": "Low", "severity_label": "Info", "type": "CC_ELIGIBLE", "subtype": "CC_ELIGIBLE", "symbol": "SPY", "message": "Shares eligible for covered call: SPY. Consider opening CC ticket.", "details": {"symbol": "SPY"}}
+{"id": "01fd76e6-3295-41e1-a4aa-64ea25059284", "timestamp_utc": "2026-03-06T16:56:53.619461+00:00", "severity": "Low", "severity_label": "Info", "type": "POSITIONS_RECONCILE_REVIEW", "subtype": null, "symbol": null, "message": "Unified positions reconcile needs attention (counts differ).", "details": {"advisory": true}}
+{"event": "ack", "ref_id": "01fd76e6-3295-41e1-a4aa-64ea25059284", "ack_at_utc": "2026-03-06T17:00:36.967873+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "9d79cb76-d10a-4d79-8033-002f95cb2fc8", "ack_at_utc": "2026-03-06T17:00:36.985500+00:00", "ack_by": "ui"}
+{"event": "ack", "ref_id": "76b44931-aa8e-4cb6-98a1-b6ea05749f27", "ack_at_utc": "2026-03-06T17:00:37.002360+00:00", "ack_by": "ui"}
+{"event": "state", "ref_id": "01fd76e6-3295-41e1-a4aa-64ea25059284", "state": "ARCHIVED", "updated_at": "2026-03-06T17:00:37.032221+00:00"}
+{"event": "state", "ref_id": "9d79cb76-d10a-4d79-8033-002f95cb2fc8", "state": "ARCHIVED", "updated_at": "2026-03-06T17:00:37.050161+00:00"}
+{"event": "state", "ref_id": "76b44931-aa8e-4cb6-98a1-b6ea05749f27", "state": "ARCHIVED", "updated_at": "2026-03-06T17:00:37.066710+00:00"}
+{"id": "23afdde1-e25c-4d26-88ec-8475fd8a343e", "timestamp_utc": "2026-03-06T17:00:40.466983+00:00", "severity": "Low", "severity_label": "Info", "type": "POSITIONS_RECONCILE_REVIEW", "subtype": null, "symbol": null, "message": "Unified positions reconcile needs attention (counts differ).", "details": {"advisory": true}}
+{"id": "7f279058-7a65-47b2-960e-2f9fa39ea854", "timestamp_utc": "2026-03-06T17:00:41.361697+00:00", "severity": "Low", "severity_label": "Info", "type": "CC_ELIGIBLE", "subtype": "CC_ELIGIBLE", "symbol": "SPY", "message": "Shares eligible for covered call: SPY. Consider opening CC ticket.", "details": {"symbol": "SPY"}}
+{"id": "180faf83-d9c8-4042-a5b2-561733d8910d", "timestamp_utc": "2026-03-06T17:00:42.298895+00:00", "severity": "Low", "severity_label": "Info", "type": "POSITIONS_RECONCILE_REVIEW", "subtype": null, "symbol": null, "message": "Unified positions reconcile needs attention (counts differ).", "details": {"advisory": true}}

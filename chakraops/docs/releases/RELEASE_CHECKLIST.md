@@ -715,6 +715,15 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Runtime state files contain no FAIL/WARN/PASS; API/UI safe labels only
 - **Scope:** mark_refresh_state.json and portfolio_risk_notify_state.json persist only safe status/label; normalize helper; backward compat. Branch: release/R28.2.
 
+### R28.3 — Notifications safe labels (no FAIL/WARN/PASS in UI-facing data)
+
+- [x] **Requirements** — chakraops/docs/releases/R28.3_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R28.3_release_notes.md
+- [x] **Verification** — out/verification/R28.3/notes.md (gate tails + UAT + grep proof)
+- [ ] **Gate** — Backend full suite: 2 failed, 937 passed, 1 skipped in 357.95s; frontend 249 passed, 18 skipped; build 13.03s. Evidence: out/verification/R28.3/notes.md. Gate unchecked until full backend pass (failures in test_ui_routes.py, non-R28.3).
+- [x] **UAT** — Notifications page no raw FAIL/WARN/PASS; legacy normalized; no decision writes
+- **Scope:** Notifications persist/return safe severity/labels; normalize on read; UI safe only. Branch: release/R28.3.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

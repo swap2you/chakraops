@@ -81,20 +81,21 @@ def append_notification(
 ) -> None:
     """
     Append a notification to out/notifications.jsonl.
-    severity: INFO | WARN | CRITICAL
-    ntype: ORATS_WARN | SCHEDULER_MISSED | RECOMPUTE_FAILURE | REQUIRED_DATA_MISSING | etc.
-    subtype: Optional (e.g. RUN_ERRORS, LOW_COMPLETENESS, ORATS_STALE, SCHEDULER_MISSED).
-    Phase 10.3: Each record gets an id for ack targeting.
+    R28.3: Persist only safe severity + severity_label (no raw WARN/FAIL/PASS in file).
+    severity: INFO | WARN | CRITICAL (caller may pass raw; we normalize before persist).
     """
+    from app.core.notifications.notification_safe_labels import normalize_notification_severity
+    safe_severity, severity_label = normalize_notification_severity(severity or "INFO")
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
         "timestamp_utc": now,
-        "severity": severity,
+        "severity": safe_severity,
+        "severity_label": severity_label,
         "type": ntype,
         "subtype": subtype,
         "symbol": symbol,
-        "message": message,
+        "message": message or "",
         "details": details or {},
     }
     path = _notifications_path()
@@ -105,7 +106,7 @@ def append_notification(
             with open(path, "a", encoding="utf-8") as f:
                 f.write(line + "\n")
             _prune_if_needed(path)
-    logger.info("[NOTIFICATIONS] Appended %s %s: %s", ntype, severity, message[:80])
+    logger.info("[NOTIFICATIONS] Appended %s %s: %s", ntype, safe_severity, (message or "")[:80])
 
 
 def _append_state_event(ref_id: str, state: str, extra: Optional[Dict[str, Any]] = None) -> None:
@@ -264,6 +265,8 @@ def load_notifications(
         rec["created_ts"] = rec.get("timestamp_utc")
         rec["acked_ts"] = rec.get("ack_at_utc") if ack_data else None
         rec["archived_ts"] = updated_at if state == "ARCHIVED" else None
+        # R28.3: Normalize for API — safe severity/severity_label only; sanitize message (no FAIL/WARN/PASS)
+        _normalize_rec_for_api(rec)
         if offset and skipped < offset:
             skipped += 1
             continue
@@ -271,6 +274,26 @@ def load_notifications(
         if len(out) >= limit:
             break
     return out
+
+
+def _normalize_rec_for_api(rec: Dict[str, Any]) -> None:
+    """R28.3: Ensure rec has safe severity/severity_label; sanitize message. Mutates rec in place."""
+    from app.core.notifications.notification_safe_labels import (
+        normalize_notification_severity,
+        sanitize_message_for_api,
+    )
+    raw_sev = rec.get("severity") or ""
+    if (raw_sev or "").strip().upper() in ("FAIL", "WARN", "PASS", "INFO", "CRITICAL", "ERROR"):
+        safe_sev, safe_label = normalize_notification_severity(raw_sev)
+        rec["severity"] = safe_sev
+        rec["severity_label"] = safe_label
+    elif not rec.get("severity_label"):
+        safe_sev, safe_label = normalize_notification_severity(raw_sev or "INFO")
+        rec["severity"] = rec.get("severity") or safe_sev
+        rec["severity_label"] = safe_label
+    msg = rec.get("message")
+    if msg is not None and isinstance(msg, str):
+        rec["message"] = sanitize_message_for_api(msg)
 
 
 def get_notifications_health() -> Dict[str, Any]:

@@ -23,10 +23,11 @@ export function gateStatusToLabel(status: string | null | undefined): string {
   return SAFE_LABELS[s] ?? status;
 }
 
-/** R24.6: Sanitize message text for display so UI never shows literal FAIL/WARN. */
+/** R24.6/R28.3: Sanitize message text for display so UI never shows literal FAIL/WARN/PASS. */
 export function sanitizeMessageForDisplay(msg: string | null | undefined): string {
   if (msg == null || msg === "") return "—";
   return msg
     .replace(/\bFAIL\b/g, "Blocked")
-    .replace(/\bWARN\b/g, "Degraded");
+    .replace(/\bWARN\b/g, "Degraded")
+    .replace(/\bPASS\b/g, "OK");
 }

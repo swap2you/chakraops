@@ -742,6 +742,15 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Live options create wires mirror; reconcile OK/Review only; no FAIL/WARN/PASS in DOM
 - **Scope:** Wire live options open mirror on manual-execute; reconcile health includes live options counts; safe labels only. Branch: release/R28.5.
 
+### R28.6 — Live open mirror wiring completeness + regression guardrails
+
+- [x] **Requirements** — chakraops/docs/releases/R28.6_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R28.6_release_notes.md
+- [x] **Verification** — out/verification/R28.6/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — R28.6 module 5 passed in 2.19s; full backend 951 passed, 1 skipped in 137.60s; frontend 249 passed, 18 skipped; build 8.69s. Evidence: out/verification/R28.6/notes.md.
+- [x] **UAT** — All live-open entrypoints wired; reconcile OK/Review only; no FAIL/WARN/PASS in DOM
+- **Scope:** Wire missing live OPEN paths (e.g. /api/positions/manual-execute); regression tests; safe labels only. Branch: release/R28.6.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

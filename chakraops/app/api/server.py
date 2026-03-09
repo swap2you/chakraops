@@ -3696,6 +3696,7 @@ async def api_positions_manual_execute(request: Request) -> Dict[str, Any]:
     IMPORTANT: This does NOT place a trade. It records the user's intention
     to execute and creates a Position record. The user must execute the
     actual trade in their brokerage account.
+    R28.6: After success, mirror live options open to unified and ensure reconcile advisory (when account != paper, CSP/CC).
     """
     try:
         body = await request.json()
@@ -3703,6 +3704,15 @@ async def api_positions_manual_execute(request: Request) -> Dict[str, Any]:
         position, errors = manual_execute(body)
         if errors:
             raise HTTPException(status_code=400, detail={"errors": errors})
+        try:
+            account_id = (getattr(position, "account_id", None) or "").strip().lower()
+            strategy = (getattr(position, "strategy", None) or "").strip().upper()
+            if account_id != "paper" and strategy in ("CSP", "CC"):
+                from app.core.portfolio.positions_unified_store_r279 import mirror_live_open_to_unified, ensure_reconcile_advisory_notification
+                mirror_live_open_to_unified(position.to_dict())
+                ensure_reconcile_advisory_notification()
+        except Exception:
+            pass
         return position.to_dict()
     except HTTPException:
         raise

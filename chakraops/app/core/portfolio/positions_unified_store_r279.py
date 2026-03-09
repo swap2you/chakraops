@@ -625,6 +625,117 @@ def mirror_paper_close_to_unified(pos: Dict[str, Any]) -> None:
     logger.debug("[R28.0] mirrored paper close %s to unified", closed_row_id)
 
 
+# --- R28.8: Reconcile diff (read-only; operator explainability) ---
+
+def _read_positions_open_from_db(symbol: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Read positions_open from unified DB into list of dicts (same shape as build_unified_positions). Deterministic order."""
+    init_db()
+    rows: List[Dict[str, Any]] = []
+    with _LOCK:
+        conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+        try:
+            if symbol:
+                sym = (symbol or "").strip().upper()
+                cursor = conn.execute(
+                    "SELECT id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags FROM positions_open WHERE symbol = ?",
+                    (sym,),
+                )
+            else:
+                cursor = conn.execute(
+                    "SELECT id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags FROM positions_open",
+                )
+            for row in cursor.fetchall():
+                rows.append({
+                    "id": row[0],
+                    "symbol": (row[1] or "").strip().upper(),
+                    "instrument_type": row[2] or "",
+                    "is_paper": int(row[3] or 0),
+                    "qty": int(row[4] or 0),
+                    "avg_price": row[5],
+                    "strike": row[6],
+                    "expiry": (row[7] or "")[:10] if row[7] else None,
+                    "right": row[8],
+                    "opened_ts": (row[9] or "")[:26],
+                    "link_id": row[10],
+                    "notes": _safe_str(row[11]),
+                    "tags": row[12],
+                })
+        finally:
+            conn.close()
+    rows.sort(key=_sort_key_open)
+    return [_safe_dict(r) for r in rows]
+
+
+def _diff_sort_key(item: Dict[str, Any]) -> tuple:
+    """Stable sort for diff items: symbol, instrument_type, id."""
+    sym = (item.get("symbol") or "").strip().upper()
+    itype = (item.get("instrument_type") or "").upper()
+    pid = (item.get("id") or "").strip()
+    return (sym, itype, pid)
+
+
+def get_reconcile_diff(
+    include_paper: bool = True,
+    symbol: Optional[str] = None,
+    limit: int = 200,
+) -> Dict[str, Any]:
+    """
+    R28.8: Read-only diff of authoritative sources vs unified DB (open positions).
+    Returns missing_in_unified, extra_in_unified, mismatched (key field differences).
+    Deterministic ordering; safe labels only; no writes.
+    """
+    expected = build_unified_positions(state="open", include_paper=include_paper, symbol=symbol)
+    unified = _read_positions_open_from_db(symbol=symbol)
+    expected_by_id = {r["id"]: r for r in expected}
+    unified_by_id = {r["id"]: r for r in unified}
+    expected_ids = set(expected_by_id)
+    unified_ids = set(unified_by_id)
+    missing = [expected_by_id[eid] for eid in expected_ids if eid not in unified_ids]
+    extra = [unified_by_id[uid] for uid in unified_ids if uid not in expected_ids]
+    mismatched: List[Dict[str, Any]] = []
+    for eid in expected_ids & unified_ids:
+        exp = expected_by_id[eid]
+        uni = unified_by_id[eid]
+        diff_fields: List[str] = []
+        if int(exp.get("qty") or 0) != int(uni.get("qty") or 0):
+            diff_fields.append("qty")
+        if (exp.get("instrument_type") or "").strip() != (uni.get("instrument_type") or "").strip():
+            diff_fields.append("instrument_type")
+        if float(exp.get("strike") or 0) != float(uni.get("strike") or 0):
+            diff_fields.append("strike")
+        if ((exp.get("expiry") or "")[:10] or None) != ((uni.get("expiry") or "")[:10] or None):
+            diff_fields.append("expiry")
+        if (exp.get("opened_ts") or "")[:26] != (uni.get("opened_ts") or "")[:26]:
+            diff_fields.append("opened_ts")
+        if diff_fields:
+            mismatched.append({
+                "id": exp["id"],
+                "symbol": exp.get("symbol"),
+                "instrument_type": exp.get("instrument_type"),
+                "is_paper": exp.get("is_paper"),
+                "fields_diff": diff_fields,
+            })
+    items: List[Dict[str, Any]] = []
+    for r in missing:
+        items.append({"kind": "missing", "id": r["id"], "symbol": r.get("symbol"), "instrument_type": r.get("instrument_type"), "is_paper": r.get("is_paper")})
+    for r in extra:
+        items.append({"kind": "extra", "id": r["id"], "symbol": r.get("symbol"), "instrument_type": r.get("instrument_type"), "is_paper": r.get("is_paper")})
+    for r in mismatched:
+        items.append({"kind": "mismatched", "id": r["id"], "symbol": r.get("symbol"), "instrument_type": r.get("instrument_type"), "is_paper": r.get("is_paper"), "fields_diff": r.get("fields_diff", [])})
+    items.sort(key=_diff_sort_key)
+    items = items[: max(0, limit)]
+    status = "OK" if (len(missing) == 0 and len(extra) == 0 and len(mismatched) == 0) else "Review"
+    status_label = "OK" if status == "OK" else "Differences found"
+    return {
+        "status": status,
+        "status_label": status_label,
+        "missing_count": len(missing),
+        "extra_count": len(extra),
+        "mismatched_count": len(mismatched),
+        "items": [_safe_dict(i) for i in items],
+    }
+
+
 def get_positions_unified_reconcile_health() -> Dict[str, Any]:
     """R28.0/R28.4: Reconcile health — paper + live open source counts vs unified DB. Status OK or Review (safe labels only; no FAIL/WARN)."""
     paper_open_count = 0

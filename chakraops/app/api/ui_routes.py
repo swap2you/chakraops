@@ -4056,6 +4056,24 @@ def ui_positions_unified(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/positions/unified/reconcile-diff")
+def ui_positions_unified_reconcile_diff(
+    include_paper: bool = Query(default=True, description="Include paper in diff"),
+    symbol: str | None = Query(default=None, description="Filter by symbol"),
+    limit: int = Query(default=200, ge=1, le=500, description="Max diff items returned"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R28.8: Read-only reconcile diff (source vs unified DB). Safe labels only; no FAIL/WARN/PASS; no writes."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import get_reconcile_diff
+        return get_reconcile_diff(include_paper=include_paper, symbol=symbol, limit=limit)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Reconcile diff error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/positions/unified/rebuild")
 def ui_positions_unified_rebuild(
     include_paper: bool = Query(default=True, description="Include paper positions in rebuild"),

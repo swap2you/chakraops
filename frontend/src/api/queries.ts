@@ -28,6 +28,7 @@ import type {
   ClosedSharePositionsListResponse,
   UiPositionsUnifiedResponse,
   UiPositionsUnifiedRebuildResponse,
+  UiReconcileDiffResponse,
 } from "./types";
 import type { DecisionMode, DecisionRef } from "./types";
 export type { DecisionRef };
@@ -86,6 +87,19 @@ function uiDeltaOverrideSymbolPath(symbol: string): string {
 
 function uiSystemHealthPath(): string {
   return `/api/ui/system-health`;
+}
+
+/** R28.8: GET /api/ui/positions/unified/reconcile-diff */
+function uiPositionsUnifiedReconcileDiffPath(params: {
+  include_paper?: boolean;
+  symbol?: string | null;
+  limit?: number;
+}): string {
+  const q = new URLSearchParams();
+  q.set("include_paper", String(params.include_paper !== false));
+  if (params.symbol?.trim()) q.set("symbol", params.symbol.trim());
+  if (params.limit != null) q.set("limit", String(params.limit));
+  return `/api/ui/positions/unified/reconcile-diff?${q.toString()}`;
 }
 
 /** R28.7: POST /api/ui/positions/unified/rebuild */
@@ -496,6 +510,9 @@ export const queryKeys = {
   uiPositions: () => ["ui", "positions"] as const,
   /** R27.9 */
   uiPositionsUnified: (params: Record<string, unknown>) => ["ui", "positions", "unified", params] as const,
+  /** R28.8 */
+  uiReconcileDiff: (params: { include_paper?: boolean; symbol?: string | null; limit?: number }) =>
+    ["ui", "positions", "unified", "reconcile-diff", params] as const,
   uiTrackedPositions: () => ["ui", "positions", "tracked"] as const,
   uiAccountsDefault: () => ["ui", "accounts", "default"] as const,
   uiAccounts: () => ["ui", "accounts"] as const,
@@ -1226,6 +1243,24 @@ export function usePositionsUnifiedRebuild() {
       qc.invalidateQueries({ queryKey: queryKeys.uiSystemHealth() });
       qc.invalidateQueries({ queryKey: ["ui", "positions", "unified"] });
     },
+  });
+}
+
+/** R28.8: GET /api/ui/positions/unified/reconcile-diff — read-only diff (source vs unified). */
+export function useReconcileDiff(params: {
+  include_paper?: boolean;
+  symbol?: string | null;
+  limit?: number;
+  enabled?: boolean;
+} = {}) {
+  const { include_paper = true, symbol, limit = 200, enabled = true } = params;
+  return useQuery({
+    queryKey: queryKeys.uiReconcileDiff({ include_paper, symbol, limit }),
+    queryFn: () =>
+      apiGet<UiReconcileDiffResponse>(
+        uiPositionsUnifiedReconcileDiffPath({ include_paper, symbol, limit })
+      ),
+    enabled,
   });
 }
 

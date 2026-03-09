@@ -366,6 +366,26 @@ export interface UiPositionsUnifiedRebuild {
   last_include_paper?: boolean | null;
 }
 
+/** R28.8 — Reconcile diff item (missing/extra/mismatched). Safe labels only. */
+export interface UiReconcileDiffItem {
+  kind: "missing" | "extra" | "mismatched";
+  id: string;
+  symbol?: string | null;
+  instrument_type?: string | null;
+  is_paper?: number | boolean | null;
+  fields_diff?: string[];
+}
+
+/** R28.8 — GET /api/ui/positions/unified/reconcile-diff response. */
+export interface UiReconcileDiffResponse {
+  status?: "OK" | "Review" | string;
+  status_label?: string | null;
+  missing_count: number;
+  extra_count: number;
+  mismatched_count: number;
+  items: UiReconcileDiffItem[];
+}
+
 export interface UiSystemHealthResponse {
   api: UiSystemHealthApi;
   decision_store?: UiSystemHealthDecisionStore;

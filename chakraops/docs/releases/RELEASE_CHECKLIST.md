@@ -755,11 +755,20 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 
 - [x] **Requirements** — chakraops/docs/releases/R28.7_requirements.md
 - [x] **Release notes** — chakraops/docs/releases/R28.7_release_notes.md
-- [x] **Verification** — out/verification/R28.7/notes.md (gate tails + UAT + grep proof). Evidence content: R28.7_verification_evidence.md (copy to out/ if needed).
-- [x] **Gate** — test_r287_* 4 passed; full backend 953 passed, 3 skipped; frontend 252 passed, 18 skipped; build 11.96s. Evidence pasted in R28.7_verification_evidence.md.
+- [x] **Verification** — **out/verification/R28.7/notes.md** (primary: gate tails + UAT + grep proof). Optional: R28.7_verification_evidence.md.
+- [x] **Gate** — test_r287_* 4 passed; full backend 953 passed, 3 skipped; frontend 252 passed, 18 skipped; build pass. Evidence in **out/verification/R28.7/notes.md**.
 - [x] **UAT** — Reconcile OK/Review; Rebuild button (confirm, triggers rebuild); unified list consistent after rebuild; no raw FAIL/WARN/PASS in UI
 - **Scope:** Manual rebuild of unified positions DB from authoritative sources; POST rebuild endpoint; system-health rebuild block; state file safe labels only; Diagnostics Rebuild card + button. NO GIT.
 - **Handoff:** R28.7_IMPLEMENTATION_SIGNOFF.md — full requirement-to-implementation checklist for agent handoff.
+
+### R28.8 — Reconcile Diff v1 (read-only, operator explainability)
+
+- [x] **Requirements** — chakraops/docs/releases/R28.8_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R28.8_release_notes.md
+- [x] **Verification** — out/verification/R28.8/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — test_r288_* 5 passed; full backend 958 passed, 3 skipped; frontend 255 passed, 18 skipped; build 8.76s. Evidence in out/verification/R28.8/notes.md.
+- [x] **UAT** — Reconcile Review → diff counts + View details; link to /positions; no raw FAIL/WARN/PASS in UI
+- **Scope:** GET reconcile-diff API; diff card on System Diagnostics; deterministic; safe labels only; no writes. NO GIT.
 
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 

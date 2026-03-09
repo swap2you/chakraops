@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { render, screen } from "@/test/test-utils";
+import { render, screen, within } from "@/test/test-utils";
 import { SystemDiagnosticsPage } from "./SystemDiagnosticsPage";
 
 const mockHealth = {
@@ -107,6 +107,7 @@ vi.mock("@/api/queries", () => ({
   useAdminSlackTest: () => ({ mutate: vi.fn(), isPending: false, data: null }),
   useAdminEvaluationForce: () => ({ mutate: vi.fn(), isPending: false, data: null }),
   usePositionsUnifiedRebuild: () => ({ mutate: mockRebuildMutate, isPending: false }),
+  useReconcileDiff: () => ({ data: { missing_count: 0, extra_count: 0, mismatched_count: 0, items: [] }, isLoading: false }),
 }));
 
 describe("SystemDiagnosticsPage", () => {
@@ -142,8 +143,9 @@ describe("SystemDiagnosticsPage", () => {
 
   it("R28.1: Unified Positions Reconcile card renders when present; no FAIL/WARN in document", () => {
     render(<SystemDiagnosticsPage />);
-    expect(screen.getByTestId("positions-unified-reconcile-card")).toBeInTheDocument();
-    expect(screen.getByText(/Unified Positions Reconcile/i)).toBeInTheDocument();
+    const reconcileCard = screen.getByTestId("positions-unified-reconcile-card");
+    expect(reconcileCard).toBeInTheDocument();
+    expect(within(reconcileCard).getByText("Unified Positions Reconcile")).toBeInTheDocument();
     expect(screen.getByText(/Paper open/i)).toBeInTheDocument();
     const text = document.body.textContent ?? "";
     expect(text).not.toMatch(/\bFAIL\b/);
@@ -167,6 +169,32 @@ describe("SystemDiagnosticsPage", () => {
   });
 
   it("R28.7: Document has no raw FAIL/WARN/PASS tokens", () => {
+    render(<SystemDiagnosticsPage />);
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+  });
+
+  it("R28.8: Reconcile Diff card renders when positions_unified_reconcile present", () => {
+    render(<SystemDiagnosticsPage />);
+    expect(screen.getByTestId("positions-unified-reconcile-diff-card")).toBeInTheDocument();
+    expect(screen.getByText(/Unified Positions Reconcile Diff/i)).toBeInTheDocument();
+  });
+
+  it("R28.8: View details button exists when reconcile is Review and toggles expand", async () => {
+    const user = userEvent.setup();
+    mockUseUiSystemHealth.mockReturnValue({
+      data: { ...mockHealth, positions_unified_reconcile: { ...mockHealth.positions_unified_reconcile, status: "Review" } },
+      isLoading: false,
+      isError: false,
+    });
+    render(<SystemDiagnosticsPage />);
+    const btn = screen.getByTestId("reconcile-diff-view-details-btn");
+    expect(btn).toBeInTheDocument();
+    await user.click(btn);
+    expect(screen.getByText(/Hide details/i)).toBeInTheDocument();
+  });
+
+  it("R28.8: Document has no FAIL/WARN/PASS in reconcile diff area", () => {
     render(<SystemDiagnosticsPage />);
     const text = document.body.textContent ?? "";
     expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);

@@ -13,6 +13,7 @@ import {
   useAdminSlackTest,
   useAdminEvaluationForce,
   usePositionsUnifiedRebuild,
+  useReconcileDiff,
 } from "@/api/queries";
 import { formatTimestampEt, formatTimestampEtFull } from "@/utils/formatTimestamp";
 import { PageHeader } from "@/components/PageHeader";
@@ -82,6 +83,13 @@ export function SystemDiagnosticsPage() {
   const adminSlackTest = useAdminSlackTest();
   const adminForceEval = useAdminEvaluationForce();
   const rebuildUnified = usePositionsUnifiedRebuild();
+  const reconcileStatus = data?.positions_unified_reconcile?.status;
+  const { data: reconcileDiff, isLoading: reconcileDiffLoading } = useReconcileDiff({
+    include_paper: true,
+    limit: 200,
+    enabled: reconcileStatus === "Review",
+  });
+  const [reconcileDiffExpanded, setReconcileDiffExpanded] = useState(false);
   const [selectedChecks, setSelectedChecks] = useState<Set<string>>(new Set(DIAGNOSTIC_CHECKS));
   const [latestResult, setLatestResult] = useState<typeof runDiagnostics.data | null>(null);
 
@@ -650,6 +658,85 @@ export function SystemDiagnosticsPage() {
                 <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.positions_unified_reconcile.unified_closed_paper_count ?? "—"}</p>
               </div>
             </div>
+          </Card>
+        )}
+        {/* R28.8: Unified Positions Reconcile Diff — read-only; show what is mismatched when reconcile is Review. */}
+        {data?.positions_unified_reconcile != null && (
+          <Card data-testid="positions-unified-reconcile-diff-card">
+            <CardHeader
+              title="Unified Positions Reconcile Diff"
+              description="Source vs unified DB (when reconcile needs review). Safe labels only."
+            />
+            <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Reconcile status</span>
+                <p className="mt-1">
+                  <StatusBadge status={data.positions_unified_reconcile.status ?? "Review"} />
+                </p>
+              </div>
+              {reconcileStatus === "Review" && (
+                <>
+                  <div>
+                    <span className="block text-xs text-zinc-500 dark:text-zinc-500">Missing in unified</span>
+                    <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">
+                      {reconcileDiffLoading ? "…" : reconcileDiff?.missing_count ?? "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="block text-xs text-zinc-500 dark:text-zinc-500">Extra in unified</span>
+                    <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">
+                      {reconcileDiffLoading ? "…" : reconcileDiff?.extra_count ?? "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="block text-xs text-zinc-500 dark:text-zinc-500">Mismatched</span>
+                    <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">
+                      {reconcileDiffLoading ? "…" : reconcileDiff?.mismatched_count ?? "—"}
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+            {reconcileStatus === "Review" && (
+              <div className="mt-3">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setReconcileDiffExpanded((e) => !e)}
+                  data-testid="reconcile-diff-view-details-btn"
+                >
+                  {reconcileDiffExpanded ? "Hide details" : "View details"}
+                </Button>
+                {reconcileDiffExpanded && reconcileDiff?.items != null && reconcileDiff.items.length > 0 && (
+                  <ul className="mt-2 max-h-60 list-none overflow-y-auto rounded border border-zinc-200 bg-zinc-50 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900/50">
+                    {reconcileDiff.items.map((item, i) => (
+                      <li key={`${item.id}-${i}`} className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-zinc-200 py-1 last:border-0 dark:border-zinc-700">
+                        <span className="font-medium text-zinc-700 dark:text-zinc-300">{item.kind}</span>
+                        <span className="font-mono text-zinc-600 dark:text-zinc-400">{item.symbol ?? item.id}</span>
+                        {item.instrument_type && (
+                          <span className="text-zinc-500 dark:text-zinc-500">{item.instrument_type}</span>
+                        )}
+                        {item.fields_diff && item.fields_diff.length > 0 && (
+                          <span className="text-zinc-500 dark:text-zinc-500">({item.fields_diff.join(", ")})</span>
+                        )}
+                        <Link
+                          to={`/positions?symbol=${encodeURIComponent(item.symbol ?? "")}&include_paper=true`}
+                          className="text-blue-600 hover:underline dark:text-blue-400"
+                        >
+                          View positions
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {reconcileDiffExpanded && reconcileDiff?.items != null && reconcileDiff.items.length === 0 && !reconcileDiffLoading && (
+                  <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-500">No diff items (counts may be from a previous run).</p>
+                )}
+              </div>
+            )}
+            {reconcileStatus === "OK" && (
+              <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-500">Reconcile OK; no diff needed.</p>
+            )}
           </Card>
         )}
         {/* R28.7: Unified Positions Rebuild — manual rebuild from authoritative sources; safe labels only. */}

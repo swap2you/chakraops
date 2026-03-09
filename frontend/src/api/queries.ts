@@ -27,6 +27,9 @@ import type {
   ClosedSharePosition,
   ClosedSharePositionsListResponse,
   UiPositionsUnifiedResponse,
+  UiPositionsUnifiedRebuildResponse,
+  UiReconcileDiffResponse,
+  UiPositionsUnifiedDbResponse,
 } from "./types";
 import type { DecisionMode, DecisionRef } from "./types";
 export type { DecisionRef };
@@ -85,6 +88,41 @@ function uiDeltaOverrideSymbolPath(symbol: string): string {
 
 function uiSystemHealthPath(): string {
   return `/api/ui/system-health`;
+}
+
+/** R28.8: GET /api/ui/positions/unified/reconcile-diff */
+function uiPositionsUnifiedReconcileDiffPath(params: {
+  include_paper?: boolean;
+  symbol?: string | null;
+  limit?: number;
+}): string {
+  const q = new URLSearchParams();
+  q.set("include_paper", String(params.include_paper !== false));
+  if (params.symbol?.trim()) q.set("symbol", params.symbol.trim());
+  if (params.limit != null) q.set("limit", String(params.limit));
+  return `/api/ui/positions/unified/reconcile-diff?${q.toString()}`;
+}
+
+/** R28.9: GET /api/ui/positions/unified/db — DB-first read (what is stored). */
+function uiPositionsUnifiedDbPath(params: {
+  state?: string;
+  include_paper?: boolean;
+  instrument_type?: string | null;
+  symbol?: string | null;
+  limit?: number;
+}): string {
+  const q = new URLSearchParams();
+  if (params.state) q.set("state", params.state);
+  if (params.include_paper !== undefined) q.set("include_paper", String(params.include_paper));
+  if (params.instrument_type?.trim()) q.set("instrument_type", params.instrument_type.trim());
+  if (params.symbol?.trim()) q.set("symbol", params.symbol.trim());
+  if (params.limit != null) q.set("limit", String(params.limit));
+  return `/api/ui/positions/unified/db?${q.toString()}`;
+}
+
+/** R28.7: POST /api/ui/positions/unified/rebuild */
+function uiPositionsUnifiedRebuildPath(includePaper: boolean): string {
+  return `/api/ui/positions/unified/rebuild?include_paper=${includePaper}`;
 }
 
 /** R25.8: Earnings debug (diagnostics only; safe fields). */
@@ -490,6 +528,11 @@ export const queryKeys = {
   uiPositions: () => ["ui", "positions"] as const,
   /** R27.9 */
   uiPositionsUnified: (params: Record<string, unknown>) => ["ui", "positions", "unified", params] as const,
+  /** R28.8 */
+  uiReconcileDiff: (params: { include_paper?: boolean; symbol?: string | null; limit?: number }) =>
+    ["ui", "positions", "unified", "reconcile-diff", params] as const,
+  /** R28.9 */
+  uiPositionsUnifiedDb: (params: Record<string, unknown>) => ["ui", "positions", "unified", "db", params] as const,
   uiTrackedPositions: () => ["ui", "positions", "tracked"] as const,
   uiAccountsDefault: () => ["ui", "accounts", "default"] as const,
   uiAccounts: () => ["ui", "accounts"] as const,
@@ -1206,6 +1249,60 @@ export function useUnifiedPositions(params: {
   });
 }
 
+/** R28.7: POST /api/ui/positions/unified/rebuild — manual rebuild; invalidates system-health and unified positions. */
+export function usePositionsUnifiedRebuild() {
+  const qc = useQueryClient();
+  return useMutation<UiPositionsUnifiedRebuildResponse, Error, { include_paper?: boolean }>({
+    mutationFn: (params: { include_paper?: boolean } = {}) => {
+      const includePaper = params?.include_paper !== false;
+      return apiPostNoBody<UiPositionsUnifiedRebuildResponse>(
+        uiPositionsUnifiedRebuildPath(includePaper)
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiSystemHealth() });
+      qc.invalidateQueries({ queryKey: ["ui", "positions", "unified"] });
+      qc.invalidateQueries({ queryKey: ["ui", "positions", "unified", "reconcile-diff"] });
+    },
+  });
+}
+
+/** R28.9: GET /api/ui/positions/unified/db — DB-first read (what is stored). */
+export function useUnifiedPositionsFromDb(params: {
+  state?: "open" | "closed";
+  include_paper?: boolean;
+  instrument_type?: string | null;
+  symbol?: string | null;
+  limit?: number;
+} = {}) {
+  const { state = "open", include_paper = true, instrument_type, symbol, limit = 500 } = params;
+  return useQuery({
+    queryKey: queryKeys.uiPositionsUnifiedDb({ state, include_paper, instrument_type, symbol, limit }),
+    queryFn: () =>
+      apiGet<UiPositionsUnifiedDbResponse>(
+        uiPositionsUnifiedDbPath({ state, include_paper, instrument_type, symbol, limit })
+      ),
+  });
+}
+
+/** R28.8: GET /api/ui/positions/unified/reconcile-diff — read-only diff (source vs unified). */
+export function useReconcileDiff(params: {
+  include_paper?: boolean;
+  symbol?: string | null;
+  limit?: number;
+  enabled?: boolean;
+} = {}) {
+  const { include_paper = true, symbol, limit = 200, enabled = true } = params;
+  return useQuery({
+    queryKey: queryKeys.uiReconcileDiff({ include_paper, symbol, limit }),
+    queryFn: () =>
+      apiGet<UiReconcileDiffResponse>(
+        uiPositionsUnifiedReconcileDiffPath({ include_paper, symbol, limit })
+      ),
+    enabled,
+  });
+}
+
 /** Phase 21.1: GET /api/ui/account/summary */
 export function useAccountSummary() {
   return useQuery({
@@ -1795,7 +1892,10 @@ export interface UiNotification {
   timestamp_utc: string;
   /** R25.4: Alias for timestamp_utc */
   created_ts?: string | null;
+  /** R28.3: Safe severity (Low/Medium/High). Never FAIL/WARN/PASS. */
   severity: string;
+  /** R28.3: Human-safe label for severity (e.g. Advisory, Review). */
+  severity_label?: string | null;
   type: string;
   /** Phase 8.6: Subtype (RUN_ERRORS, LOW_COMPLETENESS, ORATS_STALE, etc.) */
   subtype?: string | null;

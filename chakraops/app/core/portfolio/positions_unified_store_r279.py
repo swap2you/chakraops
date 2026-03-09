@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -15,6 +16,7 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 _LOCK = threading.Lock()
+_REBUILD_LOCK = threading.Lock()  # Non-blocking acquire = "rebuild already running"
 _OVERRIDE_PATH: Optional[Path] = None
 
 INSTRUMENT_SHARES = "SHARES"
@@ -368,3 +370,723 @@ def get_positions_unified_health() -> Dict[str, Any]:
             "closed_count": 0,
             "last_build_ts": datetime.now(timezone.utc).isoformat(),
         }
+
+
+# --- R28.7: Rebuild unified positions (manual, operator-triggered) ---
+
+def _rebuild_state_path() -> Path:
+    """Path for out/positions_unified_rebuild_state.json. Safe labels only in file."""
+    try:
+        from app.core.eval.evaluation_store_v2 import get_decision_store_path
+        out = get_decision_store_path().parent
+    except Exception:
+        out = Path(__file__).resolve().parents[3] / "out"
+    out.mkdir(parents=True, exist_ok=True)
+    return out / "positions_unified_rebuild_state.json"
+
+
+def _write_rebuild_state(data: Dict[str, Any]) -> None:
+    """Persist only status, status_label, timestamps, counts. No FAIL/WARN/PASS. Caller must pass safe values only."""
+    safe = {
+        "status": data.get("status") or "OK",
+        "status_label": data.get("status_label") or "OK",
+    }
+    for k in ("last_rebuild_at_utc", "last_rebuild_open_count", "last_rebuild_closed_count", "last_include_paper"):
+        if k in data:
+            safe[k] = data[k]
+    path = _rebuild_state_path()
+    try:
+        from app.core.io.atomic import atomic_write_json
+        atomic_write_json(path, safe, indent=0)
+    except Exception as e:
+        logger.warning("[R28.7] Failed to write rebuild state: %s", e)
+
+
+def load_rebuild_state() -> Optional[Dict[str, Any]]:
+    """Load rebuild state for system-health. Returns None if file missing."""
+    path = _rebuild_state_path()
+    if not path.exists():
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.warning("[R28.7] Failed to load rebuild state: %s", e)
+        return None
+
+
+def get_positions_unified_rebuild_health() -> Dict[str, Any]:
+    """R28.7: System-health block positions_unified_rebuild. Safe labels only."""
+    state = load_rebuild_state()
+    if not state or not isinstance(state, dict):
+        return {
+            "status": "OK",
+            "status_label": "OK",
+            "last_rebuild_at_utc": None,
+            "last_rebuild_open_count": None,
+            "last_rebuild_closed_count": None,
+            "last_include_paper": None,
+        }
+    return {
+        "status": state.get("status") or "OK",
+        "status_label": state.get("status_label") or "OK",
+        "last_rebuild_at_utc": state.get("last_rebuild_at_utc"),
+        "last_rebuild_open_count": state.get("last_rebuild_open_count"),
+        "last_rebuild_closed_count": state.get("last_rebuild_closed_count"),
+        "last_include_paper": state.get("last_include_paper"),
+    }
+
+
+def rebuild_positions_unified(include_paper: bool = True) -> Dict[str, Any]:
+    """
+    R28.7: Wipe and rebuild positions_open/positions_closed from authoritative sources.
+    Single-process lock; deterministic ordering; safe-only return. No notifications, no decision artifacts.
+    """
+    from datetime import datetime, timezone
+
+    def _now() -> str:
+        return datetime.now(timezone.utc).isoformat()
+
+    if not _REBUILD_LOCK.acquire(blocking=False):
+        return {
+            "status": "Review",
+            "status_label": "Rebuild already running",
+            "rebuilt_open": 0,
+            "rebuilt_closed": 0,
+            "include_paper": include_paper,
+            "started_at_utc": _now(),
+            "finished_at_utc": _now(),
+        }
+
+    started_at_utc = _now()
+    try:
+        init_db()
+        open_list = build_unified_positions(state="open", include_paper=include_paper)
+        closed_list = build_unified_positions(state="closed", include_paper=include_paper)
+
+        with _LOCK:
+            conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+            try:
+                conn.execute("DELETE FROM positions_open")
+                conn.execute("DELETE FROM positions_closed")
+                for r in open_list:
+                    conn.execute(
+                        """INSERT INTO positions_open (
+                            id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            r.get("id"), r.get("symbol"), r.get("instrument_type"), int(r.get("is_paper") or 0),
+                            int(r.get("qty") or 0), r.get("avg_price"), r.get("strike"), r.get("expiry"), r.get("right"),
+                            (r.get("opened_ts") or "")[:26], r.get("link_id"), r.get("notes"), r.get("tags"),
+                        ),
+                    )
+                for r in closed_list:
+                    conn.execute(
+                        """INSERT INTO positions_closed (
+                            id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags,
+                            closed_ts, realized_pl, fees
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            r.get("id"), r.get("symbol"), r.get("instrument_type"), int(r.get("is_paper") or 0),
+                            int(r.get("qty") or 0), r.get("avg_price"), r.get("strike"), r.get("expiry"), r.get("right"),
+                            (r.get("opened_ts") or "")[:26], r.get("link_id"), r.get("notes"), r.get("tags"),
+                            (r.get("closed_ts") or "")[:26], r.get("realized_pl"), r.get("fees"),
+                        ),
+                    )
+                conn.commit()
+            finally:
+                conn.close()
+
+        finished_at_utc = _now()
+        _write_rebuild_state({
+            "status": "OK",
+            "status_label": "OK",
+            "last_rebuild_at_utc": finished_at_utc,
+            "last_rebuild_open_count": len(open_list),
+            "last_rebuild_closed_count": len(closed_list),
+            "last_include_paper": include_paper,
+        })
+        return {
+            "status": "OK",
+            "status_label": "OK",
+            "rebuilt_open": len(open_list),
+            "rebuilt_closed": len(closed_list),
+            "include_paper": include_paper,
+            "started_at_utc": started_at_utc,
+            "finished_at_utc": finished_at_utc,
+        }
+    except Exception as e:
+        logger.exception("[R28.7] Rebuild failed: %s", e)
+        finished_at_utc = _now()
+        _write_rebuild_state({
+            "status": "Review",
+            "status_label": "Rebuild failed",
+            "last_rebuild_at_utc": finished_at_utc,
+            "last_rebuild_open_count": 0,
+            "last_rebuild_closed_count": 0,
+            "last_include_paper": include_paper,
+        })
+        return {
+            "status": "Review",
+            "status_label": "Rebuild failed",
+            "rebuilt_open": 0,
+            "rebuilt_closed": 0,
+            "include_paper": include_paper,
+            "started_at_utc": started_at_utc,
+            "finished_at_utc": finished_at_utc,
+        }
+    finally:
+        try:
+            _REBUILD_LOCK.release()
+        except Exception:
+            pass
+
+
+# --- R28.0: Paper write mirror (idempotent upsert) ---
+
+def _paper_pos_to_instrument_type(p: Dict[str, Any]) -> str:
+    strat = (p.get("strategy") or "SHARES").strip().upper()
+    if strat == "SHARES":
+        return INSTRUMENT_SHARES
+    if strat == "CSP":
+        return INSTRUMENT_CSP
+    if strat == "CC":
+        return INSTRUMENT_CC
+    return INSTRUMENT_CC  # OPTION fallback
+
+
+def mirror_paper_open_to_unified(pos: Dict[str, Any]) -> None:
+    """R28.0: Idempotent upsert of paper open position into positions_open. Stable id = paper_{pos[id]}."""
+    pid = (pos.get("id") or "").strip()
+    if not pid:
+        return
+    init_db()
+    sym = (pos.get("symbol") or "").strip().upper()
+    itype = _paper_pos_to_instrument_type(pos)
+    qty = int(pos.get("qty") or 0)
+    opened_ts = (pos.get("open_ts") or "")[:26]
+    if not opened_ts:
+        return
+    row_id = f"paper_{pid}"
+    with _LOCK:
+        conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+        try:
+            conn.execute(
+                """INSERT OR REPLACE INTO positions_open (
+                    id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags
+                ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    row_id, sym, itype, qty,
+                    pos.get("open_price"), pos.get("strike"), (pos.get("expiry") or "")[:10] or None, pos.get("right"),
+                    opened_ts, pid, _safe_str(pos.get("notes")), None,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    logger.debug("[R28.0] mirrored paper open %s to unified", row_id)
+
+
+def mirror_paper_close_to_unified(pos: Dict[str, Any]) -> None:
+    """R28.0: Idempotent upsert of paper closed position into positions_closed; remove from positions_open. Stable id = paper_closed_{pos[id]}."""
+    pid = (pos.get("id") or "").strip()
+    if not pid:
+        return
+    init_db()
+    sym = (pos.get("symbol") or "").strip().upper()
+    itype = _paper_pos_to_instrument_type(pos)
+    qty = int(pos.get("qty") or 0)
+    opened_ts = (pos.get("open_ts") or "")[:26]
+    closed_ts = (pos.get("close_ts") or "")[:26]
+    if not closed_ts:
+        return
+    open_row_id = f"paper_{pid}"
+    closed_row_id = f"paper_closed_{pid}"
+    fees = (float(pos.get("open_fees") or 0) + float(pos.get("close_fees") or 0)) or None
+    with _LOCK:
+        conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+        try:
+            conn.execute("DELETE FROM positions_open WHERE id = ?", (open_row_id,))
+            conn.execute(
+                """INSERT OR REPLACE INTO positions_closed (
+                    id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags,
+                    closed_ts, realized_pl, fees
+                ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    closed_row_id, sym, itype, qty,
+                    pos.get("open_price"), pos.get("strike"), (pos.get("expiry") or "")[:10] or None, pos.get("right"),
+                    opened_ts, pid, _safe_str(pos.get("notes")), None,
+                    closed_ts, pos.get("realized_pl"), fees,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    logger.debug("[R28.0] mirrored paper close %s to unified", closed_row_id)
+
+
+# --- R28.9: DB-first read (what is stored; no source recompute) ---
+
+def read_positions_unified_from_db(
+    state: str = "open",
+    include_paper: bool = True,
+    instrument_type: Optional[str] = None,
+    symbol: Optional[str] = None,
+    limit: int = 500,
+) -> Dict[str, Any]:
+    """
+    R28.9: Read directly from unified SQLite (positions_open or positions_closed).
+    No recompute from sources. Deterministic ordering; safe labels only; no writes.
+    """
+    limit = max(0, min(int(limit), 2000))
+    want_open = (state or "open").strip().lower() != "closed"
+    init_db()
+    rows: List[Dict[str, Any]] = []
+    with _LOCK:
+        conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+        try:
+            conditions: List[str] = []
+            params: List[Any] = []
+            if not include_paper:
+                conditions.append("is_paper = 0")
+            if symbol:
+                conditions.append("symbol = ?")
+                params.append((symbol or "").strip().upper())
+            if instrument_type:
+                conditions.append("instrument_type = ?")
+                params.append((instrument_type or "").strip().upper())
+            where_clause = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+            if want_open:
+                sql = "SELECT id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags FROM positions_open" + where_clause
+                cursor = conn.execute(sql, params)
+                for row in cursor.fetchall():
+                    rows.append({
+                        "id": row[0],
+                        "symbol": (row[1] or "").strip().upper(),
+                        "instrument_type": row[2] or "",
+                        "is_paper": int(row[3] or 0),
+                        "qty": int(row[4] or 0),
+                        "avg_price": row[5],
+                        "strike": row[6],
+                        "expiry": (row[7] or "")[:10] if row[7] else None,
+                        "right": row[8],
+                        "opened_ts": (row[9] or "")[:26],
+                        "link_id": row[10],
+                        "notes": _safe_str(row[11]),
+                        "tags": row[12],
+                    })
+            else:
+                sql = "SELECT id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags, closed_ts, realized_pl, fees FROM positions_closed" + where_clause
+                cursor = conn.execute(sql, params)
+                for row in cursor.fetchall():
+                    rows.append({
+                        "id": row[0],
+                        "symbol": (row[1] or "").strip().upper(),
+                        "instrument_type": row[2] or "",
+                        "is_paper": int(row[3] or 0),
+                        "qty": int(row[4] or 0),
+                        "avg_price": row[5],
+                        "strike": row[6],
+                        "expiry": (row[7] or "")[:10] if row[7] else None,
+                        "right": row[8],
+                        "opened_ts": (row[9] or "")[:26],
+                        "link_id": row[10],
+                        "notes": _safe_str(row[11]),
+                        "tags": row[12],
+                        "closed_ts": (row[13] or "")[:26],
+                        "realized_pl": row[14],
+                        "fees": row[15],
+                    })
+        finally:
+            conn.close()
+    if want_open:
+        rows.sort(key=_sort_key_open)
+    else:
+        rows.sort(key=_sort_key_closed)
+    items = [_safe_dict(r) for r in rows[:limit]]
+    return {
+        "status": "OK",
+        "status_label": "OK",
+        "count": len(items),
+        "items": items,
+    }
+
+
+# --- R28.8: Reconcile diff (read-only; operator explainability) ---
+
+def _read_positions_open_from_db(symbol: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Read positions_open from unified DB into list of dicts (same shape as build_unified_positions). Deterministic order."""
+    init_db()
+    rows: List[Dict[str, Any]] = []
+    with _LOCK:
+        conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+        try:
+            if symbol:
+                sym = (symbol or "").strip().upper()
+                cursor = conn.execute(
+                    "SELECT id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags FROM positions_open WHERE symbol = ?",
+                    (sym,),
+                )
+            else:
+                cursor = conn.execute(
+                    "SELECT id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags FROM positions_open",
+                )
+            for row in cursor.fetchall():
+                rows.append({
+                    "id": row[0],
+                    "symbol": (row[1] or "").strip().upper(),
+                    "instrument_type": row[2] or "",
+                    "is_paper": int(row[3] or 0),
+                    "qty": int(row[4] or 0),
+                    "avg_price": row[5],
+                    "strike": row[6],
+                    "expiry": (row[7] or "")[:10] if row[7] else None,
+                    "right": row[8],
+                    "opened_ts": (row[9] or "")[:26],
+                    "link_id": row[10],
+                    "notes": _safe_str(row[11]),
+                    "tags": row[12],
+                })
+        finally:
+            conn.close()
+    rows.sort(key=_sort_key_open)
+    return [_safe_dict(r) for r in rows]
+
+
+def _diff_sort_key(item: Dict[str, Any]) -> tuple:
+    """Stable sort for diff items: symbol, instrument_type, id."""
+    sym = (item.get("symbol") or "").strip().upper()
+    itype = (item.get("instrument_type") or "").upper()
+    pid = (item.get("id") or "").strip()
+    return (sym, itype, pid)
+
+
+def get_reconcile_diff(
+    include_paper: bool = True,
+    symbol: Optional[str] = None,
+    limit: int = 200,
+) -> Dict[str, Any]:
+    """
+    R28.8: Read-only diff of authoritative sources vs unified DB (open positions).
+    Returns missing_in_unified, extra_in_unified, mismatched (key field differences).
+    Deterministic ordering; safe labels only; no writes.
+    """
+    expected = build_unified_positions(state="open", include_paper=include_paper, symbol=symbol)
+    unified = _read_positions_open_from_db(symbol=symbol)
+    expected_by_id = {r["id"]: r for r in expected}
+    unified_by_id = {r["id"]: r for r in unified}
+    expected_ids = set(expected_by_id)
+    unified_ids = set(unified_by_id)
+    missing = [expected_by_id[eid] for eid in expected_ids if eid not in unified_ids]
+    extra = [unified_by_id[uid] for uid in unified_ids if uid not in expected_ids]
+    mismatched: List[Dict[str, Any]] = []
+    for eid in expected_ids & unified_ids:
+        exp = expected_by_id[eid]
+        uni = unified_by_id[eid]
+        diff_fields: List[str] = []
+        if int(exp.get("qty") or 0) != int(uni.get("qty") or 0):
+            diff_fields.append("qty")
+        if (exp.get("instrument_type") or "").strip() != (uni.get("instrument_type") or "").strip():
+            diff_fields.append("instrument_type")
+        if float(exp.get("strike") or 0) != float(uni.get("strike") or 0):
+            diff_fields.append("strike")
+        if ((exp.get("expiry") or "")[:10] or None) != ((uni.get("expiry") or "")[:10] or None):
+            diff_fields.append("expiry")
+        if (exp.get("opened_ts") or "")[:26] != (uni.get("opened_ts") or "")[:26]:
+            diff_fields.append("opened_ts")
+        if diff_fields:
+            mismatched.append({
+                "id": exp["id"],
+                "symbol": exp.get("symbol"),
+                "instrument_type": exp.get("instrument_type"),
+                "is_paper": exp.get("is_paper"),
+                "fields_diff": diff_fields,
+            })
+    items: List[Dict[str, Any]] = []
+    for r in missing:
+        items.append({"kind": "missing", "id": r["id"], "symbol": r.get("symbol"), "instrument_type": r.get("instrument_type"), "is_paper": r.get("is_paper")})
+    for r in extra:
+        items.append({"kind": "extra", "id": r["id"], "symbol": r.get("symbol"), "instrument_type": r.get("instrument_type"), "is_paper": r.get("is_paper")})
+    for r in mismatched:
+        items.append({"kind": "mismatched", "id": r["id"], "symbol": r.get("symbol"), "instrument_type": r.get("instrument_type"), "is_paper": r.get("is_paper"), "fields_diff": r.get("fields_diff", [])})
+    items.sort(key=_diff_sort_key)
+    items = items[: max(0, limit)]
+    status = "OK" if (len(missing) == 0 and len(extra) == 0 and len(mismatched) == 0) else "Review"
+    status_label = "OK" if status == "OK" else "Differences found"
+    return {
+        "status": status,
+        "status_label": status_label,
+        "missing_count": len(missing),
+        "extra_count": len(extra),
+        "mismatched_count": len(mismatched),
+        "items": [_safe_dict(i) for i in items],
+    }
+
+
+def get_positions_unified_reconcile_health() -> Dict[str, Any]:
+    """R28.0/R28.4: Reconcile health — paper + live open source counts vs unified DB. Status OK or Review (safe labels only; no FAIL/WARN)."""
+    paper_open_count = 0
+    paper_closed_count = 0
+    live_shares_open_count = 0
+    live_options_open_count = 0
+    try:
+        from app.core.paper.paper_store_r270 import paper_list_positions, STATUS_OPEN, STATUS_CLOSED
+        paper_open = paper_list_positions(status=STATUS_OPEN)
+        paper_closed = paper_list_positions(status=STATUS_CLOSED)
+        paper_open_count = len([p for p in paper_open if (p.get("id") or "").strip()])
+        paper_closed_count = len([p for p in paper_closed if (p.get("id") or "").strip()])
+    except Exception as e:
+        logger.warning("[R28.0] reconcile: paper source failed: %s", e)
+    try:
+        from app.core.accounts.holdings_db import list_share_positions, _DEFAULT_ACCOUNT_ID
+        live_shares = list_share_positions(_DEFAULT_ACCOUNT_ID)
+        live_shares_open_count = len([s for s in live_shares if int(s.get("quantity") or 0) > 0])
+    except Exception as e:
+        logger.warning("[R28.4] reconcile: live shares source failed: %s", e)
+    try:
+        from app.core.positions.store import list_positions as list_tracked
+        live_options = list_tracked(status="OPEN")
+        live_options_open_count = len([p for p in live_options if (getattr(p, "strategy", "") or "").strip().upper() in ("CSP", "CC")])
+    except Exception as e:
+        logger.warning("[R28.4] reconcile: live options source failed: %s", e)
+    init_db()
+    unified_open_paper = 0
+    unified_closed_paper = 0
+    unified_open_live_shares_count = 0
+    unified_open_live_options_count = 0
+    with _LOCK:
+        conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+        try:
+            unified_open_paper = conn.execute(
+                "SELECT COUNT(*) FROM positions_open WHERE is_paper = 1"
+            ).fetchone()[0]
+            unified_closed_paper = conn.execute(
+                "SELECT COUNT(*) FROM positions_closed WHERE is_paper = 1"
+            ).fetchone()[0]
+            unified_open_live_shares_count = conn.execute(
+                "SELECT COUNT(*) FROM positions_open WHERE is_paper = 0 AND instrument_type = ?",
+                (INSTRUMENT_SHARES,),
+            ).fetchone()[0]
+            unified_open_live_options_count = conn.execute(
+                "SELECT COUNT(*) FROM positions_open WHERE is_paper = 0 AND instrument_type IN (?, ?)",
+                (INSTRUMENT_CSP, INSTRUMENT_CC),
+            ).fetchone()[0]
+        finally:
+            conn.close()
+    paper_ok = unified_open_paper == paper_open_count and unified_closed_paper == paper_closed_count
+    live_shares_ok = unified_open_live_shares_count == live_shares_open_count
+    live_options_ok = unified_open_live_options_count == live_options_open_count
+    status = "OK" if (paper_ok and live_shares_ok and live_options_ok) else "Review"
+    return {
+        "paper_open_count": paper_open_count,
+        "paper_closed_count": paper_closed_count,
+        "unified_open_paper_count": unified_open_paper,
+        "unified_closed_paper_count": unified_closed_paper,
+        "live_shares_open_count": live_shares_open_count,
+        "live_options_open_count": live_options_open_count,
+        "unified_open_live_shares_count": unified_open_live_shares_count,
+        "unified_open_live_options_count": unified_open_live_options_count,
+        "status": status,
+    }
+
+
+# --- R28.1: Live close/roll mirror (idempotent) ---
+
+def _live_options_pos_to_instrument_type(p: Dict[str, Any]) -> str:
+    strat = (p.get("strategy") or "").strip().upper()
+    if strat == "CSP":
+        return INSTRUMENT_CSP
+    if strat == "CC":
+        return INSTRUMENT_CC
+    return INSTRUMENT_CC  # OPTION fallback
+
+
+def mirror_live_close_to_unified(payload_or_position: Dict[str, Any]) -> None:
+    """R28.1: Idempotent mirror of a live close into positions_closed. Handles shares (dict from close_share_position) or options (Position.to_dict() or equivalent)."""
+    p = payload_or_position if isinstance(payload_or_position, dict) else getattr(payload_or_position, "to_dict", lambda: {})()
+    if not p:
+        return
+    # Options: has position_id and strategy CSP/CC
+    position_id = (p.get("position_id") or p.get("id") or "").strip()
+    strategy = (p.get("strategy") or "").strip().upper()
+    is_options = bool(position_id and strategy in ("CSP", "CC"))
+    if is_options:
+        _mirror_live_options_close(p)
+        return
+    # Shares: id = closed row id, symbol, quantity, opened_at, closed_at, exit_price, realized_pnl
+    closed_id = (p.get("id") or "").strip()
+    if not closed_id or not (p.get("symbol") or "").strip():
+        return
+    _mirror_live_shares_close(p, closed_id)
+
+
+def _mirror_live_shares_close(p: Dict[str, Any], closed_id: str) -> None:
+    """Mirror live shares closed row. Stable id = live_shares_closed_{closed_id}. R28.4: Remove corresponding open row (one per symbol for live SHARES)."""
+    sym = (p.get("symbol") or "").strip().upper()
+    if not sym:
+        return
+    qty = int(p.get("quantity") or 0)
+    opened_ts = (p.get("opened_at") or "")[:26]
+    closed_ts = (p.get("closed_at") or "")[:26]
+    if not closed_ts:
+        return
+    init_db()
+    row_id = f"live_shares_closed_{closed_id}"
+    avg_price = p.get("avg_cost") or p.get("exit_price")
+    with _LOCK:
+        conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+        try:
+            conn.execute(
+                "DELETE FROM positions_open WHERE symbol = ? AND is_paper = 0 AND instrument_type = ?",
+                (sym, INSTRUMENT_SHARES),
+            )
+            conn.execute(
+                """INSERT OR REPLACE INTO positions_closed (
+                    id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags,
+                    closed_ts, realized_pl, fees
+                ) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    row_id, sym, INSTRUMENT_SHARES, qty, avg_price, None, None, None, opened_ts, closed_id, _safe_str(p.get("close_notes")), None,
+                    closed_ts, p.get("realized_pnl"), None,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    logger.debug("[R28.1] mirrored live shares close %s to unified", row_id)
+
+
+def _mirror_live_options_close(p: Dict[str, Any]) -> None:
+    """Mirror live options closed: remove from positions_open, upsert into positions_closed. Stable id = live_options_closed_{position_id}."""
+    pid = (p.get("position_id") or p.get("id") or "").strip()
+    if not pid:
+        return
+    init_db()
+    sym = (p.get("symbol") or "").strip().upper()
+    itype = _live_options_pos_to_instrument_type(p)
+    contracts = int(p.get("contracts") or 0)
+    qty = contracts * 100 if contracts else (int(p.get("quantity") or 0))
+    opened_ts = (p.get("opened_at") or p.get("open_time_utc") or "")[:26]
+    closed_ts = (p.get("closed_at") or p.get("close_time_utc") or "")[:26]
+    if not closed_ts:
+        return
+    open_row_id = f"live_options_{pid}"
+    closed_row_id = f"live_options_closed_{pid}"
+    open_f = float(p.get("open_fees") or 0)
+    close_f = float(p.get("close_fees") or 0)
+    fees = (open_f + close_f) or None
+    with _LOCK:
+        conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+        try:
+            conn.execute("DELETE FROM positions_open WHERE id = ?", (open_row_id,))
+            conn.execute(
+                """INSERT OR REPLACE INTO positions_closed (
+                    id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags,
+                    closed_ts, realized_pl, fees
+                ) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    closed_row_id, sym, itype, qty,
+                    p.get("open_credit") or p.get("credit_expected"), p.get("strike"), (p.get("expiration") or p.get("expiry") or "")[:10] or None, p.get("option_type") or p.get("right"),
+                    opened_ts, pid, _safe_str(p.get("notes")), None,
+                    closed_ts, p.get("realized_pnl"), fees,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    logger.debug("[R28.1] mirrored live options close %s to unified", closed_row_id)
+
+
+def mirror_live_shares_open_to_unified(share_position: Dict[str, Any]) -> None:
+    """R28.4: Idempotent mirror of a live SHARES open position into positions_open. Stable id = live_shares_{id}. Source=LIVE."""
+    sid = (share_position.get("id") or "").strip()
+    if not sid:
+        return
+    sym = (share_position.get("symbol") or "").strip().upper()
+    if not sym:
+        return
+    qty = int(share_position.get("quantity") or 0)
+    if qty <= 0:
+        return
+    opened_ts = (share_position.get("opened_at") or share_position.get("created_at") or "")[:26]
+    if not opened_ts:
+        return
+    init_db()
+    row_id = f"live_shares_{sid}"
+    with _LOCK:
+        conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+        try:
+            conn.execute(
+                """INSERT OR REPLACE INTO positions_open (
+                    id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags
+                ) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    row_id, sym, INSTRUMENT_SHARES, qty,
+                    share_position.get("avg_cost"), None, None, None,
+                    opened_ts, sid, _safe_str(share_position.get("notes")), None,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    logger.debug("[R28.4] mirrored live shares open %s to unified", row_id)
+
+
+def mirror_live_open_to_unified(payload_or_position: Dict[str, Any]) -> None:
+    """R28.1: Idempotent mirror of a live options OPEN position into positions_open (e.g. after roll). Stable id = live_options_{position_id}. R28.4: For SHARES use mirror_live_shares_open_to_unified."""
+    p = payload_or_position if isinstance(payload_or_position, dict) else getattr(payload_or_position, "to_dict", lambda: {})()
+    if not p:
+        return
+    pid = (p.get("position_id") or p.get("id") or "").strip()
+    if not pid:
+        return
+    strat = (p.get("strategy") or "").strip().upper()
+    if strat not in ("CSP", "CC"):
+        return
+    init_db()
+    sym = (p.get("symbol") or "").strip().upper()
+    itype = _live_options_pos_to_instrument_type(p)
+    contracts = int(p.get("contracts") or 0)
+    qty = contracts * 100 if contracts else (int(p.get("quantity") or 0))
+    opened_ts = (p.get("opened_at") or p.get("open_time_utc") or "")[:26]
+    if not opened_ts:
+        return
+    row_id = f"live_options_{pid}"
+    with _LOCK:
+        conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+        try:
+            conn.execute(
+                """INSERT OR REPLACE INTO positions_open (
+                    id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags
+                ) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    row_id, sym, itype, qty,
+                    p.get("open_credit") or p.get("credit_expected"), p.get("strike"), (p.get("expiration") or p.get("expiry") or "")[:10] or None, p.get("option_type") or p.get("right"),
+                    opened_ts, pid, _safe_str(p.get("notes")), None,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    logger.debug("[R28.1] mirrored live options open %s to unified", row_id)
+
+
+def ensure_reconcile_advisory_notification() -> None:
+    """R28.1: If reconcile status is Review, ensure exactly one advisory notification (deduped). Safe labels only; no FAIL/WARN."""
+    try:
+        health = get_positions_unified_reconcile_health()
+        if (health.get("status") or "").strip() != "Review":
+            return
+    except Exception as e:
+        logger.warning("[R28.1] reconcile health check failed: %s", e)
+        return
+    try:
+        from app.api.notifications_store import load_notifications, append_notification
+        existing = load_notifications(limit=200, state_filter=None, type_filter="POSITIONS_RECONCILE_REVIEW")
+        for rec in existing:
+            if rec.get("state") in ("NEW", "ACKED"):
+                return  # Already have an active one; do not create another
+        message = "Unified positions reconcile needs attention (counts differ)."
+        append_notification("INFO", "POSITIONS_RECONCILE_REVIEW", message, symbol=None, details={"advisory": True})
+    except Exception as e:
+        logger.warning("[R28.1] reconcile advisory notification failed: %s", e)

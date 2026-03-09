@@ -342,14 +342,48 @@ export interface UiSystemHealthDecisionStore {
   decision_store_mtime_utc?: string | null;
 }
 
-/** Phase 16.0: Mark refresh state from out/mark_refresh_state.json */
+/** Phase 16.0/R28.2: Mark refresh state from out/mark_refresh_state.json. Safe status only (no PASS/FAIL/WARN). */
 export interface UiSystemHealthMarkRefresh {
   last_run_at_utc?: string | null;
-  last_result?: "PASS" | "WARN" | "FAIL" | null;
+  /** R28.2: Safe status (OK | Blocked | Degraded | Review). Prefer over last_result. */
+  status?: "OK" | "Blocked" | "Degraded" | "Review" | null;
+  status_label?: string | null;
+  /** @deprecated Use status. Kept for backward compat. */
+  last_result?: string | null;
   updated_count?: number | null;
   skipped_count?: number | null;
   error_count?: number | null;
   errors_sample?: string[];
+}
+
+/** R28.7 — Positions unified rebuild block (system-health). Safe labels only. */
+export interface UiPositionsUnifiedRebuild {
+  status?: "OK" | "Review" | string | null;
+  status_label?: string | null;
+  last_rebuild_at_utc?: string | null;
+  last_rebuild_open_count?: number | null;
+  last_rebuild_closed_count?: number | null;
+  last_include_paper?: boolean | null;
+}
+
+/** R28.8 — Reconcile diff item (missing/extra/mismatched). Safe labels only. */
+export interface UiReconcileDiffItem {
+  kind: "missing" | "extra" | "mismatched";
+  id: string;
+  symbol?: string | null;
+  instrument_type?: string | null;
+  is_paper?: number | boolean | null;
+  fields_diff?: string[];
+}
+
+/** R28.8 — GET /api/ui/positions/unified/reconcile-diff response. */
+export interface UiReconcileDiffResponse {
+  status?: "OK" | "Review" | string;
+  status_label?: string | null;
+  missing_count: number;
+  extra_count: number;
+  mismatched_count: number;
+  items: UiReconcileDiffItem[];
 }
 
 export interface UiSystemHealthResponse {
@@ -385,6 +419,21 @@ export interface UiSystemHealthResponse {
   cadence?: { mode?: string; eligibility_as_of?: string | null };
   /** R25.8 — Probe symbol for earnings debug card (default SPY). */
   earnings_probe_symbol?: string;
+  /** R28.0/R28.1/R28.4 — Unified positions reconcile: paper + live vs unified counts; status OK or Review. Safe labels only. */
+  positions_unified_reconcile?: {
+    status?: "OK" | "Review";
+    paper_open_count?: number;
+    paper_closed_count?: number;
+    unified_open_paper_count?: number;
+    unified_closed_paper_count?: number;
+    /** R28.4 — Live shares open count from source; unified_open_live_shares_count from DB. */
+    live_shares_open_count?: number;
+    live_options_open_count?: number;
+    unified_open_live_shares_count?: number;
+    unified_open_live_options_count?: number;
+  };
+  /** R28.7 — Unified positions rebuild: last rebuild metadata. Safe labels only (no FAIL/WARN/PASS). */
+  positions_unified_rebuild?: UiPositionsUnifiedRebuild;
   /** R25.9 — Portfolio guardrails: status (OK/Advisory/Blocked), metrics, limits. Safe labels only. */
   guardrails?: {
     status?: "OK" | "Advisory" | "Blocked";
@@ -954,7 +1003,7 @@ export interface SharesPlan {
   as_of_inputs?: Record<string, unknown>;
 }
 
-/** R27.9: Unified position row (read-only aggregation). Safe labels only; no FAIL_/WARN_. */
+/** R27.9/R28.0: Unified position row (read-only aggregation). Safe labels only; no FAIL_/WARN_. */
 export interface UnifiedPosition {
   id: string;
   symbol: string;
@@ -972,6 +1021,9 @@ export interface UnifiedPosition {
   closed_ts?: string | null;
   realized_pl?: number | null;
   fees?: number | null;
+  /** R28.0: optional mark / unrealized when API provides (e.g. paper) */
+  mark_value?: number | null;
+  unrealized_pl?: number | null;
 }
 
 /** R27.9: GET /api/ui/positions/unified response */
@@ -979,4 +1031,29 @@ export interface UiPositionsUnifiedResponse {
   positions: UnifiedPosition[];
   state: string;
   include_paper: boolean;
+}
+
+/** R28.9: GET /api/ui/positions/unified/db — DB-first read (what is stored). */
+export interface UiPositionsUnifiedDbResponse {
+  status?: string;
+  status_label?: string | null;
+  count: number;
+  items: UnifiedPosition[];
+}
+
+/** R28.7: POST /api/ui/positions/unified/rebuild — result payload (safe labels only). */
+export interface UiPositionsUnifiedRebuildResult {
+  status?: string | null;
+  status_label?: string | null;
+  rebuilt_open?: number;
+  rebuilt_closed?: number;
+  include_paper?: boolean;
+  started_at_utc?: string | null;
+  finished_at_utc?: string | null;
+}
+
+/** R28.7: POST /api/ui/positions/unified/rebuild — response. */
+export interface UiPositionsUnifiedRebuildResponse {
+  ok: boolean;
+  result: UiPositionsUnifiedRebuildResult;
 }

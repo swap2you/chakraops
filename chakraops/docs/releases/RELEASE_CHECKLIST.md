@@ -688,6 +688,97 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Checklist completed in out/verification/R27.9/notes.md (grep proof recorded; file not present expected)
 - **Scope:** Unified positions store (positions_open/positions_closed); read-only aggregation from holdings_db + tracked positions + paper; GET /api/ui/positions/unified; system-health positions_unified; Positions page with filters and safe labels. Branch: release/R27.9.
 
+### R28.0 — Paper write mirror + reconcile health + Positions UI upgrades
+
+- [x] **Requirements** — chakraops/docs/releases/R28.0_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R28.0_release_notes.md
+- [x] **Verification** — out/verification/R28.0/notes.md (gate tails + UAT)
+- [x] **Gate** — Backend 921 passed, 3 skipped; frontend 246 passed, 18 skipped; build 7.49s. Evidence: out/verification/R28.0/notes.md
+- [x] **UAT** — Checklist completed in out/verification/R28.0/notes.md (grep proof: file not present)
+- **Scope:** Paper open/close mirror to unified DB (idempotent); positions_unified_reconcile health block; Positions page Source column, Mark/Unrealized for paper, safe labels. Branch: release/R28.0.
+
+### R28.1 — Live close/roll mirror + reconcile advisory + System Health reconcile block
+
+- [x] **Requirements** — chakraops/docs/releases/R28.1_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R28.1_release_notes.md
+- [x] **Verification** — out/verification/R28.1/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend 925 passed, 3 skipped; frontend 247 passed, 18 skipped; build 9.52s. Evidence: out/verification/R28.1/notes.md
+- [x] **UAT** — Live close/roll → unified row; reconcile Review → one notification; no FAIL/WARN
+- **Scope:** Mirror live close/roll to unified DB (idempotent); single deduped advisory when reconcile Review; reconcile block on System Diagnostics. Branch: release/R28.1.
+
+### R28.2 — Safe labels in UI-facing runtime state files (out/)
+
+- [x] **Requirements** — chakraops/docs/releases/R28.2_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R28.2_release_notes.md
+- [x] **Verification** — out/verification/R28.2/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend 931 passed, 3 skipped; frontend 248 passed, 18 skipped; build 11.52s. Evidence: out/verification/R28.2/notes.md
+- [x] **UAT** — Runtime state files contain no FAIL/WARN/PASS; API/UI safe labels only
+- **Scope:** mark_refresh_state.json and portfolio_risk_notify_state.json persist only safe status/label; normalize helper; backward compat. Branch: release/R28.2.
+
+### R28.3 — Notifications safe labels (no FAIL/WARN/PASS in UI-facing data)
+
+- [x] **Requirements** — chakraops/docs/releases/R28.3_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R28.3_release_notes.md
+- [x] **Verification** — out/verification/R28.3/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend 939 passed, 1 skipped in 417.65s; frontend 249 passed, 18 skipped; build 13.03s. Evidence: out/verification/R28.3/notes.md.
+- [x] **UAT** — Notifications page no raw FAIL/WARN/PASS; legacy normalized; no decision writes
+- **Scope:** Notifications persist/return safe severity/labels; normalize on read; UI safe only. Branch: release/R28.3.
+
+### R28.4 — Live open mirror to unified positions DB
+
+- [x] **Requirements** — chakraops/docs/releases/R28.4_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R28.4_release_notes.md
+- [x] **Verification** — out/verification/R28.4/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend 943 passed, 1 skipped in 127.06s; frontend 249 passed, 18 skipped; build 8.08s. Evidence: out/verification/R28.4/notes.md.
+- [x] **UAT** — Live shares/options open mirror idempotent; reconcile includes live counts; safe labels only
+- **Scope:** Mirror live SHARES/OPTIONS open to positions_open; reconcile health live counts; safe labels only. Branch: release/R28.4.
+
+### R28.5 — Live options OPEN mirror wiring
+
+- [x] **Requirements** — chakraops/docs/releases/R28.5_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R28.5_release_notes.md
+- [x] **Verification** — out/verification/R28.5/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — R28.5 module 3 passed in 0.58s; full backend 946 passed, 1 skipped in 404.58s; frontend 249 passed, 18 skipped; build 7.55s. Evidence: out/verification/R28.5/notes.md.
+- [x] **UAT** — Live options create wires mirror; reconcile OK/Review only; no FAIL/WARN/PASS in DOM
+- **Scope:** Wire live options open mirror on manual-execute; reconcile health includes live options counts; safe labels only. Branch: release/R28.5.
+
+### R28.6 — Live open mirror wiring completeness + regression guardrails
+
+- [x] **Requirements** — chakraops/docs/releases/R28.6_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R28.6_release_notes.md
+- [x] **Verification** — out/verification/R28.6/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — R28.6 module 5 passed in 2.19s; full backend 951 passed, 1 skipped in 137.60s; frontend 249 passed, 18 skipped; build 8.69s. Evidence: out/verification/R28.6/notes.md.
+- [x] **UAT** — All live-open entrypoints wired; reconcile OK/Review only; no FAIL/WARN/PASS in DOM
+- **Scope:** Wire missing live OPEN paths (e.g. /api/positions/manual-execute); regression tests; safe labels only. Branch: release/R28.6.
+
+### R28.7 — Unified Positions Rebuild v1 (manual) + Diagnostics UI action
+
+- [x] **Requirements** — chakraops/docs/releases/R28.7_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R28.7_release_notes.md
+- [x] **Verification** — **out/verification/R28.7/notes.md** (primary: gate tails + UAT + grep proof). Optional: R28.7_verification_evidence.md.
+- [x] **Gate** — test_r287_* 4 passed; full backend 953 passed, 3 skipped; frontend 252 passed, 18 skipped; build pass. Evidence in **out/verification/R28.7/notes.md**.
+- [x] **UAT** — Reconcile OK/Review; Rebuild button (confirm, triggers rebuild); unified list consistent after rebuild; no raw FAIL/WARN/PASS in UI
+- **Scope:** Manual rebuild of unified positions DB from authoritative sources; POST rebuild endpoint; system-health rebuild block; state file safe labels only; Diagnostics Rebuild card + button. NO GIT.
+- **Handoff:** R28.7_IMPLEMENTATION_SIGNOFF.md — full requirement-to-implementation checklist for agent handoff.
+
+### R28.8 — Reconcile Diff v1 (read-only, operator explainability)
+
+- [x] **Requirements** — chakraops/docs/releases/R28.8_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R28.8_release_notes.md
+- [x] **Verification** — out/verification/R28.8/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — test_r288_* 5 passed; full backend 958 passed, 3 skipped; frontend 255 passed, 18 skipped; build 8.76s. Evidence in out/verification/R28.8/notes.md.
+- [x] **UAT** — Reconcile Review → diff counts + View details; link to /positions; no raw FAIL/WARN/PASS in UI
+- **Scope:** GET reconcile-diff API; diff card on System Diagnostics; deterministic; safe labels only; no writes. NO GIT.
+
+### R28.9 — Reconcile Diff remediation + DB-first read
+
+- [x] **Requirements** — chakraops/docs/releases/R28.9_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R28.9_release_notes.md
+- [x] **Verification** — out/verification/R28.9/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — test_r289_* pass; full backend pass; frontend tests pass; frontend build pass. Evidence in out/verification/R28.9/notes.md.
+- [x] **UAT** — Rebuild now from Reconcile Diff when Review; View DB link; Positions source=db shows Stored; no raw FAIL/WARN/PASS in UI
+- **Scope:** GET /positions/unified/db; Rebuild now button + View DB link on Reconcile Diff card; Positions source param; safe labels only; no decision writes. NO GIT.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

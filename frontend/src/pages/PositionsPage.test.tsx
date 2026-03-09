@@ -1,10 +1,9 @@
 /**
- * R27.9: Positions page — unified list, filters (open/closed, live/paper, type, symbol);
- * mocked API; no FAIL/WARN in document.
+ * R27.9/R28.0/R28.9: Positions page — unified list; source=recompute (default) or source=db; no FAIL/WARN/PASS in document.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { render, screen } from "@/test/test-utils";
+import { render, renderWithRoute, screen } from "@/test/test-utils";
 import { PositionsPage } from "./PositionsPage";
 
 const mockPositions = [
@@ -37,6 +36,8 @@ const mockPositions = [
     link_id: "2",
     notes: null,
     tags: null,
+    mark_value: 4.25,
+    unrealized_pl: 150,
   },
 ];
 
@@ -46,8 +47,15 @@ const mockUseUnifiedPositions = vi.fn(() => ({
   isError: false,
 }));
 
+const mockUseUnifiedPositionsFromDb = vi.fn(() => ({
+  data: { items: mockPositions, count: mockPositions.length, status: "OK", status_label: "OK" },
+  isLoading: false,
+  isError: false,
+}));
+
 vi.mock("@/api/queries", () => ({
   useUnifiedPositions: (params: Record<string, unknown>) => mockUseUnifiedPositions(params),
+  useUnifiedPositionsFromDb: (params: Record<string, unknown>) => mockUseUnifiedPositionsFromDb(params),
 }));
 
 describe("PositionsPage", () => {
@@ -69,15 +77,24 @@ describe("PositionsPage", () => {
     expect(screen.getByTestId("positions-filter-symbol")).toBeInTheDocument();
   });
 
-  it("renders positions table with Symbol, Type, Qty, Opened, Ticket, Journal", () => {
+  it("renders positions table with Symbol, Source, Type, Qty, Opened, Mark, Ticket, Journal, Paper", () => {
     render(<PositionsPage />);
     expect(screen.getByText("AAPL")).toBeInTheDocument();
     expect(screen.getByText("SPY")).toBeInTheDocument();
-    expect(screen.getAllByText("SHARES").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("CSP").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Source")).toBeInTheDocument();
+    expect(screen.getByText("Mark / Unrealized")).toBeInTheDocument();
+    expect(screen.getAllByText("LIVE").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("PAPER").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByTestId("positions-row").length).toBe(2);
     expect(screen.getAllByTestId("positions-link-ticket").length).toBe(2);
     expect(screen.getAllByTestId("positions-link-journal").length).toBe(2);
+    expect(screen.getAllByTestId("positions-link-paper").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("shows Mark/Unrealized for paper row when API provides mark_value and unrealized_pl", () => {
+    const { container } = render(<PositionsPage />);
+    expect(container.textContent).toMatch(/4\.25/);
+    expect(container.textContent).toMatch(/150/);
   });
 
   it("calls useUnifiedPositions with state and include_paper", () => {
@@ -87,11 +104,28 @@ describe("PositionsPage", () => {
     );
   });
 
-  it("document textContent has no FAIL or WARN (R27.9)", () => {
+  it("document textContent has no FAIL or WARN (R27.9/R28.0)", () => {
     const { container } = render(<PositionsPage />);
     const text = container.textContent ?? "";
     expect(text).not.toMatch(/\bFAIL\b/);
     expect(text).not.toMatch(/\bWARN\b/);
+  });
+
+  it("R28.9: when source=db shows Source: Stored and uses db endpoint", () => {
+    renderWithRoute(<PositionsPage />, "/positions?source=db");
+    expect(screen.getByTestId("positions-source-label")).toHaveTextContent("Source: Stored");
+    expect(mockUseUnifiedPositionsFromDb).toHaveBeenCalled();
+  });
+
+  it("R28.9: when source absent shows Source: Computed", () => {
+    render(<PositionsPage />);
+    expect(screen.getByTestId("positions-source-label")).toHaveTextContent("Source: Computed");
+  });
+
+  it("R28.9: document has no FAIL/WARN/PASS tokens", () => {
+    const { container } = render(<PositionsPage />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
   });
 
   it("filter state change triggers new request", async () => {

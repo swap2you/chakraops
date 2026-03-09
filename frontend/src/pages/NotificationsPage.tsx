@@ -12,7 +12,7 @@ import { Link } from "react-router-dom";
 import type { UiNotification } from "@/api/queries";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardHeader, StatusBadge, Button } from "@/components/ui";
-import { sanitizeMessageForDisplay } from "@/lib/safeLabels";
+import { gateStatusToLabel, sanitizeMessageForDisplay } from "@/lib/safeLabels";
 import { formatTimestampEtFull } from "@/utils/formatTimestamp";
 
 type TabState = "NEW" | "ACKED" | "ARCHIVED" | "ALL";
@@ -168,7 +168,7 @@ export function NotificationsPage() {
                         <StatusBadge status={n.state ?? "NEW"} />
                       </td>
                       <td className="py-2 pr-2">
-                        <StatusBadge status={n.severity ?? "—"} />
+                        <StatusBadge status={gateStatusToLabel(n.severity_label ?? n.severity) ?? "—"} />
                       </td>
                       <td className="py-2 pr-2 font-medium text-zinc-700 dark:text-zinc-300">
                         {n.type === "CC_ELIGIBLE" ? "Covered call eligible" : n.type ?? "—"}

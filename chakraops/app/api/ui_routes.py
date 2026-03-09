@@ -130,22 +130,30 @@ def _get_copilot_status_health() -> Dict[str, Any]:
 
 
 def _get_mark_refresh_health() -> Dict[str, Any]:
-    """Phase 16.0: Mark refresh state for system health."""
+    """Phase 16.0/R28.2: Mark refresh state for system health. Only safe status/status_label (no PASS/FAIL/WARN).
+    R28.3: last_result is API-only backward compat; never persisted. last_result must not be 'PASS' (use 'OK')."""
     try:
         from app.core.portfolio.mark_refresh_state import load_mark_refresh_state
         state = load_mark_refresh_state()
         if state is None:
-            return {"last_run_at_utc": None, "last_result": None, "updated_count": None, "skipped_count": None, "error_count": None, "errors_sample": []}
+            return {"last_run_at_utc": None, "status": None, "status_label": None, "last_result": None, "updated_count": None, "skipped_count": None, "error_count": None, "errors_sample": []}
+        status = state.get("status")
+        status_label = state.get("status_label")
+        last_result = status_label or status or "OK"
+        if last_result == "PASS":
+            last_result = "OK"
         return {
             "last_run_at_utc": state.get("last_run_at_utc"),
-            "last_result": state.get("last_result"),
+            "status": status,
+            "status_label": status_label,
+            "last_result": last_result,
             "updated_count": state.get("updated_count"),
             "skipped_count": state.get("skipped_count"),
             "error_count": state.get("error_count"),
             "errors_sample": state.get("errors_sample") or [],
         }
     except Exception:
-        return {"last_run_at_utc": None, "last_result": None, "updated_count": None, "skipped_count": None, "error_count": None, "errors_sample": []}
+        return {"last_run_at_utc": None, "status": None, "status_label": None, "last_result": None, "updated_count": None, "skipped_count": None, "error_count": None, "errors_sample": []}
 
 
 def _get_portfolio_risk_notifier_health() -> Dict[str, Any]:
@@ -177,6 +185,37 @@ def _get_positions_unified_health() -> Dict[str, Any]:
         return get_positions_unified_health()
     except Exception:
         return {"open_count": 0, "closed_count": 0, "last_build_ts": None}
+
+
+def _get_positions_unified_reconcile_health() -> Dict[str, Any]:
+    """R28.0/R28.4: positions_unified_reconcile — paper + live vs unified counts; status OK or Review. Safe labels only."""
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import get_positions_unified_reconcile_health
+        return get_positions_unified_reconcile_health()
+    except Exception:
+        return {
+            "paper_open_count": 0, "paper_closed_count": 0,
+            "unified_open_paper_count": 0, "unified_closed_paper_count": 0,
+            "live_shares_open_count": 0, "live_options_open_count": 0,
+            "unified_open_live_shares_count": 0, "unified_open_live_options_count": 0,
+            "status": "Review",
+        }
+
+
+def _get_positions_unified_rebuild_health() -> Dict[str, Any]:
+    """R28.7: positions_unified_rebuild block — last rebuild metadata. Safe labels only."""
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import get_positions_unified_rebuild_health
+        return get_positions_unified_rebuild_health()
+    except Exception:
+        return {
+            "status": "OK",
+            "status_label": "OK",
+            "last_rebuild_at_utc": None,
+            "last_rebuild_open_count": None,
+            "last_rebuild_closed_count": None,
+            "last_include_paper": None,
+        }
 
 
 def _get_decision_store_mtime_utc() -> Optional[str]:
@@ -1291,6 +1330,8 @@ def ui_system_health(
         "earnings_probe_symbol": earnings_probe_symbol,
         "guardrails": _get_guardrails_health(),
         "positions_unified": _get_positions_unified_health(),
+        "positions_unified_reconcile": _get_positions_unified_reconcile_health(),
+        "positions_unified_rebuild": _get_positions_unified_rebuild_health(),
     }
 
 
@@ -2090,6 +2131,11 @@ async def ui_paper_execute(
                 ts=ts,
                 notes=(body.get("notes") or "").strip()[:500] or None,
             )
+            try:
+                from app.core.portfolio.positions_unified_store_r279 import mirror_paper_open_to_unified
+                mirror_paper_open_to_unified(position)
+            except Exception:
+                pass
             trade_date = (position.get("open_ts") or "")[:10] or (datetime.now(timezone.utc).date()).isoformat()
             tags_parts = [(body.get("tags") or "").strip()]
             sizing_hit = body.get("sizing_constraints_hit")
@@ -2139,6 +2185,11 @@ async def ui_paper_execute(
                 close_fees=fees,
                 ts=ts,
             )
+            try:
+                from app.core.portfolio.positions_unified_store_r279 import mirror_paper_close_to_unified
+                mirror_paper_close_to_unified(position)
+            except Exception:
+                pass
             trade_date = (position.get("close_ts") or "")[:10] or (datetime.now(timezone.utc).date()).isoformat()
             journal_create(
                 trade_date=trade_date,
@@ -2247,6 +2298,11 @@ async def ui_paper_close(
         raise HTTPException(status_code=404, detail="Position not found or already closed")
     strategy = (pos_before.get("strategy") or "SHARES").strip().upper()
     position = paper_execute_close(position_id=position_id, close_price=close_price, close_fees=close_fees, ts=ts)
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import mirror_paper_close_to_unified
+        mirror_paper_close_to_unified(position)
+    except Exception:
+        pass
     trade_date = (position.get("close_ts") or "")[:10] or (datetime.now(timezone.utc).date()).isoformat()
     action = "SELL" if strategy == "SHARES" else ("CLOSE_CSP" if strategy == "CSP" else "CLOSE_CC")
     existing_tags = (pos_before.get("notes") or "").strip()[:200] or ""
@@ -3061,7 +3117,7 @@ async def ui_positions_manual_execute(
     request: Request,
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """Record a manual execution (creates a tracked position). UI-safe wrapper."""
+    """Record a manual execution (creates a tracked position). UI-safe wrapper. R28.5: Mirror live options open to unified + reconcile advisory."""
     _require_ui_key(x_ui_key)
     try:
         from app.core.positions.service import manual_execute
@@ -3069,6 +3125,15 @@ async def ui_positions_manual_execute(
         position, errors = manual_execute(body)
         if errors:
             raise HTTPException(status_code=400, detail={"errors": errors})
+        try:
+            account_id = (getattr(position, "account_id", None) or "").strip().lower()
+            strategy = (getattr(position, "strategy", None) or "").strip().upper()
+            if account_id != "paper" and strategy in ("CSP", "CC"):
+                from app.core.portfolio.positions_unified_store_r279 import mirror_live_open_to_unified, ensure_reconcile_advisory_notification
+                mirror_live_open_to_unified(position.to_dict())
+                ensure_reconcile_advisory_notification()
+        except Exception:
+            pass
         return position.to_dict()
     except HTTPException:
         raise
@@ -3828,6 +3893,12 @@ async def ui_shares_position_upsert(
                 stop_price = None
         from app.core.accounts.holdings_db import upsert_share_position
         pos = upsert_share_position(aid, symbol, qty, avg_cost=avg_cost, opened_at=opened_at, target_price=target_price, stop_price=stop_price)
+        try:
+            from app.core.portfolio.positions_unified_store_r279 import mirror_live_shares_open_to_unified, ensure_reconcile_advisory_notification
+            mirror_live_shares_open_to_unified(pos)
+            ensure_reconcile_advisory_notification()
+        except Exception:
+            pass
         return pos
     except HTTPException:
         raise
@@ -3914,6 +3985,12 @@ async def ui_shares_position_close(
             is_paper=False,
             notes=(notes or "").strip()[:2000] or None,
         )
+        try:
+            from app.core.portfolio.positions_unified_store_r279 import mirror_live_close_to_unified, ensure_reconcile_advisory_notification
+            mirror_live_close_to_unified(closed)
+            ensure_reconcile_advisory_notification()
+        except Exception:
+            pass
         return closed
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -3977,6 +4054,76 @@ def ui_positions_unified(
         import logging
         logging.getLogger(__name__).exception("Error building unified positions: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/positions/unified/db")
+def ui_positions_unified_db(
+    state: str = Query(default="open", description="open | closed"),
+    include_paper: bool = Query(default=True, description="Include paper in DB read"),
+    instrument_type: str | None = Query(default=None, description="Filter: SHARES | CSP | CC"),
+    symbol: str | None = Query(default=None, description="Filter by symbol"),
+    limit: int = Query(default=500, ge=1, le=2000, description="Max items returned"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R28.9: DB-first read (what is stored in unified SQLite). No source recompute; safe labels only; no writes."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import read_positions_unified_from_db
+        return read_positions_unified_from_db(
+            state=state,
+            include_paper=include_paper,
+            instrument_type=instrument_type,
+            symbol=symbol,
+            limit=limit,
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error reading unified positions from DB: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/positions/unified/reconcile-diff")
+def ui_positions_unified_reconcile_diff(
+    include_paper: bool = Query(default=True, description="Include paper in diff"),
+    symbol: str | None = Query(default=None, description="Filter by symbol"),
+    limit: int = Query(default=200, ge=1, le=500, description="Max diff items returned"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R28.8: Read-only reconcile diff (source vs unified DB). Safe labels only; no FAIL/WARN/PASS; no writes."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import get_reconcile_diff
+        return get_reconcile_diff(include_paper=include_paper, symbol=symbol, limit=limit)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Reconcile diff error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/positions/unified/rebuild")
+def ui_positions_unified_rebuild(
+    include_paper: bool = Query(default=True, description="Include paper positions in rebuild"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R28.7: Manual rebuild of unified positions DB from authoritative sources. Safe labels only; no FAIL/WARN/PASS."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import rebuild_positions_unified
+        result = rebuild_positions_unified(include_paper=include_paper)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Rebuild error: %s", e)
+        result = {
+            "status": "Review",
+            "status_label": "Rebuild failed",
+            "rebuilt_open": 0,
+            "rebuilt_closed": 0,
+            "include_paper": include_paper,
+            "started_at_utc": None,
+            "finished_at_utc": None,
+        }
+    ok = (result.get("status") or "").strip() == "OK"
+    return {"ok": ok, "result": result}
 
 
 @router.get("/positions")
@@ -4078,6 +4225,12 @@ async def ui_positions_close(
             raise HTTPException(status_code=400, detail={"errors": errors})
         if position is None:
             raise HTTPException(status_code=404, detail="Position not found")
+        try:
+            from app.core.portfolio.positions_unified_store_r279 import mirror_live_close_to_unified, ensure_reconcile_advisory_notification
+            mirror_live_close_to_unified(position.to_dict())
+            ensure_reconcile_advisory_notification()
+        except Exception:
+            pass
         return position.to_dict()
     except HTTPException:
         raise
@@ -4205,6 +4358,20 @@ async def ui_positions_roll(
             raise HTTPException(status_code=status, detail={"errors": errors})
         if new_pos is None:
             raise HTTPException(status_code=404, detail="Position not found")
+        try:
+            from app.core.positions.service import get_position
+            from app.core.portfolio.positions_unified_store_r279 import (
+                mirror_live_close_to_unified,
+                mirror_live_open_to_unified,
+                ensure_reconcile_advisory_notification,
+            )
+            closed_pos = get_position(position_id)
+            if closed_pos:
+                mirror_live_close_to_unified(closed_pos.to_dict())
+            mirror_live_open_to_unified(new_pos.to_dict())
+            ensure_reconcile_advisory_notification()
+        except Exception:
+            pass
         return {"closed_position_id": position_id, "new_position": new_pos.to_dict()}
     except HTTPException:
         raise

@@ -12,7 +12,10 @@ import {
   useRepairStore,
   useAdminSlackTest,
   useAdminEvaluationForce,
+  usePositionsUnifiedRebuild,
+  useReconcileDiff,
 } from "@/api/queries";
+import type { UiPositionsUnifiedRebuildResponse } from "@/api/types";
 import { formatTimestampEt, formatTimestampEtFull } from "@/utils/formatTimestamp";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardHeader, StatusBadge, Badge, Button, Tooltip } from "@/components/ui";
@@ -57,6 +60,16 @@ function checkBadgeVariant(ch: { status?: string }): "success" | "warning" | "da
   return "neutral";
 }
 
+/** R28.7 / R24.6: Safe display label for diagnostics run overall_status (no raw PASS/FAIL/WARN in UI). */
+function overallStatusDisplayLabel(raw: string | null | undefined): string {
+  const s = (raw ?? "").toUpperCase();
+  if (s === "PASS") return "Passed";
+  if (s === "FAIL") return "Blocked";
+  if (s === "WARN") return "Degraded";
+  if (s === "OK" || s === "SKIP") return raw ?? "—";
+  return raw ?? "—";
+}
+
 export function SystemDiagnosticsPage() {
   const { data, isLoading, isError } = useUiSystemHealth();
   const probeSymbol = data?.earnings_probe_symbol ?? "SPY";
@@ -70,6 +83,14 @@ export function SystemDiagnosticsPage() {
   const repairStore = useRepairStore();
   const adminSlackTest = useAdminSlackTest();
   const adminForceEval = useAdminEvaluationForce();
+  const rebuildUnified = usePositionsUnifiedRebuild();
+  const reconcileStatus = data?.positions_unified_reconcile?.status;
+  const { data: reconcileDiff, isLoading: reconcileDiffLoading } = useReconcileDiff({
+    include_paper: true,
+    limit: 200,
+    enabled: reconcileStatus === "Review",
+  });
+  const [reconcileDiffExpanded, setReconcileDiffExpanded] = useState(false);
   const [selectedChecks, setSelectedChecks] = useState<Set<string>>(new Set(DIAGNOSTIC_CHECKS));
   const [latestResult, setLatestResult] = useState<typeof runDiagnostics.data | null>(null);
 
@@ -534,10 +555,13 @@ export function SystemDiagnosticsPage() {
               <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{formatTimestampEt(markRefresh?.last_run_at_utc)}</p>
             </div>
             <div>
-              <span className="block text-xs text-zinc-500 dark:text-zinc-500">last_result</span>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Status</span>
               <p className="mt-1">
-                <StatusBadge status={markRefresh?.last_result ?? "—"} />
+                <StatusBadge status={markRefresh?.status ?? markRefresh?.last_result ?? "—"} />
               </p>
+              {markRefresh?.status_label != null && markRefresh.status_label !== "" && (
+                <p className="mt-0.5 text-xs text-zinc-600 dark:text-zinc-400">{markRefresh.status_label}</p>
+              )}
             </div>
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">updated / skipped / errors</span>
@@ -607,6 +631,189 @@ export function SystemDiagnosticsPage() {
             </div>
           </div>
         </Card>
+        {/* R28.1: Unified Positions Reconcile — status OK/Review, counts; safe labels only. */}
+        {data?.positions_unified_reconcile != null && (
+          <Card data-testid="positions-unified-reconcile-card">
+            <CardHeader title="Unified Positions Reconcile" description="Paper vs unified counts; safe labels only." />
+            <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Status</span>
+                <p className="mt-1">
+                  <StatusBadge status={data.positions_unified_reconcile.status ?? "Review"} />
+                </p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Paper open</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.positions_unified_reconcile.paper_open_count ?? "—"}</p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Paper closed</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.positions_unified_reconcile.paper_closed_count ?? "—"}</p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Unified open (paper)</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.positions_unified_reconcile.unified_open_paper_count ?? "—"}</p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Unified closed (paper)</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.positions_unified_reconcile.unified_closed_paper_count ?? "—"}</p>
+              </div>
+            </div>
+          </Card>
+        )}
+        {/* R28.8: Unified Positions Reconcile Diff — read-only; show what is mismatched when reconcile is Review. */}
+        {data?.positions_unified_reconcile != null && (
+          <Card data-testid="positions-unified-reconcile-diff-card">
+            <CardHeader
+              title="Unified Positions Reconcile Diff"
+              description="Source vs unified DB (when reconcile needs review). Safe labels only."
+            />
+            <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Reconcile status</span>
+                <p className="mt-1">
+                  <StatusBadge status={data.positions_unified_reconcile.status ?? "Review"} />
+                </p>
+              </div>
+              {reconcileStatus === "Review" && (
+                <>
+                  <div>
+                    <span className="block text-xs text-zinc-500 dark:text-zinc-500">Missing in unified</span>
+                    <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">
+                      {reconcileDiffLoading ? "…" : reconcileDiff?.missing_count ?? "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="block text-xs text-zinc-500 dark:text-zinc-500">Extra in unified</span>
+                    <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">
+                      {reconcileDiffLoading ? "…" : reconcileDiff?.extra_count ?? "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="block text-xs text-zinc-500 dark:text-zinc-500">Mismatched</span>
+                    <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">
+                      {reconcileDiffLoading ? "…" : reconcileDiff?.mismatched_count ?? "—"}
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+            {reconcileStatus === "Review" && (
+              <div className="mt-3 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setReconcileDiffExpanded((e) => !e)}
+                    data-testid="reconcile-diff-view-details-btn"
+                  >
+                    {reconcileDiffExpanded ? "Hide details" : "View details"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={rebuildUnified.isPending}
+                    onClick={() => {
+                      if (window.confirm("This will rebuild the unified positions DB from authoritative sources. Manual action. Continue?")) {
+                        rebuildUnified.mutate(
+                          { include_paper: true },
+                          { onSuccess: () => setReconcileDiffExpanded(false) }
+                        );
+                      }
+                    }}
+                    data-testid="reconcile-diff-rebuild-now-btn"
+                  >
+                    {rebuildUnified.isPending ? ((rebuildUnified.data as UiPositionsUnifiedRebuildResponse | undefined)?.result?.status_label ?? "Rebuilding…") : "Rebuild now"}
+                  </Button>
+                  <Link
+                    to="/positions?source=db&include_paper=true"
+                    className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+                    data-testid="reconcile-diff-view-db-link"
+                  >
+                    View DB stored positions
+                  </Link>
+                </div>
+                {reconcileDiffExpanded && reconcileDiff?.items != null && reconcileDiff.items.length > 0 && (
+                  <ul className="mt-2 max-h-60 list-none overflow-y-auto rounded border border-zinc-200 bg-zinc-50 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900/50">
+                    {reconcileDiff.items.map((item, i) => (
+                      <li key={`${item.id}-${i}`} className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-zinc-200 py-1 last:border-0 dark:border-zinc-700">
+                        <span className="font-medium text-zinc-700 dark:text-zinc-300">{item.kind}</span>
+                        <span className="font-mono text-zinc-600 dark:text-zinc-400">{item.symbol ?? item.id}</span>
+                        {item.instrument_type && (
+                          <span className="text-zinc-500 dark:text-zinc-500">{item.instrument_type}</span>
+                        )}
+                        {item.fields_diff && item.fields_diff.length > 0 && (
+                          <span className="text-zinc-500 dark:text-zinc-500">({item.fields_diff.join(", ")})</span>
+                        )}
+                        <Link
+                          to={`/positions?symbol=${encodeURIComponent(item.symbol ?? "")}&include_paper=true`}
+                          className="text-blue-600 hover:underline dark:text-blue-400"
+                        >
+                          View positions
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {reconcileDiffExpanded && reconcileDiff?.items != null && reconcileDiff.items.length === 0 && !reconcileDiffLoading && (
+                  <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-500">No diff items (counts may be from a previous run).</p>
+                )}
+              </div>
+            )}
+            {reconcileStatus === "OK" && (
+              <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-500">Reconcile OK; no diff needed.</p>
+            )}
+          </Card>
+        )}
+        {/* R28.7: Unified Positions Rebuild — manual rebuild from authoritative sources; safe labels only. */}
+        {data?.positions_unified_rebuild != null && (
+          <Card data-testid="positions-unified-rebuild-card">
+            <CardHeader title="Unified Positions Rebuild" description="Manual rebuild of unified positions DB from authoritative sources." />
+            <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Status</span>
+                <p className="mt-1">
+                  <StatusBadge status={data.positions_unified_rebuild.status ?? "OK"} />
+                </p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Last rebuild (ET)</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">
+                  {data.positions_unified_rebuild.last_rebuild_at_utc
+                    ? formatTimestampEt(data.positions_unified_rebuild.last_rebuild_at_utc)
+                    : "—"}
+                </p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Open count</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.positions_unified_rebuild.last_rebuild_open_count ?? "—"}</p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Closed count</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.positions_unified_rebuild.last_rebuild_closed_count ?? "—"}</p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Include paper</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.positions_unified_rebuild.last_include_paper == null ? "—" : data.positions_unified_rebuild.last_include_paper ? "Yes" : "No"}</p>
+              </div>
+            </div>
+            <div className="mt-3">
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={rebuildUnified.isPending}
+                onClick={() => {
+                  if (window.confirm("This will rebuild the unified positions DB from authoritative sources. Manual action. Continue?")) {
+                    rebuildUnified.mutate({ include_paper: true });
+                  }
+                }}
+                data-testid="positions-unified-rebuild-btn"
+              >
+                {rebuildUnified.isPending ? "Rebuilding…" : "Rebuild unified positions"}
+              </Button>
+            </div>
+          </Card>
+        )}
         {/* R25.9: Guardrails — status (OK/Advisory/Blocked), metrics, limits; safe labels only. */}
         {data?.guardrails != null && (
           <Card data-testid="guardrails-card">
@@ -778,7 +985,7 @@ export function SystemDiagnosticsPage() {
           {displayResult && (
             <div>
               <h3 className="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Latest run — {formatTimestampEtFull(displayResult.timestamp_utc)} · Overall: {displayResult.overall_status}
+                Latest run — {formatTimestampEtFull(displayResult.timestamp_utc)} · Overall: {overallStatusDisplayLabel(displayResult.overall_status)}
               </h3>
               <table className="w-full text-sm">
                 <thead>

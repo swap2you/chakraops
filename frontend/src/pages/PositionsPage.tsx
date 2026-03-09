@@ -1,10 +1,10 @@
 /**
- * R27.9/R28.0: Unified Positions — read-only aggregation (live shares, live options, paper).
- * Source column (LIVE/PAPER); Mark/Unrealized when API provides; safe labels only; no FAIL/WARN in DOM.
+ * R27.9/R28.0/R28.9: Unified Positions — computed (default) or DB-first read.
+ * source=recompute (default): GET /api/ui/positions/unified. source=db: GET /api/ui/positions/unified/db.
  */
-import { useState } from "react";
-import { Link } from "react-router-dom";
-import { useUnifiedPositions } from "@/api/queries";
+import { useState, useEffect } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { useUnifiedPositions, useUnifiedPositionsFromDb } from "@/api/queries";
 import type { UnifiedPosition } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import {
@@ -33,19 +33,39 @@ function fmtDate(ts: string | null | undefined): string {
 }
 
 export function PositionsPage() {
-  const [state, setState] = useState<"open" | "closed">("open");
-  const [includePaper, setIncludePaper] = useState(true);
-  const [instrumentType, setInstrumentType] = useState<string>("");
-  const [symbolFilter, setSymbolFilter] = useState("");
+  const [searchParams] = useSearchParams();
+  const sourceFromUrl = searchParams.get("source") ?? "recompute";
+  const source = sourceFromUrl === "db" ? "db" : "recompute";
+  const symbolFromUrl = searchParams.get("symbol") ?? "";
+  const includePaperFromUrl = searchParams.get("include_paper");
+  const initialIncludePaper = includePaperFromUrl === "true" || includePaperFromUrl === null || includePaperFromUrl === "";
 
-  const { data, isLoading, isError } = useUnifiedPositions({
+  const [state, setState] = useState<"open" | "closed">("open");
+  const [includePaper, setIncludePaper] = useState(initialIncludePaper);
+  const [instrumentType, setInstrumentType] = useState<string>("");
+  const [symbolFilter, setSymbolFilter] = useState(symbolFromUrl);
+
+  useEffect(() => {
+    if (symbolFromUrl) setSymbolFilter(symbolFromUrl);
+    if (includePaperFromUrl === "true" || includePaperFromUrl === "false") setIncludePaper(includePaperFromUrl === "true");
+  }, [symbolFromUrl, includePaperFromUrl]);
+
+  const computed = useUnifiedPositions({
     state,
     include_paper: includePaper,
     instrument_type: instrumentType.trim() || null,
     symbol: symbolFilter.trim() || null,
   });
+  const fromDb = useUnifiedPositionsFromDb({
+    state,
+    include_paper: includePaper,
+    instrument_type: instrumentType.trim() || null,
+    symbol: symbolFilter.trim() || null,
+    limit: 500,
+  });
 
-  const positions: UnifiedPosition[] = data?.positions ?? [];
+  const { isLoading, isError } = source === "db" ? fromDb : computed;
+  const positions: UnifiedPosition[] = source === "db" ? (fromDb.data?.items ?? []) : (computed.data?.positions ?? []);
 
   return (
     <div className="space-y-6">
@@ -102,7 +122,12 @@ export function PositionsPage() {
         </div>
       </Card>
       <Card>
-        <CardHeader title={state === "open" ? "Open positions" : "Closed positions"} />
+        <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 p-4">
+          <CardHeader title={state === "open" ? "Open positions" : "Closed positions"} />
+          <span className="text-sm text-zinc-500 dark:text-zinc-500" data-testid="positions-source-label">
+            Source: {source === "db" ? "Stored" : "Computed"}
+          </span>
+        </div>
         {isLoading && (
           <div className="p-6 text-sm text-zinc-500">Loading…</div>
         )}

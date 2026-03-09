@@ -200,6 +200,38 @@ describe("SystemDiagnosticsPage", () => {
     expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
   });
 
+  it("R28.9: Rebuild now button renders only when reconcile status is Review", () => {
+    render(<SystemDiagnosticsPage />);
+    expect(screen.queryByTestId("reconcile-diff-rebuild-now-btn")).not.toBeInTheDocument();
+    mockUseUiSystemHealth.mockReturnValue({
+      data: { ...mockHealth, positions_unified_reconcile: { ...mockHealth.positions_unified_reconcile, status: "Review" } },
+      isLoading: false,
+      isError: false,
+    });
+    const { unmount } = render(<SystemDiagnosticsPage />);
+    expect(screen.getByTestId("reconcile-diff-rebuild-now-btn")).toBeInTheDocument();
+    unmount();
+  });
+
+  it("R28.9: Clicking Rebuild now triggers mutation with include_paper true", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockUseUiSystemHealth.mockReturnValue({
+      data: { ...mockHealth, positions_unified_reconcile: { ...mockHealth.positions_unified_reconcile, status: "Review" } },
+      isLoading: false,
+      isError: false,
+    });
+    render(<SystemDiagnosticsPage />);
+    await user.click(screen.getByTestId("reconcile-diff-rebuild-now-btn"));
+    expect(mockRebuildMutate).toHaveBeenCalledWith({ include_paper: true }, expect.any(Object));
+    vi.mocked(window.confirm).mockRestore();
+  });
+
+  it("R28.9: Document has no FAIL/WARN/PASS tokens", () => {
+    render(<SystemDiagnosticsPage />);
+    expect(document.body.textContent ?? "").not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+  });
+
   it("R25.9: Guardrails card renders with safe labels; no FAIL/WARN in DOM", () => {
     render(<SystemDiagnosticsPage />);
     expect(screen.getByTestId("guardrails-card")).toBeInTheDocument();

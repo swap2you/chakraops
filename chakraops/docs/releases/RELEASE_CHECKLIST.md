@@ -770,6 +770,15 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Reconcile Review → diff counts + View details; link to /positions; no raw FAIL/WARN/PASS in UI
 - **Scope:** GET reconcile-diff API; diff card on System Diagnostics; deterministic; safe labels only; no writes. NO GIT.
 
+### R28.9 — Reconcile Diff remediation + DB-first read
+
+- [x] **Requirements** — chakraops/docs/releases/R28.9_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R28.9_release_notes.md
+- [x] **Verification** — out/verification/R28.9/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — test_r289_* pass; full backend pass; frontend tests pass; frontend build pass. Evidence in out/verification/R28.9/notes.md.
+- [x] **UAT** — Rebuild now from Reconcile Diff when Review; View DB link; Positions source=db shows Stored; no raw FAIL/WARN/PASS in UI
+- **Scope:** GET /positions/unified/db; Rebuild now button + View DB link on Reconcile Diff card; Positions source param; safe labels only; no decision writes. NO GIT.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

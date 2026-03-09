@@ -4056,6 +4056,32 @@ def ui_positions_unified(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/positions/unified/db")
+def ui_positions_unified_db(
+    state: str = Query(default="open", description="open | closed"),
+    include_paper: bool = Query(default=True, description="Include paper in DB read"),
+    instrument_type: str | None = Query(default=None, description="Filter: SHARES | CSP | CC"),
+    symbol: str | None = Query(default=None, description="Filter by symbol"),
+    limit: int = Query(default=500, ge=1, le=2000, description="Max items returned"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R28.9: DB-first read (what is stored in unified SQLite). No source recompute; safe labels only; no writes."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import read_positions_unified_from_db
+        return read_positions_unified_from_db(
+            state=state,
+            include_paper=include_paper,
+            instrument_type=instrument_type,
+            symbol=symbol,
+            limit=limit,
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Error reading unified positions from DB: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/positions/unified/reconcile-diff")
 def ui_positions_unified_reconcile_diff(
     include_paper: bool = Query(default=True, description="Include paper in diff"),

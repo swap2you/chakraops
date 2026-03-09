@@ -15,6 +15,7 @@ import {
   usePositionsUnifiedRebuild,
   useReconcileDiff,
 } from "@/api/queries";
+import type { UiPositionsUnifiedRebuildResponse } from "@/api/types";
 import { formatTimestampEt, formatTimestampEtFull } from "@/utils/formatTimestamp";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardHeader, StatusBadge, Badge, Button, Tooltip } from "@/components/ui";
@@ -698,15 +699,40 @@ export function SystemDiagnosticsPage() {
               )}
             </div>
             {reconcileStatus === "Review" && (
-              <div className="mt-3">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setReconcileDiffExpanded((e) => !e)}
-                  data-testid="reconcile-diff-view-details-btn"
-                >
-                  {reconcileDiffExpanded ? "Hide details" : "View details"}
-                </Button>
+              <div className="mt-3 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setReconcileDiffExpanded((e) => !e)}
+                    data-testid="reconcile-diff-view-details-btn"
+                  >
+                    {reconcileDiffExpanded ? "Hide details" : "View details"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={rebuildUnified.isPending}
+                    onClick={() => {
+                      if (window.confirm("This will rebuild the unified positions DB from authoritative sources. Manual action. Continue?")) {
+                        rebuildUnified.mutate(
+                          { include_paper: true },
+                          { onSuccess: () => setReconcileDiffExpanded(false) }
+                        );
+                      }
+                    }}
+                    data-testid="reconcile-diff-rebuild-now-btn"
+                  >
+                    {rebuildUnified.isPending ? ((rebuildUnified.data as UiPositionsUnifiedRebuildResponse | undefined)?.result?.status_label ?? "Rebuilding…") : "Rebuild now"}
+                  </Button>
+                  <Link
+                    to="/positions?source=db&include_paper=true"
+                    className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+                    data-testid="reconcile-diff-view-db-link"
+                  >
+                    View DB stored positions
+                  </Link>
+                </div>
                 {reconcileDiffExpanded && reconcileDiff?.items != null && reconcileDiff.items.length > 0 && (
                   <ul className="mt-2 max-h-60 list-none overflow-y-auto rounded border border-zinc-200 bg-zinc-50 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900/50">
                     {reconcileDiff.items.map((item, i) => (

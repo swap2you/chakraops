@@ -1033,6 +1033,14 @@ export interface UiPositionsUnifiedResponse {
   include_paper: boolean;
 }
 
+/** R28.9: GET /api/ui/positions/unified/db — DB-first read (what is stored). */
+export interface UiPositionsUnifiedDbResponse {
+  status?: string;
+  status_label?: string | null;
+  count: number;
+  items: UnifiedPosition[];
+}
+
 /** R28.7: POST /api/ui/positions/unified/rebuild — result payload (safe labels only). */
 export interface UiPositionsUnifiedRebuildResult {
   status?: string | null;

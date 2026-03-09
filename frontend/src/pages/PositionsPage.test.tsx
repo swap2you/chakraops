@@ -1,10 +1,9 @@
 /**
- * R27.9/R28.0: Positions page — unified list, Source column, Mark/Unrealized for paper when present,
- * filters; no FAIL/WARN in document.
+ * R27.9/R28.0/R28.9: Positions page — unified list; source=recompute (default) or source=db; no FAIL/WARN/PASS in document.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { render, screen } from "@/test/test-utils";
+import { render, renderWithRoute, screen } from "@/test/test-utils";
 import { PositionsPage } from "./PositionsPage";
 
 const mockPositions = [
@@ -48,8 +47,15 @@ const mockUseUnifiedPositions = vi.fn(() => ({
   isError: false,
 }));
 
+const mockUseUnifiedPositionsFromDb = vi.fn(() => ({
+  data: { items: mockPositions, count: mockPositions.length, status: "OK", status_label: "OK" },
+  isLoading: false,
+  isError: false,
+}));
+
 vi.mock("@/api/queries", () => ({
   useUnifiedPositions: (params: Record<string, unknown>) => mockUseUnifiedPositions(params),
+  useUnifiedPositionsFromDb: (params: Record<string, unknown>) => mockUseUnifiedPositionsFromDb(params),
 }));
 
 describe("PositionsPage", () => {
@@ -103,6 +109,23 @@ describe("PositionsPage", () => {
     const text = container.textContent ?? "";
     expect(text).not.toMatch(/\bFAIL\b/);
     expect(text).not.toMatch(/\bWARN\b/);
+  });
+
+  it("R28.9: when source=db shows Source: Stored and uses db endpoint", () => {
+    renderWithRoute(<PositionsPage />, "/positions?source=db");
+    expect(screen.getByTestId("positions-source-label")).toHaveTextContent("Source: Stored");
+    expect(mockUseUnifiedPositionsFromDb).toHaveBeenCalled();
+  });
+
+  it("R28.9: when source absent shows Source: Computed", () => {
+    render(<PositionsPage />);
+    expect(screen.getByTestId("positions-source-label")).toHaveTextContent("Source: Computed");
+  });
+
+  it("R28.9: document has no FAIL/WARN/PASS tokens", () => {
+    const { container } = render(<PositionsPage />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
   });
 
   it("filter state change triggers new request", async () => {

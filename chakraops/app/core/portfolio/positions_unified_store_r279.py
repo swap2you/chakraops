@@ -625,6 +625,93 @@ def mirror_paper_close_to_unified(pos: Dict[str, Any]) -> None:
     logger.debug("[R28.0] mirrored paper close %s to unified", closed_row_id)
 
 
+# --- R28.9: DB-first read (what is stored; no source recompute) ---
+
+def read_positions_unified_from_db(
+    state: str = "open",
+    include_paper: bool = True,
+    instrument_type: Optional[str] = None,
+    symbol: Optional[str] = None,
+    limit: int = 500,
+) -> Dict[str, Any]:
+    """
+    R28.9: Read directly from unified SQLite (positions_open or positions_closed).
+    No recompute from sources. Deterministic ordering; safe labels only; no writes.
+    """
+    limit = max(0, min(int(limit), 2000))
+    want_open = (state or "open").strip().lower() != "closed"
+    init_db()
+    rows: List[Dict[str, Any]] = []
+    with _LOCK:
+        conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+        try:
+            conditions: List[str] = []
+            params: List[Any] = []
+            if not include_paper:
+                conditions.append("is_paper = 0")
+            if symbol:
+                conditions.append("symbol = ?")
+                params.append((symbol or "").strip().upper())
+            if instrument_type:
+                conditions.append("instrument_type = ?")
+                params.append((instrument_type or "").strip().upper())
+            where_clause = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+            if want_open:
+                sql = "SELECT id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags FROM positions_open" + where_clause
+                cursor = conn.execute(sql, params)
+                for row in cursor.fetchall():
+                    rows.append({
+                        "id": row[0],
+                        "symbol": (row[1] or "").strip().upper(),
+                        "instrument_type": row[2] or "",
+                        "is_paper": int(row[3] or 0),
+                        "qty": int(row[4] or 0),
+                        "avg_price": row[5],
+                        "strike": row[6],
+                        "expiry": (row[7] or "")[:10] if row[7] else None,
+                        "right": row[8],
+                        "opened_ts": (row[9] or "")[:26],
+                        "link_id": row[10],
+                        "notes": _safe_str(row[11]),
+                        "tags": row[12],
+                    })
+            else:
+                sql = "SELECT id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags, closed_ts, realized_pl, fees FROM positions_closed" + where_clause
+                cursor = conn.execute(sql, params)
+                for row in cursor.fetchall():
+                    rows.append({
+                        "id": row[0],
+                        "symbol": (row[1] or "").strip().upper(),
+                        "instrument_type": row[2] or "",
+                        "is_paper": int(row[3] or 0),
+                        "qty": int(row[4] or 0),
+                        "avg_price": row[5],
+                        "strike": row[6],
+                        "expiry": (row[7] or "")[:10] if row[7] else None,
+                        "right": row[8],
+                        "opened_ts": (row[9] or "")[:26],
+                        "link_id": row[10],
+                        "notes": _safe_str(row[11]),
+                        "tags": row[12],
+                        "closed_ts": (row[13] or "")[:26],
+                        "realized_pl": row[14],
+                        "fees": row[15],
+                    })
+        finally:
+            conn.close()
+    if want_open:
+        rows.sort(key=_sort_key_open)
+    else:
+        rows.sort(key=_sort_key_closed)
+    items = [_safe_dict(r) for r in rows[:limit]]
+    return {
+        "status": "OK",
+        "status_label": "OK",
+        "count": len(items),
+        "items": items,
+    }
+
+
 # --- R28.8: Reconcile diff (read-only; operator explainability) ---
 
 def _read_positions_open_from_db(symbol: Optional[str] = None) -> List[Dict[str, Any]]:

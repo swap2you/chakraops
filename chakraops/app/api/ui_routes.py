@@ -203,7 +203,7 @@ def _get_positions_unified_reconcile_health() -> Dict[str, Any]:
 
 
 def _get_positions_unified_rebuild_health() -> Dict[str, Any]:
-    """R28.7: positions_unified_rebuild block — last rebuild metadata. Safe labels only."""
+    """R28.7/R29.0: positions_unified_rebuild block — last rebuild metadata. Safe labels only. finished_at_utc for staleness."""
     try:
         from app.core.portfolio.positions_unified_store_r279 import get_positions_unified_rebuild_health
         return get_positions_unified_rebuild_health()
@@ -212,6 +212,7 @@ def _get_positions_unified_rebuild_health() -> Dict[str, Any]:
             "status": "OK",
             "status_label": "OK",
             "last_rebuild_at_utc": None,
+            "finished_at_utc": None,
             "last_rebuild_open_count": None,
             "last_rebuild_closed_count": None,
             "last_include_paper": None,

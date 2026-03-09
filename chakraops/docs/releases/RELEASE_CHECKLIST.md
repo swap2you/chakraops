@@ -779,6 +779,15 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Rebuild now from Reconcile Diff when Review; View DB link; Positions source=db shows Stored; no raw FAIL/WARN/PASS in UI
 - **Scope:** GET /positions/unified/db; Rebuild now button + View DB link on Reconcile Diff card; Positions source param; safe labels only; no decision writes. NO GIT.
 
+### R29.0 — DB-first Positions default + staleness guardrail
+
+- [x] **Requirements** — chakraops/docs/releases/R29.0_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R29.0_release_notes.md
+- [x] **Verification** — out/verification/R29.0/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — test_r290_* pass; full backend pass; frontend tests pass; frontend build pass. Evidence in out/verification/R29.0/notes.md.
+- [x] **UAT** — Positions defaults to Stored; stale banner when rebuild missing/old; Rebuild button + confirm; Stored/Computed toggle; no FAIL/WARN/PASS in UI
+- **Scope:** Default source=db; staleness banner + Rebuild; system-health finished_at_utc; safe labels only. NO GIT.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

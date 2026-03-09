@@ -356,11 +356,13 @@ export interface UiSystemHealthMarkRefresh {
   errors_sample?: string[];
 }
 
-/** R28.7 — Positions unified rebuild block (system-health). Safe labels only. */
+/** R28.7/R29.0 — Positions unified rebuild block (system-health). Safe labels only. finished_at_utc for staleness. */
 export interface UiPositionsUnifiedRebuild {
   status?: "OK" | "Review" | string | null;
   status_label?: string | null;
   last_rebuild_at_utc?: string | null;
+  /** R29.0: Alias of last_rebuild_at_utc for staleness (6h threshold). */
+  finished_at_utc?: string | null;
   last_rebuild_open_count?: number | null;
   last_rebuild_closed_count?: number | null;
   last_include_paper?: boolean | null;

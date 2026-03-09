@@ -1,10 +1,11 @@
 /**
- * R27.9/R28.0/R28.9: Unified Positions — computed (default) or DB-first read.
- * source=recompute (default): GET /api/ui/positions/unified. source=db: GET /api/ui/positions/unified/db.
+ * R27.9/R28.0/R28.9/R29.0: Unified Positions — default Stored (source=db), optional Computed.
+ * source=db (default): GET /api/ui/positions/unified/db. source=recompute: GET /api/ui/positions/unified.
+ * R29.0: Staleness banner when Stored and rebuild missing or >6h old; Rebuild button; safe labels only.
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useUnifiedPositions, useUnifiedPositionsFromDb } from "@/api/queries";
+import { useUnifiedPositions, useUnifiedPositionsFromDb, useUiSystemHealth, usePositionsUnifiedRebuild } from "@/api/queries";
 import type { UnifiedPosition } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import {
@@ -18,7 +19,30 @@ import {
   TableCell,
   EmptyState,
   Badge,
+  Button,
 } from "@/components/ui";
+
+const STALENESS_HOURS = 6;
+
+/** R29.0: Stale if rebuild block missing, finished_at_utc missing, or finished_at_utc older than 6h (UTC). */
+function useStoredPositionsStale(): boolean {
+  const { data: health } = useUiSystemHealth();
+  return useMemo(() => {
+    const block = health?.positions_unified_rebuild;
+    if (!block) return true;
+    const finished = block.finished_at_utc ?? block.last_rebuild_at_utc ?? null;
+    if (!finished || typeof finished !== "string") return true;
+    try {
+      const dt = new Date(finished);
+      if (Number.isNaN(dt.getTime())) return true;
+      const now = Date.now();
+      const ageMs = now - dt.getTime();
+      return ageMs > STALENESS_HOURS * 60 * 60 * 1000;
+    } catch {
+      return true;
+    }
+  }, [health?.positions_unified_rebuild]);
+}
 
 function fmtNum(n: number | null | undefined): string {
   if (n == null) return "—";
@@ -33,8 +57,8 @@ function fmtDate(ts: string | null | undefined): string {
 }
 
 export function PositionsPage() {
-  const [searchParams] = useSearchParams();
-  const sourceFromUrl = searchParams.get("source") ?? "recompute";
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sourceFromUrl = searchParams.get("source") ?? "db";
   const source = sourceFromUrl === "db" ? "db" : "recompute";
   const symbolFromUrl = searchParams.get("symbol") ?? "";
   const includePaperFromUrl = searchParams.get("include_paper");
@@ -44,6 +68,10 @@ export function PositionsPage() {
   const [includePaper, setIncludePaper] = useState(initialIncludePaper);
   const [instrumentType, setInstrumentType] = useState<string>("");
   const [symbolFilter, setSymbolFilter] = useState(symbolFromUrl);
+  const [showRebuildConfirm, setShowRebuildConfirm] = useState(false);
+
+  const isStale = useStoredPositionsStale();
+  const rebuildUnified = usePositionsUnifiedRebuild();
 
   useEffect(() => {
     if (symbolFromUrl) setSymbolFilter(symbolFromUrl);
@@ -67,9 +95,64 @@ export function PositionsPage() {
   const { isLoading, isError } = source === "db" ? fromDb : computed;
   const positions: UnifiedPosition[] = source === "db" ? (fromDb.data?.items ?? []) : (computed.data?.positions ?? []);
 
+  const setSource = (s: "db" | "recompute") => {
+    const next = new URLSearchParams(searchParams);
+    next.set("source", s === "db" ? "db" : "recompute");
+    setSearchParams(next);
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader title="Positions" subtext="Unified view of open and closed positions (live and paper)." />
+
+      {source === "db" && isStale && (
+        <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40">
+          <div className="p-4">
+            <p className="font-medium text-amber-800 dark:text-amber-200" data-testid="positions-stale-banner-title">
+              Stored positions may be stale — Review
+            </p>
+            <p className="mt-1 text-sm text-amber-700 dark:text-amber-300" data-testid="positions-stale-banner-subtext">
+              Rebuild unified positions to refresh stored data from authoritative sources.
+            </p>
+            <div className="mt-3 flex items-center gap-3">
+              <Button
+                variant="primary"
+                onClick={() => setShowRebuildConfirm(true)}
+                disabled={rebuildUnified.isPending}
+                data-testid="positions-stale-rebuild-btn"
+              >
+                {rebuildUnified.isPending ? "Rebuild running" : "Rebuild unified positions"}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {showRebuildConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" data-testid="positions-rebuild-confirm-modal">
+          <Card className="max-w-md p-6">
+            <p className="text-sm text-zinc-700 dark:text-zinc-300">
+              This will rebuild the unified positions DB from authoritative sources. Manual action. Continue?
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setShowRebuildConfirm(false)} data-testid="positions-rebuild-confirm-cancel">
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  rebuildUnified.mutate({ include_paper: includePaper }, { onSuccess: () => setShowRebuildConfirm(false) });
+                }}
+                disabled={rebuildUnified.isPending}
+                data-testid="positions-rebuild-confirm-ok"
+              >
+                Continue
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
       <Card>
         <CardHeader title="Filters" />
         <div className="flex flex-wrap gap-4 p-4 border-t border-zinc-200 dark:border-zinc-800">
@@ -122,11 +205,35 @@ export function PositionsPage() {
         </div>
       </Card>
       <Card>
-        <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 p-4">
           <CardHeader title={state === "open" ? "Open positions" : "Closed positions"} />
-          <span className="text-sm text-zinc-500 dark:text-zinc-500" data-testid="positions-source-label">
-            Source: {source === "db" ? "Stored" : "Computed"}
-          </span>
+          <div className="flex items-center gap-3" role="radiogroup" aria-label="Data source">
+            <span className="text-sm text-zinc-500 dark:text-zinc-500" data-testid="positions-source-label">
+              Source: {source === "db" ? "Stored" : "Computed"}
+            </span>
+            <label className="flex cursor-pointer items-center gap-1.5 text-sm">
+              <input
+                type="radio"
+                name="positions-source"
+                checked={source === "db"}
+                onChange={() => setSource("db")}
+                className="rounded-full border-zinc-400 text-zinc-600 focus:ring-zinc-500 dark:border-zinc-500 dark:text-zinc-400"
+                data-testid="positions-source-radio-stored"
+              />
+              Stored
+            </label>
+            <label className="flex cursor-pointer items-center gap-1.5 text-sm">
+              <input
+                type="radio"
+                name="positions-source"
+                checked={source === "recompute"}
+                onChange={() => setSource("recompute")}
+                className="rounded-full border-zinc-400 text-zinc-600 focus:ring-zinc-500 dark:border-zinc-500 dark:text-zinc-400"
+                data-testid="positions-source-radio-computed"
+              />
+              Computed
+            </label>
+          </div>
         </div>
         {isLoading && (
           <div className="p-6 text-sm text-zinc-500">Loading…</div>

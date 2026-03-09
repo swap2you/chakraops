@@ -1,5 +1,5 @@
 /**
- * R27.9/R28.0/R28.9: Positions page — unified list; source=recompute (default) or source=db; no FAIL/WARN/PASS in document.
+ * R27.9/R28.0/R28.9/R29.0: Positions page — default Stored (source=db), staleness banner, no FAIL/WARN/PASS.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import userEvent from "@testing-library/user-event";
@@ -53,9 +53,26 @@ const mockUseUnifiedPositionsFromDb = vi.fn(() => ({
   isError: false,
 }));
 
+/** R29.0: Not stale when finished_at_utc is recent (future). */
+const healthNotStale = {
+  positions_unified_rebuild: { finished_at_utc: "2099-06-01T12:00:00Z", last_include_paper: true },
+};
+/** R29.0: Stale when block missing or finished_at_utc old/missing. */
+const healthStale = { positions_unified_rebuild: undefined };
+
+const mockUseUiSystemHealth = vi.fn(() => ({ data: healthNotStale }));
+const mockMutate = vi.fn();
+const mockUsePositionsUnifiedRebuild = vi.fn(() => ({
+  mutate: mockMutate,
+  isPending: false,
+  data: undefined,
+}));
+
 vi.mock("@/api/queries", () => ({
   useUnifiedPositions: (params: Record<string, unknown>) => mockUseUnifiedPositions(params),
   useUnifiedPositionsFromDb: (params: Record<string, unknown>) => mockUseUnifiedPositionsFromDb(params),
+  useUiSystemHealth: () => mockUseUiSystemHealth(),
+  usePositionsUnifiedRebuild: () => mockUsePositionsUnifiedRebuild(),
 }));
 
 describe("PositionsPage", () => {
@@ -65,6 +82,17 @@ describe("PositionsPage", () => {
       data: { positions: mockPositions, state: "open", include_paper: true },
       isLoading: false,
       isError: false,
+    });
+    mockUseUnifiedPositionsFromDb.mockReturnValue({
+      data: { items: mockPositions, count: mockPositions.length, status: "OK", status_label: "OK" },
+      isLoading: false,
+      isError: false,
+    });
+    mockUseUiSystemHealth.mockReturnValue({ data: healthNotStale });
+    mockUsePositionsUnifiedRebuild.mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+      data: undefined,
     });
   });
 
@@ -97,8 +125,8 @@ describe("PositionsPage", () => {
     expect(container.textContent).toMatch(/150/);
   });
 
-  it("calls useUnifiedPositions with state and include_paper", () => {
-    render(<PositionsPage />);
+  it("calls useUnifiedPositions with state and include_paper when source is recompute", () => {
+    renderWithRoute(<PositionsPage />, "/positions?source=recompute");
     expect(mockUseUnifiedPositions).toHaveBeenCalledWith(
       expect.objectContaining({ state: "open", include_paper: true })
     );
@@ -117,23 +145,56 @@ describe("PositionsPage", () => {
     expect(mockUseUnifiedPositionsFromDb).toHaveBeenCalled();
   });
 
-  it("R28.9: when source absent shows Source: Computed", () => {
+  it("R29.0: default source is Stored when no query param", () => {
     render(<PositionsPage />);
+    expect(screen.getByTestId("positions-source-label")).toHaveTextContent("Source: Stored");
+    expect(mockUseUnifiedPositionsFromDb).toHaveBeenCalled();
+  });
+
+  it("R29.0: when source=recompute shows Source: Computed", () => {
+    renderWithRoute(<PositionsPage />, "/positions?source=recompute");
     expect(screen.getByTestId("positions-source-label")).toHaveTextContent("Source: Computed");
   });
 
-  it("R28.9: document has no FAIL/WARN/PASS tokens", () => {
-    const { container } = render(<PositionsPage />);
-    const text = container.textContent ?? "";
-    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
-  });
-
   it("filter state change triggers new request", async () => {
-    render(<PositionsPage />);
+    renderWithRoute(<PositionsPage />, "/positions?source=recompute");
     const stateSelect = screen.getByTestId("positions-filter-state");
     await userEvent.selectOptions(stateSelect, "closed");
     expect(mockUseUnifiedPositions).toHaveBeenLastCalledWith(
       expect.objectContaining({ state: "closed" })
     );
+  });
+
+  it("R29.0: when stored and stale, banner renders and rebuild button triggers mutation with include_paper", async () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthStale });
+    render(<PositionsPage />);
+    expect(screen.getByTestId("positions-stale-banner-title")).toHaveTextContent(/Stored positions may be stale/);
+    expect(screen.getByTestId("positions-stale-rebuild-btn")).toHaveTextContent("Rebuild unified positions");
+    await userEvent.click(screen.getByTestId("positions-stale-rebuild-btn"));
+    expect(screen.getByTestId("positions-rebuild-confirm-modal")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("positions-rebuild-confirm-ok"));
+    expect(mockMutate).toHaveBeenCalledWith(
+      { include_paper: true },
+      expect.objectContaining({ onSuccess: expect.any(Function) })
+    );
+  });
+
+  it("R29.0: when rebuild running, button disabled and shows Rebuild running", () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthStale });
+    mockUsePositionsUnifiedRebuild.mockReturnValue({
+      mutate: mockMutate,
+      isPending: true,
+      data: undefined,
+    });
+    render(<PositionsPage />);
+    const btn = screen.getByTestId("positions-stale-rebuild-btn");
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveTextContent("Rebuild running");
+  });
+
+  it("R29.0: document has no FAIL/WARN/PASS tokens", () => {
+    const { container } = render(<PositionsPage />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
   });
 });

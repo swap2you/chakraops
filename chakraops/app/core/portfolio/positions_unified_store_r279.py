@@ -416,21 +416,24 @@ def load_rebuild_state() -> Optional[Dict[str, Any]]:
 
 
 def get_positions_unified_rebuild_health() -> Dict[str, Any]:
-    """R28.7: System-health block positions_unified_rebuild. Safe labels only."""
+    """R28.7/R29.0: System-health block positions_unified_rebuild. Safe labels only. finished_at_utc alias for staleness."""
     state = load_rebuild_state()
     if not state or not isinstance(state, dict):
         return {
             "status": "OK",
             "status_label": "OK",
             "last_rebuild_at_utc": None,
+            "finished_at_utc": None,
             "last_rebuild_open_count": None,
             "last_rebuild_closed_count": None,
             "last_include_paper": None,
         }
+    last_ts = state.get("last_rebuild_at_utc")
     return {
         "status": state.get("status") or "OK",
         "status_label": state.get("status_label") or "OK",
-        "last_rebuild_at_utc": state.get("last_rebuild_at_utc"),
+        "last_rebuild_at_utc": last_ts,
+        "finished_at_utc": last_ts,
         "last_rebuild_open_count": state.get("last_rebuild_open_count"),
         "last_rebuild_closed_count": state.get("last_rebuild_closed_count"),
         "last_include_paper": state.get("last_include_paper"),

@@ -27,6 +27,7 @@ import type {
   ClosedSharePosition,
   ClosedSharePositionsListResponse,
   UiPositionsUnifiedResponse,
+  UiPositionsUnifiedRebuildResponse,
 } from "./types";
 import type { DecisionMode, DecisionRef } from "./types";
 export type { DecisionRef };
@@ -85,6 +86,11 @@ function uiDeltaOverrideSymbolPath(symbol: string): string {
 
 function uiSystemHealthPath(): string {
   return `/api/ui/system-health`;
+}
+
+/** R28.7: POST /api/ui/positions/unified/rebuild */
+function uiPositionsUnifiedRebuildPath(includePaper: boolean): string {
+  return `/api/ui/positions/unified/rebuild?include_paper=${includePaper}`;
 }
 
 /** R25.8: Earnings debug (diagnostics only; safe fields). */
@@ -1203,6 +1209,23 @@ export function useUnifiedPositions(params: {
       apiGet<UiPositionsUnifiedResponse>(
         uiPositionsUnifiedPath({ state, include_paper, instrument_type, symbol })
       ),
+  });
+}
+
+/** R28.7: POST /api/ui/positions/unified/rebuild — manual rebuild; invalidates system-health and unified positions. */
+export function usePositionsUnifiedRebuild() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { include_paper?: boolean } = {}) => {
+      const includePaper = params?.include_paper !== false;
+      return apiPostNoBody<UiPositionsUnifiedRebuildResponse>(
+        uiPositionsUnifiedRebuildPath(includePaper)
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiSystemHealth() });
+      qc.invalidateQueries({ queryKey: ["ui", "positions", "unified"] });
+    },
   });
 }
 

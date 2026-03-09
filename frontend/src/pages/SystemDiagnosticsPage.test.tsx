@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import userEvent from "@testing-library/user-event";
 import { render, screen } from "@/test/test-utils";
 import { SystemDiagnosticsPage } from "./SystemDiagnosticsPage";
 
@@ -41,6 +42,14 @@ const mockHealth = {
     unified_open_paper_count: 0,
     unified_closed_paper_count: 0,
   },
+  positions_unified_rebuild: {
+    status: "OK",
+    status_label: "OK",
+    last_rebuild_at_utc: "2026-02-27T14:00:00Z",
+    last_rebuild_open_count: 2,
+    last_rebuild_closed_count: 1,
+    last_include_paper: true,
+  },
   guardrails: {
     status: "OK",
     metrics: { cash_reserve_pct: 40, open_options_count: 1, open_shares_count: 0, symbols_exposure_count: 2, max_symbol_notional_pct: 10 },
@@ -60,6 +69,7 @@ const mockHistory = {
 
 const mockUseLatestSnapshot = vi.fn(() => ({ data: null, isError: true }));
 const mockUseUiSystemHealth = vi.fn(() => ({ data: mockHealth, isLoading: false, isError: false }));
+const mockRebuildMutate = vi.fn();
 const mockIntegrityData = {
   stores: {
     notifications: { path: "/out/notifications.jsonl", exists: true, total_lines: 10, invalid_lines: 0, last_valid_line: 10, last_valid_offset: 0 },
@@ -96,6 +106,7 @@ vi.mock("@/api/queries", () => ({
   useRepairStore: () => ({ mutate: vi.fn(), isPending: false }),
   useAdminSlackTest: () => ({ mutate: vi.fn(), isPending: false, data: null }),
   useAdminEvaluationForce: () => ({ mutate: vi.fn(), isPending: false, data: null }),
+  usePositionsUnifiedRebuild: () => ({ mutate: mockRebuildMutate, isPending: false }),
 }));
 
 describe("SystemDiagnosticsPage", () => {
@@ -137,6 +148,28 @@ describe("SystemDiagnosticsPage", () => {
     const text = document.body.textContent ?? "";
     expect(text).not.toMatch(/\bFAIL\b/);
     expect(text).not.toMatch(/\bWARN\b/);
+  });
+
+  it("R28.7: Unified Positions Rebuild card renders when positions_unified_rebuild present", () => {
+    render(<SystemDiagnosticsPage />);
+    expect(screen.getByTestId("positions-unified-rebuild-card")).toBeInTheDocument();
+    expect(screen.getByText(/Unified Positions Rebuild/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Rebuild unified positions/i })).toBeInTheDocument();
+  });
+
+  it("R28.7: Rebuild button click with confirm triggers mutation with include_paper true", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<SystemDiagnosticsPage />);
+    await user.click(screen.getByTestId("positions-unified-rebuild-btn"));
+    expect(mockRebuildMutate).toHaveBeenCalledWith({ include_paper: true });
+    vi.mocked(window.confirm).mockRestore();
+  });
+
+  it("R28.7: Document has no raw FAIL/WARN/PASS tokens", () => {
+    render(<SystemDiagnosticsPage />);
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
   });
 
   it("R25.9: Guardrails card renders with safe labels; no FAIL/WARN in DOM", () => {

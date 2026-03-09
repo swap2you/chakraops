@@ -12,6 +12,7 @@ import {
   useRepairStore,
   useAdminSlackTest,
   useAdminEvaluationForce,
+  usePositionsUnifiedRebuild,
 } from "@/api/queries";
 import { formatTimestampEt, formatTimestampEtFull } from "@/utils/formatTimestamp";
 import { PageHeader } from "@/components/PageHeader";
@@ -57,6 +58,16 @@ function checkBadgeVariant(ch: { status?: string }): "success" | "warning" | "da
   return "neutral";
 }
 
+/** R28.7 / R24.6: Safe display label for diagnostics run overall_status (no raw PASS/FAIL/WARN in UI). */
+function overallStatusDisplayLabel(raw: string | null | undefined): string {
+  const s = (raw ?? "").toUpperCase();
+  if (s === "PASS") return "Passed";
+  if (s === "FAIL") return "Blocked";
+  if (s === "WARN") return "Degraded";
+  if (s === "OK" || s === "SKIP") return raw ?? "—";
+  return raw ?? "—";
+}
+
 export function SystemDiagnosticsPage() {
   const { data, isLoading, isError } = useUiSystemHealth();
   const probeSymbol = data?.earnings_probe_symbol ?? "SPY";
@@ -70,6 +81,7 @@ export function SystemDiagnosticsPage() {
   const repairStore = useRepairStore();
   const adminSlackTest = useAdminSlackTest();
   const adminForceEval = useAdminEvaluationForce();
+  const rebuildUnified = usePositionsUnifiedRebuild();
   const [selectedChecks, setSelectedChecks] = useState<Set<string>>(new Set(DIAGNOSTIC_CHECKS));
   const [latestResult, setLatestResult] = useState<typeof runDiagnostics.data | null>(null);
 
@@ -640,6 +652,55 @@ export function SystemDiagnosticsPage() {
             </div>
           </Card>
         )}
+        {/* R28.7: Unified Positions Rebuild — manual rebuild from authoritative sources; safe labels only. */}
+        {data?.positions_unified_rebuild != null && (
+          <Card data-testid="positions-unified-rebuild-card">
+            <CardHeader title="Unified Positions Rebuild" description="Manual rebuild of unified positions DB from authoritative sources." />
+            <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Status</span>
+                <p className="mt-1">
+                  <StatusBadge status={data.positions_unified_rebuild.status ?? "OK"} />
+                </p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Last rebuild (ET)</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">
+                  {data.positions_unified_rebuild.last_rebuild_at_utc
+                    ? formatTimestampEt(data.positions_unified_rebuild.last_rebuild_at_utc)
+                    : "—"}
+                </p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Open count</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.positions_unified_rebuild.last_rebuild_open_count ?? "—"}</p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Closed count</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.positions_unified_rebuild.last_rebuild_closed_count ?? "—"}</p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Include paper</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.positions_unified_rebuild.last_include_paper == null ? "—" : data.positions_unified_rebuild.last_include_paper ? "Yes" : "No"}</p>
+              </div>
+            </div>
+            <div className="mt-3">
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={rebuildUnified.isPending}
+                onClick={() => {
+                  if (window.confirm("This will rebuild the unified positions DB from authoritative sources. Manual action. Continue?")) {
+                    rebuildUnified.mutate({ include_paper: true });
+                  }
+                }}
+                data-testid="positions-unified-rebuild-btn"
+              >
+                {rebuildUnified.isPending ? "Rebuilding…" : "Rebuild unified positions"}
+              </Button>
+            </div>
+          </Card>
+        )}
         {/* R25.9: Guardrails — status (OK/Advisory/Blocked), metrics, limits; safe labels only. */}
         {data?.guardrails != null && (
           <Card data-testid="guardrails-card">
@@ -811,7 +872,7 @@ export function SystemDiagnosticsPage() {
           {displayResult && (
             <div>
               <h3 className="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Latest run — {formatTimestampEtFull(displayResult.timestamp_utc)} · Overall: {displayResult.overall_status}
+                Latest run — {formatTimestampEtFull(displayResult.timestamp_utc)} · Overall: {overallStatusDisplayLabel(displayResult.overall_status)}
               </h3>
               <table className="w-full text-sm">
                 <thead>

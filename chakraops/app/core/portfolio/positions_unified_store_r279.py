@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -15,6 +16,7 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 _LOCK = threading.Lock()
+_REBUILD_LOCK = threading.Lock()  # Non-blocking acquire = "rebuild already running"
 _OVERRIDE_PATH: Optional[Path] = None
 
 INSTRUMENT_SHARES = "SHARES"
@@ -368,6 +370,176 @@ def get_positions_unified_health() -> Dict[str, Any]:
             "closed_count": 0,
             "last_build_ts": datetime.now(timezone.utc).isoformat(),
         }
+
+
+# --- R28.7: Rebuild unified positions (manual, operator-triggered) ---
+
+def _rebuild_state_path() -> Path:
+    """Path for out/positions_unified_rebuild_state.json. Safe labels only in file."""
+    try:
+        from app.core.eval.evaluation_store_v2 import get_decision_store_path
+        out = get_decision_store_path().parent
+    except Exception:
+        out = Path(__file__).resolve().parents[3] / "out"
+    out.mkdir(parents=True, exist_ok=True)
+    return out / "positions_unified_rebuild_state.json"
+
+
+def _write_rebuild_state(data: Dict[str, Any]) -> None:
+    """Persist only status, status_label, timestamps, counts. No FAIL/WARN/PASS. Caller must pass safe values only."""
+    safe = {
+        "status": data.get("status") or "OK",
+        "status_label": data.get("status_label") or "OK",
+    }
+    for k in ("last_rebuild_at_utc", "last_rebuild_open_count", "last_rebuild_closed_count", "last_include_paper"):
+        if k in data:
+            safe[k] = data[k]
+    path = _rebuild_state_path()
+    try:
+        from app.core.io.atomic import atomic_write_json
+        atomic_write_json(path, safe, indent=0)
+    except Exception as e:
+        logger.warning("[R28.7] Failed to write rebuild state: %s", e)
+
+
+def load_rebuild_state() -> Optional[Dict[str, Any]]:
+    """Load rebuild state for system-health. Returns None if file missing."""
+    path = _rebuild_state_path()
+    if not path.exists():
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.warning("[R28.7] Failed to load rebuild state: %s", e)
+        return None
+
+
+def get_positions_unified_rebuild_health() -> Dict[str, Any]:
+    """R28.7: System-health block positions_unified_rebuild. Safe labels only."""
+    state = load_rebuild_state()
+    if not state or not isinstance(state, dict):
+        return {
+            "status": "OK",
+            "status_label": "OK",
+            "last_rebuild_at_utc": None,
+            "last_rebuild_open_count": None,
+            "last_rebuild_closed_count": None,
+            "last_include_paper": None,
+        }
+    return {
+        "status": state.get("status") or "OK",
+        "status_label": state.get("status_label") or "OK",
+        "last_rebuild_at_utc": state.get("last_rebuild_at_utc"),
+        "last_rebuild_open_count": state.get("last_rebuild_open_count"),
+        "last_rebuild_closed_count": state.get("last_rebuild_closed_count"),
+        "last_include_paper": state.get("last_include_paper"),
+    }
+
+
+def rebuild_positions_unified(include_paper: bool = True) -> Dict[str, Any]:
+    """
+    R28.7: Wipe and rebuild positions_open/positions_closed from authoritative sources.
+    Single-process lock; deterministic ordering; safe-only return. No notifications, no decision artifacts.
+    """
+    from datetime import datetime, timezone
+
+    def _now() -> str:
+        return datetime.now(timezone.utc).isoformat()
+
+    if not _REBUILD_LOCK.acquire(blocking=False):
+        return {
+            "status": "Review",
+            "status_label": "Rebuild already running",
+            "rebuilt_open": 0,
+            "rebuilt_closed": 0,
+            "include_paper": include_paper,
+            "started_at_utc": _now(),
+            "finished_at_utc": _now(),
+        }
+
+    started_at_utc = _now()
+    try:
+        init_db()
+        open_list = build_unified_positions(state="open", include_paper=include_paper)
+        closed_list = build_unified_positions(state="closed", include_paper=include_paper)
+
+        with _LOCK:
+            conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+            try:
+                conn.execute("DELETE FROM positions_open")
+                conn.execute("DELETE FROM positions_closed")
+                for r in open_list:
+                    conn.execute(
+                        """INSERT INTO positions_open (
+                            id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            r.get("id"), r.get("symbol"), r.get("instrument_type"), int(r.get("is_paper") or 0),
+                            int(r.get("qty") or 0), r.get("avg_price"), r.get("strike"), r.get("expiry"), r.get("right"),
+                            (r.get("opened_ts") or "")[:26], r.get("link_id"), r.get("notes"), r.get("tags"),
+                        ),
+                    )
+                for r in closed_list:
+                    conn.execute(
+                        """INSERT INTO positions_closed (
+                            id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right, opened_ts, link_id, notes, tags,
+                            closed_ts, realized_pl, fees
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            r.get("id"), r.get("symbol"), r.get("instrument_type"), int(r.get("is_paper") or 0),
+                            int(r.get("qty") or 0), r.get("avg_price"), r.get("strike"), r.get("expiry"), r.get("right"),
+                            (r.get("opened_ts") or "")[:26], r.get("link_id"), r.get("notes"), r.get("tags"),
+                            (r.get("closed_ts") or "")[:26], r.get("realized_pl"), r.get("fees"),
+                        ),
+                    )
+                conn.commit()
+            finally:
+                conn.close()
+
+        finished_at_utc = _now()
+        _write_rebuild_state({
+            "status": "OK",
+            "status_label": "OK",
+            "last_rebuild_at_utc": finished_at_utc,
+            "last_rebuild_open_count": len(open_list),
+            "last_rebuild_closed_count": len(closed_list),
+            "last_include_paper": include_paper,
+        })
+        return {
+            "status": "OK",
+            "status_label": "OK",
+            "rebuilt_open": len(open_list),
+            "rebuilt_closed": len(closed_list),
+            "include_paper": include_paper,
+            "started_at_utc": started_at_utc,
+            "finished_at_utc": finished_at_utc,
+        }
+    except Exception as e:
+        logger.exception("[R28.7] Rebuild failed: %s", e)
+        finished_at_utc = _now()
+        _write_rebuild_state({
+            "status": "Review",
+            "status_label": "Rebuild failed",
+            "last_rebuild_at_utc": finished_at_utc,
+            "last_rebuild_open_count": 0,
+            "last_rebuild_closed_count": 0,
+            "last_include_paper": include_paper,
+        })
+        return {
+            "status": "Review",
+            "status_label": "Rebuild failed",
+            "rebuilt_open": 0,
+            "rebuilt_closed": 0,
+            "include_paper": include_paper,
+            "started_at_utc": started_at_utc,
+            "finished_at_utc": finished_at_utc,
+        }
+    finally:
+        try:
+            _REBUILD_LOCK.release()
+        except Exception:
+            pass
 
 
 # --- R28.0: Paper write mirror (idempotent upsert) ---

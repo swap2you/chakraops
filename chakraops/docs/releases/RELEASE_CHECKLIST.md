@@ -751,6 +751,16 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — All live-open entrypoints wired; reconcile OK/Review only; no FAIL/WARN/PASS in DOM
 - **Scope:** Wire missing live OPEN paths (e.g. /api/positions/manual-execute); regression tests; safe labels only. Branch: release/R28.6.
 
+### R28.7 — Unified Positions Rebuild v1 (manual) + Diagnostics UI action
+
+- [x] **Requirements** — chakraops/docs/releases/R28.7_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R28.7_release_notes.md
+- [x] **Verification** — out/verification/R28.7/notes.md (gate tails + UAT + grep proof). Evidence content: R28.7_verification_evidence.md (copy to out/ if needed).
+- [x] **Gate** — test_r287_* 4 passed; full backend 953 passed, 3 skipped; frontend 252 passed, 18 skipped; build 11.96s. Evidence pasted in R28.7_verification_evidence.md.
+- [x] **UAT** — Reconcile OK/Review; Rebuild button (confirm, triggers rebuild); unified list consistent after rebuild; no raw FAIL/WARN/PASS in UI
+- **Scope:** Manual rebuild of unified positions DB from authoritative sources; POST rebuild endpoint; system-health rebuild block; state file safe labels only; Diagnostics Rebuild card + button. NO GIT.
+- **Handoff:** R28.7_IMPLEMENTATION_SIGNOFF.md — full requirement-to-implementation checklist for agent handoff.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

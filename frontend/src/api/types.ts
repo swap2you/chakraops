@@ -356,6 +356,16 @@ export interface UiSystemHealthMarkRefresh {
   errors_sample?: string[];
 }
 
+/** R28.7 — Positions unified rebuild block (system-health). Safe labels only. */
+export interface UiPositionsUnifiedRebuild {
+  status?: "OK" | "Review" | string | null;
+  status_label?: string | null;
+  last_rebuild_at_utc?: string | null;
+  last_rebuild_open_count?: number | null;
+  last_rebuild_closed_count?: number | null;
+  last_include_paper?: boolean | null;
+}
+
 export interface UiSystemHealthResponse {
   api: UiSystemHealthApi;
   decision_store?: UiSystemHealthDecisionStore;
@@ -402,6 +412,8 @@ export interface UiSystemHealthResponse {
     unified_open_live_shares_count?: number;
     unified_open_live_options_count?: number;
   };
+  /** R28.7 — Unified positions rebuild: last rebuild metadata. Safe labels only (no FAIL/WARN/PASS). */
+  positions_unified_rebuild?: UiPositionsUnifiedRebuild;
   /** R25.9 — Portfolio guardrails: status (OK/Advisory/Blocked), metrics, limits. Safe labels only. */
   guardrails?: {
     status?: "OK" | "Advisory" | "Blocked";
@@ -999,4 +1011,21 @@ export interface UiPositionsUnifiedResponse {
   positions: UnifiedPosition[];
   state: string;
   include_paper: boolean;
+}
+
+/** R28.7: POST /api/ui/positions/unified/rebuild — result payload (safe labels only). */
+export interface UiPositionsUnifiedRebuildResult {
+  status?: string | null;
+  status_label?: string | null;
+  rebuilt_open?: number;
+  rebuilt_closed?: number;
+  include_paper?: boolean;
+  started_at_utc?: string | null;
+  finished_at_utc?: string | null;
+}
+
+/** R28.7: POST /api/ui/positions/unified/rebuild — response. */
+export interface UiPositionsUnifiedRebuildResponse {
+  ok: boolean;
+  result: UiPositionsUnifiedRebuildResult;
 }

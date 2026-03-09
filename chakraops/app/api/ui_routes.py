@@ -202,6 +202,22 @@ def _get_positions_unified_reconcile_health() -> Dict[str, Any]:
         }
 
 
+def _get_positions_unified_rebuild_health() -> Dict[str, Any]:
+    """R28.7: positions_unified_rebuild block — last rebuild metadata. Safe labels only."""
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import get_positions_unified_rebuild_health
+        return get_positions_unified_rebuild_health()
+    except Exception:
+        return {
+            "status": "OK",
+            "status_label": "OK",
+            "last_rebuild_at_utc": None,
+            "last_rebuild_open_count": None,
+            "last_rebuild_closed_count": None,
+            "last_include_paper": None,
+        }
+
+
 def _get_decision_store_mtime_utc() -> Optional[str]:
     """Return active decision store file mtime as ISO UTC string, or None."""
     try:
@@ -1315,6 +1331,7 @@ def ui_system_health(
         "guardrails": _get_guardrails_health(),
         "positions_unified": _get_positions_unified_health(),
         "positions_unified_reconcile": _get_positions_unified_reconcile_health(),
+        "positions_unified_rebuild": _get_positions_unified_rebuild_health(),
     }
 
 
@@ -4037,6 +4054,32 @@ def ui_positions_unified(
         import logging
         logging.getLogger(__name__).exception("Error building unified positions: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/positions/unified/rebuild")
+def ui_positions_unified_rebuild(
+    include_paper: bool = Query(default=True, description="Include paper positions in rebuild"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R28.7: Manual rebuild of unified positions DB from authoritative sources. Safe labels only; no FAIL/WARN/PASS."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import rebuild_positions_unified
+        result = rebuild_positions_unified(include_paper=include_paper)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Rebuild error: %s", e)
+        result = {
+            "status": "Review",
+            "status_label": "Rebuild failed",
+            "rebuilt_open": 0,
+            "rebuilt_closed": 0,
+            "include_paper": include_paper,
+            "started_at_utc": None,
+            "finished_at_utc": None,
+        }
+    ok = (result.get("status") or "").strip() == "OK"
+    return {"ok": ok, "result": result}
 
 
 @router.get("/positions")

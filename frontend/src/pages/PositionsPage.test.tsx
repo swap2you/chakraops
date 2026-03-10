@@ -71,6 +71,19 @@ const healthWithIntegrityDetails = {
     last_sample_items: [{ kind: "missing", id: "p1", symbol: "AAPL", instrument_type: "SHARES" }],
   },
 };
+/** R29.5: Integrity Review so Copy remediation summary and Open diagnostics appear. */
+const healthWithIntegrityReview = {
+  ...healthNotStale,
+  positions_unified_integrity_check: {
+    last_checked_at_utc: "2026-02-27T15:00:00Z",
+    last_status: "Review" as const,
+    last_status_label: "Differences found",
+    last_reconcile_missing_count: 1,
+    last_reconcile_extra_count: 0,
+    last_reconcile_mismatched_count: 1,
+    last_sample_items: [{ kind: "missing", id: "p1", symbol: "AAPL", instrument_type: "SHARES" }],
+  },
+};
 /** R29.0: Stale when block missing or finished_at_utc old/missing. */
 const healthStale = { positions_unified_rebuild: undefined, positions_unified_reconcile: { status: "OK" as const } };
 /** R29.1: Reconcile status Review for Integrity strip diff tests. */
@@ -363,6 +376,31 @@ describe("PositionsPage", () => {
 
   it("R29.4: document contains no forbidden tokens FAIL/WARN/PASS or FAIL_/WARN_", () => {
     mockUseUiSystemHealth.mockReturnValue({ data: healthWithIntegrityDetails });
+    const { container } = render(<PositionsPage />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_/);
+    expect(text).not.toMatch(/WARN_/);
+  });
+
+  it("R29.5: Copy remediation summary only when Review; writeText receives sanitized content", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    mockUseUiSystemHealth.mockReturnValue({ data: healthWithIntegrityReview });
+    renderWithRoute(<PositionsPage />, "/positions?source=db");
+    const copyBtn = screen.getByTestId("positions-integrity-copy-remediation-btn");
+    expect(copyBtn).toHaveTextContent("Copy remediation summary");
+    await userEvent.click(copyBtn);
+    expect(writeText).toHaveBeenCalledTimes(1);
+    const copied = writeText.mock.calls[0][0] as string;
+    expect(copied).toContain("Unified Positions Integrity: Review");
+    expect(copied).toContain("missing: 1, extra: 0, mismatched: 1");
+    expect(copied).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(copied).not.toMatch(/FAIL_|WARN_/);
+  });
+
+  it("R29.5: document contains no forbidden tokens when Review", () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthWithIntegrityReview });
     const { container } = render(<PositionsPage />);
     const text = container.textContent ?? "";
     expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);

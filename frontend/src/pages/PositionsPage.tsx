@@ -68,6 +68,36 @@ function sanitizeCompareDisplay(val: string | null | undefined): string {
   return sanitizeForDisplay(val);
 }
 
+const REMEDIATION_SAMPLE_CAP = 10;
+
+/** R29.5: Build sanitized remediation summary (deterministic; no forbidden tokens). Use API order for items. */
+function buildRemediationSummary(block: {
+  last_status?: string | null;
+  last_status_label?: string | null;
+  last_reconcile_missing_count?: number | null;
+  last_reconcile_extra_count?: number | null;
+  last_reconcile_mismatched_count?: number | null;
+  last_sample_items?: Array<{ kind?: string; symbol?: string | null; instrument_type?: string | null; id?: string; fields_diff?: string[] }> | null;
+}): string {
+  const lines: string[] = ["Unified Positions Integrity: Review"];
+  const missing = block.last_reconcile_missing_count ?? 0;
+  const extra = block.last_reconcile_extra_count ?? 0;
+  const mismatched = block.last_reconcile_mismatched_count ?? 0;
+  lines.push(`missing: ${missing}, extra: ${extra}, mismatched: ${mismatched}`);
+  const items = block.last_sample_items ?? [];
+  for (let i = 0; i < Math.min(items.length, REMEDIATION_SAMPLE_CAP); i++) {
+    const item = items[i];
+    const kind = sanitizeForDisplay(item.kind);
+    const symbol = sanitizeForDisplay(item.symbol ?? item.id);
+    const itype = sanitizeForDisplay(item.instrument_type);
+    const id = sanitizeForDisplay(item.id);
+    const fd = (item.fields_diff ?? []).map(sanitizeForDisplay).join(", ");
+    const fieldsPart = fd ? ` ${fd}` : "";
+    lines.push(`${kind} ${symbol} ${itype} ${id}${fieldsPart}`.trim());
+  }
+  return lines.join("\n");
+}
+
 export function PositionsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const sourceFromUrl = searchParams.get("source") ?? "db";
@@ -187,6 +217,28 @@ export function PositionsPage() {
                   >
                     View full diff in Diagnostics
                   </Link>
+                  {integrityCheckBlock.last_status === "Review" && (
+                    <>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          const summary = buildRemediationSummary(integrityCheckBlock);
+                          void navigator.clipboard.writeText(summary);
+                        }}
+                        data-testid="positions-integrity-copy-remediation-btn"
+                      >
+                        Copy remediation summary
+                      </Button>
+                      <Link
+                        to="/system"
+                        className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+                        data-testid="positions-integrity-open-diagnostics-link"
+                      >
+                        Open diagnostics
+                      </Link>
+                    </>
+                  )}
                 </div>
               )}
               {integrityDetailsExpanded && integrityCheckBlock?.last_sample_items != null && integrityCheckBlock.last_sample_items.length > 0 && (

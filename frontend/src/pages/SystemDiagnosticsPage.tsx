@@ -857,6 +857,23 @@ export function SystemDiagnosticsPage() {
                 <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.positions_unified_integrity_check.last_reconcile_mismatched_count ?? "—"}</p>
               </div>
             </div>
+            {/* R29.5: Remediation guidance — OK vs Review with safe labels only. */}
+            <div className="mt-3" data-testid="integrity-check-remediation-guidance">
+              {(data.positions_unified_integrity_check.last_status ?? "OK") === "OK" ? (
+                <p className="text-sm text-zinc-600 dark:text-zinc-400">No action needed.</p>
+              ) : (
+                <ul className="list-inside list-disc space-y-1 text-sm text-zinc-600 dark:text-zinc-400">
+                  <li>
+                    <Link to="/positions?source=db&include_paper=true" className="text-blue-600 hover:underline dark:text-blue-400">
+                      View diff details
+                    </Link>
+                    {" "}(Positions, stored view)
+                  </li>
+                  <li>Run integrity check (button below)</li>
+                  <li>Rebuild unified positions (from Positions or Reconcile Diff card)</li>
+                </ul>
+              )}
+            </div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Button
                 size="sm"

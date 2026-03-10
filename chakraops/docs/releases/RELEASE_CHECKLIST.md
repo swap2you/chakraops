@@ -824,6 +824,15 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Positions: last check + View details; SystemDiagnostics: Integrity Check card + details; no raw FAIL/WARN/PASS. UAT checklist completed in out/verification/R29.4/notes.md.
 - **Scope:** GET integrity-check; state history+sample; Diagnostics parity; sanitization; no decision writes. NO GIT.
 
+### R29.5 — Integrity remediation UX
+
+- [x] **Requirements** — chakraops/docs/releases/R29.5_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R29.5_release_notes.md
+- [x] **Verification** — out/verification/R29.5/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend: 987 passed, 1 skipped in 249.46s; Frontend tests: Test Files 31 passed | 2 skipped (33), Tests 282 passed | 18 skipped (300); Build: built in 20.12s. Evidence: out/verification/R29.5/notes.md.
+- [x] **UAT** — Copy remediation summary when Review; copied text sanitized; Diagnostics remediation guidance; no background jobs. UAT checklist completed in out/verification/R29.5/notes.md.
+- **Scope:** Remediation UX (copy summary, Open diagnostics, guidance bullets); safe labels only; no decision writes. NO GIT.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

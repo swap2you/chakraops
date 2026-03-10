@@ -176,6 +176,33 @@ describe("SystemDiagnosticsPage", () => {
     expect(text).not.toMatch(/WARN_/);
   });
 
+  it("R29.5: when integrity status Review, remediation guidance shows bullets and links", () => {
+    const healthReview = {
+      ...mockHealth,
+      positions_unified_integrity_check: {
+        ...mockHealth.positions_unified_integrity_check,
+        last_status: "Review",
+        last_status_label: "Differences found",
+      },
+    };
+    mockUseUiSystemHealth.mockReturnValue({ data: healthReview, isLoading: false, isError: false });
+    render(<SystemDiagnosticsPage />);
+    const guidance = screen.getByTestId("integrity-check-remediation-guidance");
+    expect(guidance).toBeInTheDocument();
+    expect(guidance).not.toHaveTextContent("No action needed.");
+    expect(guidance).toHaveTextContent("View diff details");
+    expect(guidance).toHaveTextContent("Run integrity check");
+    expect(guidance).toHaveTextContent("Rebuild unified positions");
+  });
+
+  it("R29.5: document has no forbidden tokens", () => {
+    render(<SystemDiagnosticsPage />);
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_/);
+    expect(text).not.toMatch(/WARN_/);
+  });
+
   it("R28.7: Unified Positions Rebuild card renders when positions_unified_rebuild present", () => {
     render(<SystemDiagnosticsPage />);
     expect(screen.getByTestId("positions-unified-rebuild-card")).toBeInTheDocument();

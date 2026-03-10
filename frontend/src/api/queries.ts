@@ -1232,20 +1232,22 @@ export function usePortfolio() {
   });
 }
 
-/** R27.9: GET /api/ui/positions/unified — read-only aggregation (live shares, live options, paper). */
+/** R27.9: GET /api/ui/positions/unified — read-only aggregation (live shares, live options, paper). R29.2: enabled for compare. */
 export function useUnifiedPositions(params: {
   state?: "open" | "closed";
   include_paper?: boolean;
   instrument_type?: string | null;
   symbol?: string | null;
+  enabled?: boolean;
 } = {}) {
-  const { state = "open", include_paper = true, instrument_type, symbol } = params;
+  const { state = "open", include_paper = true, instrument_type, symbol, enabled = true } = params;
   return useQuery({
     queryKey: queryKeys.uiPositionsUnified({ state, include_paper, instrument_type, symbol }),
     queryFn: () =>
       apiGet<UiPositionsUnifiedResponse>(
         uiPositionsUnifiedPath({ state, include_paper, instrument_type, symbol })
       ),
+    enabled,
   });
 }
 
@@ -1267,21 +1269,23 @@ export function usePositionsUnifiedRebuild() {
   });
 }
 
-/** R28.9: GET /api/ui/positions/unified/db — DB-first read (what is stored). */
+/** R28.9: GET /api/ui/positions/unified/db — DB-first read (what is stored). R29.2: enabled for compare. */
 export function useUnifiedPositionsFromDb(params: {
   state?: "open" | "closed";
   include_paper?: boolean;
   instrument_type?: string | null;
   symbol?: string | null;
   limit?: number;
+  enabled?: boolean;
 } = {}) {
-  const { state = "open", include_paper = true, instrument_type, symbol, limit = 500 } = params;
+  const { state = "open", include_paper = true, instrument_type, symbol, limit = 500, enabled = true } = params;
   return useQuery({
     queryKey: queryKeys.uiPositionsUnifiedDb({ state, include_paper, instrument_type, symbol, limit }),
     queryFn: () =>
       apiGet<UiPositionsUnifiedDbResponse>(
         uiPositionsUnifiedDbPath({ state, include_paper, instrument_type, symbol, limit })
       ),
+    enabled,
   });
 }
 

@@ -788,6 +788,24 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Positions defaults to Stored; stale banner when rebuild missing/old; Rebuild button + confirm; Stored/Computed toggle; no FAIL/WARN/PASS in UI
 - **Scope:** Default source=db; staleness banner + Rebuild; system-health finished_at_utc; safe labels only. NO GIT.
 
+### R29.1 — Positions Trust Banner v1 (Integrity strip)
+
+- [x] **Requirements** — chakraops/docs/releases/R29.1_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R29.1_release_notes.md
+- [x] **Verification** — out/verification/R29.1/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — test_r291_* pass; full backend pass; frontend tests pass; frontend build pass. Evidence in out/verification/R29.1/notes.md.
+- [x] **UAT** — Stored shows Integrity strip and Review shows diff; View diff details and Rebuild work; Switch to Computed/Stored; no FAIL/WARN/PASS in UI
+- **Scope:** Integrity strip on Positions; reconcile status + diff + actions; safe labels only. NO GIT.
+
+### R29.2 — Stored vs Computed Compare v1
+
+- [x] **Requirements** — chakraops/docs/releases/R29.2_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R29.2_release_notes.md
+- [x] **Verification** — out/verification/R29.2/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — test_r292_* pass; full backend pass; frontend tests pass; frontend build pass. Evidence in out/verification/R29.2/notes.md.
+- [x] **UAT** — Symbol filter + Compare open; diff summary/details; Rebuild; no FAIL/WARN/PASS or FAIL_/WARN_ in UI
+- **Scope:** Compare panel on Positions; symbol parity; sanitized display; safe labels only. NO GIT.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

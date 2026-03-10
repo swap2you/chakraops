@@ -1,11 +1,16 @@
 /**
- * R27.9/R28.0/R28.9/R29.0: Unified Positions — default Stored (source=db), optional Computed.
- * source=db (default): GET /api/ui/positions/unified/db. source=recompute: GET /api/ui/positions/unified.
- * R29.0: Staleness banner when Stored and rebuild missing or >6h old; Rebuild button; safe labels only.
+ * R27.9/R28.0/R28.9/R29.0/R29.1/R29.2: Unified Positions — Integrity strip; Compare Stored vs Computed when symbol set.
+ * R29.2: Compare panel (symbol set): Stored vs Computed columns, diff summary/details, sanitized display.
  */
 import { useState, useEffect, useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useUnifiedPositions, useUnifiedPositionsFromDb, useUiSystemHealth, usePositionsUnifiedRebuild } from "@/api/queries";
+import {
+  useUnifiedPositions,
+  useUnifiedPositionsFromDb,
+  useUiSystemHealth,
+  usePositionsUnifiedRebuild,
+  useReconcileDiff,
+} from "@/api/queries";
 import type { UnifiedPosition } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import {
@@ -56,6 +61,15 @@ function fmtDate(ts: string | null | undefined): string {
   return s || "—";
 }
 
+/** R29.2: Sanitize for compare display — no raw FAIL/WARN/PASS or FAIL_/WARN_ in UI. */
+function sanitizeCompareDisplay(val: string | null | undefined): string {
+  if (val == null) return "—";
+  let s = String(val).trim();
+  s = s.replace(/\bFAIL\b/gi, "—").replace(/\bWARN\b/gi, "Review").replace(/\bPASS\b/gi, "OK");
+  s = s.replace(/FAIL_/g, "").replace(/WARN_/g, "");
+  return s || "—";
+}
+
 export function PositionsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const sourceFromUrl = searchParams.get("source") ?? "db";
@@ -69,9 +83,31 @@ export function PositionsPage() {
   const [instrumentType, setInstrumentType] = useState<string>("");
   const [symbolFilter, setSymbolFilter] = useState(symbolFromUrl);
   const [showRebuildConfirm, setShowRebuildConfirm] = useState(false);
+  const [integrityDiffExpanded, setIntegrityDiffExpanded] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
+
+  const hasSymbolFilter = !!symbolFilter.trim();
+  const computedEnabled = source === "recompute" || (compareOpen && hasSymbolFilter);
+  const fromDbEnabled = source === "db" || (compareOpen && hasSymbolFilter);
 
   const isStale = useStoredPositionsStale();
   const rebuildUnified = usePositionsUnifiedRebuild();
+  const { data: health } = useUiSystemHealth();
+  const reconcileStatus = (health?.positions_unified_reconcile?.status ?? "OK") as "OK" | "Review";
+  const reconcileCounts = health?.positions_unified_reconcile;
+  const needReconcileDiff = source === "db" && reconcileStatus === "Review";
+  const { data: reconcileDiff } = useReconcileDiff({
+    include_paper: includePaper,
+    symbol: symbolFilter.trim() || null,
+    limit: 200,
+    enabled: needReconcileDiff,
+  });
+  const { data: compareDiff } = useReconcileDiff({
+    include_paper: includePaper,
+    symbol: symbolFilter.trim() || null,
+    limit: 200,
+    enabled: compareOpen && hasSymbolFilter,
+  });
 
   useEffect(() => {
     if (symbolFromUrl) setSymbolFilter(symbolFromUrl);
@@ -83,6 +119,7 @@ export function PositionsPage() {
     include_paper: includePaper,
     instrument_type: instrumentType.trim() || null,
     symbol: symbolFilter.trim() || null,
+    enabled: computedEnabled,
   });
   const fromDb = useUnifiedPositionsFromDb({
     state,
@@ -90,6 +127,7 @@ export function PositionsPage() {
     instrument_type: instrumentType.trim() || null,
     symbol: symbolFilter.trim() || null,
     limit: 500,
+    enabled: fromDbEnabled,
   });
 
   const { isLoading, isError } = source === "db" ? fromDb : computed;
@@ -104,6 +142,191 @@ export function PositionsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Positions" subtext="Unified view of open and closed positions (live and paper)." />
+
+      {/* R29.1: Integrity strip — reconcile status + diff summary + actions when Stored; minimal note when Computed */}
+      <Card className="border-zinc-200 dark:border-zinc-700" data-testid="positions-integrity-strip">
+        <div className="p-4">
+          <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Integrity</h3>
+          {source === "db" ? (
+            <>
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
+                <span className="text-zinc-600 dark:text-zinc-400">
+                  Reconcile: <span data-testid="positions-integrity-status">{reconcileStatus === "Review" ? "Review" : "OK"}</span>
+                </span>
+                {reconcileCounts != null && (
+                  <span className="text-zinc-500 dark:text-zinc-500">
+                    (open: {reconcileCounts.paper_open_count ?? "—"} paper, {reconcileCounts.unified_open_paper_count ?? "—"} unified)
+                  </span>
+                )}
+              </div>
+              {reconcileStatus === "Review" && (
+                <>
+                  {reconcileDiff != null && (
+                    <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-zinc-600 dark:text-zinc-400">
+                      <span data-testid="positions-integrity-diff-counts">
+                        missing: {reconcileDiff.missing_count}, extra: {reconcileDiff.extra_count}, mismatched: {reconcileDiff.mismatched_count}
+                      </span>
+                    </div>
+                  )}
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setIntegrityDiffExpanded((e) => !e)}
+                      data-testid="positions-integrity-view-diff-details"
+                    >
+                      {integrityDiffExpanded ? "Hide diff details" : "View diff details"}
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setShowRebuildConfirm(true)}
+                      disabled={rebuildUnified.isPending}
+                      data-testid="positions-integrity-rebuild-btn"
+                    >
+                      {rebuildUnified.isPending ? "Rebuild running" : "Rebuild unified positions"}
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => setSource("recompute")}
+                      className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+                      data-testid="positions-integrity-switch-to-computed"
+                    >
+                      Switch to Computed
+                    </button>
+                  </div>
+                  {integrityDiffExpanded && reconcileDiff?.items != null && reconcileDiff.items.length > 0 && (
+                    <ul className="mt-3 max-h-60 list-none space-y-1 overflow-y-auto rounded border border-zinc-200 bg-zinc-50 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900/50" data-testid="positions-integrity-diff-list">
+                      {reconcileDiff.items.map((item, i) => (
+                        <li key={`${item.id}-${i}`} className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-zinc-200 py-1.5 last:border-0 dark:border-zinc-700">
+                          <span className="font-medium text-zinc-700 dark:text-zinc-300">{item.kind}</span>
+                          <span className="font-mono text-zinc-600 dark:text-zinc-400">{item.symbol ?? item.id}</span>
+                          {item.instrument_type != null && (
+                            <span className="text-zinc-500 dark:text-zinc-500">{item.instrument_type}</span>
+                          )}
+                          <span className="text-zinc-400 dark:text-zinc-500">{item.id}</span>
+                          {item.fields_diff != null && item.fields_diff.length > 0 && (
+                            <span className="text-zinc-500 dark:text-zinc-500">({item.fields_diff.join(", ")})</span>
+                          )}
+                          <Link
+                            to={`/positions?symbol=${encodeURIComponent(item.symbol ?? "")}&include_paper=${includePaper}&source=db`}
+                            className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+                            data-testid="positions-integrity-view-positions-link"
+                          >
+                            View positions
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </>
+          ) : (
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
+              <span className="text-zinc-600 dark:text-zinc-400" data-testid="positions-integrity-computed-note">
+                Integrity: Computed (authoritative)
+              </span>
+              <button
+                type="button"
+                onClick={() => setSource("db")}
+                className="text-blue-600 hover:underline dark:text-blue-400"
+                data-testid="positions-integrity-switch-to-stored"
+              >
+                Switch to Stored
+              </button>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* R29.2: Compare Stored vs Computed — only when symbol filter set */}
+      {hasSymbolFilter && (
+        <Card className="border-zinc-200 dark:border-zinc-700" data-testid="positions-compare-panel">
+          <div className="p-4">
+            <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Compare</h3>
+            <div className="mt-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setCompareOpen((o) => !o)}
+                data-testid="positions-compare-toggle-btn"
+              >
+                {compareOpen ? "Hide stored vs computed" : "Compare stored vs computed"}
+              </Button>
+            </div>
+            {compareOpen && (
+              <>
+                {compareDiff != null && (
+                  <div className="mt-3 text-sm text-zinc-600 dark:text-zinc-400" data-testid="positions-compare-diff-summary">
+                    missing_in_stored: {compareDiff.missing_count}, extra_in_stored: {compareDiff.extra_count}, mismatched: {compareDiff.mismatched_count}
+                  </div>
+                )}
+                <div className="mt-3 flex flex-wrap gap-4">
+                  <div className="min-w-0 flex-1 rounded border border-zinc-200 bg-zinc-50/50 p-2 dark:border-zinc-700 dark:bg-zinc-900/30">
+                    <p className="text-xs font-medium text-zinc-500 dark:text-zinc-500">Stored</p>
+                    <ul className="mt-1 max-h-48 list-none space-y-0.5 overflow-y-auto text-xs">
+                      {(fromDb.data?.items ?? []).map((p) => (
+                        <li key={p.id} className="flex flex-wrap gap-x-2 gap-y-0.5 font-mono text-zinc-700 dark:text-zinc-300">
+                          <span>{sanitizeCompareDisplay(p.id)}</span>
+                          <span>{sanitizeCompareDisplay(p.instrument_type)}</span>
+                          <span>qty: {fmtNum(p.qty)}</span>
+                          <span>{fmtDate(p.opened_ts)}</span>
+                          {p.expiry != null && <span>exp: {sanitizeCompareDisplay(String(p.expiry))}</span>}
+                          {p.strike != null && <span>strike: {fmtNum(p.strike)}</span>}
+                          {p.right != null && <span>{sanitizeCompareDisplay(String(p.right))}</span>}
+                          <span>{p.is_paper ? "paper" : "live"}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="min-w-0 flex-1 rounded border border-zinc-200 bg-zinc-50/50 p-2 dark:border-zinc-700 dark:bg-zinc-900/30">
+                    <p className="text-xs font-medium text-zinc-500 dark:text-zinc-500">Computed</p>
+                    <ul className="mt-1 max-h-48 list-none space-y-0.5 overflow-y-auto text-xs">
+                      {(computed.data?.positions ?? []).map((p) => (
+                        <li key={p.id} className="flex flex-wrap gap-x-2 gap-y-0.5 font-mono text-zinc-700 dark:text-zinc-300">
+                          <span>{sanitizeCompareDisplay(p.id)}</span>
+                          <span>{sanitizeCompareDisplay(p.instrument_type)}</span>
+                          <span>qty: {fmtNum(p.qty)}</span>
+                          <span>{fmtDate(p.opened_ts)}</span>
+                          {p.expiry != null && <span>exp: {sanitizeCompareDisplay(String(p.expiry))}</span>}
+                          {p.strike != null && <span>strike: {fmtNum(p.strike)}</span>}
+                          {p.right != null && <span>{sanitizeCompareDisplay(String(p.right))}</span>}
+                          <span>{p.is_paper ? "paper" : "live"}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+                {compareDiff?.items != null && compareDiff.items.length > 0 && (
+                  <ul className="mt-3 max-h-40 list-none space-y-1 overflow-y-auto rounded border border-zinc-200 bg-zinc-50 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900/50" data-testid="positions-compare-diff-details">
+                    {compareDiff.items.map((item, i) => (
+                      <li key={`${item.id}-${i}`} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-zinc-200 py-1 last:border-0 dark:border-zinc-700">
+                        <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                          {item.kind === "missing" ? "Missing" : item.kind === "extra" ? "Extra" : "Mismatch"}
+                        </span>
+                        <span className="font-mono text-zinc-600 dark:text-zinc-400">{sanitizeCompareDisplay(item.id)}</span>
+                        {item.instrument_type != null && <span className="text-zinc-500">{sanitizeCompareDisplay(item.instrument_type)}</span>}
+                        {item.fields_diff != null && item.fields_diff.length > 0 && (
+                          <span className="text-zinc-500">({item.fields_diff.map((f) => sanitizeCompareDisplay(f)).join(", ")})</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+                  <Link to="/system" className="text-blue-600 hover:underline dark:text-blue-400" data-testid="positions-compare-view-diff-diagnostics">
+                    View diff in diagnostics
+                  </Link>
+                  <Button variant="primary" size="sm" onClick={() => setShowRebuildConfirm(true)} disabled={rebuildUnified.isPending} data-testid="positions-compare-rebuild-btn">
+                    {rebuildUnified.isPending ? "Rebuild running" : "Rebuild unified positions"}
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </Card>
+      )}
 
       {source === "db" && isStale && (
         <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40">

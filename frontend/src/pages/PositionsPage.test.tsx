@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { render, renderWithRoute, screen } from "@/test/test-utils";
+import { render, renderWithRoute, screen, within } from "@/test/test-utils";
 import { PositionsPage } from "./PositionsPage";
 
 const mockPositions = [
@@ -56,9 +56,28 @@ const mockUseUnifiedPositionsFromDb = vi.fn(() => ({
 /** R29.0: Not stale when finished_at_utc is recent (future). */
 const healthNotStale = {
   positions_unified_rebuild: { finished_at_utc: "2099-06-01T12:00:00Z", last_include_paper: true },
+  positions_unified_reconcile: { status: "OK" as const },
 };
 /** R29.0: Stale when block missing or finished_at_utc old/missing. */
-const healthStale = { positions_unified_rebuild: undefined };
+const healthStale = { positions_unified_rebuild: undefined, positions_unified_reconcile: { status: "OK" as const } };
+/** R29.1: Reconcile status Review for Integrity strip diff tests. */
+const healthReconcileReview = {
+  ...healthNotStale,
+  positions_unified_reconcile: { status: "Review" as const },
+};
+
+const mockReconcileDiffPayload = {
+  missing_count: 1,
+  extra_count: 0,
+  mismatched_count: 1,
+  items: [
+    { id: "diff-1", kind: "missing" as const, symbol: "AAPL", instrument_type: "SHARES", fields_diff: ["qty"] },
+  ],
+};
+const mockUseReconcileDiff = vi.fn(() => ({
+  data: mockReconcileDiffPayload,
+  isLoading: false,
+}));
 
 const mockUseUiSystemHealth = vi.fn(() => ({ data: healthNotStale }));
 const mockMutate = vi.fn();
@@ -73,6 +92,7 @@ vi.mock("@/api/queries", () => ({
   useUnifiedPositionsFromDb: (params: Record<string, unknown>) => mockUseUnifiedPositionsFromDb(params),
   useUiSystemHealth: () => mockUseUiSystemHealth(),
   usePositionsUnifiedRebuild: () => mockUsePositionsUnifiedRebuild(),
+  useReconcileDiff: (params: Record<string, unknown>) => mockUseReconcileDiff(params),
 }));
 
 describe("PositionsPage", () => {
@@ -94,6 +114,7 @@ describe("PositionsPage", () => {
       isPending: false,
       data: undefined,
     });
+    mockUseReconcileDiff.mockReturnValue({ data: mockReconcileDiffPayload, isLoading: false });
   });
 
   it("renders Positions header and filters", () => {
@@ -196,5 +217,77 @@ describe("PositionsPage", () => {
     const { container } = render(<PositionsPage />);
     const text = container.textContent ?? "";
     expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+  });
+
+  it("R29.1: when source=db and reconcile status Review, integrity strip shows Review and diff counts; View diff details expands list", async () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthReconcileReview });
+    mockUseReconcileDiff.mockReturnValue({ data: mockReconcileDiffPayload, isLoading: false });
+    render(<PositionsPage />);
+    expect(screen.getByTestId("positions-integrity-strip")).toBeInTheDocument();
+    expect(screen.getByTestId("positions-integrity-status")).toHaveTextContent("Review");
+    expect(screen.getByTestId("positions-integrity-diff-counts")).toHaveTextContent(/missing: 1.*extra: 0.*mismatched: 1/);
+    expect(screen.getByTestId("positions-integrity-view-diff-details")).toHaveTextContent("View diff details");
+    await userEvent.click(screen.getByTestId("positions-integrity-view-diff-details"));
+    const diffList = screen.getByTestId("positions-integrity-diff-list");
+    expect(diffList).toBeInTheDocument();
+    expect(within(diffList).getByText("missing")).toBeInTheDocument();
+    expect(within(diffList).getByText("AAPL")).toBeInTheDocument();
+    expect(screen.getAllByTestId("positions-integrity-view-positions-link").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("R29.1: clicking Rebuild unified positions (Integrity) triggers mutation with include_paper from filter", async () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthReconcileReview });
+    render(<PositionsPage />);
+    await userEvent.click(screen.getByTestId("positions-integrity-rebuild-btn"));
+    expect(screen.getByTestId("positions-rebuild-confirm-modal")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("positions-rebuild-confirm-ok"));
+    expect(mockMutate).toHaveBeenCalledWith(
+      { include_paper: true },
+      expect.objectContaining({ onSuccess: expect.any(Function) })
+    );
+  });
+
+  it("R29.1: clicking Switch to Computed updates to Source: Computed and does not render diff details section", async () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthReconcileReview });
+    render(<PositionsPage />);
+    expect(screen.getByTestId("positions-source-label")).toHaveTextContent("Source: Stored");
+    await userEvent.click(screen.getByTestId("positions-integrity-switch-to-computed"));
+    expect(screen.getByTestId("positions-source-label")).toHaveTextContent("Source: Computed");
+    expect(screen.getByTestId("positions-integrity-computed-note")).toHaveTextContent(/Computed \(authoritative\)/);
+    expect(screen.queryByTestId("positions-integrity-diff-counts")).not.toBeInTheDocument();
+  });
+
+  it("R29.1: document has no FAIL/WARN/PASS tokens", () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthReconcileReview });
+    const { container } = render(<PositionsPage />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+  });
+
+  it("R29.2: when symbol set, Compare button appears; opening Compare shows diff summary and both lists", async () => {
+    renderWithRoute(<PositionsPage />, "/positions?symbol=AAPL");
+    expect(screen.getByTestId("positions-compare-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("positions-compare-toggle-btn")).toHaveTextContent("Compare stored vs computed");
+    expect(screen.queryByTestId("positions-compare-diff-summary")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("positions-compare-toggle-btn"));
+    expect(mockUseUnifiedPositions).toHaveBeenCalledWith(expect.objectContaining({ symbol: "AAPL", include_paper: true }));
+    expect(mockUseUnifiedPositionsFromDb).toHaveBeenCalledWith(expect.objectContaining({ symbol: "AAPL", include_paper: true }));
+    expect(screen.getByTestId("positions-compare-diff-summary")).toBeInTheDocument();
+    expect(screen.getByTestId("positions-compare-diff-details")).toBeInTheDocument();
+    expect(screen.getByTestId("positions-compare-view-diff-diagnostics")).toBeInTheDocument();
+  });
+
+  it("R29.2: when Compare closed, diff summary not visible", () => {
+    renderWithRoute(<PositionsPage />, "/positions?symbol=AAPL");
+    expect(screen.getByTestId("positions-compare-panel")).toBeInTheDocument();
+    expect(screen.queryByTestId("positions-compare-diff-summary")).not.toBeInTheDocument();
+  });
+
+  it("R29.2: document has no FAIL/WARN/PASS and no FAIL_/WARN_ tokens", () => {
+    const { container } = render(<PositionsPage />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_/);
+    expect(text).not.toMatch(/WARN_/);
   });
 });

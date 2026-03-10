@@ -58,6 +58,19 @@ const healthNotStale = {
   positions_unified_rebuild: { finished_at_utc: "2099-06-01T12:00:00Z", last_include_paper: true },
   positions_unified_reconcile: { status: "OK" as const },
 };
+/** R29.4: Integrity check block with last run + sample items for View details. */
+const healthWithIntegrityDetails = {
+  ...healthNotStale,
+  positions_unified_integrity_check: {
+    last_checked_at_utc: "2026-02-27T15:00:00Z",
+    last_status: "OK" as const,
+    last_status_label: "OK",
+    last_reconcile_missing_count: 0,
+    last_reconcile_extra_count: 0,
+    last_reconcile_mismatched_count: 0,
+    last_sample_items: [{ kind: "missing", id: "p1", symbol: "AAPL", instrument_type: "SHARES" }],
+  },
+};
 /** R29.0: Stale when block missing or finished_at_utc old/missing. */
 const healthStale = { positions_unified_rebuild: undefined, positions_unified_reconcile: { status: "OK" as const } };
 /** R29.1: Reconcile status Review for Integrity strip diff tests. */
@@ -334,5 +347,26 @@ describe("PositionsPage", () => {
     const btn = screen.getByTestId("positions-integrity-check-btn");
     expect(btn).toBeDisabled();
     expect(btn).toHaveTextContent("Check running");
+  });
+
+  it("R29.4: Last integrity check summary and View details expand sample items", async () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthWithIntegrityDetails });
+    renderWithRoute(<PositionsPage />, "/positions?source=db");
+    expect(screen.getByTestId("positions-integrity-last-check")).toHaveTextContent(/Last integrity check/);
+    expect(screen.getByTestId("positions-integrity-view-details-btn")).toHaveTextContent("View details");
+    await userEvent.click(screen.getByTestId("positions-integrity-view-details-btn"));
+    const detailsList = screen.getByTestId("positions-integrity-details-list");
+    expect(detailsList).toBeInTheDocument();
+    expect(within(detailsList).getByText("missing")).toBeInTheDocument();
+    expect(within(detailsList).getByText("AAPL")).toBeInTheDocument();
+  });
+
+  it("R29.4: document contains no forbidden tokens FAIL/WARN/PASS or FAIL_/WARN_", () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthWithIntegrityDetails });
+    const { container } = render(<PositionsPage />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_/);
+    expect(text).not.toMatch(/WARN_/);
   });
 });

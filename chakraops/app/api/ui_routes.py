@@ -233,6 +233,8 @@ def _get_positions_unified_integrity_check_health() -> Dict[str, Any]:
             "last_reconcile_missing_count": None,
             "last_reconcile_extra_count": None,
             "last_reconcile_mismatched_count": None,
+            "last_started_at_utc": None,
+            "last_sample_items": None,
         }
 
 
@@ -4117,6 +4119,21 @@ def ui_positions_unified_reconcile_diff(
         import logging
         logging.getLogger(__name__).exception("Reconcile diff error: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/positions/unified/integrity-check")
+def ui_positions_unified_integrity_check_get(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R29.4: Read-only last integrity-check result + optional history. Safe labels only; no decision write."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import get_positions_unified_integrity_check_result
+        return get_positions_unified_integrity_check_result()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Integrity check GET error: %s", e)
+        return {"status": "OK", "status_label": "OK", "last": None, "history": []}
 
 
 @router.post("/positions/unified/integrity-check")

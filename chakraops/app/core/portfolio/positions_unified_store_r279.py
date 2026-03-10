@@ -22,6 +22,9 @@ _OVERRIDE_PATH: Optional[Path] = None
 
 # R29.3: Staleness threshold for integrity check (hours)
 _INTEGRITY_CHECK_STALE_HOURS = 24
+# R29.4: History and sample caps (deterministic)
+_INTEGRITY_CHECK_HISTORY_CAP = 10
+_INTEGRITY_CHECK_SAMPLE_ITEMS_CAP = 20
 
 INSTRUMENT_SHARES = "SHARES"
 INSTRUMENT_CSP = "CSP"
@@ -29,6 +32,7 @@ INSTRUMENT_CC = "CC"
 
 # Prohibited in API responses (non-negotiable)
 _FAIL_WARN_PATTERN = re.compile(r"FAIL_|WARN_", re.I)
+_FORBIDDEN_TOKENS = re.compile(r"\b(FAIL|WARN|PASS)\b", re.I)
 
 
 def _positions_db_path() -> Path:
@@ -65,8 +69,19 @@ def _safe_str(val: Any) -> str:
         return ""
     s = str(val).strip()
     if _FAIL_WARN_PATTERN.search(s):
-        return ""  # or a generic safe placeholder; requirement: never expose raw
+        return ""
     return s
+
+
+def _sanitize_display_str(val: Any) -> str:
+    """R29.4: No FAIL/WARN/PASS or FAIL_/WARN_ in display strings. Replace forbidden tokens; strip bad substrings."""
+    if val is None:
+        return ""
+    s = str(val).strip()
+    s = _FORBIDDEN_TOKENS.sub("", s)
+    if _FAIL_WARN_PATTERN.search(s):
+        return ""
+    return s.strip() or ""
 
 
 def _fees_from_position(p: Any) -> Optional[float]:
@@ -1112,21 +1127,51 @@ def _integrity_check_state_path() -> Path:
     return out / "positions_unified_integrity_check_state.json"
 
 
+def _sanitize_sample_item(item: Dict[str, Any]) -> Dict[str, Any]:
+    """R29.4: One diff item with all string values sanitized (no FAIL/WARN/PASS or FAIL_/WARN_)."""
+    out: Dict[str, Any] = {}
+    for k, v in item.items():
+        if isinstance(v, str):
+            out[k] = _sanitize_display_str(v)
+        elif isinstance(v, list):
+            out[k] = [_sanitize_display_str(x) if isinstance(x, str) else x for x in v]
+        else:
+            out[k] = v
+    return out
+
+
 def _write_integrity_check_state(data: Dict[str, Any]) -> None:
-    """Persist only safe fields; no FAIL/WARN/PASS."""
-    safe = {
-        "last_checked_at_utc": data.get("checked_at_utc"),
-        "last_status": data.get("status") or "OK",
-        "last_status_label": data.get("status_label") or "OK",
-        "last_stale": data.get("stale", False),
-        "last_reconcile_missing_count": data.get("reconcile", {}).get("missing_count"),
-        "last_reconcile_extra_count": data.get("reconcile", {}).get("extra_count"),
-        "last_reconcile_mismatched_count": data.get("reconcile", {}).get("mismatched_count"),
+    """R29.3/R29.4: Persist only safe fields; no FAIL/WARN/PASS. State has last + history (capped)."""
+    rec = data.get("reconcile") or {}
+    sample_raw = data.get("sample_items") or []
+    sample = [_sanitize_sample_item(i) for i in sample_raw[: _INTEGRITY_CHECK_SAMPLE_ITEMS_CAP]]
+    sample.sort(key=_diff_sort_key)
+    last_entry = {
+        "status": data.get("status") or "OK",
+        "status_label": data.get("status_label") or "OK",
+        "started_at_utc": data.get("started_at_utc"),
+        "finished_at_utc": data.get("checked_at_utc"),
+        "missing_count": rec.get("missing_count", 0),
+        "extra_count": rec.get("extra_count", 0),
+        "mismatched_count": rec.get("mismatched_count", 0),
+        "sample_items": sample,
     }
     path = _integrity_check_state_path()
     try:
+        existing: Dict[str, Any] = {}
+        if path.exists():
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+            except Exception:
+                pass
+        history = existing.get("history") or []
+        if not isinstance(history, list):
+            history = []
+        history = [last_entry] + history[: _INTEGRITY_CHECK_HISTORY_CAP - 1]
+        payload = {"last": last_entry, "history": history}
         from app.core.io.atomic import atomic_write_json
-        atomic_write_json(path, safe, indent=0)
+        atomic_write_json(path, payload, indent=0)
     except Exception as e:
         logger.warning("[R29.3] Failed to write integrity check state: %s", e)
 
@@ -1181,6 +1226,7 @@ def run_positions_unified_integrity_check(include_paper: bool = True) -> Dict[st
         }
 
     try:
+        started_at = _now()
         checked_at = _now()
         rebuild_health = get_positions_unified_rebuild_health()
         finished_at = rebuild_health.get("finished_at_utc") or rebuild_health.get("last_rebuild_at_utc")
@@ -1211,12 +1257,17 @@ def run_positions_unified_integrity_check(include_paper: bool = True) -> Dict[st
         if not stale and overall_status == "OK":
             status_label = "OK"
 
+        items = list(reconcile.get("items") or [])
+        items.sort(key=_diff_sort_key)
+        sample_items = items[: _INTEGRITY_CHECK_SAMPLE_ITEMS_CAP]
+
         result = {
             "ok": overall_status == "OK",
             "status": overall_status,
             "status_label": status_label,
             "include_paper": include_paper,
             "stale": stale,
+            "started_at_utc": started_at,
             "reconcile": {
                 "status": rec_status,
                 "status_label": rec_label,
@@ -1225,6 +1276,7 @@ def run_positions_unified_integrity_check(include_paper: bool = True) -> Dict[st
                 "mismatched_count": reconcile.get("mismatched_count", 0),
             },
             "checked_at_utc": checked_at,
+            "sample_items": sample_items,
         }
         _write_integrity_check_state(result)
         if overall_status == "Review":
@@ -1238,7 +1290,7 @@ def run_positions_unified_integrity_check(include_paper: bool = True) -> Dict[st
 
 
 def get_positions_unified_integrity_check_health() -> Dict[str, Any]:
-    """R29.3: System-health block positions_unified_integrity_check. Read-only from state file; safe only."""
+    """R29.3/R29.4: System-health block positions_unified_integrity_check. Read-only from state file; safe only."""
     state = load_integrity_check_state()
     if not state or not isinstance(state, dict):
         return {
@@ -1249,6 +1301,21 @@ def get_positions_unified_integrity_check_health() -> Dict[str, Any]:
             "last_reconcile_missing_count": None,
             "last_reconcile_extra_count": None,
             "last_reconcile_mismatched_count": None,
+            "last_started_at_utc": None,
+            "last_sample_items": None,
+        }
+    last = state.get("last")
+    if isinstance(last, dict):
+        return {
+            "last_checked_at_utc": last.get("finished_at_utc"),
+            "last_status": last.get("status") or "OK",
+            "last_status_label": last.get("status_label") or "OK",
+            "last_stale": state.get("last_stale", False),
+            "last_reconcile_missing_count": last.get("missing_count"),
+            "last_reconcile_extra_count": last.get("extra_count"),
+            "last_reconcile_mismatched_count": last.get("mismatched_count"),
+            "last_started_at_utc": last.get("started_at_utc"),
+            "last_sample_items": last.get("sample_items"),
         }
     return {
         "last_checked_at_utc": state.get("last_checked_at_utc"),
@@ -1258,4 +1325,45 @@ def get_positions_unified_integrity_check_health() -> Dict[str, Any]:
         "last_reconcile_missing_count": state.get("last_reconcile_missing_count"),
         "last_reconcile_extra_count": state.get("last_reconcile_extra_count"),
         "last_reconcile_mismatched_count": state.get("last_reconcile_mismatched_count"),
+        "last_started_at_utc": None,
+        "last_sample_items": None,
+    }
+
+
+def get_positions_unified_integrity_check_result() -> Dict[str, Any]:
+    """R29.4: Read-only last result + history for GET /api/ui/positions/unified/integrity-check. Deterministic ordering."""
+    state = load_integrity_check_state()
+    if not state or not isinstance(state, dict):
+        return {
+            "status": "OK",
+            "status_label": "OK",
+            "last": None,
+            "history": [],
+        }
+    last = state.get("last")
+    history = state.get("history") or []
+    if not isinstance(history, list):
+        history = []
+    if isinstance(last, dict):
+        return {
+            "status": last.get("status") or "OK",
+            "status_label": last.get("status_label") or "OK",
+            "last": last,
+            "history": history[: _INTEGRITY_CHECK_HISTORY_CAP],
+        }
+    last_derived = {
+        "status": state.get("last_status") or "OK",
+        "status_label": state.get("last_status_label") or "OK",
+        "started_at_utc": None,
+        "finished_at_utc": state.get("last_checked_at_utc"),
+        "missing_count": state.get("last_reconcile_missing_count"),
+        "extra_count": state.get("last_reconcile_extra_count"),
+        "mismatched_count": state.get("last_reconcile_mismatched_count"),
+        "sample_items": [],
+    }
+    return {
+        "status": last_derived["status"],
+        "status_label": last_derived["status_label"],
+        "last": last_derived,
+        "history": [],
     }

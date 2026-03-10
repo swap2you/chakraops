@@ -50,6 +50,15 @@ const mockHealth = {
     last_rebuild_closed_count: 1,
     last_include_paper: true,
   },
+  positions_unified_integrity_check: {
+    last_checked_at_utc: "2026-02-27T15:00:00Z",
+    last_status: "OK",
+    last_status_label: "OK",
+    last_reconcile_missing_count: 0,
+    last_reconcile_extra_count: 0,
+    last_reconcile_mismatched_count: 0,
+    last_sample_items: [{ kind: "missing", id: "p1", symbol: "AAPL", instrument_type: "SHARES" }],
+  },
   guardrails: {
     status: "OK",
     metrics: { cash_reserve_pct: 40, open_options_count: 1, open_shares_count: 0, symbols_exposure_count: 2, max_symbol_notional_pct: 10 },
@@ -107,6 +116,7 @@ vi.mock("@/api/queries", () => ({
   useAdminSlackTest: () => ({ mutate: vi.fn(), isPending: false, data: null }),
   useAdminEvaluationForce: () => ({ mutate: vi.fn(), isPending: false, data: null }),
   usePositionsUnifiedRebuild: () => ({ mutate: mockRebuildMutate, isPending: false }),
+  usePositionsUnifiedIntegrityCheck: () => ({ mutate: vi.fn(), isPending: false }),
   useReconcileDiff: () => ({ data: { missing_count: 0, extra_count: 0, mismatched_count: 0, items: [] }, isLoading: false }),
 }));
 
@@ -150,6 +160,20 @@ describe("SystemDiagnosticsPage", () => {
     const text = document.body.textContent ?? "";
     expect(text).not.toMatch(/\bFAIL\b/);
     expect(text).not.toMatch(/\bWARN\b/);
+  });
+
+  it("R29.4: Unified Positions Integrity Check card renders when positions_unified_integrity_check present", () => {
+    render(<SystemDiagnosticsPage />);
+    expect(screen.getByTestId("positions-unified-integrity-check-card")).toBeInTheDocument();
+    expect(screen.getByTestId("integrity-check-view-details-btn")).toHaveTextContent("View details");
+  });
+
+  it("R29.4: document has no FAIL/WARN/PASS or FAIL_/WARN_ tokens", () => {
+    render(<SystemDiagnosticsPage />);
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_/);
+    expect(text).not.toMatch(/WARN_/);
   });
 
   it("R28.7: Unified Positions Rebuild card renders when positions_unified_rebuild present", () => {

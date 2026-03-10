@@ -29,6 +29,7 @@ import type {
   UiPositionsUnifiedResponse,
   UiPositionsUnifiedRebuildResponse,
   UiPositionsUnifiedIntegrityCheckResponse,
+  UiPositionsUnifiedIntegrityCheckResult,
   UiReconcileDiffResponse,
   UiPositionsUnifiedDbResponse,
 } from "./types";
@@ -535,6 +536,8 @@ export const queryKeys = {
   /** R28.8 */
   uiReconcileDiff: (params: { include_paper?: boolean; symbol?: string | null; limit?: number }) =>
     ["ui", "positions", "unified", "reconcile-diff", params] as const,
+  /** R29.4 */
+  uiIntegrityCheckResult: () => ["ui", "positions", "unified", "integrity-check"] as const,
   /** R28.9 */
   uiPositionsUnifiedDb: (params: Record<string, unknown>) => ["ui", "positions", "unified", "db", params] as const,
   uiTrackedPositions: () => ["ui", "positions", "tracked"] as const,
@@ -1290,8 +1293,19 @@ export function usePositionsUnifiedIntegrityCheck() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.uiSystemHealth() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiIntegrityCheckResult() });
       qc.invalidateQueries({ queryKey: ["ui", "positions", "unified", "reconcile-diff"] });
     },
+  });
+}
+
+/** R29.4: GET /api/ui/positions/unified/integrity-check — last result + history (read-only). */
+export function useIntegrityCheckResult(params: { enabled?: boolean } = {}) {
+  const { enabled = true } = params;
+  return useQuery({
+    queryKey: queryKeys.uiIntegrityCheckResult(),
+    queryFn: () => apiGet<UiPositionsUnifiedIntegrityCheckResult>(UI_POSITIONS_UNIFIED_INTEGRITY_CHECK_PATH),
+    enabled,
   });
 }
 

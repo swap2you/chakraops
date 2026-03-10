@@ -1088,4 +1088,41 @@ export interface UiPositionsUnifiedIntegrityCheck {
   last_reconcile_missing_count?: number | null;
   last_reconcile_extra_count?: number | null;
   last_reconcile_mismatched_count?: number | null;
+  last_started_at_utc?: string | null;
+  last_sample_items?: IntegrityCheckSampleItem[] | null;
+}
+
+/** R29.4: One sanitized diff item in integrity check details. */
+export interface IntegrityCheckSampleItem {
+  kind?: string;
+  id?: string;
+  symbol?: string | null;
+  instrument_type?: string | null;
+  fields_diff?: string[];
+}
+
+/** R29.4: GET /api/ui/positions/unified/integrity-check response. */
+export interface UiPositionsUnifiedIntegrityCheckResult {
+  status: "OK" | "Review";
+  status_label: string;
+  last: {
+    status?: string;
+    status_label?: string;
+    started_at_utc?: string | null;
+    finished_at_utc?: string | null;
+    missing_count?: number;
+    extra_count?: number;
+    mismatched_count?: number;
+    sample_items?: IntegrityCheckSampleItem[];
+  } | null;
+  history: Array<{
+    started_at_utc?: string | null;
+    finished_at_utc?: string | null;
+    status?: string;
+    status_label?: string;
+    missing_count?: number;
+    extra_count?: number;
+    mismatched_count?: number;
+    sample_items?: IntegrityCheckSampleItem[];
+  }>;
 }

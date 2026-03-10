@@ -14,6 +14,7 @@ import {
 } from "@/api/queries";
 import type { UnifiedPosition } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
+import { sanitizeForDisplay } from "@/utils/sanitizeDisplay";
 import {
   Card,
   CardHeader,
@@ -62,13 +63,9 @@ function fmtDate(ts: string | null | undefined): string {
   return s || "—";
 }
 
-/** R29.2: Sanitize for compare display — no raw FAIL/WARN/PASS or FAIL_/WARN_ in UI. */
+/** R29.2: Use shared sanitizer for compare display. */
 function sanitizeCompareDisplay(val: string | null | undefined): string {
-  if (val == null) return "—";
-  let s = String(val).trim();
-  s = s.replace(/\bFAIL\b/gi, "—").replace(/\bWARN\b/gi, "Review").replace(/\bPASS\b/gi, "OK");
-  s = s.replace(/FAIL_/g, "").replace(/WARN_/g, "");
-  return s || "—";
+  return sanitizeForDisplay(val);
 }
 
 export function PositionsPage() {
@@ -86,6 +83,7 @@ export function PositionsPage() {
   const [showRebuildConfirm, setShowRebuildConfirm] = useState(false);
   const [showIntegrityCheckConfirm, setShowIntegrityCheckConfirm] = useState(false);
   const [integrityDiffExpanded, setIntegrityDiffExpanded] = useState(false);
+  const [integrityDetailsExpanded, setIntegrityDetailsExpanded] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
 
   const hasSymbolFilter = !!symbolFilter.trim();
@@ -162,12 +160,53 @@ export function PositionsPage() {
                     (open: {reconcileCounts.paper_open_count ?? "—"} paper, {reconcileCounts.unified_open_paper_count ?? "—"} unified)
                   </span>
                 )}
-                {integrityCheckBlock?.last_checked_at_utc != null && (
+                {integrityCheckBlock != null && (
                   <span className="text-zinc-500 dark:text-zinc-500" data-testid="positions-integrity-last-check">
-                    Last check: {integrityCheckBlock.last_status ?? "—"} — {integrityCheckBlock.last_status_label ?? "—"}
+                    Last integrity check: {integrityCheckBlock.last_status ?? "—"} — {sanitizeForDisplay(integrityCheckBlock.last_status_label)}
+                    {integrityCheckBlock.last_checked_at_utc != null && ` (${integrityCheckBlock.last_checked_at_utc.slice(0, 19)}Z)`}
+                    {(integrityCheckBlock.last_reconcile_missing_count != null || integrityCheckBlock.last_reconcile_extra_count != null || integrityCheckBlock.last_reconcile_mismatched_count != null) && (
+                      <> — missing: {integrityCheckBlock.last_reconcile_missing_count ?? 0}, extra: {integrityCheckBlock.last_reconcile_extra_count ?? 0}, mismatched: {integrityCheckBlock.last_reconcile_mismatched_count ?? 0}</>
+                    )}
                   </span>
                 )}
               </div>
+              {integrityCheckBlock != null && (
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIntegrityDetailsExpanded((e) => !e)}
+                    data-testid="positions-integrity-view-details-btn"
+                  >
+                    {integrityDetailsExpanded ? "Hide details" : "View details"}
+                  </Button>
+                  <Link
+                    to="/system"
+                    className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+                    data-testid="positions-integrity-view-diagnostics-link"
+                  >
+                    View full diff in Diagnostics
+                  </Link>
+                </div>
+              )}
+              {integrityDetailsExpanded && integrityCheckBlock?.last_sample_items != null && integrityCheckBlock.last_sample_items.length > 0 && (
+                <ul className="mt-2 max-h-48 list-none space-y-1 overflow-y-auto rounded border border-zinc-200 bg-zinc-50 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900/50" data-testid="positions-integrity-details-list">
+                  {integrityCheckBlock.last_sample_items.map((item, i) => (
+                    <li key={`${item.id ?? i}-${i}`} className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-zinc-200 py-1.5 last:border-0 dark:border-zinc-700">
+                      <span className="font-medium text-zinc-700 dark:text-zinc-300">{sanitizeForDisplay(item.kind)}</span>
+                      <span className="font-mono text-zinc-600 dark:text-zinc-400">{sanitizeForDisplay(item.symbol ?? item.id)}</span>
+                      {item.instrument_type != null && <span className="text-zinc-500 dark:text-zinc-500">{sanitizeForDisplay(item.instrument_type)}</span>}
+                      <span className="text-zinc-400 dark:text-zinc-500">{sanitizeForDisplay(item.id)}</span>
+                      {item.fields_diff != null && item.fields_diff.length > 0 && (
+                        <span className="text-zinc-500 dark:text-zinc-500">({item.fields_diff.map(sanitizeForDisplay).join(", ")})</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {integrityDetailsExpanded && integrityCheckBlock?.last_sample_items != null && integrityCheckBlock.last_sample_items.length === 0 && (
+                <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-500">No sample items from last check.</p>
+              )}
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <Button
                   variant="secondary"

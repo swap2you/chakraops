@@ -81,8 +81,14 @@ const mockUseReconcileDiff = vi.fn(() => ({
 
 const mockUseUiSystemHealth = vi.fn(() => ({ data: healthNotStale }));
 const mockMutate = vi.fn();
+const mockMutateIntegrity = vi.fn();
 const mockUsePositionsUnifiedRebuild = vi.fn(() => ({
   mutate: mockMutate,
+  isPending: false,
+  data: undefined,
+}));
+const mockUsePositionsUnifiedIntegrityCheck = vi.fn(() => ({
+  mutate: mockMutateIntegrity,
   isPending: false,
   data: undefined,
 }));
@@ -92,6 +98,7 @@ vi.mock("@/api/queries", () => ({
   useUnifiedPositionsFromDb: (params: Record<string, unknown>) => mockUseUnifiedPositionsFromDb(params),
   useUiSystemHealth: () => mockUseUiSystemHealth(),
   usePositionsUnifiedRebuild: () => mockUsePositionsUnifiedRebuild(),
+  usePositionsUnifiedIntegrityCheck: () => mockUsePositionsUnifiedIntegrityCheck(),
   useReconcileDiff: (params: Record<string, unknown>) => mockUseReconcileDiff(params),
 }));
 
@@ -111,6 +118,11 @@ describe("PositionsPage", () => {
     mockUseUiSystemHealth.mockReturnValue({ data: healthNotStale });
     mockUsePositionsUnifiedRebuild.mockReturnValue({
       mutate: mockMutate,
+      isPending: false,
+      data: undefined,
+    });
+    mockUsePositionsUnifiedIntegrityCheck.mockReturnValue({
+      mutate: mockMutateIntegrity,
       isPending: false,
       data: undefined,
     });
@@ -289,5 +301,38 @@ describe("PositionsPage", () => {
     expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
     expect(text).not.toMatch(/FAIL_/);
     expect(text).not.toMatch(/WARN_/);
+  });
+
+  it("R29.3: clicking Run integrity check opens confirm modal; confirm calls mutation with include_paper true", async () => {
+    renderWithRoute(<PositionsPage />, "/positions?source=db");
+    await userEvent.click(screen.getByTestId("positions-integrity-check-btn"));
+    expect(screen.getByTestId("positions-integrity-check-confirm-modal")).toBeInTheDocument();
+    expect(screen.getByText(/This will run an integrity check comparing stored positions with authoritative sources and staleness\. Manual action\. Continue\?/)).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("positions-integrity-check-confirm-ok"));
+    expect(mockMutateIntegrity).toHaveBeenCalledWith(
+      { include_paper: true },
+      expect.objectContaining({ onSuccess: expect.any(Function) })
+    );
+  });
+
+  it("R29.3: document contains no forbidden tokens FAIL/WARN/PASS or FAIL_/WARN_", () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthReconcileReview });
+    const { container } = render(<PositionsPage />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_/);
+    expect(text).not.toMatch(/WARN_/);
+  });
+
+  it("R29.3: Run integrity check button disabled and shows Check running when mutation pending", () => {
+    mockUsePositionsUnifiedIntegrityCheck.mockReturnValue({
+      mutate: mockMutateIntegrity,
+      isPending: true,
+      data: undefined,
+    });
+    renderWithRoute(<PositionsPage />, "/positions?source=db");
+    const btn = screen.getByTestId("positions-integrity-check-btn");
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveTextContent("Check running");
   });
 });

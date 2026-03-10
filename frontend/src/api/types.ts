@@ -436,6 +436,8 @@ export interface UiSystemHealthResponse {
   };
   /** R28.7 — Unified positions rebuild: last rebuild metadata. Safe labels only (no FAIL/WARN/PASS). */
   positions_unified_rebuild?: UiPositionsUnifiedRebuild;
+  /** R29.3 — Integrity check: last run state. Safe labels only. */
+  positions_unified_integrity_check?: UiPositionsUnifiedIntegrityCheck;
   /** R25.9 — Portfolio guardrails: status (OK/Advisory/Blocked), metrics, limits. Safe labels only. */
   guardrails?: {
     status?: "OK" | "Advisory" | "Blocked";
@@ -1058,4 +1060,32 @@ export interface UiPositionsUnifiedRebuildResult {
 export interface UiPositionsUnifiedRebuildResponse {
   ok: boolean;
   result: UiPositionsUnifiedRebuildResult;
+}
+
+/** R29.3: POST /api/ui/positions/unified/integrity-check — response. Safe labels only (OK/Review). */
+export interface UiPositionsUnifiedIntegrityCheckResponse {
+  ok: boolean;
+  status: "OK" | "Review";
+  status_label: string;
+  include_paper: boolean;
+  stale: boolean;
+  reconcile: {
+    status: "OK" | "Review";
+    status_label: string;
+    missing_count: number;
+    extra_count: number;
+    mismatched_count: number;
+  };
+  checked_at_utc: string;
+}
+
+/** R29.3: System health block for last integrity check. Safe labels only. */
+export interface UiPositionsUnifiedIntegrityCheck {
+  last_checked_at_utc?: string | null;
+  last_status?: "OK" | "Review" | null;
+  last_status_label?: string | null;
+  last_stale?: boolean | null;
+  last_reconcile_missing_count?: number | null;
+  last_reconcile_extra_count?: number | null;
+  last_reconcile_mismatched_count?: number | null;
 }

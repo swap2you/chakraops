@@ -28,6 +28,7 @@ import type {
   ClosedSharePositionsListResponse,
   UiPositionsUnifiedResponse,
   UiPositionsUnifiedRebuildResponse,
+  UiPositionsUnifiedIntegrityCheckResponse,
   UiReconcileDiffResponse,
   UiPositionsUnifiedDbResponse,
 } from "./types";
@@ -124,6 +125,9 @@ function uiPositionsUnifiedDbPath(params: {
 function uiPositionsUnifiedRebuildPath(includePaper: boolean): string {
   return `/api/ui/positions/unified/rebuild?include_paper=${includePaper}`;
 }
+
+/** R29.3: POST /api/ui/positions/unified/integrity-check — body: { include_paper: boolean }. */
+const UI_POSITIONS_UNIFIED_INTEGRITY_CHECK_PATH = "/api/ui/positions/unified/integrity-check";
 
 /** R25.8: Earnings debug (diagnostics only; safe fields). */
 function uiEarningsDebugPath(symbol: string): string {
@@ -1264,6 +1268,28 @@ export function usePositionsUnifiedRebuild() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.uiSystemHealth() });
       qc.invalidateQueries({ queryKey: ["ui", "positions", "unified"] });
+      qc.invalidateQueries({ queryKey: ["ui", "positions", "unified", "reconcile-diff"] });
+    },
+  });
+}
+
+/** R29.3: POST /api/ui/positions/unified/integrity-check — manual integrity check; invalidates system-health and reconcile-diff. */
+export function usePositionsUnifiedIntegrityCheck() {
+  const qc = useQueryClient();
+  return useMutation<
+    UiPositionsUnifiedIntegrityCheckResponse,
+    Error,
+    { include_paper?: boolean }
+  >({
+    mutationFn: (params: { include_paper?: boolean } = {}) => {
+      const includePaper = params?.include_paper !== false;
+      return apiPost<UiPositionsUnifiedIntegrityCheckResponse>(
+        UI_POSITIONS_UNIFIED_INTEGRITY_CHECK_PATH,
+        { include_paper: includePaper }
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiSystemHealth() });
       qc.invalidateQueries({ queryKey: ["ui", "positions", "unified", "reconcile-diff"] });
     },
   });

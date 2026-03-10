@@ -9,6 +9,7 @@ import {
   useUnifiedPositionsFromDb,
   useUiSystemHealth,
   usePositionsUnifiedRebuild,
+  usePositionsUnifiedIntegrityCheck,
   useReconcileDiff,
 } from "@/api/queries";
 import type { UnifiedPosition } from "@/api/types";
@@ -83,6 +84,7 @@ export function PositionsPage() {
   const [instrumentType, setInstrumentType] = useState<string>("");
   const [symbolFilter, setSymbolFilter] = useState(symbolFromUrl);
   const [showRebuildConfirm, setShowRebuildConfirm] = useState(false);
+  const [showIntegrityCheckConfirm, setShowIntegrityCheckConfirm] = useState(false);
   const [integrityDiffExpanded, setIntegrityDiffExpanded] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
 
@@ -92,7 +94,9 @@ export function PositionsPage() {
 
   const isStale = useStoredPositionsStale();
   const rebuildUnified = usePositionsUnifiedRebuild();
+  const integrityCheck = usePositionsUnifiedIntegrityCheck();
   const { data: health } = useUiSystemHealth();
+  const integrityCheckBlock = health?.positions_unified_integrity_check;
   const reconcileStatus = (health?.positions_unified_reconcile?.status ?? "OK") as "OK" | "Review";
   const reconcileCounts = health?.positions_unified_reconcile;
   const needReconcileDiff = source === "db" && reconcileStatus === "Review";
@@ -158,6 +162,39 @@ export function PositionsPage() {
                     (open: {reconcileCounts.paper_open_count ?? "—"} paper, {reconcileCounts.unified_open_paper_count ?? "—"} unified)
                   </span>
                 )}
+                {integrityCheckBlock?.last_checked_at_utc != null && (
+                  <span className="text-zinc-500 dark:text-zinc-500" data-testid="positions-integrity-last-check">
+                    Last check: {integrityCheckBlock.last_status ?? "—"} — {integrityCheckBlock.last_status_label ?? "—"}
+                  </span>
+                )}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowIntegrityCheckConfirm(true)}
+                  disabled={integrityCheck.isPending}
+                  data-testid="positions-integrity-check-btn"
+                >
+                  {integrityCheck.isPending ? "Check running" : "Run integrity check"}
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setShowRebuildConfirm(true)}
+                  disabled={rebuildUnified.isPending}
+                  data-testid="positions-integrity-rebuild-btn"
+                >
+                  {rebuildUnified.isPending ? "Rebuild running" : "Rebuild unified positions"}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setSource("recompute")}
+                  className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+                  data-testid="positions-integrity-switch-to-computed"
+                >
+                  Switch to Computed
+                </button>
               </div>
               {reconcileStatus === "Review" && (
                 <>
@@ -168,7 +205,7 @@ export function PositionsPage() {
                       </span>
                     </div>
                   )}
-                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
                     <Button
                       variant="secondary"
                       size="sm"
@@ -177,23 +214,6 @@ export function PositionsPage() {
                     >
                       {integrityDiffExpanded ? "Hide diff details" : "View diff details"}
                     </Button>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => setShowRebuildConfirm(true)}
-                      disabled={rebuildUnified.isPending}
-                      data-testid="positions-integrity-rebuild-btn"
-                    >
-                      {rebuildUnified.isPending ? "Rebuild running" : "Rebuild unified positions"}
-                    </Button>
-                    <button
-                      type="button"
-                      onClick={() => setSource("recompute")}
-                      className="text-sm text-blue-600 hover:underline dark:text-blue-400"
-                      data-testid="positions-integrity-switch-to-computed"
-                    >
-                      Switch to Computed
-                    </button>
                   </div>
                   {integrityDiffExpanded && reconcileDiff?.items != null && reconcileDiff.items.length > 0 && (
                     <ul className="mt-3 max-h-60 list-none space-y-1 overflow-y-auto rounded border border-zinc-200 bg-zinc-50 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900/50" data-testid="positions-integrity-diff-list">
@@ -368,6 +388,31 @@ export function PositionsPage() {
                 }}
                 disabled={rebuildUnified.isPending}
                 data-testid="positions-rebuild-confirm-ok"
+              >
+                Continue
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {showIntegrityCheckConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" data-testid="positions-integrity-check-confirm-modal">
+          <Card className="max-w-md p-6">
+            <p className="text-sm text-zinc-700 dark:text-zinc-300">
+              This will run an integrity check comparing stored positions with authoritative sources and staleness. Manual action. Continue?
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setShowIntegrityCheckConfirm(false)} data-testid="positions-integrity-check-confirm-cancel">
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  integrityCheck.mutate({ include_paper: includePaper }, { onSuccess: () => setShowIntegrityCheckConfirm(false) });
+                }}
+                disabled={integrityCheck.isPending}
+                data-testid="positions-integrity-check-confirm-ok"
               >
                 Continue
               </Button>

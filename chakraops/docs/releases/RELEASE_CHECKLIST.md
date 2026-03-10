@@ -806,6 +806,15 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Symbol filter + Compare open; diff summary/details; Rebuild; no FAIL/WARN/PASS or FAIL_/WARN_ in UI
 - **Scope:** Compare panel on Positions; symbol parity; sanitized display; safe labels only. NO GIT.
 
+### R29.3 — Integrity Check + Advisory v1
+
+- [x] **Requirements** — chakraops/docs/releases/R29.3_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R29.3_release_notes.md
+- [x] **Verification** — out/verification/R29.3/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend: 980 passed, 1 skipped in 269.01s; Frontend tests: 31 passed | 2 skipped (33), 274 passed | 18 skipped (292); Build: ✓ built in 9.00s. Evidence: out/verification/R29.3/notes.md.
+- [x] **UAT** — Positions: run integrity check OK path; simulate Review if feasible; no raw FAIL/WARN/PASS; grep proof. UAT checklist completed in out/verification/R29.3/notes.md.
+- **Scope:** POST integrity-check; lock; advisory dedupe; safe labels only; no decision writes. NO GIT.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

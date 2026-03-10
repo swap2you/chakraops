@@ -17,7 +17,11 @@ logger = logging.getLogger(__name__)
 
 _LOCK = threading.Lock()
 _REBUILD_LOCK = threading.Lock()  # Non-blocking acquire = "rebuild already running"
+_INTEGRITY_CHECK_LOCK = threading.Lock()  # R29.3: non-blocking = "check already running"
 _OVERRIDE_PATH: Optional[Path] = None
+
+# R29.3: Staleness threshold for integrity check (hours)
+_INTEGRITY_CHECK_STALE_HOURS = 24
 
 INSTRUMENT_SHARES = "SHARES"
 INSTRUMENT_CSP = "CSP"
@@ -1093,3 +1097,165 @@ def ensure_reconcile_advisory_notification() -> None:
         append_notification("INFO", "POSITIONS_RECONCILE_REVIEW", message, symbol=None, details={"advisory": True})
     except Exception as e:
         logger.warning("[R28.1] reconcile advisory notification failed: %s", e)
+
+
+# --- R29.3: Integrity check (manual; staleness + reconcile; optional advisory) ---
+
+def _integrity_check_state_path() -> Path:
+    """Path for out/positions_unified_integrity_check_state.json. Safe fields only."""
+    try:
+        from app.core.eval.evaluation_store_v2 import get_decision_store_path
+        out = get_decision_store_path().parent
+    except Exception:
+        out = Path(__file__).resolve().parents[3] / "out"
+    out.mkdir(parents=True, exist_ok=True)
+    return out / "positions_unified_integrity_check_state.json"
+
+
+def _write_integrity_check_state(data: Dict[str, Any]) -> None:
+    """Persist only safe fields; no FAIL/WARN/PASS."""
+    safe = {
+        "last_checked_at_utc": data.get("checked_at_utc"),
+        "last_status": data.get("status") or "OK",
+        "last_status_label": data.get("status_label") or "OK",
+        "last_stale": data.get("stale", False),
+        "last_reconcile_missing_count": data.get("reconcile", {}).get("missing_count"),
+        "last_reconcile_extra_count": data.get("reconcile", {}).get("extra_count"),
+        "last_reconcile_mismatched_count": data.get("reconcile", {}).get("mismatched_count"),
+    }
+    path = _integrity_check_state_path()
+    try:
+        from app.core.io.atomic import atomic_write_json
+        atomic_write_json(path, safe, indent=0)
+    except Exception as e:
+        logger.warning("[R29.3] Failed to write integrity check state: %s", e)
+
+
+def load_integrity_check_state() -> Optional[Dict[str, Any]]:
+    """Load last integrity check state for system-health."""
+    path = _integrity_check_state_path()
+    if not path.exists():
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.warning("[R29.3] Failed to load integrity check state: %s", e)
+        return None
+
+
+def ensure_positions_integrity_advisory_notification() -> None:
+    """R29.3: If no active NEW/ACKED notification of type POSITIONS_INTEGRITY_REVIEW, create one. Safe message only."""
+    try:
+        from app.api.notifications_store import load_notifications, append_notification
+        existing = load_notifications(limit=200, state_filter=None, type_filter="POSITIONS_INTEGRITY_REVIEW")
+        for rec in existing:
+            if rec.get("state") in ("NEW", "ACKED"):
+                return
+        message = "Positions integrity check found issues (stored may be stale or reconcile differs)."
+        append_notification("INFO", "POSITIONS_INTEGRITY_REVIEW", message, symbol=None, details={"advisory": True})
+    except Exception as e:
+        logger.warning("[R29.3] integrity advisory notification failed: %s", e)
+
+
+def run_positions_unified_integrity_check(include_paper: bool = True) -> Dict[str, Any]:
+    """
+    R29.3: Manual integrity check — staleness (from rebuild health) + reconcile diff summary.
+    Returns safe-label result only. Optionally creates one advisory notification when Review (deduped).
+    Does NOT write decision_latest or any decision artifacts.
+    """
+    from datetime import datetime, timezone, timedelta
+
+    def _now() -> str:
+        return datetime.now(timezone.utc).isoformat()
+
+    if not _INTEGRITY_CHECK_LOCK.acquire(blocking=False):
+        return {
+            "ok": False,
+            "status": "Review",
+            "status_label": "Check already running",
+            "include_paper": include_paper,
+            "stale": False,
+            "reconcile": {"status": "OK", "status_label": "OK", "missing_count": 0, "extra_count": 0, "mismatched_count": 0},
+            "checked_at_utc": _now(),
+        }
+
+    try:
+        checked_at = _now()
+        rebuild_health = get_positions_unified_rebuild_health()
+        finished_at = rebuild_health.get("finished_at_utc") or rebuild_health.get("last_rebuild_at_utc")
+        stale = False
+        status_label = "OK"
+        if not finished_at or not isinstance(finished_at, str):
+            stale = True
+            status_label = "No rebuild recorded"
+        else:
+            try:
+                dt = datetime.fromisoformat(finished_at.replace("Z", "+00:00"))
+                age_h = (datetime.now(timezone.utc) - dt).total_seconds() / 3600
+                if age_h > _INTEGRITY_CHECK_STALE_HOURS:
+                    stale = True
+                    status_label = "Stored positions may be stale"
+            except (ValueError, TypeError):
+                stale = True
+                status_label = "No rebuild recorded"
+
+        reconcile = get_reconcile_diff(include_paper=include_paper, symbol=None, limit=50)
+        rec_status = (reconcile.get("status") or "OK").strip()
+        rec_label = reconcile.get("status_label") or "OK"
+        if rec_status == "Review":
+            if not stale:
+                status_label = rec_label
+            stale = stale or (rec_status == "Review")
+        overall_status = "Review" if (stale or rec_status == "Review") else "OK"
+        if not stale and overall_status == "OK":
+            status_label = "OK"
+
+        result = {
+            "ok": overall_status == "OK",
+            "status": overall_status,
+            "status_label": status_label,
+            "include_paper": include_paper,
+            "stale": stale,
+            "reconcile": {
+                "status": rec_status,
+                "status_label": rec_label,
+                "missing_count": reconcile.get("missing_count", 0),
+                "extra_count": reconcile.get("extra_count", 0),
+                "mismatched_count": reconcile.get("mismatched_count", 0),
+            },
+            "checked_at_utc": checked_at,
+        }
+        _write_integrity_check_state(result)
+        if overall_status == "Review":
+            ensure_positions_integrity_advisory_notification()
+        return result
+    finally:
+        try:
+            _INTEGRITY_CHECK_LOCK.release()
+        except Exception:
+            pass
+
+
+def get_positions_unified_integrity_check_health() -> Dict[str, Any]:
+    """R29.3: System-health block positions_unified_integrity_check. Read-only from state file; safe only."""
+    state = load_integrity_check_state()
+    if not state or not isinstance(state, dict):
+        return {
+            "last_checked_at_utc": None,
+            "last_status": "OK",
+            "last_status_label": "OK",
+            "last_stale": False,
+            "last_reconcile_missing_count": None,
+            "last_reconcile_extra_count": None,
+            "last_reconcile_mismatched_count": None,
+        }
+    return {
+        "last_checked_at_utc": state.get("last_checked_at_utc"),
+        "last_status": state.get("last_status") or "OK",
+        "last_status_label": state.get("last_status_label") or "OK",
+        "last_stale": state.get("last_stale", False),
+        "last_reconcile_missing_count": state.get("last_reconcile_missing_count"),
+        "last_reconcile_extra_count": state.get("last_reconcile_extra_count"),
+        "last_reconcile_mismatched_count": state.get("last_reconcile_mismatched_count"),
+    }

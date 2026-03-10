@@ -219,6 +219,23 @@ def _get_positions_unified_rebuild_health() -> Dict[str, Any]:
         }
 
 
+def _get_positions_unified_integrity_check_health() -> Dict[str, Any]:
+    """R29.3: positions_unified_integrity_check block — last check state. Safe only; no FAIL/WARN/PASS."""
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import get_positions_unified_integrity_check_health
+        return get_positions_unified_integrity_check_health()
+    except Exception:
+        return {
+            "last_checked_at_utc": None,
+            "last_status": "OK",
+            "last_status_label": "OK",
+            "last_stale": False,
+            "last_reconcile_missing_count": None,
+            "last_reconcile_extra_count": None,
+            "last_reconcile_mismatched_count": None,
+        }
+
+
 def _get_decision_store_mtime_utc() -> Optional[str]:
     """Return active decision store file mtime as ISO UTC string, or None."""
     try:
@@ -1333,6 +1350,7 @@ def ui_system_health(
         "positions_unified": _get_positions_unified_health(),
         "positions_unified_reconcile": _get_positions_unified_reconcile_health(),
         "positions_unified_rebuild": _get_positions_unified_rebuild_health(),
+        "positions_unified_integrity_check": _get_positions_unified_integrity_check_health(),
     }
 
 
@@ -4099,6 +4117,36 @@ def ui_positions_unified_reconcile_diff(
         import logging
         logging.getLogger(__name__).exception("Reconcile diff error: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/positions/unified/integrity-check")
+async def ui_positions_unified_integrity_check(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R29.3: Manual integrity check — staleness + reconcile summary. Safe labels only; optional single advisory when Review. No decision write."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    except Exception:
+        body = {}
+    include_paper = body.get("include_paper", True) if isinstance(body.get("include_paper"), bool) else True
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import run_positions_unified_integrity_check
+        return run_positions_unified_integrity_check(include_paper=include_paper)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Integrity check error: %s", e)
+        from datetime import datetime, timezone
+        return {
+            "ok": False,
+            "status": "Review",
+            "status_label": "Check failed",
+            "include_paper": include_paper,
+            "stale": False,
+            "reconcile": {"status": "OK", "status_label": "OK", "missing_count": 0, "extra_count": 0, "mismatched_count": 0},
+            "checked_at_utc": datetime.now(timezone.utc).isoformat(),
+        }
 
 
 @router.post("/positions/unified/rebuild")

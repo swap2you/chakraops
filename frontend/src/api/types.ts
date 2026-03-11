@@ -1092,13 +1092,17 @@ export interface UiPositionsUnifiedIntegrityCheck {
   last_sample_items?: IntegrityCheckSampleItem[] | null;
 }
 
-/** R29.4: One sanitized diff item in integrity check details. */
+/** R29.4/R29.6: One sanitized diff item in integrity check details; optional safe deep links. */
 export interface IntegrityCheckSampleItem {
   kind?: string;
   id?: string;
   symbol?: string | null;
   instrument_type?: string | null;
   fields_diff?: string[];
+  /** R29.6: Safe URL to /positions with symbol and include_paper. */
+  link_positions_url?: string;
+  /** R29.6: Safe URL to /system (diagnostics). */
+  link_diagnostics_url?: string;
 }
 
 /** R29.4: GET /api/ui/positions/unified/integrity-check response. */

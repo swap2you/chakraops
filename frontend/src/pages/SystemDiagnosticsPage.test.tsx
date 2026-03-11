@@ -57,7 +57,16 @@ const mockHealth = {
     last_reconcile_missing_count: 0,
     last_reconcile_extra_count: 0,
     last_reconcile_mismatched_count: 0,
-    last_sample_items: [{ kind: "missing", id: "p1", symbol: "AAPL", instrument_type: "SHARES" }],
+    last_sample_items: [
+      {
+        kind: "missing",
+        id: "p1",
+        symbol: "AAPL",
+        instrument_type: "SHARES",
+        link_positions_url: "/positions?source=db&symbol=AAPL&include_paper=true",
+        link_diagnostics_url: "/system",
+      },
+    ],
   },
   guardrails: {
     status: "OK",
@@ -166,6 +175,22 @@ describe("SystemDiagnosticsPage", () => {
     render(<SystemDiagnosticsPage />);
     expect(screen.getByTestId("positions-unified-integrity-check-card")).toBeInTheDocument();
     expect(screen.getByTestId("integrity-check-view-details-btn")).toHaveTextContent("View details");
+  });
+
+  it("R29.6: integrity sample items show Open positions link with correct href; no forbidden tokens", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<SystemDiagnosticsPage />);
+    await user.click(screen.getByTestId("integrity-check-view-details-btn"));
+    const openPosLinks = screen.getAllByTestId("integrity-sample-open-positions");
+    expect(openPosLinks.length).toBeGreaterThanOrEqual(1);
+    expect(openPosLinks[0]).toHaveAttribute("href", "/positions?source=db&symbol=AAPL&include_paper=true");
+    const openDiagLinks = screen.getAllByTestId("integrity-sample-open-diagnostics");
+    expect(openDiagLinks.length).toBeGreaterThanOrEqual(1);
+    expect(openDiagLinks[0]).toHaveAttribute("href", "/system");
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_/);
+    expect(text).not.toMatch(/WARN_/);
   });
 
   it("R29.4: document has no FAIL/WARN/PASS or FAIL_/WARN_ tokens", () => {

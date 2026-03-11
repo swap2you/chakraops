@@ -58,7 +58,7 @@ const healthNotStale = {
   positions_unified_rebuild: { finished_at_utc: "2099-06-01T12:00:00Z", last_include_paper: true },
   positions_unified_reconcile: { status: "OK" as const },
 };
-/** R29.4: Integrity check block with last run + sample items for View details. */
+/** R29.4/R29.6: Integrity check block with last run + sample items and safe deep links. */
 const healthWithIntegrityDetails = {
   ...healthNotStale,
   positions_unified_integrity_check: {
@@ -68,7 +68,16 @@ const healthWithIntegrityDetails = {
     last_reconcile_missing_count: 0,
     last_reconcile_extra_count: 0,
     last_reconcile_mismatched_count: 0,
-    last_sample_items: [{ kind: "missing", id: "p1", symbol: "AAPL", instrument_type: "SHARES" }],
+    last_sample_items: [
+      {
+        kind: "missing",
+        id: "p1",
+        symbol: "AAPL",
+        instrument_type: "SHARES",
+        link_positions_url: "/positions?source=db&symbol=AAPL&include_paper=true",
+        link_diagnostics_url: "/system",
+      },
+    ],
   },
 };
 /** R29.5: Integrity Review so Copy remediation summary and Open diagnostics appear. */
@@ -81,7 +90,16 @@ const healthWithIntegrityReview = {
     last_reconcile_missing_count: 1,
     last_reconcile_extra_count: 0,
     last_reconcile_mismatched_count: 1,
-    last_sample_items: [{ kind: "missing", id: "p1", symbol: "AAPL", instrument_type: "SHARES" }],
+    last_sample_items: [
+      {
+        kind: "missing",
+        id: "p1",
+        symbol: "AAPL",
+        instrument_type: "SHARES",
+        link_positions_url: "/positions?source=db&symbol=AAPL&include_paper=true",
+        link_diagnostics_url: "/system",
+      },
+    ],
   },
 };
 /** R29.0: Stale when block missing or finished_at_utc old/missing. */
@@ -372,6 +390,22 @@ describe("PositionsPage", () => {
     expect(detailsList).toBeInTheDocument();
     expect(within(detailsList).getByText("missing")).toBeInTheDocument();
     expect(within(detailsList).getByText("AAPL")).toBeInTheDocument();
+  });
+
+  it("R29.6: when sample items have link_positions_url, Open positions link renders with correct href; no forbidden tokens", async () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthWithIntegrityDetails });
+    const { container } = renderWithRoute(<PositionsPage />, "/positions?source=db");
+    await userEvent.click(screen.getByTestId("positions-integrity-view-details-btn"));
+    const openPosLinks = screen.getAllByTestId("integrity-sample-open-positions");
+    expect(openPosLinks.length).toBeGreaterThanOrEqual(1);
+    expect(openPosLinks[0]).toHaveAttribute("href", "/positions?source=db&symbol=AAPL&include_paper=true");
+    const openDiagLinks = screen.getAllByTestId("integrity-sample-open-diagnostics");
+    expect(openDiagLinks.length).toBeGreaterThanOrEqual(1);
+    expect(openDiagLinks[0]).toHaveAttribute("href", "/system");
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_/);
+    expect(text).not.toMatch(/WARN_/);
   });
 
   it("R29.4: document contains no forbidden tokens FAIL/WARN/PASS or FAIL_/WARN_", () => {

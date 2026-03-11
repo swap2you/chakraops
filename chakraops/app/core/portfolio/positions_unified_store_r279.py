@@ -12,6 +12,7 @@ import sqlite3
 import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 logger = logging.getLogger(__name__)
 
@@ -1140,12 +1141,22 @@ def _sanitize_sample_item(item: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def _add_sample_item_links(sample: List[Dict[str, Any]], include_paper: bool) -> None:
+    """R29.6: Add link_positions_url and link_diagnostics_url to each item (in-place). Safe URLs only."""
+    inc = "true" if include_paper else "false"
+    for it in sample:
+        sym = str(it.get("symbol") or it.get("id") or "").strip()
+        it["link_positions_url"] = "/positions?source=db&symbol=" + quote(sym, safe="") + "&include_paper=" + inc
+        it["link_diagnostics_url"] = "/system"
+
+
 def _write_integrity_check_state(data: Dict[str, Any]) -> None:
-    """R29.3/R29.4: Persist only safe fields; no FAIL/WARN/PASS. State has last + history (capped)."""
+    """R29.3/R29.4/R29.6: Persist only safe fields; no FAIL/WARN/PASS. State has last + history (capped); sample items include links."""
     rec = data.get("reconcile") or {}
     sample_raw = data.get("sample_items") or []
     sample = [_sanitize_sample_item(i) for i in sample_raw[: _INTEGRITY_CHECK_SAMPLE_ITEMS_CAP]]
     sample.sort(key=_diff_sort_key)
+    _add_sample_item_links(sample, data.get("include_paper", True))
     last_entry = {
         "status": data.get("status") or "OK",
         "status_label": data.get("status_label") or "OK",
@@ -1259,7 +1270,9 @@ def run_positions_unified_integrity_check(include_paper: bool = True) -> Dict[st
 
         items = list(reconcile.get("items") or [])
         items.sort(key=_diff_sort_key)
-        sample_items = items[: _INTEGRITY_CHECK_SAMPLE_ITEMS_CAP]
+        sample_items = [_sanitize_sample_item(i) for i in items[: _INTEGRITY_CHECK_SAMPLE_ITEMS_CAP]]
+        sample_items.sort(key=_diff_sort_key)
+        _add_sample_item_links(sample_items, include_paper)
 
         result = {
             "ok": overall_status == "OK",

@@ -911,6 +911,16 @@ export function SystemDiagnosticsPage() {
                     {item.fields_diff != null && item.fields_diff.length > 0 && (
                       <span className="text-zinc-500 dark:text-zinc-500">({item.fields_diff.map(sanitizeForDisplay).join(", ")})</span>
                     )}
+                    {item.link_positions_url != null && item.link_positions_url !== "" && (
+                      <Link to={item.link_positions_url} className="text-blue-600 hover:underline dark:text-blue-400" data-testid="integrity-sample-open-positions">
+                        Open positions
+                      </Link>
+                    )}
+                    {item.link_diagnostics_url != null && item.link_diagnostics_url !== "" && (
+                      <Link to={item.link_diagnostics_url} className="text-blue-600 hover:underline dark:text-blue-400" data-testid="integrity-sample-open-diagnostics">
+                        Open diagnostics
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>

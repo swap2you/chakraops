@@ -833,6 +833,15 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Copy remediation summary when Review; copied text sanitized; Diagnostics remediation guidance; no background jobs. UAT checklist completed in out/verification/R29.5/notes.md.
 - **Scope:** Remediation UX (copy summary, Open diagnostics, guidance bullets); safe labels only; no decision writes. NO GIT.
 
+### R29.6 — Integrity sample items: safe deep links
+
+- [x] **Requirements** — chakraops/docs/releases/R29.6_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R29.6_release_notes.md
+- [x] **Verification** — out/verification/R29.6/notes.md (gate tails + UAT + grep proof); chakraops/chakraops/out/verification/R29.6/notes.md
+- [x] **Gate** — Backend test_r296_*: 4 passed; full pytest: 989 passed, 3 skipped; Frontend: 31 passed | 2 skipped (33), 284 passed | 18 skipped; Build: built in 8.72s. Evidence: chakraops/chakraops/out/verification/R29.6/notes.md.
+- [x] **UAT** — Integrity sample items show "Open positions" links; links go to /positions with correct symbol/include_paper/source=db; no forbidden tokens in UI.
+- **Scope:** Safe link fields on sample items; Positions + Diagnostics per-item links; no decision_latest write; deterministic ordering. NO GIT.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

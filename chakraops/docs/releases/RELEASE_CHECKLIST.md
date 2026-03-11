@@ -860,6 +860,15 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Trade Ticket: Execution readiness card shows status and checks; Copy order stub copies lines; no forbidden tokens.
 - **Scope:** GET trade-ticket/readiness; Execution readiness card; safe labels only; no decision_latest write; deterministic. NO GIT.
 
+### R30.1 — Readiness: fix links + gating-aware UI (manual-only)
+
+- [x] **Requirements** — chakraops/docs/releases/R30.1_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R30.1_release_notes.md
+- [x] **Verification** — out/verification/R30.1/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend test_r301: 4 passed; full pytest: 1003 passed, 1 skipped; Frontend: 31 passed | 2 skipped, 293 passed | 18 skipped; Build: built in 10.59s. Evidence: out/verification/R30.1/notes.md.
+- [x] **UAT** — Readiness card shows "Ready to execute" status (OK/Review); Fix links appear and navigate to expected pages; no FAIL/WARN/PASS visible.
+- **Scope:** Per-check action_label/action_href; Ready banner + Review guidance; Fix links; no decision_latest write; no forbidden tokens; deterministic. NO GIT.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

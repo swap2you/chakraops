@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ChevronDown, ChevronRight, Copy, Check } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardHeader, Button } from "@/components/ui";
@@ -162,7 +162,7 @@ export function TradeTicketPage() {
         </div>
       </details>
 
-      {/* R30.0: Execution readiness */}
+      {/* R30.0/R30.1: Execution readiness — Ready banner, checks with Fix links, Copy order stub */}
       {readiness && (
         <Card data-testid="trade-ticket-readiness-card">
           <CardHeader
@@ -170,14 +170,28 @@ export function TradeTicketPage() {
             description={`${readiness.status_label} (as of ${readiness.as_of_utc.slice(0, 19)}Z)`}
           />
           <div className="border-t border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm space-y-2">
-            <p className="font-medium">
-              Status: <span className={readiness.status === "OK" ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>{readiness.status}</span>
+            <p className="font-medium" data-testid="readiness-ready-banner">
+              Ready to execute: <span className={readiness.status === "OK" ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>{readiness.status}</span>
             </p>
+            {readiness.status === "Review" && (
+              <p className="text-amber-600 dark:text-amber-400" data-testid="readiness-review-guidance">
+                Resolve the items below before executing.
+              </p>
+            )}
             <ul className="list-disc list-inside space-y-1 text-zinc-600 dark:text-zinc-400">
               {(readiness.checks ?? []).map((c) => (
-                <li key={c.code}>
+                <li key={c.code} className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span className="font-medium text-zinc-700 dark:text-zinc-300">{c.code}</span>: {c.label}
                   {c.detail ? ` — ${c.detail}` : ""}
+                  {c.action_href != null && c.action_href !== "" && (
+                    <Link
+                      to={c.action_href}
+                      className="text-blue-600 hover:underline dark:text-blue-400 text-xs whitespace-nowrap"
+                      data-testid={`readiness-fix-${c.code.toLowerCase()}`}
+                    >
+                      Fix
+                    </Link>
+                  )}
                 </li>
               ))}
             </ul>

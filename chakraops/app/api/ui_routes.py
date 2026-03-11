@@ -9,6 +9,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, Header, HTTPException, Path, Query, Request
 
@@ -1810,21 +1811,24 @@ def _build_trade_ticket_readiness(
     except Exception:
         pass
 
-    # INTEGRITY
+    # INTEGRITY (R30.1: action link to positions with symbol)
     try:
         integrity = _get_positions_unified_integrity_check_health()
         st = (integrity.get("last_status") or "OK").strip()
         status = "Review" if st == "Review" else "OK"
+        href = "/positions?source=db&symbol=" + quote(symbol, safe="")
         checks.append({
             "code": "INTEGRITY",
             "status": status,
             "label": _readiness_sanitize(integrity.get("last_status_label") or ("Unified positions integrity: " + status)),
             "detail": _readiness_sanitize("Last check: " + str(integrity.get("last_checked_at_utc") or "—")),
+            "action_label": "Open integrity",
+            "action_href": _readiness_sanitize(href) or href,
         })
     except Exception:
-        checks.append({"code": "INTEGRITY", "status": "Review", "label": "Check unavailable", "detail": ""})
+        checks.append({"code": "INTEGRITY", "status": "Review", "label": "Check unavailable", "detail": "", "action_label": "Open integrity", "action_href": "/positions?source=db&symbol=" + quote(symbol, safe="")})
 
-    # MARK_FRESHNESS
+    # MARK_FRESHNESS (R30.1: action link to system)
     try:
         mark = _get_mark_refresh_health()
         st = (mark.get("status") or mark.get("last_result") or "OK").strip()
@@ -1836,11 +1840,13 @@ def _build_trade_ticket_readiness(
             "status": status,
             "label": _readiness_sanitize(mark.get("status_label") or mark.get("last_result") or ("Marks: " + status)),
             "detail": _readiness_sanitize("Last run: " + str(mark.get("last_run_at_utc") or "—")),
+            "action_label": "Open system diagnostics",
+            "action_href": "/system",
         })
     except Exception:
-        checks.append({"code": "MARK_FRESHNESS", "status": "Review", "label": "Check unavailable", "detail": ""})
+        checks.append({"code": "MARK_FRESHNESS", "status": "Review", "label": "Check unavailable", "detail": "", "action_label": "Open system diagnostics", "action_href": "/system"})
 
-    # CASH_SECURED_RESERVE (guardrails)
+    # CASH_SECURED_RESERVE (guardrails) (R30.1: action link to portfolio)
     try:
         guard = _get_guardrails_health()
         st = (guard.get("status") or "OK").strip()
@@ -1852,11 +1858,13 @@ def _build_trade_ticket_readiness(
             "status": status,
             "label": _readiness_sanitize(guard.get("status_label") or ("Cash reserve: " + str(cash_pct) + "%" if cash_pct is not None else "Guardrails: " + st)),
             "detail": _readiness_sanitize("Reserve %: " + str(cash_pct) if cash_pct is not None else ""),
+            "action_label": "Open portfolio",
+            "action_href": "/portfolio",
         })
     except Exception:
-        checks.append({"code": "CASH_SECURED_RESERVE", "status": "Review", "label": "Check unavailable", "detail": ""})
+        checks.append({"code": "CASH_SECURED_RESERVE", "status": "Review", "label": "Check unavailable", "detail": "", "action_label": "Open portfolio", "action_href": "/portfolio"})
 
-    # SIZING_CONSTRAINTS (from ticket)
+    # SIZING_CONSTRAINTS (from ticket) (R30.1: action link to system for guardrails)
     try:
         sizing = ticket.get("sizing") or {}
         hit = sizing.get("sizing_constraints_hit") or []
@@ -1867,26 +1875,31 @@ def _build_trade_ticket_readiness(
             "status": status,
             "label": _readiness_sanitize(label),
             "detail": _readiness_sanitize("Recommended: " + str(sizing.get("recommended_contracts") or sizing.get("recommended_qty") or "—")),
+            "action_label": "Open guardrails",
+            "action_href": "/system",
         })
     except Exception:
-        checks.append({"code": "SIZING_CONSTRAINTS", "status": "Review", "label": "Check unavailable", "detail": ""})
+        checks.append({"code": "SIZING_CONSTRAINTS", "status": "Review", "label": "Check unavailable", "detail": "", "action_label": "Open guardrails", "action_href": "/system"})
 
-    # EARNINGS_ADVISORY (from ticket)
+    # EARNINGS_ADVISORY (from ticket) (R30.1: action link to symbol diagnostics)
     try:
         ea = ticket.get("earnings_advisory") or {}
         days = ea.get("days")
         status = "Review" if (days is not None and isinstance(days, (int, float)) and int(days) <= 14) else "OK"
         label = "Earnings in " + str(days) + " days" if days is not None else "Earnings data unavailable"
+        href_ea = "/symbol-diagnostics?symbol=" + quote(symbol, safe="")
         checks.append({
             "code": "EARNINGS_ADVISORY",
             "status": status,
             "label": _readiness_sanitize(label),
             "detail": _readiness_sanitize("Next: " + str(ea.get("next_date") or "—")),
+            "action_label": "Open symbol",
+            "action_href": href_ea,
         })
     except Exception:
-        checks.append({"code": "EARNINGS_ADVISORY", "status": "Review", "label": "Check unavailable", "detail": ""})
+        checks.append({"code": "EARNINGS_ADVISORY", "status": "Review", "label": "Check unavailable", "detail": "", "action_label": "Open symbol", "action_href": "/symbol-diagnostics?symbol=" + quote(symbol, safe="")})
 
-    # ACCOUNT_PRESENT
+    # ACCOUNT_PRESENT (R30.1: action link to system/settings)
     try:
         from app.core.accounts.service import get_default_account
         account = get_default_account()
@@ -1899,9 +1912,11 @@ def _build_trade_ticket_readiness(
             "status": status,
             "label": "Default account set" if account else "No default account",
             "detail": detail,
+            "action_label": "Open settings",
+            "action_href": "/system",
         })
     except Exception:
-        checks.append({"code": "ACCOUNT_PRESENT", "status": "Review", "label": "Check unavailable", "detail": ""})
+        checks.append({"code": "ACCOUNT_PRESENT", "status": "Review", "label": "Check unavailable", "detail": "", "action_label": "Open settings", "action_href": "/system"})
 
     # Sanitize all check strings
     for c in checks:

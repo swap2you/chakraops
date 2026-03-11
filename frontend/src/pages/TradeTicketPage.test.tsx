@@ -26,12 +26,12 @@ const mockReadiness = {
   status_label: "All checks OK",
   as_of_utc: "2026-02-27T12:00:00Z",
   checks: [
-    { code: "INTEGRITY", status: "OK" as const, label: "OK", detail: "" },
-    { code: "MARK_FRESHNESS", status: "OK" as const, label: "OK", detail: "" },
-    { code: "CASH_SECURED_RESERVE", status: "OK" as const, label: "OK", detail: "" },
-    { code: "SIZING_CONSTRAINTS", status: "OK" as const, label: "No constraints hit", detail: "" },
-    { code: "EARNINGS_ADVISORY", status: "OK" as const, label: "OK", detail: "" },
-    { code: "ACCOUNT_PRESENT", status: "OK" as const, label: "Default account set", detail: "" },
+    { code: "INTEGRITY", status: "OK" as const, label: "OK", detail: "", action_label: "Open integrity", action_href: "/positions?source=db&symbol=SPY" },
+    { code: "MARK_FRESHNESS", status: "OK" as const, label: "OK", detail: "", action_label: "Open system diagnostics", action_href: "/system" },
+    { code: "CASH_SECURED_RESERVE", status: "OK" as const, label: "OK", detail: "", action_label: "Open portfolio", action_href: "/portfolio" },
+    { code: "SIZING_CONSTRAINTS", status: "OK" as const, label: "No constraints hit", detail: "", action_label: "Open guardrails", action_href: "/system" },
+    { code: "EARNINGS_ADVISORY", status: "OK" as const, label: "OK", detail: "", action_label: "Open symbol", action_href: "/symbol-diagnostics?symbol=SPY" },
+    { code: "ACCOUNT_PRESENT", status: "OK" as const, label: "Default account set", detail: "", action_label: "Open settings", action_href: "/system" },
   ],
   order_stub: { title: "Order stub: SPY CSP OPEN", lines: ["Symbol: SPY", "Strategy: CSP", "Action: OPEN", "Qty: 2"] },
 };
@@ -117,6 +117,35 @@ describe("TradeTicketPage", () => {
   });
 
   it("R30.0: document has no forbidden tokens (FAIL/WARN/PASS or FAIL_/WARN_)", () => {
+    renderWithRoute(<TradeTicketPage />, ticketUrl);
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_|WARN_/);
+  });
+
+  it("R30.1: renders Fix links for checks with action_href and href matches expected paths", () => {
+    renderWithRoute(<TradeTicketPage />, ticketUrl);
+    const fixIntegrity = screen.getByTestId("readiness-fix-integrity");
+    expect(fixIntegrity).toBeInTheDocument();
+    expect(fixIntegrity).toHaveAttribute("href", "/positions?source=db&symbol=SPY");
+    const fixMarkFreshness = screen.getByTestId("readiness-fix-mark_freshness");
+    expect(fixMarkFreshness).toHaveAttribute("href", "/system");
+    const fixEarnings = screen.getByTestId("readiness-fix-earnings_advisory");
+    expect(fixEarnings).toHaveAttribute("href", "/symbol-diagnostics?symbol=SPY");
+  });
+
+  it("R30.1: shows Ready to execute: Review and guidance when readiness.status is Review", () => {
+    mockUseTradeTicketReadiness.mockReturnValue({
+      data: { ...mockReadiness, status: "Review" as const, status_label: "Review required" },
+      isLoading: false,
+      isError: false,
+    });
+    renderWithRoute(<TradeTicketPage />, ticketUrl);
+    expect(screen.getByTestId("readiness-ready-banner")).toHaveTextContent("Ready to execute: Review");
+    expect(screen.getByTestId("readiness-review-guidance")).toHaveTextContent("Resolve the items below before executing.");
+  });
+
+  it("R30.1: no forbidden tokens in document.textContent and no FAIL_/WARN_ substrings", () => {
     renderWithRoute(<TradeTicketPage />, ticketUrl);
     const text = document.body.textContent ?? "";
     expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);

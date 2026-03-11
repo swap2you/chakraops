@@ -2191,12 +2191,19 @@ export interface TradeTicketResponse {
   error?: string;
 }
 
-/** R30.0: Trade ticket readiness response (safe labels only). */
+/** R30.0/R30.1: Trade ticket readiness response (safe labels only; optional action links per check). */
 export interface TradeTicketReadinessResponse {
   status: "OK" | "Review";
   status_label: string;
   as_of_utc: string;
-  checks: Array<{ code: string; status: "OK" | "Review"; label: string; detail: string }>;
+  checks: Array<{
+    code: string;
+    status: "OK" | "Review";
+    label: string;
+    detail: string;
+    action_label?: string;
+    action_href?: string;
+  }>;
   order_stub: { title: string; lines: string[] };
 }
 export function useTradeTicketReadiness(symbol: string, mode: "live" | "paper", ticketKind: string) {

@@ -1761,6 +1761,200 @@ def ui_notification_delete(
 # ---------------------------------------------------------------------------
 # R26.2: Trade Ticket v2 — GET ticket payload; POST journal from ticket
 # ---------------------------------------------------------------------------
+# R30.0: Execution readiness — read-only checks from existing state; safe labels only
+# ---------------------------------------------------------------------------
+
+
+def _readiness_sanitize(s: Any) -> str:
+    """R30.0: Sanitize string for readiness response; no FAIL/WARN/PASS or FAIL_/WARN_."""
+    from app.core.portfolio.positions_unified_store_r279 import _sanitize_display_str
+    return _sanitize_display_str(s) if s is not None else ""
+
+
+def _build_trade_ticket_readiness(
+    symbol: str,
+    mode: str,
+    ticket_kind: str,
+) -> Dict[str, Any]:
+    """R30.0: Build readiness payload from existing state only. No broker calls; no decision write. Deterministic checks order."""
+    from datetime import datetime, timezone
+
+    symbol = (symbol or "").strip().upper()
+    mode = (mode or "live").strip().lower()
+    if mode not in ("live", "paper"):
+        mode = "live"
+    ticket_kind = (ticket_kind or "ENTRY").strip().upper()
+    if ticket_kind not in ("ENTRY", "CLOSE", "ROLL", "CC"):
+        ticket_kind = "ENTRY"
+
+    # Map ticket_kind -> strategy, action (deterministic)
+    if ticket_kind == "ENTRY":
+        strategy, action = "CSP", "OPEN"
+    elif ticket_kind == "CLOSE":
+        strategy, action = "CSP", "CLOSE"
+    elif ticket_kind == "ROLL":
+        strategy, action = "CSP", "OPEN"
+    elif ticket_kind == "CC":
+        strategy, action = "CC", "OPEN"
+    else:
+        strategy, action = "CSP", "OPEN"
+
+    as_of_utc = datetime.now(timezone.utc).isoformat()
+    checks: List[Dict[str, Any]] = []
+
+    # Build ticket once for SIZING, EARNINGS, order_stub
+    ticket: Dict[str, Any] = {}
+    try:
+        from app.core.portfolio.trade_ticket_r262 import build_trade_ticket
+        ticket = build_trade_ticket(symbol=symbol, strategy=strategy, action=action)
+    except Exception:
+        pass
+
+    # INTEGRITY
+    try:
+        integrity = _get_positions_unified_integrity_check_health()
+        st = (integrity.get("last_status") or "OK").strip()
+        status = "Review" if st == "Review" else "OK"
+        checks.append({
+            "code": "INTEGRITY",
+            "status": status,
+            "label": _readiness_sanitize(integrity.get("last_status_label") or ("Unified positions integrity: " + status)),
+            "detail": _readiness_sanitize("Last check: " + str(integrity.get("last_checked_at_utc") or "—")),
+        })
+    except Exception:
+        checks.append({"code": "INTEGRITY", "status": "Review", "label": "Check unavailable", "detail": ""})
+
+    # MARK_FRESHNESS
+    try:
+        mark = _get_mark_refresh_health()
+        st = (mark.get("status") or mark.get("last_result") or "OK").strip()
+        status = "Review" if st not in ("OK", "ok", None) else "OK"
+        if status == "OK" and not mark.get("last_run_at_utc"):
+            status = "Review"
+        checks.append({
+            "code": "MARK_FRESHNESS",
+            "status": status,
+            "label": _readiness_sanitize(mark.get("status_label") or mark.get("last_result") or ("Marks: " + status)),
+            "detail": _readiness_sanitize("Last run: " + str(mark.get("last_run_at_utc") or "—")),
+        })
+    except Exception:
+        checks.append({"code": "MARK_FRESHNESS", "status": "Review", "label": "Check unavailable", "detail": ""})
+
+    # CASH_SECURED_RESERVE (guardrails)
+    try:
+        guard = _get_guardrails_health()
+        st = (guard.get("status") or "OK").strip()
+        status = "Review" if st in ("Blocked", "Advisory", "blocked", "advisory") else "OK"
+        cash_pct = guard.get("metrics") or {}
+        cash_pct = cash_pct.get("cash_reserve_pct") if isinstance(cash_pct, dict) else None
+        checks.append({
+            "code": "CASH_SECURED_RESERVE",
+            "status": status,
+            "label": _readiness_sanitize(guard.get("status_label") or ("Cash reserve: " + str(cash_pct) + "%" if cash_pct is not None else "Guardrails: " + st)),
+            "detail": _readiness_sanitize("Reserve %: " + str(cash_pct) if cash_pct is not None else ""),
+        })
+    except Exception:
+        checks.append({"code": "CASH_SECURED_RESERVE", "status": "Review", "label": "Check unavailable", "detail": ""})
+
+    # SIZING_CONSTRAINTS (from ticket)
+    try:
+        sizing = ticket.get("sizing") or {}
+        hit = sizing.get("sizing_constraints_hit") or []
+        status = "Review" if (isinstance(hit, list) and len(hit) > 0) else "OK"
+        label = "Sizing constraints hit: " + ", ".join(str(x) for x in hit)[:80] if hit else "No constraints hit"
+        checks.append({
+            "code": "SIZING_CONSTRAINTS",
+            "status": status,
+            "label": _readiness_sanitize(label),
+            "detail": _readiness_sanitize("Recommended: " + str(sizing.get("recommended_contracts") or sizing.get("recommended_qty") or "—")),
+        })
+    except Exception:
+        checks.append({"code": "SIZING_CONSTRAINTS", "status": "Review", "label": "Check unavailable", "detail": ""})
+
+    # EARNINGS_ADVISORY (from ticket)
+    try:
+        ea = ticket.get("earnings_advisory") or {}
+        days = ea.get("days")
+        status = "Review" if (days is not None and isinstance(days, (int, float)) and int(days) <= 14) else "OK"
+        label = "Earnings in " + str(days) + " days" if days is not None else "Earnings data unavailable"
+        checks.append({
+            "code": "EARNINGS_ADVISORY",
+            "status": status,
+            "label": _readiness_sanitize(label),
+            "detail": _readiness_sanitize("Next: " + str(ea.get("next_date") or "—")),
+        })
+    except Exception:
+        checks.append({"code": "EARNINGS_ADVISORY", "status": "Review", "label": "Check unavailable", "detail": ""})
+
+    # ACCOUNT_PRESENT
+    try:
+        from app.core.accounts.service import get_default_account
+        account = get_default_account()
+        status = "Review" if account is None else "OK"
+        detail = ""
+        if account is not None and hasattr(account, "account_id"):
+            detail = _readiness_sanitize(str(getattr(account, "account_id")))
+        checks.append({
+            "code": "ACCOUNT_PRESENT",
+            "status": status,
+            "label": "Default account set" if account else "No default account",
+            "detail": detail,
+        })
+    except Exception:
+        checks.append({"code": "ACCOUNT_PRESENT", "status": "Review", "label": "Check unavailable", "detail": ""})
+
+    # Sanitize all check strings
+    for c in checks:
+        c["label"] = _readiness_sanitize(c.get("label") or "")
+        c["detail"] = _readiness_sanitize(c.get("detail") or "")
+
+    overall = "Review" if any(c.get("status") == "Review" for c in checks) else "OK"
+    status_label = "One or more checks need attention" if overall == "Review" else "All checks OK"
+
+    # order_stub: deterministic lines from ticket
+    try:
+        j = ticket.get("journal_draft") or {}
+        steps = ticket.get("execution_steps") or []
+        lines: List[str] = [
+            "Symbol: " + str(symbol),
+            "Strategy: " + str(strategy),
+            "Action: " + str(action),
+            "Qty: " + str(j.get("qty") or "—"),
+            "Contract: " + str(j.get("contract_key") or "—"),
+            "Expiry: " + str(j.get("expiry") or "—"),
+            "Strike: " + str(j.get("strike") or "—"),
+        ]
+        for step in (steps if isinstance(steps, list) else [])[:10]:
+            lines.append(_readiness_sanitize(step))
+        order_stub = {
+            "title": _readiness_sanitize("Order stub: " + symbol + " " + strategy + " " + action),
+            "lines": [_readiness_sanitize(ln) for ln in lines],
+        }
+    except Exception:
+        order_stub = {
+            "title": _readiness_sanitize("Order stub: " + symbol),
+            "lines": [_readiness_sanitize("Symbol: " + symbol)],
+        }
+
+    return {
+        "status": overall,
+        "status_label": _readiness_sanitize(status_label),
+        "as_of_utc": as_of_utc,
+        "checks": checks,
+        "order_stub": order_stub,
+    }
+
+
+@router.get("/trade-ticket/readiness")
+def ui_trade_ticket_readiness(
+    symbol: str = Query(..., description="Symbol"),
+    mode: str = Query("live", description="live | paper"),
+    ticket_kind: str = Query("ENTRY", description="ENTRY | CLOSE | ROLL | CC"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R30.0: Execution readiness for trade ticket. Read-only from existing state; safe labels only; no decision write."""
+    _require_ui_key(x_ui_key)
+    return _build_trade_ticket_readiness(symbol=symbol, mode=mode, ticket_kind=ticket_kind)
 
 
 @router.get("/trade-ticket")

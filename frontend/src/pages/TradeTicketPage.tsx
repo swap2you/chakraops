@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { ChevronDown, ChevronRight, Copy, Check } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardHeader, Button } from "@/components/ui";
-import { useTradeTicket, useJournalFromTicket, usePaperExecute } from "@/api/queries";
+import { useTradeTicket, useTradeTicketReadiness, useJournalFromTicket, usePaperExecute } from "@/api/queries";
 import { constraintToLabel } from "@/utils/sizingConstraints";
 
 export function TradeTicketPage() {
@@ -17,6 +17,12 @@ export function TradeTicketPage() {
   const paperExecute = usePaperExecute();
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const [paperMode, setPaperMode] = useState(false);
+  const mode: "live" | "paper" = paperMode ? "paper" : "live";
+  const ticketKind =
+    action === "ROLL" ? "ROLL" :
+    strategy === "CC" && (action === "OPEN" || action === "BUY") ? "CC" :
+    action === "CLOSE" || action === "SELL" ? "CLOSE" : "ENTRY";
+  const { data: readiness } = useTradeTicketReadiness(symbol, mode, ticketKind);
   const [paperPrice, setPaperPrice] = useState("");
   const [paperFees, setPaperFees] = useState("0");
   const [paperToast, setPaperToast] = useState<string | null>(null);
@@ -155,6 +161,37 @@ export function TradeTicketPage() {
           <p><span className="text-zinc-500">Recommended action:</span> {String(header.recommended_action ?? "—")}</p>
         </div>
       </details>
+
+      {/* R30.0: Execution readiness */}
+      {readiness && (
+        <Card data-testid="trade-ticket-readiness-card">
+          <CardHeader
+            title="Execution readiness"
+            description={`${readiness.status_label} (as of ${readiness.as_of_utc.slice(0, 19)}Z)`}
+          />
+          <div className="border-t border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm space-y-2">
+            <p className="font-medium">
+              Status: <span className={readiness.status === "OK" ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>{readiness.status}</span>
+            </p>
+            <ul className="list-disc list-inside space-y-1 text-zinc-600 dark:text-zinc-400">
+              {(readiness.checks ?? []).map((c) => (
+                <li key={c.code}>
+                  <span className="font-medium text-zinc-700 dark:text-zinc-300">{c.code}</span>: {c.label}
+                  {c.detail ? ` — ${c.detail}` : ""}
+                </li>
+              ))}
+            </ul>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => copyToClipboard((readiness.order_stub?.lines ?? []).join("\n"), "order_stub")}
+              data-testid="ticket-copy-order-stub"
+            >
+              {copiedSection === "order_stub" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} Copy order stub
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {/* Sizing */}
       <details open={sizingOpen} onToggle={(e) => setSizingOpen((e.target as HTMLDetailsElement).open)} className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900/60">

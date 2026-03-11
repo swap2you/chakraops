@@ -851,6 +851,15 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Download integrity bundle when Review; ZIP contains expected files; no forbidden tokens in export (test scans zip).
 - **Scope:** GET integrity-bundle endpoint; sanitized ZIP; Download button when Review; no decision_latest write; deterministic. NO GIT.
 
+### R30.0 — Wheel Execution Readiness Pack v1
+
+- [x] **Requirements** — chakraops/docs/releases/R30.0_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R30.0_release_notes.md
+- [x] **Verification** — chakraops/chakraops/out/verification/R30.0/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend test_r300_*: 4 passed; full pytest: 999 passed, 1 skipped; Frontend: 31 passed | 2 skipped (33), 290 passed | 18 skipped; Build: built in 13.07s. Evidence: chakraops/chakraops/out/verification/R30.0/notes.md.
+- [x] **UAT** — Trade Ticket: Execution readiness card shows status and checks; Copy order stub copies lines; no forbidden tokens.
+- **Scope:** GET trade-ticket/readiness; Execution readiness card; safe labels only; no decision_latest write; deterministic. NO GIT.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

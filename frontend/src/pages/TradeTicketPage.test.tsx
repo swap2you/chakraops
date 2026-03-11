@@ -21,8 +21,25 @@ const mockMutate = vi.fn();
 const mockUseJournalFromTicket = vi.fn(() => ({ mutate: mockMutate, isPending: false }));
 const mockPaperMutate = vi.fn();
 
+const mockReadiness = {
+  status: "OK" as const,
+  status_label: "All checks OK",
+  as_of_utc: "2026-02-27T12:00:00Z",
+  checks: [
+    { code: "INTEGRITY", status: "OK" as const, label: "OK", detail: "" },
+    { code: "MARK_FRESHNESS", status: "OK" as const, label: "OK", detail: "" },
+    { code: "CASH_SECURED_RESERVE", status: "OK" as const, label: "OK", detail: "" },
+    { code: "SIZING_CONSTRAINTS", status: "OK" as const, label: "No constraints hit", detail: "" },
+    { code: "EARNINGS_ADVISORY", status: "OK" as const, label: "OK", detail: "" },
+    { code: "ACCOUNT_PRESENT", status: "OK" as const, label: "Default account set", detail: "" },
+  ],
+  order_stub: { title: "Order stub: SPY CSP OPEN", lines: ["Symbol: SPY", "Strategy: CSP", "Action: OPEN", "Qty: 2"] },
+};
+const mockUseTradeTicketReadiness = vi.fn(() => ({ data: mockReadiness, isLoading: false, isError: false }));
+
 vi.mock("@/api/queries", () => ({
   useTradeTicket: (...args: unknown[]) => mockUseTradeTicket(...args),
+  useTradeTicketReadiness: (...args: unknown[]) => mockUseTradeTicketReadiness(...args),
   useJournalFromTicket: () => mockUseJournalFromTicket(),
   usePaperExecute: () => ({ mutate: mockPaperMutate, isPending: false }),
 }));
@@ -33,6 +50,7 @@ describe("TradeTicketPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseTradeTicket.mockReturnValue({ data: mockTicket, isLoading: false, isError: false });
+    mockUseTradeTicketReadiness.mockReturnValue({ data: mockReadiness, isLoading: false, isError: false });
   });
 
   it("renders ticket with snapshot, sizing, steps, journal sections", async () => {
@@ -84,5 +102,24 @@ describe("TradeTicketPage", () => {
     expect(mockPaperMutate).toHaveBeenCalled();
     const payload = mockPaperMutate.mock.calls[0][0];
     expect(payload).toMatchObject({ mode: "PAPER", action: expect.any(String), symbol: "SPY", strategy: "CSP", qty: 2 });
+  });
+
+  it("R30.0: Execution readiness card renders; Copy order stub copies order_stub.lines", async () => {
+    renderWithRoute(<TradeTicketPage />, ticketUrl);
+    expect(screen.getByTestId("trade-ticket-readiness-card")).toBeInTheDocument();
+    expect(screen.getByText("Execution readiness")).toBeInTheDocument();
+    const copyStubBtn = screen.getByTestId("ticket-copy-order-stub");
+    expect(copyStubBtn).toHaveTextContent(/Copy order stub/);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    await userEvent.click(copyStubBtn);
+    expect(writeText).toHaveBeenCalledWith("Symbol: SPY\nStrategy: CSP\nAction: OPEN\nQty: 2");
+  });
+
+  it("R30.0: document has no forbidden tokens (FAIL/WARN/PASS or FAIL_/WARN_)", () => {
+    renderWithRoute(<TradeTicketPage />, ticketUrl);
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_|WARN_/);
   });
 });

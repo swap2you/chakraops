@@ -410,6 +410,15 @@ function tradeTicketPath(symbol: string, strategy: string, action: string): stri
   return `/api/ui/trade-ticket?${p.toString()}`;
 }
 
+/** R30.0: GET /api/ui/trade-ticket/readiness — execution readiness checks (safe labels only). */
+function tradeTicketReadinessPath(symbol: string, mode: "live" | "paper", ticketKind: string): string {
+  const p = new URLSearchParams();
+  p.set("symbol", symbol);
+  p.set("mode", mode);
+  p.set("ticket_kind", ticketKind);
+  return `/api/ui/trade-ticket/readiness?${p.toString()}`;
+}
+
 function uiJournalPath(params: { from_date?: string; to_date?: string; symbol?: string; strategy?: string; limit?: number; offset?: number; include_paper?: boolean; paper_only?: boolean }): string {
   const p = new URLSearchParams();
   if (params.from_date) p.set("from_date", params.from_date);
@@ -2181,6 +2190,23 @@ export interface TradeTicketResponse {
   earnings_advisory: Record<string, unknown>;
   error?: string;
 }
+
+/** R30.0: Trade ticket readiness response (safe labels only). */
+export interface TradeTicketReadinessResponse {
+  status: "OK" | "Review";
+  status_label: string;
+  as_of_utc: string;
+  checks: Array<{ code: string; status: "OK" | "Review"; label: string; detail: string }>;
+  order_stub: { title: string; lines: string[] };
+}
+export function useTradeTicketReadiness(symbol: string, mode: "live" | "paper", ticketKind: string) {
+  return useQuery({
+    queryKey: ["ui", "trade-ticket", "readiness", symbol, mode, ticketKind],
+    queryFn: () => apiGet<TradeTicketReadinessResponse>(tradeTicketReadinessPath(symbol, mode, ticketKind)),
+    enabled: !!symbol?.trim(),
+  });
+}
+
 export function useTradeTicket(symbol: string, strategy: string, action: string) {
   return useQuery({
     queryKey: queryKeys.tradeTicket(symbol, strategy, action),

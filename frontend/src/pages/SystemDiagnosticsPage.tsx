@@ -13,10 +13,12 @@ import {
   useAdminSlackTest,
   useAdminEvaluationForce,
   usePositionsUnifiedRebuild,
+  usePositionsUnifiedIntegrityCheck,
   useReconcileDiff,
 } from "@/api/queries";
 import type { UiPositionsUnifiedRebuildResponse } from "@/api/types";
 import { formatTimestampEt, formatTimestampEtFull } from "@/utils/formatTimestamp";
+import { sanitizeForDisplay } from "@/utils/sanitizeDisplay";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardHeader, StatusBadge, Badge, Button, Tooltip } from "@/components/ui";
 
@@ -84,6 +86,7 @@ export function SystemDiagnosticsPage() {
   const adminSlackTest = useAdminSlackTest();
   const adminForceEval = useAdminEvaluationForce();
   const rebuildUnified = usePositionsUnifiedRebuild();
+  const integrityCheck = usePositionsUnifiedIntegrityCheck();
   const reconcileStatus = data?.positions_unified_reconcile?.status;
   const { data: reconcileDiff, isLoading: reconcileDiffLoading } = useReconcileDiff({
     include_paper: true,
@@ -91,6 +94,7 @@ export function SystemDiagnosticsPage() {
     enabled: reconcileStatus === "Review",
   });
   const [reconcileDiffExpanded, setReconcileDiffExpanded] = useState(false);
+  const [integrityCheckDetailsExpanded, setIntegrityCheckDetailsExpanded] = useState(false);
   const [selectedChecks, setSelectedChecks] = useState<Set<string>>(new Set(DIAGNOSTIC_CHECKS));
   const [latestResult, setLatestResult] = useState<typeof runDiagnostics.data | null>(null);
 
@@ -812,6 +816,128 @@ export function SystemDiagnosticsPage() {
                 {rebuildUnified.isPending ? "Rebuilding…" : "Rebuild unified positions"}
               </Button>
             </div>
+          </Card>
+        )}
+        {/* R29.4: Unified Positions Integrity Check — last run status, counts, view details; parity with PositionsPage. */}
+        {data?.positions_unified_integrity_check != null && (
+          <Card data-testid="positions-unified-integrity-check-card">
+            <CardHeader
+              title="Unified Positions Integrity Check"
+              description="Last integrity check (staleness + reconcile). Safe labels only."
+            />
+            <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Status</span>
+                <p className="mt-1">
+                  <StatusBadge status={data.positions_unified_integrity_check.last_status ?? "OK"} />
+                </p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Last run (ET)</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">
+                  {data.positions_unified_integrity_check.last_checked_at_utc
+                    ? formatTimestampEt(data.positions_unified_integrity_check.last_checked_at_utc)
+                    : "—"}
+                </p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Status label</span>
+                <p className="mt-1 text-zinc-700 dark:text-zinc-200">{sanitizeForDisplay(data.positions_unified_integrity_check.last_status_label)}</p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Missing</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.positions_unified_integrity_check.last_reconcile_missing_count ?? "—"}</p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Extra</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.positions_unified_integrity_check.last_reconcile_extra_count ?? "—"}</p>
+              </div>
+              <div>
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">Mismatched</span>
+                <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data.positions_unified_integrity_check.last_reconcile_mismatched_count ?? "—"}</p>
+              </div>
+            </div>
+            {/* R29.5: Remediation guidance — OK vs Review with safe labels only. */}
+            <div className="mt-3" data-testid="integrity-check-remediation-guidance">
+              {(data.positions_unified_integrity_check.last_status ?? "OK") === "OK" ? (
+                <p className="text-sm text-zinc-600 dark:text-zinc-400">No action needed.</p>
+              ) : (
+                <ul className="list-inside list-disc space-y-1 text-sm text-zinc-600 dark:text-zinc-400">
+                  <li>
+                    <Link to="/positions?source=db&include_paper=true" className="text-blue-600 hover:underline dark:text-blue-400">
+                      View diff details
+                    </Link>
+                    {" "}(Positions, stored view)
+                  </li>
+                  <li>Run integrity check (button below)</li>
+                  <li>Rebuild unified positions (from Positions or Reconcile Diff card)</li>
+                </ul>
+              )}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setIntegrityCheckDetailsExpanded((e) => !e)}
+                data-testid="integrity-check-view-details-btn"
+              >
+                {integrityCheckDetailsExpanded ? "Hide details" : "View details"}
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={integrityCheck.isPending}
+                onClick={() => {
+                  if (window.confirm("This will run an integrity check comparing stored positions with authoritative sources and staleness. Manual action. Continue?")) {
+                    integrityCheck.mutate({ include_paper: true }, { onSuccess: () => setIntegrityCheckDetailsExpanded(true) });
+                  }
+                }}
+                data-testid="integrity-check-run-btn"
+              >
+                {integrityCheck.isPending ? "Check running" : "Run integrity check"}
+              </Button>
+              {data.positions_unified_integrity_check.last_status === "Review" && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => void import("@/api/queries").then((m) => m.downloadIntegrityBundle(true))}
+                  data-testid="integrity-check-download-bundle-btn"
+                >
+                  Download integrity bundle
+                </Button>
+              )}
+              <Link to="/positions?source=db" className="text-sm text-blue-600 hover:underline dark:text-blue-400">
+                Positions
+              </Link>
+            </div>
+            {integrityCheckDetailsExpanded && data.positions_unified_integrity_check.last_sample_items != null && data.positions_unified_integrity_check.last_sample_items.length > 0 && (
+              <ul className="mt-2 max-h-48 list-none space-y-1 overflow-y-auto rounded border border-zinc-200 bg-zinc-50 p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900/50" data-testid="integrity-check-details-list">
+                {data.positions_unified_integrity_check.last_sample_items.map((item, i) => (
+                  <li key={`${item.id ?? i}-${i}`} className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-zinc-200 py-1.5 last:border-0 dark:border-zinc-700">
+                    <span className="font-medium text-zinc-700 dark:text-zinc-300">{sanitizeForDisplay(item.kind)}</span>
+                    <span className="font-mono text-zinc-600 dark:text-zinc-400">{sanitizeForDisplay(item.symbol ?? item.id)}</span>
+                    {item.instrument_type != null && <span className="text-zinc-500 dark:text-zinc-500">{sanitizeForDisplay(item.instrument_type)}</span>}
+                    <span className="text-zinc-400 dark:text-zinc-500">{sanitizeForDisplay(item.id)}</span>
+                    {item.fields_diff != null && item.fields_diff.length > 0 && (
+                      <span className="text-zinc-500 dark:text-zinc-500">({item.fields_diff.map(sanitizeForDisplay).join(", ")})</span>
+                    )}
+                    {item.link_positions_url != null && item.link_positions_url !== "" && (
+                      <Link to={item.link_positions_url} className="text-blue-600 hover:underline dark:text-blue-400" data-testid="integrity-sample-open-positions">
+                        Open positions
+                      </Link>
+                    )}
+                    {item.link_diagnostics_url != null && item.link_diagnostics_url !== "" && (
+                      <Link to={item.link_diagnostics_url} className="text-blue-600 hover:underline dark:text-blue-400" data-testid="integrity-sample-open-diagnostics">
+                        Open diagnostics
+                      </Link>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {integrityCheckDetailsExpanded && data.positions_unified_integrity_check.last_sample_items != null && data.positions_unified_integrity_check.last_sample_items.length === 0 && (
+              <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-500">No sample items from last check.</p>
+            )}
           </Card>
         )}
         {/* R25.9: Guardrails — status (OK/Advisory/Blocked), metrics, limits; safe labels only. */}

@@ -1,9 +1,9 @@
 /**
- * R27.9/R28.0/R28.9: Positions page — unified list; source=recompute (default) or source=db; no FAIL/WARN/PASS in document.
+ * R27.9/R28.0/R28.9/R29.0: Positions page — default Stored (source=db), staleness banner, no FAIL/WARN/PASS.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { render, renderWithRoute, screen } from "@/test/test-utils";
+import { render, renderWithRoute, screen, within } from "@/test/test-utils";
 import { PositionsPage } from "./PositionsPage";
 
 const mockPositions = [
@@ -53,9 +53,100 @@ const mockUseUnifiedPositionsFromDb = vi.fn(() => ({
   isError: false,
 }));
 
+/** R29.0: Not stale when finished_at_utc is recent (future). */
+const healthNotStale = {
+  positions_unified_rebuild: { finished_at_utc: "2099-06-01T12:00:00Z", last_include_paper: true },
+  positions_unified_reconcile: { status: "OK" as const },
+};
+/** R29.4/R29.6: Integrity check block with last run + sample items and safe deep links. */
+const healthWithIntegrityDetails = {
+  ...healthNotStale,
+  positions_unified_integrity_check: {
+    last_checked_at_utc: "2026-02-27T15:00:00Z",
+    last_status: "OK" as const,
+    last_status_label: "OK",
+    last_reconcile_missing_count: 0,
+    last_reconcile_extra_count: 0,
+    last_reconcile_mismatched_count: 0,
+    last_sample_items: [
+      {
+        kind: "missing",
+        id: "p1",
+        symbol: "AAPL",
+        instrument_type: "SHARES",
+        link_positions_url: "/positions?source=db&symbol=AAPL&include_paper=true",
+        link_diagnostics_url: "/system",
+      },
+    ],
+  },
+};
+/** R29.5: Integrity Review so Copy remediation summary and Open diagnostics appear. */
+const healthWithIntegrityReview = {
+  ...healthNotStale,
+  positions_unified_integrity_check: {
+    last_checked_at_utc: "2026-02-27T15:00:00Z",
+    last_status: "Review" as const,
+    last_status_label: "Differences found",
+    last_reconcile_missing_count: 1,
+    last_reconcile_extra_count: 0,
+    last_reconcile_mismatched_count: 1,
+    last_sample_items: [
+      {
+        kind: "missing",
+        id: "p1",
+        symbol: "AAPL",
+        instrument_type: "SHARES",
+        link_positions_url: "/positions?source=db&symbol=AAPL&include_paper=true",
+        link_diagnostics_url: "/system",
+      },
+    ],
+  },
+};
+/** R29.0: Stale when block missing or finished_at_utc old/missing. */
+const healthStale = { positions_unified_rebuild: undefined, positions_unified_reconcile: { status: "OK" as const } };
+/** R29.1: Reconcile status Review for Integrity strip diff tests. */
+const healthReconcileReview = {
+  ...healthNotStale,
+  positions_unified_reconcile: { status: "Review" as const },
+};
+
+const mockReconcileDiffPayload = {
+  missing_count: 1,
+  extra_count: 0,
+  mismatched_count: 1,
+  items: [
+    { id: "diff-1", kind: "missing" as const, symbol: "AAPL", instrument_type: "SHARES", fields_diff: ["qty"] },
+  ],
+};
+const mockUseReconcileDiff = vi.fn(() => ({
+  data: mockReconcileDiffPayload,
+  isLoading: false,
+}));
+
+const mockUseUiSystemHealth = vi.fn(() => ({ data: healthNotStale }));
+const mockMutate = vi.fn();
+const mockMutateIntegrity = vi.fn();
+const mockUsePositionsUnifiedRebuild = vi.fn(() => ({
+  mutate: mockMutate,
+  isPending: false,
+  data: undefined,
+}));
+const mockUsePositionsUnifiedIntegrityCheck = vi.fn(() => ({
+  mutate: mockMutateIntegrity,
+  isPending: false,
+  data: undefined,
+}));
+
+const mockDownloadIntegrityBundle = vi.hoisted(() => vi.fn());
+
 vi.mock("@/api/queries", () => ({
   useUnifiedPositions: (params: Record<string, unknown>) => mockUseUnifiedPositions(params),
   useUnifiedPositionsFromDb: (params: Record<string, unknown>) => mockUseUnifiedPositionsFromDb(params),
+  useUiSystemHealth: () => mockUseUiSystemHealth(),
+  usePositionsUnifiedRebuild: () => mockUsePositionsUnifiedRebuild(),
+  usePositionsUnifiedIntegrityCheck: () => mockUsePositionsUnifiedIntegrityCheck(),
+  useReconcileDiff: (params: Record<string, unknown>) => mockUseReconcileDiff(params),
+  downloadIntegrityBundle: mockDownloadIntegrityBundle,
 }));
 
 describe("PositionsPage", () => {
@@ -66,6 +157,23 @@ describe("PositionsPage", () => {
       isLoading: false,
       isError: false,
     });
+    mockUseUnifiedPositionsFromDb.mockReturnValue({
+      data: { items: mockPositions, count: mockPositions.length, status: "OK", status_label: "OK" },
+      isLoading: false,
+      isError: false,
+    });
+    mockUseUiSystemHealth.mockReturnValue({ data: healthNotStale });
+    mockUsePositionsUnifiedRebuild.mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+      data: undefined,
+    });
+    mockUsePositionsUnifiedIntegrityCheck.mockReturnValue({
+      mutate: mockMutateIntegrity,
+      isPending: false,
+      data: undefined,
+    });
+    mockUseReconcileDiff.mockReturnValue({ data: mockReconcileDiffPayload, isLoading: false });
   });
 
   it("renders Positions header and filters", () => {
@@ -97,8 +205,8 @@ describe("PositionsPage", () => {
     expect(container.textContent).toMatch(/150/);
   });
 
-  it("calls useUnifiedPositions with state and include_paper", () => {
-    render(<PositionsPage />);
+  it("calls useUnifiedPositions with state and include_paper when source is recompute", () => {
+    renderWithRoute(<PositionsPage />, "/positions?source=recompute");
     expect(mockUseUnifiedPositions).toHaveBeenCalledWith(
       expect.objectContaining({ state: "open", include_paper: true })
     );
@@ -117,23 +225,238 @@ describe("PositionsPage", () => {
     expect(mockUseUnifiedPositionsFromDb).toHaveBeenCalled();
   });
 
-  it("R28.9: when source absent shows Source: Computed", () => {
+  it("R29.0: default source is Stored when no query param", () => {
     render(<PositionsPage />);
+    expect(screen.getByTestId("positions-source-label")).toHaveTextContent("Source: Stored");
+    expect(mockUseUnifiedPositionsFromDb).toHaveBeenCalled();
+  });
+
+  it("R29.0: when source=recompute shows Source: Computed", () => {
+    renderWithRoute(<PositionsPage />, "/positions?source=recompute");
     expect(screen.getByTestId("positions-source-label")).toHaveTextContent("Source: Computed");
   });
 
-  it("R28.9: document has no FAIL/WARN/PASS tokens", () => {
-    const { container } = render(<PositionsPage />);
-    const text = container.textContent ?? "";
-    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
-  });
-
   it("filter state change triggers new request", async () => {
-    render(<PositionsPage />);
+    renderWithRoute(<PositionsPage />, "/positions?source=recompute");
     const stateSelect = screen.getByTestId("positions-filter-state");
     await userEvent.selectOptions(stateSelect, "closed");
     expect(mockUseUnifiedPositions).toHaveBeenLastCalledWith(
       expect.objectContaining({ state: "closed" })
     );
+  });
+
+  it("R29.0: when stored and stale, banner renders and rebuild button triggers mutation with include_paper", async () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthStale });
+    render(<PositionsPage />);
+    expect(screen.getByTestId("positions-stale-banner-title")).toHaveTextContent(/Stored positions may be stale/);
+    expect(screen.getByTestId("positions-stale-rebuild-btn")).toHaveTextContent("Rebuild unified positions");
+    await userEvent.click(screen.getByTestId("positions-stale-rebuild-btn"));
+    expect(screen.getByTestId("positions-rebuild-confirm-modal")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("positions-rebuild-confirm-ok"));
+    expect(mockMutate).toHaveBeenCalledWith(
+      { include_paper: true },
+      expect.objectContaining({ onSuccess: expect.any(Function) })
+    );
+  });
+
+  it("R29.0: when rebuild running, button disabled and shows Rebuild running", () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthStale });
+    mockUsePositionsUnifiedRebuild.mockReturnValue({
+      mutate: mockMutate,
+      isPending: true,
+      data: undefined,
+    });
+    render(<PositionsPage />);
+    const btn = screen.getByTestId("positions-stale-rebuild-btn");
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveTextContent("Rebuild running");
+  });
+
+  it("R29.0: document has no FAIL/WARN/PASS tokens", () => {
+    const { container } = render(<PositionsPage />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+  });
+
+  it("R29.1: when source=db and reconcile status Review, integrity strip shows Review and diff counts; View diff details expands list", async () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthReconcileReview });
+    mockUseReconcileDiff.mockReturnValue({ data: mockReconcileDiffPayload, isLoading: false });
+    render(<PositionsPage />);
+    expect(screen.getByTestId("positions-integrity-strip")).toBeInTheDocument();
+    expect(screen.getByTestId("positions-integrity-status")).toHaveTextContent("Review");
+    expect(screen.getByTestId("positions-integrity-diff-counts")).toHaveTextContent(/missing: 1.*extra: 0.*mismatched: 1/);
+    expect(screen.getByTestId("positions-integrity-view-diff-details")).toHaveTextContent("View diff details");
+    await userEvent.click(screen.getByTestId("positions-integrity-view-diff-details"));
+    const diffList = screen.getByTestId("positions-integrity-diff-list");
+    expect(diffList).toBeInTheDocument();
+    expect(within(diffList).getByText("missing")).toBeInTheDocument();
+    expect(within(diffList).getByText("AAPL")).toBeInTheDocument();
+    expect(screen.getAllByTestId("positions-integrity-view-positions-link").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("R29.1: clicking Rebuild unified positions (Integrity) triggers mutation with include_paper from filter", async () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthReconcileReview });
+    render(<PositionsPage />);
+    await userEvent.click(screen.getByTestId("positions-integrity-rebuild-btn"));
+    expect(screen.getByTestId("positions-rebuild-confirm-modal")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("positions-rebuild-confirm-ok"));
+    expect(mockMutate).toHaveBeenCalledWith(
+      { include_paper: true },
+      expect.objectContaining({ onSuccess: expect.any(Function) })
+    );
+  });
+
+  it("R29.1: clicking Switch to Computed updates to Source: Computed and does not render diff details section", async () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthReconcileReview });
+    render(<PositionsPage />);
+    expect(screen.getByTestId("positions-source-label")).toHaveTextContent("Source: Stored");
+    await userEvent.click(screen.getByTestId("positions-integrity-switch-to-computed"));
+    expect(screen.getByTestId("positions-source-label")).toHaveTextContent("Source: Computed");
+    expect(screen.getByTestId("positions-integrity-computed-note")).toHaveTextContent(/Computed \(authoritative\)/);
+    expect(screen.queryByTestId("positions-integrity-diff-counts")).not.toBeInTheDocument();
+  });
+
+  it("R29.1: document has no FAIL/WARN/PASS tokens", () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthReconcileReview });
+    const { container } = render(<PositionsPage />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+  });
+
+  it("R29.2: when symbol set, Compare button appears; opening Compare shows diff summary and both lists", async () => {
+    renderWithRoute(<PositionsPage />, "/positions?symbol=AAPL");
+    expect(screen.getByTestId("positions-compare-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("positions-compare-toggle-btn")).toHaveTextContent("Compare stored vs computed");
+    expect(screen.queryByTestId("positions-compare-diff-summary")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("positions-compare-toggle-btn"));
+    expect(mockUseUnifiedPositions).toHaveBeenCalledWith(expect.objectContaining({ symbol: "AAPL", include_paper: true }));
+    expect(mockUseUnifiedPositionsFromDb).toHaveBeenCalledWith(expect.objectContaining({ symbol: "AAPL", include_paper: true }));
+    expect(screen.getByTestId("positions-compare-diff-summary")).toBeInTheDocument();
+    expect(screen.getByTestId("positions-compare-diff-details")).toBeInTheDocument();
+    expect(screen.getByTestId("positions-compare-view-diff-diagnostics")).toBeInTheDocument();
+  });
+
+  it("R29.2: when Compare closed, diff summary not visible", () => {
+    renderWithRoute(<PositionsPage />, "/positions?symbol=AAPL");
+    expect(screen.getByTestId("positions-compare-panel")).toBeInTheDocument();
+    expect(screen.queryByTestId("positions-compare-diff-summary")).not.toBeInTheDocument();
+  });
+
+  it("R29.2: document has no FAIL/WARN/PASS and no FAIL_/WARN_ tokens", () => {
+    const { container } = render(<PositionsPage />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_/);
+    expect(text).not.toMatch(/WARN_/);
+  });
+
+  it("R29.3: clicking Run integrity check opens confirm modal; confirm calls mutation with include_paper true", async () => {
+    renderWithRoute(<PositionsPage />, "/positions?source=db");
+    await userEvent.click(screen.getByTestId("positions-integrity-check-btn"));
+    expect(screen.getByTestId("positions-integrity-check-confirm-modal")).toBeInTheDocument();
+    expect(screen.getByText(/This will run an integrity check comparing stored positions with authoritative sources and staleness\. Manual action\. Continue\?/)).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("positions-integrity-check-confirm-ok"));
+    expect(mockMutateIntegrity).toHaveBeenCalledWith(
+      { include_paper: true },
+      expect.objectContaining({ onSuccess: expect.any(Function) })
+    );
+  });
+
+  it("R29.3: document contains no forbidden tokens FAIL/WARN/PASS or FAIL_/WARN_", () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthReconcileReview });
+    const { container } = render(<PositionsPage />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_/);
+    expect(text).not.toMatch(/WARN_/);
+  });
+
+  it("R29.3: Run integrity check button disabled and shows Check running when mutation pending", () => {
+    mockUsePositionsUnifiedIntegrityCheck.mockReturnValue({
+      mutate: mockMutateIntegrity,
+      isPending: true,
+      data: undefined,
+    });
+    renderWithRoute(<PositionsPage />, "/positions?source=db");
+    const btn = screen.getByTestId("positions-integrity-check-btn");
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveTextContent("Check running");
+  });
+
+  it("R29.4: Last integrity check summary and View details expand sample items", async () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthWithIntegrityDetails });
+    renderWithRoute(<PositionsPage />, "/positions?source=db");
+    expect(screen.getByTestId("positions-integrity-last-check")).toHaveTextContent(/Last integrity check/);
+    expect(screen.getByTestId("positions-integrity-view-details-btn")).toHaveTextContent("View details");
+    await userEvent.click(screen.getByTestId("positions-integrity-view-details-btn"));
+    const detailsList = screen.getByTestId("positions-integrity-details-list");
+    expect(detailsList).toBeInTheDocument();
+    expect(within(detailsList).getByText("missing")).toBeInTheDocument();
+    expect(within(detailsList).getByText("AAPL")).toBeInTheDocument();
+  });
+
+  it("R29.6: when sample items have link_positions_url, Open positions link renders with correct href; no forbidden tokens", async () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthWithIntegrityDetails });
+    const { container } = renderWithRoute(<PositionsPage />, "/positions?source=db");
+    await userEvent.click(screen.getByTestId("positions-integrity-view-details-btn"));
+    const openPosLinks = screen.getAllByTestId("integrity-sample-open-positions");
+    expect(openPosLinks.length).toBeGreaterThanOrEqual(1);
+    expect(openPosLinks[0]).toHaveAttribute("href", "/positions?source=db&symbol=AAPL&include_paper=true");
+    const openDiagLinks = screen.getAllByTestId("integrity-sample-open-diagnostics");
+    expect(openDiagLinks.length).toBeGreaterThanOrEqual(1);
+    expect(openDiagLinks[0]).toHaveAttribute("href", "/system");
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_/);
+    expect(text).not.toMatch(/WARN_/);
+  });
+
+  it("R29.4: document contains no forbidden tokens FAIL/WARN/PASS or FAIL_/WARN_", () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthWithIntegrityDetails });
+    const { container } = render(<PositionsPage />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_/);
+    expect(text).not.toMatch(/WARN_/);
+  });
+
+  it("R29.7: Download integrity bundle button only when Review; clicking calls download with include_paper and symbol", async () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthWithIntegrityReview });
+    renderWithRoute(<PositionsPage />, "/positions?source=db");
+    const downloadBtn = screen.getByTestId("positions-integrity-download-bundle-btn");
+    expect(downloadBtn).toHaveTextContent("Download integrity bundle");
+    await userEvent.click(downloadBtn);
+    expect(mockDownloadIntegrityBundle).toHaveBeenCalledWith(true, undefined);
+  });
+
+  it("R29.7: when status OK, Download integrity bundle button is not present", () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthWithIntegrityDetails });
+    renderWithRoute(<PositionsPage />, "/positions?source=db");
+    expect(screen.queryByTestId("positions-integrity-download-bundle-btn")).not.toBeInTheDocument();
+  });
+
+  it("R29.5: Copy remediation summary only when Review; writeText receives sanitized content", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    mockUseUiSystemHealth.mockReturnValue({ data: healthWithIntegrityReview });
+    renderWithRoute(<PositionsPage />, "/positions?source=db");
+    const copyBtn = screen.getByTestId("positions-integrity-copy-remediation-btn");
+    expect(copyBtn).toHaveTextContent("Copy remediation summary");
+    await userEvent.click(copyBtn);
+    expect(writeText).toHaveBeenCalledTimes(1);
+    const copied = writeText.mock.calls[0][0] as string;
+    expect(copied).toContain("Unified Positions Integrity: Review");
+    expect(copied).toContain("missing: 1, extra: 0, mismatched: 1");
+    expect(copied).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(copied).not.toMatch(/FAIL_|WARN_/);
+  });
+
+  it("R29.5: document contains no forbidden tokens when Review", () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthWithIntegrityReview });
+    const { container } = render(<PositionsPage />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_/);
+    expect(text).not.toMatch(/WARN_/);
   });
 });

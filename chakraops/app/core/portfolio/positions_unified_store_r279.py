@@ -12,12 +12,20 @@ import sqlite3
 import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 logger = logging.getLogger(__name__)
 
 _LOCK = threading.Lock()
 _REBUILD_LOCK = threading.Lock()  # Non-blocking acquire = "rebuild already running"
+_INTEGRITY_CHECK_LOCK = threading.Lock()  # R29.3: non-blocking = "check already running"
 _OVERRIDE_PATH: Optional[Path] = None
+
+# R29.3: Staleness threshold for integrity check (hours)
+_INTEGRITY_CHECK_STALE_HOURS = 24
+# R29.4: History and sample caps (deterministic)
+_INTEGRITY_CHECK_HISTORY_CAP = 10
+_INTEGRITY_CHECK_SAMPLE_ITEMS_CAP = 20
 
 INSTRUMENT_SHARES = "SHARES"
 INSTRUMENT_CSP = "CSP"
@@ -25,6 +33,7 @@ INSTRUMENT_CC = "CC"
 
 # Prohibited in API responses (non-negotiable)
 _FAIL_WARN_PATTERN = re.compile(r"FAIL_|WARN_", re.I)
+_FORBIDDEN_TOKENS = re.compile(r"\b(FAIL|WARN|PASS)\b", re.I)
 
 
 def _positions_db_path() -> Path:
@@ -61,8 +70,32 @@ def _safe_str(val: Any) -> str:
         return ""
     s = str(val).strip()
     if _FAIL_WARN_PATTERN.search(s):
-        return ""  # or a generic safe placeholder; requirement: never expose raw
+        return ""
     return s
+
+
+def _sanitize_display_str(val: Any) -> str:
+    """R29.4: No FAIL/WARN/PASS or FAIL_/WARN_ in display strings. Replace forbidden tokens; strip bad substrings."""
+    if val is None:
+        return ""
+    s = str(val).strip()
+    s = _FORBIDDEN_TOKENS.sub("", s)
+    if _FAIL_WARN_PATTERN.search(s):
+        return ""
+    return s.strip() or ""
+
+
+def sanitize_json_for_export(obj: Any) -> Any:
+    """R29.7: Recursively sanitize a JSON-serializable structure for export; no FAIL/WARN/PASS or FAIL_/WARN_ in strings."""
+    if obj is None:
+        return None
+    if isinstance(obj, str):
+        return _sanitize_display_str(obj)
+    if isinstance(obj, dict):
+        return {k: sanitize_json_for_export(v) for k, v in sorted(obj.items())}
+    if isinstance(obj, list):
+        return [sanitize_json_for_export(v) for v in obj]
+    return obj
 
 
 def _fees_from_position(p: Any) -> Optional[float]:
@@ -416,21 +449,24 @@ def load_rebuild_state() -> Optional[Dict[str, Any]]:
 
 
 def get_positions_unified_rebuild_health() -> Dict[str, Any]:
-    """R28.7: System-health block positions_unified_rebuild. Safe labels only."""
+    """R28.7/R29.0: System-health block positions_unified_rebuild. Safe labels only. finished_at_utc alias for staleness."""
     state = load_rebuild_state()
     if not state or not isinstance(state, dict):
         return {
             "status": "OK",
             "status_label": "OK",
             "last_rebuild_at_utc": None,
+            "finished_at_utc": None,
             "last_rebuild_open_count": None,
             "last_rebuild_closed_count": None,
             "last_include_paper": None,
         }
+    last_ts = state.get("last_rebuild_at_utc")
     return {
         "status": state.get("status") or "OK",
         "status_label": state.get("status_label") or "OK",
-        "last_rebuild_at_utc": state.get("last_rebuild_at_utc"),
+        "last_rebuild_at_utc": last_ts,
+        "finished_at_utc": last_ts,
         "last_rebuild_open_count": state.get("last_rebuild_open_count"),
         "last_rebuild_closed_count": state.get("last_rebuild_closed_count"),
         "last_include_paper": state.get("last_include_paper"),
@@ -1090,3 +1126,270 @@ def ensure_reconcile_advisory_notification() -> None:
         append_notification("INFO", "POSITIONS_RECONCILE_REVIEW", message, symbol=None, details={"advisory": True})
     except Exception as e:
         logger.warning("[R28.1] reconcile advisory notification failed: %s", e)
+
+
+# --- R29.3: Integrity check (manual; staleness + reconcile; optional advisory) ---
+
+def _integrity_check_state_path() -> Path:
+    """Path for out/positions_unified_integrity_check_state.json. Safe fields only."""
+    try:
+        from app.core.eval.evaluation_store_v2 import get_decision_store_path
+        out = get_decision_store_path().parent
+    except Exception:
+        out = Path(__file__).resolve().parents[3] / "out"
+    out.mkdir(parents=True, exist_ok=True)
+    return out / "positions_unified_integrity_check_state.json"
+
+
+def _sanitize_sample_item(item: Dict[str, Any]) -> Dict[str, Any]:
+    """R29.4: One diff item with all string values sanitized (no FAIL/WARN/PASS or FAIL_/WARN_)."""
+    out: Dict[str, Any] = {}
+    for k, v in item.items():
+        if isinstance(v, str):
+            out[k] = _sanitize_display_str(v)
+        elif isinstance(v, list):
+            out[k] = [_sanitize_display_str(x) if isinstance(x, str) else x for x in v]
+        else:
+            out[k] = v
+    return out
+
+
+def _add_sample_item_links(sample: List[Dict[str, Any]], include_paper: bool) -> None:
+    """R29.6: Add link_positions_url and link_diagnostics_url to each item (in-place). Safe URLs only."""
+    inc = "true" if include_paper else "false"
+    for it in sample:
+        sym = str(it.get("symbol") or it.get("id") or "").strip()
+        it["link_positions_url"] = "/positions?source=db&symbol=" + quote(sym, safe="") + "&include_paper=" + inc
+        it["link_diagnostics_url"] = "/system"
+
+
+def _write_integrity_check_state(data: Dict[str, Any]) -> None:
+    """R29.3/R29.4/R29.6: Persist only safe fields; no FAIL/WARN/PASS. State has last + history (capped); sample items include links."""
+    rec = data.get("reconcile") or {}
+    sample_raw = data.get("sample_items") or []
+    sample = [_sanitize_sample_item(i) for i in sample_raw[: _INTEGRITY_CHECK_SAMPLE_ITEMS_CAP]]
+    sample.sort(key=_diff_sort_key)
+    _add_sample_item_links(sample, data.get("include_paper", True))
+    last_entry = {
+        "status": data.get("status") or "OK",
+        "status_label": data.get("status_label") or "OK",
+        "started_at_utc": data.get("started_at_utc"),
+        "finished_at_utc": data.get("checked_at_utc"),
+        "missing_count": rec.get("missing_count", 0),
+        "extra_count": rec.get("extra_count", 0),
+        "mismatched_count": rec.get("mismatched_count", 0),
+        "sample_items": sample,
+    }
+    path = _integrity_check_state_path()
+    try:
+        existing: Dict[str, Any] = {}
+        if path.exists():
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+            except Exception:
+                pass
+        history = existing.get("history") or []
+        if not isinstance(history, list):
+            history = []
+        history = [last_entry] + history[: _INTEGRITY_CHECK_HISTORY_CAP - 1]
+        payload = {"last": last_entry, "history": history}
+        from app.core.io.atomic import atomic_write_json
+        atomic_write_json(path, payload, indent=0)
+    except Exception as e:
+        logger.warning("[R29.3] Failed to write integrity check state: %s", e)
+
+
+def load_integrity_check_state() -> Optional[Dict[str, Any]]:
+    """Load last integrity check state for system-health."""
+    path = _integrity_check_state_path()
+    if not path.exists():
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.warning("[R29.3] Failed to load integrity check state: %s", e)
+        return None
+
+
+def ensure_positions_integrity_advisory_notification() -> None:
+    """R29.3: If no active NEW/ACKED notification of type POSITIONS_INTEGRITY_REVIEW, create one. Safe message only."""
+    try:
+        from app.api.notifications_store import load_notifications, append_notification
+        existing = load_notifications(limit=200, state_filter=None, type_filter="POSITIONS_INTEGRITY_REVIEW")
+        for rec in existing:
+            if rec.get("state") in ("NEW", "ACKED"):
+                return
+        message = "Positions integrity check found issues (stored may be stale or reconcile differs)."
+        append_notification("INFO", "POSITIONS_INTEGRITY_REVIEW", message, symbol=None, details={"advisory": True})
+    except Exception as e:
+        logger.warning("[R29.3] integrity advisory notification failed: %s", e)
+
+
+def run_positions_unified_integrity_check(include_paper: bool = True) -> Dict[str, Any]:
+    """
+    R29.3: Manual integrity check — staleness (from rebuild health) + reconcile diff summary.
+    Returns safe-label result only. Optionally creates one advisory notification when Review (deduped).
+    Does NOT write decision_latest or any decision artifacts.
+    """
+    from datetime import datetime, timezone, timedelta
+
+    def _now() -> str:
+        return datetime.now(timezone.utc).isoformat()
+
+    if not _INTEGRITY_CHECK_LOCK.acquire(blocking=False):
+        return {
+            "ok": False,
+            "status": "Review",
+            "status_label": "Check already running",
+            "include_paper": include_paper,
+            "stale": False,
+            "reconcile": {"status": "OK", "status_label": "OK", "missing_count": 0, "extra_count": 0, "mismatched_count": 0},
+            "checked_at_utc": _now(),
+        }
+
+    try:
+        started_at = _now()
+        checked_at = _now()
+        rebuild_health = get_positions_unified_rebuild_health()
+        finished_at = rebuild_health.get("finished_at_utc") or rebuild_health.get("last_rebuild_at_utc")
+        stale = False
+        status_label = "OK"
+        if not finished_at or not isinstance(finished_at, str):
+            stale = True
+            status_label = "No rebuild recorded"
+        else:
+            try:
+                dt = datetime.fromisoformat(finished_at.replace("Z", "+00:00"))
+                age_h = (datetime.now(timezone.utc) - dt).total_seconds() / 3600
+                if age_h > _INTEGRITY_CHECK_STALE_HOURS:
+                    stale = True
+                    status_label = "Stored positions may be stale"
+            except (ValueError, TypeError):
+                stale = True
+                status_label = "No rebuild recorded"
+
+        reconcile = get_reconcile_diff(include_paper=include_paper, symbol=None, limit=50)
+        rec_status = (reconcile.get("status") or "OK").strip()
+        rec_label = reconcile.get("status_label") or "OK"
+        if rec_status == "Review":
+            if not stale:
+                status_label = rec_label
+            stale = stale or (rec_status == "Review")
+        overall_status = "Review" if (stale or rec_status == "Review") else "OK"
+        if not stale and overall_status == "OK":
+            status_label = "OK"
+
+        items = list(reconcile.get("items") or [])
+        items.sort(key=_diff_sort_key)
+        sample_items = [_sanitize_sample_item(i) for i in items[: _INTEGRITY_CHECK_SAMPLE_ITEMS_CAP]]
+        sample_items.sort(key=_diff_sort_key)
+        _add_sample_item_links(sample_items, include_paper)
+
+        result = {
+            "ok": overall_status == "OK",
+            "status": overall_status,
+            "status_label": status_label,
+            "include_paper": include_paper,
+            "stale": stale,
+            "started_at_utc": started_at,
+            "reconcile": {
+                "status": rec_status,
+                "status_label": rec_label,
+                "missing_count": reconcile.get("missing_count", 0),
+                "extra_count": reconcile.get("extra_count", 0),
+                "mismatched_count": reconcile.get("mismatched_count", 0),
+            },
+            "checked_at_utc": checked_at,
+            "sample_items": sample_items,
+        }
+        _write_integrity_check_state(result)
+        if overall_status == "Review":
+            ensure_positions_integrity_advisory_notification()
+        return result
+    finally:
+        try:
+            _INTEGRITY_CHECK_LOCK.release()
+        except Exception:
+            pass
+
+
+def get_positions_unified_integrity_check_health() -> Dict[str, Any]:
+    """R29.3/R29.4: System-health block positions_unified_integrity_check. Read-only from state file; safe only."""
+    state = load_integrity_check_state()
+    if not state or not isinstance(state, dict):
+        return {
+            "last_checked_at_utc": None,
+            "last_status": "OK",
+            "last_status_label": "OK",
+            "last_stale": False,
+            "last_reconcile_missing_count": None,
+            "last_reconcile_extra_count": None,
+            "last_reconcile_mismatched_count": None,
+            "last_started_at_utc": None,
+            "last_sample_items": None,
+        }
+    last = state.get("last")
+    if isinstance(last, dict):
+        return {
+            "last_checked_at_utc": last.get("finished_at_utc"),
+            "last_status": last.get("status") or "OK",
+            "last_status_label": last.get("status_label") or "OK",
+            "last_stale": state.get("last_stale", False),
+            "last_reconcile_missing_count": last.get("missing_count"),
+            "last_reconcile_extra_count": last.get("extra_count"),
+            "last_reconcile_mismatched_count": last.get("mismatched_count"),
+            "last_started_at_utc": last.get("started_at_utc"),
+            "last_sample_items": last.get("sample_items"),
+        }
+    return {
+        "last_checked_at_utc": state.get("last_checked_at_utc"),
+        "last_status": state.get("last_status") or "OK",
+        "last_status_label": state.get("last_status_label") or "OK",
+        "last_stale": state.get("last_stale", False),
+        "last_reconcile_missing_count": state.get("last_reconcile_missing_count"),
+        "last_reconcile_extra_count": state.get("last_reconcile_extra_count"),
+        "last_reconcile_mismatched_count": state.get("last_reconcile_mismatched_count"),
+        "last_started_at_utc": None,
+        "last_sample_items": None,
+    }
+
+
+def get_positions_unified_integrity_check_result() -> Dict[str, Any]:
+    """R29.4: Read-only last result + history for GET /api/ui/positions/unified/integrity-check. Deterministic ordering."""
+    state = load_integrity_check_state()
+    if not state or not isinstance(state, dict):
+        return {
+            "status": "OK",
+            "status_label": "OK",
+            "last": None,
+            "history": [],
+        }
+    last = state.get("last")
+    history = state.get("history") or []
+    if not isinstance(history, list):
+        history = []
+    if isinstance(last, dict):
+        return {
+            "status": last.get("status") or "OK",
+            "status_label": last.get("status_label") or "OK",
+            "last": last,
+            "history": history[: _INTEGRITY_CHECK_HISTORY_CAP],
+        }
+    last_derived = {
+        "status": state.get("last_status") or "OK",
+        "status_label": state.get("last_status_label") or "OK",
+        "started_at_utc": None,
+        "finished_at_utc": state.get("last_checked_at_utc"),
+        "missing_count": state.get("last_reconcile_missing_count"),
+        "extra_count": state.get("last_reconcile_extra_count"),
+        "mismatched_count": state.get("last_reconcile_mismatched_count"),
+        "sample_items": [],
+    }
+    return {
+        "status": last_derived["status"],
+        "status_label": last_derived["status_label"],
+        "last": last_derived,
+        "history": [],
+    }

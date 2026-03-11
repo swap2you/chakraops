@@ -28,6 +28,8 @@ import type {
   ClosedSharePositionsListResponse,
   UiPositionsUnifiedResponse,
   UiPositionsUnifiedRebuildResponse,
+  UiPositionsUnifiedIntegrityCheckResponse,
+  UiPositionsUnifiedIntegrityCheckResult,
   UiReconcileDiffResponse,
   UiPositionsUnifiedDbResponse,
 } from "./types";
@@ -123,6 +125,31 @@ function uiPositionsUnifiedDbPath(params: {
 /** R28.7: POST /api/ui/positions/unified/rebuild */
 function uiPositionsUnifiedRebuildPath(includePaper: boolean): string {
   return `/api/ui/positions/unified/rebuild?include_paper=${includePaper}`;
+}
+
+/** R29.3: POST /api/ui/positions/unified/integrity-check — body: { include_paper: boolean }. */
+const UI_POSITIONS_UNIFIED_INTEGRITY_CHECK_PATH = "/api/ui/positions/unified/integrity-check";
+
+/** R29.7: GET /api/ui/positions/unified/integrity-bundle — returns ZIP; query params include_paper, symbol?, limit. */
+export function uiIntegrityBundlePath(includePaper: boolean, symbol: string | null | undefined, limit: number = 200): string {
+  const q = new URLSearchParams();
+  q.set("include_paper", String(includePaper));
+  q.set("limit", String(Math.min(1000, Math.max(1, limit))));
+  if (symbol != null && symbol.trim() !== "") q.set("symbol", symbol.trim());
+  return `/api/ui/positions/unified/integrity-bundle?${q.toString()}`;
+}
+
+/** R29.7: Download integrity bundle ZIP (manual; when status is Review). */
+export async function downloadIntegrityBundle(includePaper: boolean, symbol?: string | null): Promise<void> {
+  const { apiGetBlob } = await import("@/api/client");
+  const path = uiIntegrityBundlePath(includePaper, symbol ?? null, 200);
+  const blob = await apiGetBlob(path);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `integrity_bundle_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.zip`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 /** R25.8: Earnings debug (diagnostics only; safe fields). */
@@ -531,6 +558,8 @@ export const queryKeys = {
   /** R28.8 */
   uiReconcileDiff: (params: { include_paper?: boolean; symbol?: string | null; limit?: number }) =>
     ["ui", "positions", "unified", "reconcile-diff", params] as const,
+  /** R29.4 */
+  uiIntegrityCheckResult: () => ["ui", "positions", "unified", "integrity-check"] as const,
   /** R28.9 */
   uiPositionsUnifiedDb: (params: Record<string, unknown>) => ["ui", "positions", "unified", "db", params] as const,
   uiTrackedPositions: () => ["ui", "positions", "tracked"] as const,
@@ -1232,20 +1261,22 @@ export function usePortfolio() {
   });
 }
 
-/** R27.9: GET /api/ui/positions/unified — read-only aggregation (live shares, live options, paper). */
+/** R27.9: GET /api/ui/positions/unified — read-only aggregation (live shares, live options, paper). R29.2: enabled for compare. */
 export function useUnifiedPositions(params: {
   state?: "open" | "closed";
   include_paper?: boolean;
   instrument_type?: string | null;
   symbol?: string | null;
+  enabled?: boolean;
 } = {}) {
-  const { state = "open", include_paper = true, instrument_type, symbol } = params;
+  const { state = "open", include_paper = true, instrument_type, symbol, enabled = true } = params;
   return useQuery({
     queryKey: queryKeys.uiPositionsUnified({ state, include_paper, instrument_type, symbol }),
     queryFn: () =>
       apiGet<UiPositionsUnifiedResponse>(
         uiPositionsUnifiedPath({ state, include_paper, instrument_type, symbol })
       ),
+    enabled,
   });
 }
 
@@ -1267,21 +1298,56 @@ export function usePositionsUnifiedRebuild() {
   });
 }
 
-/** R28.9: GET /api/ui/positions/unified/db — DB-first read (what is stored). */
+/** R29.3: POST /api/ui/positions/unified/integrity-check — manual integrity check; invalidates system-health and reconcile-diff. */
+export function usePositionsUnifiedIntegrityCheck() {
+  const qc = useQueryClient();
+  return useMutation<
+    UiPositionsUnifiedIntegrityCheckResponse,
+    Error,
+    { include_paper?: boolean }
+  >({
+    mutationFn: (params: { include_paper?: boolean } = {}) => {
+      const includePaper = params?.include_paper !== false;
+      return apiPost<UiPositionsUnifiedIntegrityCheckResponse>(
+        UI_POSITIONS_UNIFIED_INTEGRITY_CHECK_PATH,
+        { include_paper: includePaper }
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiSystemHealth() });
+      qc.invalidateQueries({ queryKey: queryKeys.uiIntegrityCheckResult() });
+      qc.invalidateQueries({ queryKey: ["ui", "positions", "unified", "reconcile-diff"] });
+    },
+  });
+}
+
+/** R29.4: GET /api/ui/positions/unified/integrity-check — last result + history (read-only). */
+export function useIntegrityCheckResult(params: { enabled?: boolean } = {}) {
+  const { enabled = true } = params;
+  return useQuery({
+    queryKey: queryKeys.uiIntegrityCheckResult(),
+    queryFn: () => apiGet<UiPositionsUnifiedIntegrityCheckResult>(UI_POSITIONS_UNIFIED_INTEGRITY_CHECK_PATH),
+    enabled,
+  });
+}
+
+/** R28.9: GET /api/ui/positions/unified/db — DB-first read (what is stored). R29.2: enabled for compare. */
 export function useUnifiedPositionsFromDb(params: {
   state?: "open" | "closed";
   include_paper?: boolean;
   instrument_type?: string | null;
   symbol?: string | null;
   limit?: number;
+  enabled?: boolean;
 } = {}) {
-  const { state = "open", include_paper = true, instrument_type, symbol, limit = 500 } = params;
+  const { state = "open", include_paper = true, instrument_type, symbol, limit = 500, enabled = true } = params;
   return useQuery({
     queryKey: queryKeys.uiPositionsUnifiedDb({ state, include_paper, instrument_type, symbol, limit }),
     queryFn: () =>
       apiGet<UiPositionsUnifiedDbResponse>(
         uiPositionsUnifiedDbPath({ state, include_paper, instrument_type, symbol, limit })
       ),
+    enabled,
   });
 }
 

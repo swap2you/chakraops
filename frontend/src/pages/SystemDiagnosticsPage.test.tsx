@@ -50,6 +50,24 @@ const mockHealth = {
     last_rebuild_closed_count: 1,
     last_include_paper: true,
   },
+  positions_unified_integrity_check: {
+    last_checked_at_utc: "2026-02-27T15:00:00Z",
+    last_status: "OK",
+    last_status_label: "OK",
+    last_reconcile_missing_count: 0,
+    last_reconcile_extra_count: 0,
+    last_reconcile_mismatched_count: 0,
+    last_sample_items: [
+      {
+        kind: "missing",
+        id: "p1",
+        symbol: "AAPL",
+        instrument_type: "SHARES",
+        link_positions_url: "/positions?source=db&symbol=AAPL&include_paper=true",
+        link_diagnostics_url: "/system",
+      },
+    ],
+  },
   guardrails: {
     status: "OK",
     metrics: { cash_reserve_pct: 40, open_options_count: 1, open_shares_count: 0, symbols_exposure_count: 2, max_symbol_notional_pct: 10 },
@@ -70,6 +88,7 @@ const mockHistory = {
 const mockUseLatestSnapshot = vi.fn(() => ({ data: null, isError: true }));
 const mockUseUiSystemHealth = vi.fn(() => ({ data: mockHealth, isLoading: false, isError: false }));
 const mockRebuildMutate = vi.fn();
+const mockDownloadIntegrityBundle = vi.hoisted(() => vi.fn());
 const mockIntegrityData = {
   stores: {
     notifications: { path: "/out/notifications.jsonl", exists: true, total_lines: 10, invalid_lines: 0, last_valid_line: 10, last_valid_offset: 0 },
@@ -107,7 +126,9 @@ vi.mock("@/api/queries", () => ({
   useAdminSlackTest: () => ({ mutate: vi.fn(), isPending: false, data: null }),
   useAdminEvaluationForce: () => ({ mutate: vi.fn(), isPending: false, data: null }),
   usePositionsUnifiedRebuild: () => ({ mutate: mockRebuildMutate, isPending: false }),
+  usePositionsUnifiedIntegrityCheck: () => ({ mutate: vi.fn(), isPending: false }),
   useReconcileDiff: () => ({ data: { missing_count: 0, extra_count: 0, mismatched_count: 0, items: [] }, isLoading: false }),
+  downloadIntegrityBundle: mockDownloadIntegrityBundle,
 }));
 
 describe("SystemDiagnosticsPage", () => {
@@ -150,6 +171,86 @@ describe("SystemDiagnosticsPage", () => {
     const text = document.body.textContent ?? "";
     expect(text).not.toMatch(/\bFAIL\b/);
     expect(text).not.toMatch(/\bWARN\b/);
+  });
+
+  it("R29.4: Unified Positions Integrity Check card renders when positions_unified_integrity_check present", () => {
+    render(<SystemDiagnosticsPage />);
+    expect(screen.getByTestId("positions-unified-integrity-check-card")).toBeInTheDocument();
+    expect(screen.getByTestId("integrity-check-view-details-btn")).toHaveTextContent("View details");
+  });
+
+  it("R29.6: integrity sample items show Open positions link with correct href; no forbidden tokens", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<SystemDiagnosticsPage />);
+    await user.click(screen.getByTestId("integrity-check-view-details-btn"));
+    const openPosLinks = screen.getAllByTestId("integrity-sample-open-positions");
+    expect(openPosLinks.length).toBeGreaterThanOrEqual(1);
+    expect(openPosLinks[0]).toHaveAttribute("href", "/positions?source=db&symbol=AAPL&include_paper=true");
+    const openDiagLinks = screen.getAllByTestId("integrity-sample-open-diagnostics");
+    expect(openDiagLinks.length).toBeGreaterThanOrEqual(1);
+    expect(openDiagLinks[0]).toHaveAttribute("href", "/system");
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_/);
+    expect(text).not.toMatch(/WARN_/);
+  });
+
+  it("R29.7: Download integrity bundle button only when Review; clicking calls download with include_paper true", async () => {
+    const healthReview = {
+      ...mockHealth,
+      positions_unified_integrity_check: {
+        ...mockHealth.positions_unified_integrity_check,
+        last_status: "Review",
+        last_status_label: "Differences found",
+      },
+    };
+    mockUseUiSystemHealth.mockReturnValue({ data: healthReview, isLoading: false, isError: false });
+    const user = userEvent.setup();
+    render(<SystemDiagnosticsPage />);
+    const downloadBtn = screen.getByTestId("integrity-check-download-bundle-btn");
+    expect(downloadBtn).toHaveTextContent("Download integrity bundle");
+    await user.click(downloadBtn);
+    expect(mockDownloadIntegrityBundle).toHaveBeenCalledWith(true);
+  });
+
+  it("R29.7: when integrity status OK, Download integrity bundle button is not present", () => {
+    render(<SystemDiagnosticsPage />);
+    expect(screen.queryByTestId("integrity-check-download-bundle-btn")).not.toBeInTheDocument();
+  });
+
+  it("R29.4: document has no FAIL/WARN/PASS or FAIL_/WARN_ tokens", () => {
+    render(<SystemDiagnosticsPage />);
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_/);
+    expect(text).not.toMatch(/WARN_/);
+  });
+
+  it("R29.5: when integrity status Review, remediation guidance shows bullets and links", () => {
+    const healthReview = {
+      ...mockHealth,
+      positions_unified_integrity_check: {
+        ...mockHealth.positions_unified_integrity_check,
+        last_status: "Review",
+        last_status_label: "Differences found",
+      },
+    };
+    mockUseUiSystemHealth.mockReturnValue({ data: healthReview, isLoading: false, isError: false });
+    render(<SystemDiagnosticsPage />);
+    const guidance = screen.getByTestId("integrity-check-remediation-guidance");
+    expect(guidance).toBeInTheDocument();
+    expect(guidance).not.toHaveTextContent("No action needed.");
+    expect(guidance).toHaveTextContent("View diff details");
+    expect(guidance).toHaveTextContent("Run integrity check");
+    expect(guidance).toHaveTextContent("Rebuild unified positions");
+  });
+
+  it("R29.5: document has no forbidden tokens", () => {
+    render(<SystemDiagnosticsPage />);
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_/);
+    expect(text).not.toMatch(/WARN_/);
   });
 
   it("R28.7: Unified Positions Rebuild card renders when positions_unified_rebuild present", () => {

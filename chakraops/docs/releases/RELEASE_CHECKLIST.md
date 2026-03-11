@@ -779,6 +779,78 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Rebuild now from Reconcile Diff when Review; View DB link; Positions source=db shows Stored; no raw FAIL/WARN/PASS in UI
 - **Scope:** GET /positions/unified/db; Rebuild now button + View DB link on Reconcile Diff card; Positions source param; safe labels only; no decision writes. NO GIT.
 
+### R29.0 — DB-first Positions default + staleness guardrail
+
+- [x] **Requirements** — chakraops/docs/releases/R29.0_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R29.0_release_notes.md
+- [x] **Verification** — out/verification/R29.0/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — test_r290_* pass; full backend pass; frontend tests pass; frontend build pass. Evidence in out/verification/R29.0/notes.md.
+- [x] **UAT** — Positions defaults to Stored; stale banner when rebuild missing/old; Rebuild button + confirm; Stored/Computed toggle; no FAIL/WARN/PASS in UI
+- **Scope:** Default source=db; staleness banner + Rebuild; system-health finished_at_utc; safe labels only. NO GIT.
+
+### R29.1 — Positions Trust Banner v1 (Integrity strip)
+
+- [x] **Requirements** — chakraops/docs/releases/R29.1_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R29.1_release_notes.md
+- [x] **Verification** — out/verification/R29.1/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — test_r291_* pass; full backend pass; frontend tests pass; frontend build pass. Evidence in out/verification/R29.1/notes.md.
+- [x] **UAT** — Stored shows Integrity strip and Review shows diff; View diff details and Rebuild work; Switch to Computed/Stored; no FAIL/WARN/PASS in UI
+- **Scope:** Integrity strip on Positions; reconcile status + diff + actions; safe labels only. NO GIT.
+
+### R29.2 — Stored vs Computed Compare v1
+
+- [x] **Requirements** — chakraops/docs/releases/R29.2_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R29.2_release_notes.md
+- [x] **Verification** — out/verification/R29.2/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — test_r292_* pass; full backend pass; frontend tests pass; frontend build pass. Evidence in out/verification/R29.2/notes.md.
+- [x] **UAT** — Symbol filter + Compare open; diff summary/details; Rebuild; no FAIL/WARN/PASS or FAIL_/WARN_ in UI
+- **Scope:** Compare panel on Positions; symbol parity; sanitized display; safe labels only. NO GIT.
+
+### R29.3 — Integrity Check + Advisory v1
+
+- [x] **Requirements** — chakraops/docs/releases/R29.3_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R29.3_release_notes.md
+- [x] **Verification** — out/verification/R29.3/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend: 980 passed, 1 skipped in 269.01s; Frontend tests: 31 passed | 2 skipped (33), 274 passed | 18 skipped (292); Build: ✓ built in 9.00s. Evidence: out/verification/R29.3/notes.md.
+- [x] **UAT** — Positions: run integrity check OK path; simulate Review if feasible; no raw FAIL/WARN/PASS; grep proof. UAT checklist completed in out/verification/R29.3/notes.md.
+- **Scope:** POST integrity-check; lock; advisory dedupe; safe labels only; no decision writes. NO GIT.
+
+### R29.4 — Integrity Check details/history + System Diagnostics parity
+
+- [x] **Requirements** — chakraops/docs/releases/R29.4_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R29.4_release_notes.md
+- [x] **Verification** — out/verification/R29.4/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend: 984 passed, 1 skipped in 298.50s; Frontend tests: 31 passed | 2 skipped (33), 278 passed | 18 skipped (296); Build: built in 8.15s. Evidence: out/verification/R29.4/notes.md.
+- [x] **UAT** — Positions: last check + View details; SystemDiagnostics: Integrity Check card + details; no raw FAIL/WARN/PASS. UAT checklist completed in out/verification/R29.4/notes.md.
+- **Scope:** GET integrity-check; state history+sample; Diagnostics parity; sanitization; no decision writes. NO GIT.
+
+### R29.5 — Integrity remediation UX
+
+- [x] **Requirements** — chakraops/docs/releases/R29.5_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R29.5_release_notes.md
+- [x] **Verification** — out/verification/R29.5/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend: 987 passed, 1 skipped in 249.46s; Frontend tests: Test Files 31 passed | 2 skipped (33), Tests 282 passed | 18 skipped (300); Build: built in 20.12s. Evidence: out/verification/R29.5/notes.md.
+- [x] **UAT** — Copy remediation summary when Review; copied text sanitized; Diagnostics remediation guidance; no background jobs. UAT checklist completed in out/verification/R29.5/notes.md.
+- **Scope:** Remediation UX (copy summary, Open diagnostics, guidance bullets); safe labels only; no decision writes. NO GIT.
+
+### R29.6 — Integrity sample items: safe deep links
+
+- [x] **Requirements** — chakraops/docs/releases/R29.6_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R29.6_release_notes.md
+- [x] **Verification** — out/verification/R29.6/notes.md (gate tails + UAT + grep proof); chakraops/chakraops/out/verification/R29.6/notes.md
+- [x] **Gate** — Backend test_r296_*: 4 passed; full pytest: 989 passed, 3 skipped; Frontend: 31 passed | 2 skipped (33), 284 passed | 18 skipped; Build: built in 8.72s. Evidence: chakraops/chakraops/out/verification/R29.6/notes.md.
+- [x] **UAT** — Integrity sample items show "Open positions" links; links go to /positions with correct symbol/include_paper/source=db; no forbidden tokens in UI.
+- **Scope:** Safe link fields on sample items; Positions + Diagnostics per-item links; no decision_latest write; deterministic ordering. NO GIT.
+
+### R29.7 — Integrity Export Pack v1
+
+- [x] **Requirements** — chakraops/docs/releases/R29.7_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R29.7_release_notes.md
+- [x] **Verification** — chakraops/chakraops/out/verification/R29.7/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend test_r297_*: 4 passed; full pytest: 993 passed, 3 skipped; Frontend: 31 passed | 2 skipped (33), 288 passed | 18 skipped; Build: built in 9.18s. Evidence: chakraops/chakraops/out/verification/R29.7/notes.md.
+- [x] **UAT** — Download integrity bundle when Review; ZIP contains expected files; no forbidden tokens in export (test scans zip).
+- **Scope:** GET integrity-bundle endpoint; sanitized ZIP; Download button when Review; no decision_latest write; deterministic. NO GIT.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

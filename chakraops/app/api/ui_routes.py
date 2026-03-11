@@ -203,7 +203,7 @@ def _get_positions_unified_reconcile_health() -> Dict[str, Any]:
 
 
 def _get_positions_unified_rebuild_health() -> Dict[str, Any]:
-    """R28.7: positions_unified_rebuild block — last rebuild metadata. Safe labels only."""
+    """R28.7/R29.0: positions_unified_rebuild block — last rebuild metadata. Safe labels only. finished_at_utc for staleness."""
     try:
         from app.core.portfolio.positions_unified_store_r279 import get_positions_unified_rebuild_health
         return get_positions_unified_rebuild_health()
@@ -212,9 +212,29 @@ def _get_positions_unified_rebuild_health() -> Dict[str, Any]:
             "status": "OK",
             "status_label": "OK",
             "last_rebuild_at_utc": None,
+            "finished_at_utc": None,
             "last_rebuild_open_count": None,
             "last_rebuild_closed_count": None,
             "last_include_paper": None,
+        }
+
+
+def _get_positions_unified_integrity_check_health() -> Dict[str, Any]:
+    """R29.3: positions_unified_integrity_check block — last check state. Safe only; no FAIL/WARN/PASS."""
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import get_positions_unified_integrity_check_health
+        return get_positions_unified_integrity_check_health()
+    except Exception:
+        return {
+            "last_checked_at_utc": None,
+            "last_status": "OK",
+            "last_status_label": "OK",
+            "last_stale": False,
+            "last_reconcile_missing_count": None,
+            "last_reconcile_extra_count": None,
+            "last_reconcile_mismatched_count": None,
+            "last_started_at_utc": None,
+            "last_sample_items": None,
         }
 
 
@@ -1332,6 +1352,7 @@ def ui_system_health(
         "positions_unified": _get_positions_unified_health(),
         "positions_unified_reconcile": _get_positions_unified_reconcile_health(),
         "positions_unified_rebuild": _get_positions_unified_rebuild_health(),
+        "positions_unified_integrity_check": _get_positions_unified_integrity_check_health(),
     }
 
 
@@ -4098,6 +4119,137 @@ def ui_positions_unified_reconcile_diff(
         import logging
         logging.getLogger(__name__).exception("Reconcile diff error: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/positions/unified/integrity-bundle")
+def ui_positions_unified_integrity_bundle(
+    include_paper: bool = Query(default=True, description="Include paper in exported data"),
+    symbol: str | None = Query(default=None, description="Filter by symbol"),
+    limit: int = Query(default=200, ge=1, le=1000, description="Max items per list (default 200, max 1000)"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+):
+    """R29.7: Manual download of integrity bundle (ZIP) for debugging. Sanitized JSON only; no decision write; no secrets."""
+    from datetime import datetime, timezone
+    import io
+    import zipfile
+
+    from fastapi.responses import Response
+
+    from app.core.portfolio.positions_unified_store_r279 import (
+        build_unified_positions,
+        get_positions_unified_integrity_check_result,
+        get_reconcile_diff,
+        read_positions_unified_from_db,
+        sanitize_json_for_export,
+    )
+
+    _require_ui_key(x_ui_key)
+    try:
+        generated_at = datetime.now(timezone.utc).isoformat()
+        ts = generated_at.replace(":", "-").replace(".", "-")[:19]
+
+        integrity_check = get_positions_unified_integrity_check_result()
+        reconcile_diff = get_reconcile_diff(include_paper=include_paper, symbol=symbol, limit=limit)
+        positions_db = read_positions_unified_from_db(
+            state="open", include_paper=include_paper, symbol=symbol, limit=limit
+        )
+        computed_list = build_unified_positions(state="open", include_paper=include_paper, symbol=symbol)
+        positions_computed = {"positions": computed_list[:limit], "state": "open", "include_paper": include_paper}
+        system_health_subset = {
+            "positions_unified_rebuild": _get_positions_unified_rebuild_health(),
+            "positions_unified_reconcile": _get_positions_unified_reconcile_health(),
+            "positions_unified_integrity_check": _get_positions_unified_integrity_check_health(),
+        }
+
+        integrity_check_s = sanitize_json_for_export(integrity_check)
+        reconcile_diff_s = sanitize_json_for_export(reconcile_diff)
+        positions_db_s = sanitize_json_for_export(positions_db)
+        positions_computed_s = sanitize_json_for_export(positions_computed)
+        system_health_subset_s = sanitize_json_for_export(system_health_subset)
+
+        count_reconcile = len((reconcile_diff.get("items") or []))
+        count_db = positions_db.get("count") or 0
+        count_computed = len(positions_computed.get("positions") or [])
+
+        manifest = {
+            "generated_at_utc": generated_at,
+            "include_paper": include_paper,
+            "symbol": symbol,
+            "limit": limit,
+            "counts": {
+                "reconcile_diff_items": count_reconcile,
+                "positions_db_count": count_db,
+                "positions_computed_count": count_computed,
+                "system_health_blocks": 3,
+            },
+        }
+        manifest_s = sanitize_json_for_export(manifest)
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("manifest.json", json.dumps(manifest_s, indent=2, default=str))
+            zf.writestr("integrity_check.json", json.dumps(integrity_check_s, indent=2, default=str))
+            zf.writestr("reconcile_diff.json", json.dumps(reconcile_diff_s, indent=2, default=str))
+            zf.writestr("positions_db.json", json.dumps(positions_db_s, indent=2, default=str))
+            zf.writestr("positions_computed.json", json.dumps(positions_computed_s, indent=2, default=str))
+            zf.writestr("system_health_subset.json", json.dumps(system_health_subset_s, indent=2, default=str))
+
+        zip_bytes = buf.getvalue()
+        filename = f"integrity_bundle_{ts}.zip"
+        return Response(
+            content=zip_bytes,
+            media_type="application/zip",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Integrity bundle error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/positions/unified/integrity-check")
+def ui_positions_unified_integrity_check_get(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R29.4: Read-only last integrity-check result + optional history. Safe labels only; no decision write."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import get_positions_unified_integrity_check_result
+        return get_positions_unified_integrity_check_result()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Integrity check GET error: %s", e)
+        return {"status": "OK", "status_label": "OK", "last": None, "history": []}
+
+
+@router.post("/positions/unified/integrity-check")
+async def ui_positions_unified_integrity_check(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R29.3: Manual integrity check — staleness + reconcile summary. Safe labels only; optional single advisory when Review. No decision write."""
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    except Exception:
+        body = {}
+    include_paper = body.get("include_paper", True) if isinstance(body.get("include_paper"), bool) else True
+    try:
+        from app.core.portfolio.positions_unified_store_r279 import run_positions_unified_integrity_check
+        return run_positions_unified_integrity_check(include_paper=include_paper)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Integrity check error: %s", e)
+        from datetime import datetime, timezone
+        return {
+            "ok": False,
+            "status": "Review",
+            "status_label": "Check failed",
+            "include_paper": include_paper,
+            "stale": False,
+            "reconcile": {"status": "OK", "status_label": "OK", "missing_count": 0, "extra_count": 0, "mismatched_count": 0},
+            "checked_at_utc": datetime.now(timezone.utc).isoformat(),
+        }
 
 
 @router.post("/positions/unified/rebuild")

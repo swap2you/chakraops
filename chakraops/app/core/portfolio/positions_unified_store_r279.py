@@ -85,6 +85,19 @@ def _sanitize_display_str(val: Any) -> str:
     return s.strip() or ""
 
 
+def sanitize_json_for_export(obj: Any) -> Any:
+    """R29.7: Recursively sanitize a JSON-serializable structure for export; no FAIL/WARN/PASS or FAIL_/WARN_ in strings."""
+    if obj is None:
+        return None
+    if isinstance(obj, str):
+        return _sanitize_display_str(obj)
+    if isinstance(obj, dict):
+        return {k: sanitize_json_for_export(v) for k, v in sorted(obj.items())}
+    if isinstance(obj, list):
+        return [sanitize_json_for_export(v) for v in obj]
+    return obj
+
+
 def _fees_from_position(p: Any) -> Optional[float]:
     """Sum open_fees + close_fees for a position object; return None if both 0."""
     o = float(getattr(p, "open_fees", 0) or 0)

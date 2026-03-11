@@ -896,6 +896,16 @@ export function SystemDiagnosticsPage() {
               >
                 {integrityCheck.isPending ? "Check running" : "Run integrity check"}
               </Button>
+              {data.positions_unified_integrity_check.last_status === "Review" && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => void import("@/api/queries").then((m) => m.downloadIntegrityBundle(true))}
+                  data-testid="integrity-check-download-bundle-btn"
+                >
+                  Download integrity bundle
+                </Button>
+              )}
               <Link to="/positions?source=db" className="text-sm text-blue-600 hover:underline dark:text-blue-400">
                 Positions
               </Link>

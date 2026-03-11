@@ -88,6 +88,7 @@ const mockHistory = {
 const mockUseLatestSnapshot = vi.fn(() => ({ data: null, isError: true }));
 const mockUseUiSystemHealth = vi.fn(() => ({ data: mockHealth, isLoading: false, isError: false }));
 const mockRebuildMutate = vi.fn();
+const mockDownloadIntegrityBundle = vi.hoisted(() => vi.fn());
 const mockIntegrityData = {
   stores: {
     notifications: { path: "/out/notifications.jsonl", exists: true, total_lines: 10, invalid_lines: 0, last_valid_line: 10, last_valid_offset: 0 },
@@ -127,6 +128,7 @@ vi.mock("@/api/queries", () => ({
   usePositionsUnifiedRebuild: () => ({ mutate: mockRebuildMutate, isPending: false }),
   usePositionsUnifiedIntegrityCheck: () => ({ mutate: vi.fn(), isPending: false }),
   useReconcileDiff: () => ({ data: { missing_count: 0, extra_count: 0, mismatched_count: 0, items: [] }, isLoading: false }),
+  downloadIntegrityBundle: mockDownloadIntegrityBundle,
 }));
 
 describe("SystemDiagnosticsPage", () => {
@@ -191,6 +193,29 @@ describe("SystemDiagnosticsPage", () => {
     expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
     expect(text).not.toMatch(/FAIL_/);
     expect(text).not.toMatch(/WARN_/);
+  });
+
+  it("R29.7: Download integrity bundle button only when Review; clicking calls download with include_paper true", async () => {
+    const healthReview = {
+      ...mockHealth,
+      positions_unified_integrity_check: {
+        ...mockHealth.positions_unified_integrity_check,
+        last_status: "Review",
+        last_status_label: "Differences found",
+      },
+    };
+    mockUseUiSystemHealth.mockReturnValue({ data: healthReview, isLoading: false, isError: false });
+    const user = userEvent.setup();
+    render(<SystemDiagnosticsPage />);
+    const downloadBtn = screen.getByTestId("integrity-check-download-bundle-btn");
+    expect(downloadBtn).toHaveTextContent("Download integrity bundle");
+    await user.click(downloadBtn);
+    expect(mockDownloadIntegrityBundle).toHaveBeenCalledWith(true);
+  });
+
+  it("R29.7: when integrity status OK, Download integrity bundle button is not present", () => {
+    render(<SystemDiagnosticsPage />);
+    expect(screen.queryByTestId("integrity-check-download-bundle-btn")).not.toBeInTheDocument();
   });
 
   it("R29.4: document has no FAIL/WARN/PASS or FAIL_/WARN_ tokens", () => {

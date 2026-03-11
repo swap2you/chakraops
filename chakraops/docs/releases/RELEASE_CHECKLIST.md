@@ -842,6 +842,15 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Integrity sample items show "Open positions" links; links go to /positions with correct symbol/include_paper/source=db; no forbidden tokens in UI.
 - **Scope:** Safe link fields on sample items; Positions + Diagnostics per-item links; no decision_latest write; deterministic ordering. NO GIT.
 
+### R29.7 — Integrity Export Pack v1
+
+- [x] **Requirements** — chakraops/docs/releases/R29.7_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R29.7_release_notes.md
+- [x] **Verification** — chakraops/chakraops/out/verification/R29.7/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend test_r297_*: 4 passed; full pytest: 993 passed, 3 skipped; Frontend: 31 passed | 2 skipped (33), 288 passed | 18 skipped; Build: built in 9.18s. Evidence: chakraops/chakraops/out/verification/R29.7/notes.md.
+- [x] **UAT** — Download integrity bundle when Review; ZIP contains expected files; no forbidden tokens in export (test scans zip).
+- **Scope:** GET integrity-bundle endpoint; sanitized ZIP; Download button when Review; no decision_latest write; deterministic. NO GIT.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

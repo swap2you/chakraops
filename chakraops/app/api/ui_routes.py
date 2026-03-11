@@ -4121,6 +4121,92 @@ def ui_positions_unified_reconcile_diff(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/positions/unified/integrity-bundle")
+def ui_positions_unified_integrity_bundle(
+    include_paper: bool = Query(default=True, description="Include paper in exported data"),
+    symbol: str | None = Query(default=None, description="Filter by symbol"),
+    limit: int = Query(default=200, ge=1, le=1000, description="Max items per list (default 200, max 1000)"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+):
+    """R29.7: Manual download of integrity bundle (ZIP) for debugging. Sanitized JSON only; no decision write; no secrets."""
+    from datetime import datetime, timezone
+    import io
+    import zipfile
+
+    from fastapi.responses import Response
+
+    from app.core.portfolio.positions_unified_store_r279 import (
+        build_unified_positions,
+        get_positions_unified_integrity_check_result,
+        get_reconcile_diff,
+        read_positions_unified_from_db,
+        sanitize_json_for_export,
+    )
+
+    _require_ui_key(x_ui_key)
+    try:
+        generated_at = datetime.now(timezone.utc).isoformat()
+        ts = generated_at.replace(":", "-").replace(".", "-")[:19]
+
+        integrity_check = get_positions_unified_integrity_check_result()
+        reconcile_diff = get_reconcile_diff(include_paper=include_paper, symbol=symbol, limit=limit)
+        positions_db = read_positions_unified_from_db(
+            state="open", include_paper=include_paper, symbol=symbol, limit=limit
+        )
+        computed_list = build_unified_positions(state="open", include_paper=include_paper, symbol=symbol)
+        positions_computed = {"positions": computed_list[:limit], "state": "open", "include_paper": include_paper}
+        system_health_subset = {
+            "positions_unified_rebuild": _get_positions_unified_rebuild_health(),
+            "positions_unified_reconcile": _get_positions_unified_reconcile_health(),
+            "positions_unified_integrity_check": _get_positions_unified_integrity_check_health(),
+        }
+
+        integrity_check_s = sanitize_json_for_export(integrity_check)
+        reconcile_diff_s = sanitize_json_for_export(reconcile_diff)
+        positions_db_s = sanitize_json_for_export(positions_db)
+        positions_computed_s = sanitize_json_for_export(positions_computed)
+        system_health_subset_s = sanitize_json_for_export(system_health_subset)
+
+        count_reconcile = len((reconcile_diff.get("items") or []))
+        count_db = positions_db.get("count") or 0
+        count_computed = len(positions_computed.get("positions") or [])
+
+        manifest = {
+            "generated_at_utc": generated_at,
+            "include_paper": include_paper,
+            "symbol": symbol,
+            "limit": limit,
+            "counts": {
+                "reconcile_diff_items": count_reconcile,
+                "positions_db_count": count_db,
+                "positions_computed_count": count_computed,
+                "system_health_blocks": 3,
+            },
+        }
+        manifest_s = sanitize_json_for_export(manifest)
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("manifest.json", json.dumps(manifest_s, indent=2, default=str))
+            zf.writestr("integrity_check.json", json.dumps(integrity_check_s, indent=2, default=str))
+            zf.writestr("reconcile_diff.json", json.dumps(reconcile_diff_s, indent=2, default=str))
+            zf.writestr("positions_db.json", json.dumps(positions_db_s, indent=2, default=str))
+            zf.writestr("positions_computed.json", json.dumps(positions_computed_s, indent=2, default=str))
+            zf.writestr("system_health_subset.json", json.dumps(system_health_subset_s, indent=2, default=str))
+
+        zip_bytes = buf.getvalue()
+        filename = f"integrity_bundle_{ts}.zip"
+        return Response(
+            content=zip_bytes,
+            media_type="application/zip",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Integrity bundle error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/positions/unified/integrity-check")
 def ui_positions_unified_integrity_check_get(
     x_ui_key: str | None = Header(None, alias="x-ui-key"),

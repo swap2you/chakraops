@@ -130,6 +130,28 @@ function uiPositionsUnifiedRebuildPath(includePaper: boolean): string {
 /** R29.3: POST /api/ui/positions/unified/integrity-check — body: { include_paper: boolean }. */
 const UI_POSITIONS_UNIFIED_INTEGRITY_CHECK_PATH = "/api/ui/positions/unified/integrity-check";
 
+/** R29.7: GET /api/ui/positions/unified/integrity-bundle — returns ZIP; query params include_paper, symbol?, limit. */
+export function uiIntegrityBundlePath(includePaper: boolean, symbol: string | null | undefined, limit: number = 200): string {
+  const q = new URLSearchParams();
+  q.set("include_paper", String(includePaper));
+  q.set("limit", String(Math.min(1000, Math.max(1, limit))));
+  if (symbol != null && symbol.trim() !== "") q.set("symbol", symbol.trim());
+  return `/api/ui/positions/unified/integrity-bundle?${q.toString()}`;
+}
+
+/** R29.7: Download integrity bundle ZIP (manual; when status is Review). */
+export async function downloadIntegrityBundle(includePaper: boolean, symbol?: string | null): Promise<void> {
+  const { apiGetBlob } = await import("@/api/client");
+  const path = uiIntegrityBundlePath(includePaper, symbol ?? null, 200);
+  const blob = await apiGetBlob(path);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `integrity_bundle_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.zip`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 /** R25.8: Earnings debug (diagnostics only; safe fields). */
 function uiEarningsDebugPath(symbol: string): string {
   return `/api/ui/earnings/debug?symbol=${encodeURIComponent(symbol)}`;

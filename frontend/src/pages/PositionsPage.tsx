@@ -230,6 +230,14 @@ export function PositionsPage() {
                       >
                         Copy remediation summary
                       </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => void import("@/api/queries").then((m) => m.downloadIntegrityBundle(includePaper, symbolFilter.trim() || undefined))}
+                        data-testid="positions-integrity-download-bundle-btn"
+                      >
+                        Download integrity bundle
+                      </Button>
                       <Link
                         to="/system"
                         className="text-sm text-blue-600 hover:underline dark:text-blue-400"

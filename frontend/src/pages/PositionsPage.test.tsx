@@ -137,6 +137,8 @@ const mockUsePositionsUnifiedIntegrityCheck = vi.fn(() => ({
   data: undefined,
 }));
 
+const mockDownloadIntegrityBundle = vi.hoisted(() => vi.fn());
+
 vi.mock("@/api/queries", () => ({
   useUnifiedPositions: (params: Record<string, unknown>) => mockUseUnifiedPositions(params),
   useUnifiedPositionsFromDb: (params: Record<string, unknown>) => mockUseUnifiedPositionsFromDb(params),
@@ -144,6 +146,7 @@ vi.mock("@/api/queries", () => ({
   usePositionsUnifiedRebuild: () => mockUsePositionsUnifiedRebuild(),
   usePositionsUnifiedIntegrityCheck: () => mockUsePositionsUnifiedIntegrityCheck(),
   useReconcileDiff: (params: Record<string, unknown>) => mockUseReconcileDiff(params),
+  downloadIntegrityBundle: mockDownloadIntegrityBundle,
 }));
 
 describe("PositionsPage", () => {
@@ -415,6 +418,21 @@ describe("PositionsPage", () => {
     expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
     expect(text).not.toMatch(/FAIL_/);
     expect(text).not.toMatch(/WARN_/);
+  });
+
+  it("R29.7: Download integrity bundle button only when Review; clicking calls download with include_paper and symbol", async () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthWithIntegrityReview });
+    renderWithRoute(<PositionsPage />, "/positions?source=db");
+    const downloadBtn = screen.getByTestId("positions-integrity-download-bundle-btn");
+    expect(downloadBtn).toHaveTextContent("Download integrity bundle");
+    await userEvent.click(downloadBtn);
+    expect(mockDownloadIntegrityBundle).toHaveBeenCalledWith(true, undefined);
+  });
+
+  it("R29.7: when status OK, Download integrity bundle button is not present", () => {
+    mockUseUiSystemHealth.mockReturnValue({ data: healthWithIntegrityDetails });
+    renderWithRoute(<PositionsPage />, "/positions?source=db");
+    expect(screen.queryByTestId("positions-integrity-download-bundle-btn")).not.toBeInTheDocument();
   });
 
   it("R29.5: Copy remediation summary only when Review; writeText receives sanitized content", async () => {

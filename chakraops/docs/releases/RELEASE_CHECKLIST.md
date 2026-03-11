@@ -869,6 +869,15 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Readiness card shows "Ready to execute" status (OK/Review); Fix links appear and navigate to expected pages; no FAIL/WARN/PASS visible.
 - **Scope:** Per-check action_label/action_href; Ready banner + Review guidance; Fix links; no decision_latest write; no forbidden tokens; deterministic. NO GIT.
 
+### R30.2 — Readiness Pack Export v1 (manual download, sanitized, deterministic)
+
+- [x] **Requirements** — chakraops/docs/releases/R30.2_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R30.2_release_notes.md
+- [x] **Verification** — out/verification/R30.2/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend test_r302: 4 passed; full pytest: 1007 passed, 1 skipped; Frontend: 31 passed | 2 skipped, 295 passed | 18 skipped; Build: built in 9.95s. Evidence: out/verification/R30.2/notes.md.
+- [x] **UAT** — Trade Ticket shows "Download readiness pack"; download produces zip with expected files; files sanitized (no forbidden tokens); no decision_latest write.
+- **Scope:** GET readiness-pack; ZIP manifest/readiness/system_health_subset/notes; sanitize_json_for_export; no decision write; no forbidden tokens; deterministic. NO GIT.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

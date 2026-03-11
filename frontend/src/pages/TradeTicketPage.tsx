@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { ChevronDown, ChevronRight, Copy, Check } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardHeader, Button } from "@/components/ui";
-import { useTradeTicket, useTradeTicketReadiness, useJournalFromTicket, usePaperExecute } from "@/api/queries";
+import { useTradeTicket, useTradeTicketReadiness, useJournalFromTicket, usePaperExecute, downloadReadinessPack } from "@/api/queries";
 import { constraintToLabel } from "@/utils/sizingConstraints";
 
 export function TradeTicketPage() {
@@ -195,14 +195,24 @@ export function TradeTicketPage() {
                 </li>
               ))}
             </ul>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => copyToClipboard((readiness.order_stub?.lines ?? []).join("\n"), "order_stub")}
-              data-testid="ticket-copy-order-stub"
-            >
-              {copiedSection === "order_stub" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} Copy order stub
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => copyToClipboard((readiness.order_stub?.lines ?? []).join("\n"), "order_stub")}
+                data-testid="ticket-copy-order-stub"
+              >
+                {copiedSection === "order_stub" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} Copy order stub
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => void downloadReadinessPack(symbol, mode, ticketKind, true)}
+                data-testid="ticket-download-readiness-pack"
+              >
+                Download readiness pack
+              </Button>
+            </div>
           </div>
         </Card>
       )}

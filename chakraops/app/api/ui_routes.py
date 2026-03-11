@@ -1972,6 +1972,96 @@ def ui_trade_ticket_readiness(
     return _build_trade_ticket_readiness(symbol=symbol, mode=mode, ticket_kind=ticket_kind)
 
 
+@router.get("/trade-ticket/readiness-pack")
+def ui_trade_ticket_readiness_pack(
+    symbol: str = Query(..., description="Symbol"),
+    mode: str = Query("live", description="live | paper"),
+    ticket_kind: str = Query("ENTRY", description="ENTRY | CLOSE | ROLL | CC"),
+    include_paper: bool = Query(True, description="Include paper in exported system-health subset (safe)"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+):
+    """R30.2: Manual download of readiness pack (ZIP). Sanitized JSON only; no decision write; no secrets."""
+    import io
+    import zipfile
+
+    from fastapi.responses import Response
+
+    from app.core.portfolio.positions_unified_store_r279 import sanitize_json_for_export
+
+    _require_ui_key(x_ui_key)
+    try:
+        symbol = (symbol or "").strip().upper()
+        mode = (mode or "live").strip().lower()
+        if mode not in ("live", "paper"):
+            mode = "live"
+        ticket_kind = (ticket_kind or "ENTRY").strip().upper()
+        if ticket_kind not in ("ENTRY", "CLOSE", "ROLL", "CC"):
+            ticket_kind = "ENTRY"
+
+        generated_at = datetime.now(timezone.utc).isoformat()
+        ts = generated_at.replace(":", "-").replace(".", "-")[:19]
+
+        readiness = _build_trade_ticket_readiness(symbol=symbol, mode=mode, ticket_kind=ticket_kind)
+        readiness_s = sanitize_json_for_export(readiness)
+
+        system_health_subset = {
+            "positions_unified_reconcile": _get_positions_unified_reconcile_health(),
+            "positions_unified_rebuild": _get_positions_unified_rebuild_health(),
+            "positions_unified_integrity_check": _get_positions_unified_integrity_check_health(),
+            "mark_refresh": _get_mark_refresh_health(),
+            "portfolio_risk_notifier": _get_portfolio_risk_notifier_health(),
+        }
+        system_health_subset_s = sanitize_json_for_export(system_health_subset)
+
+        checks_summary = [
+            {"code": c.get("code"), "status": c.get("status")}
+            for c in (readiness.get("checks") or [])
+        ]
+        order_lines = (readiness.get("order_stub") or {}).get("lines") or []
+        notes_obj = {
+            "overall_status": readiness.get("status"),
+            "overall_status_label": readiness.get("status_label"),
+            "checks": checks_summary,
+            "order_stub_lines": order_lines,
+        }
+        notes_s = sanitize_json_for_export(notes_obj)
+
+        included_files = ["manifest.json", "readiness.json", "system_health_subset.json", "notes.json"]
+        manifest = {
+            "generated_at_utc": generated_at,
+            "symbol": symbol,
+            "mode": mode,
+            "ticket_kind": ticket_kind,
+            "include_paper": include_paper,
+            "included_files": included_files,
+            "counts": {
+                "checks": len(readiness.get("checks") or []),
+                "order_stub_lines": len(order_lines),
+                "system_health_blocks": 5,
+            },
+        }
+        manifest_s = sanitize_json_for_export(manifest)
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("manifest.json", json.dumps(manifest_s, indent=2, default=str))
+            zf.writestr("readiness.json", json.dumps(readiness_s, indent=2, default=str))
+            zf.writestr("system_health_subset.json", json.dumps(system_health_subset_s, indent=2, default=str))
+            zf.writestr("notes.json", json.dumps(notes_s, indent=2, default=str))
+
+        zip_bytes = buf.getvalue()
+        filename = f"readiness_pack_{symbol}_{ts}.zip"
+        return Response(
+            content=zip_bytes,
+            media_type="application/zip",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Readiness pack error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/trade-ticket")
 def ui_trade_ticket(
     symbol: str = Query(..., description="Symbol"),

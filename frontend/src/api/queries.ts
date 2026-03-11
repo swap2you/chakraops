@@ -419,6 +419,38 @@ function tradeTicketReadinessPath(symbol: string, mode: "live" | "paper", ticket
   return `/api/ui/trade-ticket/readiness?${p.toString()}`;
 }
 
+/** R30.2: GET /api/ui/trade-ticket/readiness-pack — returns ZIP; query symbol, mode, ticket_kind, include_paper. */
+export function readinessPackPath(
+  symbol: string,
+  mode: "live" | "paper",
+  ticketKind: string,
+  includePaper: boolean = true
+): string {
+  const p = new URLSearchParams();
+  p.set("symbol", symbol.trim());
+  p.set("mode", mode);
+  p.set("ticket_kind", ticketKind);
+  p.set("include_paper", String(includePaper));
+  return `/api/ui/trade-ticket/readiness-pack?${p.toString()}`;
+}
+
+/** R30.2: Download readiness pack ZIP (manual; sanitized, deterministic). */
+export async function downloadReadinessPack(
+  symbol: string,
+  mode: "live" | "paper",
+  ticketKind: string,
+  includePaper: boolean = true
+): Promise<void> {
+  const path = readinessPackPath(symbol, mode, ticketKind, includePaper);
+  const blob = await apiGetBlob(path);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `readiness_pack_${symbol}_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.zip`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function uiJournalPath(params: { from_date?: string; to_date?: string; symbol?: string; strategy?: string; limit?: number; offset?: number; include_paper?: boolean; paper_only?: boolean }): string {
   const p = new URLSearchParams();
   if (params.from_date) p.set("from_date", params.from_date);

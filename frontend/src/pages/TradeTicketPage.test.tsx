@@ -36,12 +36,14 @@ const mockReadiness = {
   order_stub: { title: "Order stub: SPY CSP OPEN", lines: ["Symbol: SPY", "Strategy: CSP", "Action: OPEN", "Qty: 2"] },
 };
 const mockUseTradeTicketReadiness = vi.fn(() => ({ data: mockReadiness, isLoading: false, isError: false }));
+const mockDownloadReadinessPack = vi.fn();
 
 vi.mock("@/api/queries", () => ({
   useTradeTicket: (...args: unknown[]) => mockUseTradeTicket(...args),
   useTradeTicketReadiness: (...args: unknown[]) => mockUseTradeTicketReadiness(...args),
   useJournalFromTicket: () => mockUseJournalFromTicket(),
   usePaperExecute: () => ({ mutate: mockPaperMutate, isPending: false }),
+  downloadReadinessPack: (...args: unknown[]) => mockDownloadReadinessPack(...args),
 }));
 
 const ticketUrl = "/ticket?symbol=SPY&strategy=CSP&action=OPEN";
@@ -147,6 +149,23 @@ describe("TradeTicketPage", () => {
 
   it("R30.1: no forbidden tokens in document.textContent and no FAIL_/WARN_ substrings", () => {
     renderWithRoute(<TradeTicketPage />, ticketUrl);
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_|WARN_/);
+  });
+
+  it("R30.2: Download readiness pack button present; clicking calls downloadReadinessPack with symbol, mode, ticketKind, includePaper", async () => {
+    renderWithRoute(<TradeTicketPage />, ticketUrl);
+    const btn = screen.getByTestId("ticket-download-readiness-pack");
+    expect(btn).toBeInTheDocument();
+    expect(btn).toHaveTextContent("Download readiness pack");
+    await userEvent.click(btn);
+    expect(mockDownloadReadinessPack).toHaveBeenCalledWith("SPY", "live", "ENTRY", true);
+  });
+
+  it("R30.2: document has no forbidden tokens when readiness card with download button is shown", () => {
+    renderWithRoute(<TradeTicketPage />, ticketUrl);
+    expect(screen.getByTestId("ticket-download-readiness-pack")).toBeInTheDocument();
     const text = document.body.textContent ?? "";
     expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
     expect(text).not.toMatch(/FAIL_|WARN_/);

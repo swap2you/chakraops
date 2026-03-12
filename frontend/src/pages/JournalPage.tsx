@@ -9,8 +9,10 @@ import {
   useJournalUpdate,
   useJournalExport,
   downloadJournalReadinessPack,
+  useJournalEntryReadinessPack,
 } from "@/api/queries";
 import type { JournalEntry } from "@/api/queries";
+import { safeForReadinessDisplay } from "@/utils/sanitizeDisplay";
 import { PageHeader } from "@/components/PageHeader";
 import {
   Table,
@@ -67,6 +69,7 @@ export function JournalPage() {
   const [editTags, setEditTags] = useState("");
   const [includePaper, setIncludePaper] = useState(false);
   const [paperOnly, setPaperOnly] = useState(false);
+  const [viewPackEntryId, setViewPackEntryId] = useState<string | null>(null);
 
   const { from_date, to_date } = useMemo(() => monthToRange(month), [month]);
   const { data, isLoading, isError, error } = useJournal({
@@ -301,14 +304,24 @@ export function JournalPage() {
                   </TableCell>
                   <TableCell>
                     {e.has_readiness_pack ? (
-                      <button
-                        type="button"
-                        onClick={() => void downloadJournalReadinessPack(e.id, e.symbol)}
-                        className="text-sm text-blue-600 hover:underline dark:text-blue-400"
-                        data-testid="journal-download-readiness-pack"
-                      >
-                        Download readiness pack
-                      </button>
+                      <div className="flex flex-col gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setViewPackEntryId(e.id)}
+                          className="text-sm text-blue-600 hover:underline dark:text-blue-400 text-left"
+                          data-testid="journal-view-readiness-pack"
+                        >
+                          View readiness pack
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void downloadJournalReadinessPack(e.id, e.symbol)}
+                          className="text-sm text-blue-600 hover:underline dark:text-blue-400 text-left"
+                          data-testid="journal-download-readiness-pack"
+                        >
+                          Download readiness pack
+                        </button>
+                      </div>
                     ) : (
                       "—"
                     )}
@@ -365,6 +378,83 @@ export function JournalPage() {
           isPending={createMutation.isPending}
         />
       )}
+
+      {viewPackEntryId && (
+        <ReadinessPackModal
+          entryId={viewPackEntryId}
+          onClose={() => setViewPackEntryId(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ReadinessPackModal({ entryId, onClose }: { entryId: string; onClose: () => void }) {
+  const { data, isLoading, isError } = useJournalEntryReadinessPack(entryId, true);
+  const readiness = data?.readiness;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-labelledby="readiness-pack-title">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-lg border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900 shadow-xl">
+        <div className="sticky top-0 flex items-center justify-between border-b border-zinc-200 bg-white px-4 py-3 dark:border-zinc-700 dark:bg-zinc-900">
+          <h2 id="readiness-pack-title" className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">Readiness pack</h2>
+          <Button size="sm" variant="secondary" onClick={onClose}>Close</Button>
+        </div>
+        <div className="p-4 space-y-4 text-sm">
+          {isLoading && <p className="text-zinc-600 dark:text-zinc-400">Loading…</p>}
+          {isError && <p className="text-amber-600 dark:text-amber-400">Readiness pack not available.</p>}
+          {!isLoading && !isError && readiness && (
+            <>
+              <section>
+                <h3 className="font-medium text-zinc-800 dark:text-zinc-200 mb-1">Summary</h3>
+                <p className="text-zinc-600 dark:text-zinc-400">
+                  {safeForReadinessDisplay(readiness.status)} — {safeForReadinessDisplay(readiness.status_label)}
+                  {readiness.as_of_utc != null && ` (${safeForReadinessDisplay(readiness.as_of_utc)})`}
+                </p>
+              </section>
+              <section>
+                <h3 className="font-medium text-zinc-800 dark:text-zinc-200 mb-2">Checks</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-left">
+                    <thead>
+                      <tr className="border-b border-zinc-200 dark:border-zinc-700">
+                        <th className="py-1 pr-2 font-medium text-zinc-700 dark:text-zinc-300">Code</th>
+                        <th className="py-1 pr-2 font-medium text-zinc-700 dark:text-zinc-300">Status</th>
+                        <th className="py-1 pr-2 font-medium text-zinc-700 dark:text-zinc-300">Label</th>
+                        <th className="py-1 pr-2 font-medium text-zinc-700 dark:text-zinc-300">Detail</th>
+                        <th className="py-1 font-medium text-zinc-700 dark:text-zinc-300">Fix</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(readiness.checks ?? []).map((c, i) => (
+                        <tr key={i} className="border-b border-zinc-100 dark:border-zinc-800">
+                          <td className="py-1 pr-2 text-zinc-700 dark:text-zinc-300">{safeForReadinessDisplay(c.code)}</td>
+                          <td className="py-1 pr-2 text-zinc-600 dark:text-zinc-400">{safeForReadinessDisplay(c.status)}</td>
+                          <td className="py-1 pr-2 text-zinc-600 dark:text-zinc-400">{safeForReadinessDisplay(c.label)}</td>
+                          <td className="py-1 pr-2 text-zinc-500 dark:text-zinc-500">{safeForReadinessDisplay(c.detail)}</td>
+                          <td className="py-1">
+                            {c.action_href != null && c.action_href !== "" ? (
+                              <Link to={c.action_href} className="text-blue-600 hover:underline dark:text-blue-400">Fix</Link>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+              <section>
+                <h3 className="font-medium text-zinc-800 dark:text-zinc-200 mb-1">Order stub</h3>
+                <pre className="rounded bg-zinc-100 dark:bg-zinc-800 p-3 text-xs text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap overflow-x-auto">
+                  {(readiness.order_stub?.lines ?? []).map((line) => safeForReadinessDisplay(line)).join("\n") || "—"}
+                </pre>
+              </section>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

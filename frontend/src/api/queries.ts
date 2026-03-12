@@ -465,6 +465,29 @@ export async function downloadJournalReadinessPack(entryId: string, symbol: stri
   URL.revokeObjectURL(url);
 }
 
+/** R30.4: Readiness pack bundle shape (from GET attachment). */
+export interface ReadinessPackBundle {
+  manifest?: Record<string, unknown>;
+  readiness?: {
+    status?: string;
+    status_label?: string;
+    as_of_utc?: string;
+    checks?: Array<{ code?: string; status?: string; label?: string; detail?: string; action_label?: string; action_href?: string }>;
+    order_stub?: { title?: string; lines?: string[] };
+  };
+  system_health_subset?: Record<string, unknown>;
+  notes?: Record<string, unknown>;
+}
+
+/** R30.4: Fetch journal entry readiness pack JSON for in-app viewer. */
+export function useJournalEntryReadinessPack(entryId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["ui", "journal", "readiness-pack", entryId],
+    queryFn: () => apiGet<ReadinessPackBundle>(uiJournalEntryReadinessPackJsonPath(entryId!)),
+    enabled: !!entryId && enabled,
+  });
+}
+
 function uiJournalPath(params: { from_date?: string; to_date?: string; symbol?: string; strategy?: string; limit?: number; offset?: number; include_paper?: boolean; paper_only?: boolean }): string {
   const p = new URLSearchParams();
   if (params.from_date) p.set("from_date", params.from_date);
@@ -487,9 +510,12 @@ function uiJournalExportPath(from_date: string, to_date: string): string {
 function uiJournalEntryPath(id: string): string {
   return `/api/ui/journal/${encodeURIComponent(id)}`;
 }
-/** R30.3: GET journal entry attachment readiness-pack (JSON bundle) */
-function uiJournalEntryReadinessPackPath(entryId: string): string {
+/** R30.3/R30.4: GET journal entry attachment readiness-pack (JSON bundle) */
+export function uiJournalEntryReadinessPackJsonPath(entryId: string): string {
   return `/api/ui/journal/entry/${encodeURIComponent(entryId)}/attachment/readiness-pack`;
+}
+function uiJournalEntryReadinessPackPath(entryId: string): string {
+  return uiJournalEntryReadinessPackJsonPath(entryId);
 }
 /** R25.5: Reports monthly. R27.0: include_paper */
 function uiReportsMonthlyPath(month: string, include_paper?: boolean): string {

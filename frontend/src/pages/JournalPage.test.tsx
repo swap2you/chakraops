@@ -44,6 +44,19 @@ const mockEntries = [
 
 const mockDownloadJournalReadinessPack = vi.fn();
 
+const mockReadinessPackBundle = {
+  readiness: {
+    status: "OK",
+    status_label: "All checks OK",
+    as_of_utc: "2026-02-20T12:00:00Z",
+    checks: [
+      { code: "INTEGRITY", status: "OK", label: "OK", detail: "Last check: 2026-02-20", action_href: "/positions?source=db&symbol=SPY" },
+      { code: "MARK_FRESHNESS", status: "OK", label: "OK", detail: "", action_href: "/system" },
+    ],
+    order_stub: { title: "Order stub: SPY CSP OPEN", lines: ["Symbol: SPY", "Strategy: CSP", "Action: OPEN", "Qty: 2"] },
+  },
+};
+
 vi.mock("@/api/queries", () => ({
   useJournal: () => ({
     data: { entries: mockEntries },
@@ -55,6 +68,7 @@ vi.mock("@/api/queries", () => ({
   useJournalUpdate: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useJournalExport: () => ({ mutateAsync: vi.fn(), isPending: false }),
   downloadJournalReadinessPack: (...args: unknown[]) => mockDownloadJournalReadinessPack(...args),
+  useJournalEntryReadinessPack: () => ({ data: mockReadinessPackBundle, isLoading: false, isError: false }),
 }));
 
 describe("JournalPage", () => {
@@ -126,5 +140,49 @@ describe("JournalPage", () => {
     const text = document.body.textContent ?? "";
     expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
     expect(text).not.toMatch(/FAIL_|WARN_/);
+  });
+
+  it("R30.4: when has_readiness_pack=true, View readiness pack button appears", () => {
+    render(<JournalPage />);
+    const viewBtn = screen.getByTestId("journal-view-readiness-pack");
+    expect(viewBtn).toBeInTheDocument();
+    expect(viewBtn).toHaveTextContent("View readiness pack");
+  });
+
+  it("R30.4: clicking View readiness pack opens modal with summary, checks, order stub", async () => {
+    const user = (await import("@testing-library/user-event")).default;
+    render(<JournalPage />);
+    await user.click(screen.getByTestId("journal-view-readiness-pack"));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByText("Readiness pack")).toBeInTheDocument();
+    expect(screen.getByText("Summary")).toBeInTheDocument();
+    expect(screen.getByText("Checks")).toBeInTheDocument();
+    expect(screen.getByText("Order stub")).toBeInTheDocument();
+    expect(screen.getByText(/OK — All checks OK/)).toBeInTheDocument();
+    expect(screen.getByText("INTEGRITY")).toBeInTheDocument();
+    expect(dialog.textContent).toContain("Symbol: SPY");
+  });
+
+  it("R30.4: when has_readiness_pack=false, row has no View readiness pack button (only one row has pack)", () => {
+    render(<JournalPage />);
+    const viewButtons = screen.getAllByTestId("journal-view-readiness-pack");
+    expect(viewButtons.length).toBe(1);
+  });
+
+  it("R30.4: document has no forbidden tokens (FAIL/WARN/PASS or FAIL_/WARN_)", () => {
+    render(<JournalPage />);
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_|WARN_/);
+  });
+
+  it("R30.4: Fix links render when action_href present and are internal", async () => {
+    const user = (await import("@testing-library/user-event")).default;
+    render(<JournalPage />);
+    await user.click(screen.getByTestId("journal-view-readiness-pack"));
+    const fixLinks = screen.getAllByRole("link", { name: "Fix" });
+    expect(fixLinks.length).toBeGreaterThanOrEqual(1);
+    expect(fixLinks[0]).toHaveAttribute("href", "/positions?source=db&symbol=SPY");
   });
 });

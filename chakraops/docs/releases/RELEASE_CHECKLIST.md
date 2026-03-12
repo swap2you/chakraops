@@ -887,6 +887,15 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Save/record journal with checkbox ON creates attachment; Journal entry shows Download readiness pack; downloaded JSON has manifest/readiness/system_health_subset/notes; no forbidden tokens.
 - **Scope:** journal_attachments table; from-ticket attach_readiness_pack; GET attachment; has_readiness_pack in list; checkbox + Journal download; no decision write; no forbidden tokens. NO GIT.
 
+### R30.4 — In-app Readiness Pack Viewer v1 (Journal)
+
+- [x] **Requirements** — chakraops/docs/releases/R30.4_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R30.4_release_notes.md
+- [x] **Verification** — out/verification/R30.4/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend test_r304_*: 3 passed; full pytest: 1013 passed, 3 skipped; Frontend: 31 passed | 2 skipped, 304 passed | 18 skipped; Build: built in 8.46s. Evidence: out/verification/R30.4/notes.md.
+- [x] **UAT** — Journal row shows View readiness pack; modal shows summary/checks/order stub; no forbidden tokens.
+- **Scope:** View button + modal; safeForReadinessDisplay; no new backend endpoints; no decision write. NO GIT.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

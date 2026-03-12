@@ -785,27 +785,28 @@ def test_ui_portfolio_risk_pass_when_within_limits(tmp_path):
     app = _get_app()
     with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
         with patch("app.core.accounts.store._accounts_path", side_effect=_fake_accounts_path):
-            client = TestClient(app)
-            post = client.post(
-                "/api/ui/positions",
-                json={
-                    "symbol": "SPY",
-                    "strategy": "CSP",
-                    "contracts": 1,
-                    "strike": 300.0,
-                    "expiration": "2026-04-01",  # within default wheel DTE 21–60
-                    "credit_expected": 250.0,
-                    "contract_key": "300-2026-04-01-PUT",
-                },
-            )
-            assert post.status_code == 200
-            r = client.get("/api/ui/portfolio/risk")
-            assert r.status_code == 200
-            data = r.json()
-            assert data.get("status") == "PASS"
-            assert "metrics" in data
-            assert data["metrics"].get("capital_deployed") == 30000.0
-            assert len(data.get("breaches") or []) == 0
+            with patch("app.core.wheel.policy.evaluate_wheel_policy", return_value={"allowed": True, "blocked_by": []}):
+                client = TestClient(app)
+                post = client.post(
+                    "/api/ui/positions",
+                    json={
+                        "symbol": "SPY",
+                        "strategy": "CSP",
+                        "contracts": 1,
+                        "strike": 300.0,
+                        "expiration": "2026-04-01",  # within default wheel DTE 21–60
+                        "credit_expected": 250.0,
+                        "contract_key": "300-2026-04-01-PUT",
+                    },
+                )
+                assert post.status_code == 200
+                r = client.get("/api/ui/portfolio/risk")
+                assert r.status_code == 200
+                data = r.json()
+                assert data.get("status") == "PASS"
+                assert "metrics" in data
+                assert data["metrics"].get("capital_deployed") == 30000.0
+                assert len(data.get("breaches") or []) == 0
 
 
 def test_ui_portfolio_risk_fail_when_breach(tmp_path):
@@ -836,30 +837,31 @@ def test_ui_portfolio_risk_fail_when_breach(tmp_path):
     with patch("app.core.positions.store._get_positions_dir", return_value=positions_dir):
         with patch("app.core.accounts.store._accounts_path", side_effect=_fake_accounts_path):
             with patch("app.api.notifications_store._notifications_path", side_effect=_fake_notifications_path):
-                client = TestClient(app)
-                post = client.post(
-                    "/api/ui/positions",
-                    json={
-                        "symbol": "SPY",
-                        "strategy": "CSP",
-                        "contracts": 2,
-                        "strike": 450.0,
-                        "expiration": "2026-04-01",  # within default wheel DTE 21–60
-                        "credit_expected": 250.0,
-                        "contract_key": "450-2026-04-01-PUT",
-                    },
-                )
-                assert post.status_code == 200
-                r = client.get("/api/ui/portfolio/risk")
-                assert r.status_code == 200
-                data = r.json()
-                assert data.get("status") == "FAIL"
-                breaches = data.get("breaches") or []
-                assert len(breaches) >= 1
-                msg = breaches[0].get("message", "")
-                assert "Deployed" in msg or "max" in msg.lower()
-                assert data["metrics"]["capital_deployed"] == 90000.0
-                assert data["metrics"]["deployed_pct"] > 0.2
+                with patch("app.core.wheel.policy.evaluate_wheel_policy", return_value={"allowed": True, "blocked_by": []}):
+                    client = TestClient(app)
+                    post = client.post(
+                        "/api/ui/positions",
+                        json={
+                            "symbol": "SPY",
+                            "strategy": "CSP",
+                            "contracts": 2,
+                            "strike": 450.0,
+                            "expiration": "2026-04-01",  # within default wheel DTE 21–60
+                            "credit_expected": 250.0,
+                            "contract_key": "450-2026-04-01-PUT",
+                        },
+                    )
+                    assert post.status_code == 200
+                    r = client.get("/api/ui/portfolio/risk")
+                    assert r.status_code == 200
+                    data = r.json()
+                    assert data.get("status") == "FAIL"
+                    breaches = data.get("breaches") or []
+                    assert len(breaches) >= 1
+                    msg = breaches[0].get("message", "")
+                    assert "Deployed" in msg or "max" in msg.lower()
+                    assert data["metrics"]["capital_deployed"] == 90000.0
+                    assert data["metrics"]["deployed_pct"] > 0.2
 
 
 def test_ui_portfolio_risk_diagnostics_emits_notification_on_fail(tmp_path):
@@ -895,30 +897,31 @@ def test_ui_portfolio_risk_diagnostics_emits_notification_on_fail(tmp_path):
         with patch("app.core.accounts.store._accounts_path", side_effect=_fake_accounts_path):
             with patch("app.api.diagnostics._diagnostics_history_path", side_effect=_fake_diagnostics_path):
                 with patch("app.api.notifications_store._notifications_path", side_effect=_fake_notif_path):
-                    client = TestClient(app)
-                    client.post(
-                        "/api/ui/positions",
-                        json={
-                            "symbol": "AAPL",
-                            "strategy": "CSP",
-                            "contracts": 3,
-                            "strike": 150.0,
-                            "expiration": "2026-04-01",  # within default wheel DTE 21–60
-                            "credit_expected": 100.0,
-                            "contract_key": "150-2026-04-01-PUT",
-                        },
-                    )
-                    r = client.post("/api/ui/diagnostics/run", params={"checks": "portfolio_risk"})
-                    assert r.status_code == 200
-                    checks = r.json().get("checks") or []
-                    pr = next((c for c in checks if c.get("check") == "portfolio_risk"), None)
-                    assert pr is not None
-                    assert pr.get("status") == "FAIL"
-                    assert pr["details"].get("breach_count", 0) >= 1
-                    if notif_path.exists():
-                        lines = [ln.strip() for ln in notif_path.read_text(encoding="utf-8").splitlines() if ln.strip()]
-                        assert any("PORTFOLIO_RISK" in ln for ln in lines)
-                        assert any("RISK_LIMIT_BREACH" in ln for ln in lines)
+                    with patch("app.core.wheel.policy.evaluate_wheel_policy", return_value={"allowed": True, "blocked_by": []}):
+                        client = TestClient(app)
+                        client.post(
+                            "/api/ui/positions",
+                            json={
+                                "symbol": "AAPL",
+                                "strategy": "CSP",
+                                "contracts": 3,
+                                "strike": 150.0,
+                                "expiration": "2026-04-01",  # within default wheel DTE 21–60
+                                "credit_expected": 100.0,
+                                "contract_key": "150-2026-04-01-PUT",
+                            },
+                        )
+                        r = client.post("/api/ui/diagnostics/run", params={"checks": "portfolio_risk"})
+                        assert r.status_code == 200
+                        checks = r.json().get("checks") or []
+                        pr = next((c for c in checks if c.get("check") == "portfolio_risk"), None)
+                        assert pr is not None
+                        assert pr.get("status") == "FAIL"
+                        assert pr["details"].get("breach_count", 0) >= 1
+                        if notif_path.exists():
+                            lines = [ln.strip() for ln in notif_path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+                            assert any("PORTFOLIO_RISK" in ln for ln in lines)
+                            assert any("RISK_LIMIT_BREACH" in ln for ln in lines)
 
 
 def test_ui_marks_refresh_with_mock_fetcher(tmp_path):

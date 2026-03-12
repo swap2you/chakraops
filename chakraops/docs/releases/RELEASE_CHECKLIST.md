@@ -896,6 +896,15 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Journal row shows View readiness pack; modal shows summary/checks/order stub; no forbidden tokens.
 - **Scope:** View button + modal; safeForReadinessDisplay; no new backend endpoints; no decision write. NO GIT.
 
+### R30.5 — Journal Readiness Pack Ops: filter + bulk export (JSONL)
+
+- [x] **Requirements** — chakraops/docs/releases/R30.5_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R30.5_release_notes.md
+- [x] **Verification** — out/verification/R30.5/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend test_r305_*: 4 passed; full pytest: 1017 passed, 3 skipped (corrected after full suite pass); Frontend: 31 passed | 2 skipped, 308 passed | 18 skipped; Build: built in 6.45s. Evidence: out/verification/R30.5/notes.md.
+- [x] **UAT** — Journal filter shows only entries with pack when enabled; bulk export downloads JSONL; no forbidden tokens.
+- **Scope:** Has readiness pack filter; Download readiness packs (JSONL); GET readiness-packs/export; sanitize_json_for_export; no decision write. NO GIT.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

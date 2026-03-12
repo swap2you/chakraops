@@ -9,6 +9,7 @@ import {
   useJournalUpdate,
   useJournalExport,
   downloadJournalReadinessPack,
+  downloadJournalReadinessPacksJsonl,
   useJournalEntryReadinessPack,
 } from "@/api/queries";
 import type { JournalEntry } from "@/api/queries";
@@ -69,7 +70,9 @@ export function JournalPage() {
   const [editTags, setEditTags] = useState("");
   const [includePaper, setIncludePaper] = useState(false);
   const [paperOnly, setPaperOnly] = useState(false);
+  const [hasPackFilter, setHasPackFilter] = useState(true);
   const [viewPackEntryId, setViewPackEntryId] = useState<string | null>(null);
+  const [downloadingPacks, setDownloadingPacks] = useState(false);
 
   const { from_date, to_date } = useMemo(() => monthToRange(month), [month]);
   const { data, isLoading, isError, error } = useJournal({
@@ -85,7 +88,8 @@ export function JournalPage() {
   const updateMutation = useJournalUpdate();
   const exportMutation = useJournalExport();
 
-  const entries = data?.entries ?? [];
+  const allEntries = data?.entries ?? [];
+  const entries = hasPackFilter ? allEntries.filter((e) => e.has_readiness_pack) : allEntries;
 
   const handleExport = async () => {
     try {
@@ -144,6 +148,28 @@ export function JournalPage() {
               )}
               Export CSV
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="journal-download-readiness-packs"
+              disabled={downloadingPacks}
+              onClick={async () => {
+                setDownloadingPacks(true);
+                try {
+                  await downloadJournalReadinessPacksJsonl({
+                    has_pack: hasPackFilter,
+                    from_date,
+                    to_date,
+                    limit: 200,
+                  });
+                } finally {
+                  setDownloadingPacks(false);
+                }
+              }}
+            >
+              {downloadingPacks ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              Download readiness packs (JSONL)
+            </Button>
             <Button size="sm" onClick={() => setAddOpen(true)}>
               <Plus className="h-4 w-4" />
               Add entry
@@ -189,6 +215,15 @@ export function JournalPage() {
             className="rounded border-zinc-300 dark:border-zinc-600"
           />
           Paper only
+        </label>
+        <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="journal-filter-has-pack">
+          <input
+            type="checkbox"
+            checked={hasPackFilter}
+            onChange={(e) => setHasPackFilter(e.target.checked)}
+            className="rounded border-zinc-300 dark:border-zinc-600"
+          />
+          Has readiness pack
         </label>
         <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
           Strategy

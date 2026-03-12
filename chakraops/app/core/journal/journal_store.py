@@ -470,3 +470,39 @@ def journal_attachment_entry_ids_with_kind(kind: str) -> set[str]:
             return {r[0] for r in rows}
         finally:
             conn.close()
+
+
+def journal_list_for_readiness_export(
+    *,
+    start_utc: Optional[str] = None,
+    end_utc: Optional[str] = None,
+    has_pack: bool = True,
+    limit: int = 200,
+) -> List[Dict[str, Any]]:
+    """R30.5: Entries for readiness-pack bulk export. Order: created_ts ASC, id ASC. has_pack=True => only entries with READINESS_PACK."""
+    init_journal_db()
+    conditions: List[str] = []
+    params: List[Any] = []
+    if start_utc:
+        conditions.append("created_ts >= ?")
+        params.append(start_utc.strip()[:30])
+    if end_utc:
+        conditions.append("created_ts <= ?")
+        params.append(end_utc.strip()[:30])
+    if has_pack:
+        conditions.append(
+            "id IN (SELECT journal_entry_id FROM journal_attachments WHERE kind = 'READINESS_PACK')"
+        )
+    where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+    cap = min(max(1, limit), 1000)
+    params.append(cap)
+    with _LOCK:
+        conn = _get_conn()
+        try:
+            rows = conn.execute(
+                f"SELECT * FROM journal_entries{where} ORDER BY created_ts ASC, id ASC LIMIT ?",
+                params,
+            ).fetchall()
+            return [_row_to_dict(r) for r in rows]
+        finally:
+            conn.close()

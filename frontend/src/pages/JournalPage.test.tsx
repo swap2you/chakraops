@@ -20,7 +20,7 @@ const mockEntries = [
     notes: "test",
     tags: "tag1",
     realized_pl: null,
-    link_target: null as { kind: string; id: string } | null,
+    link_target: { kind: "shares", id: "SPY:pos-abc" } as { kind: string; id: string },
     has_readiness_pack: true,
   },
   {
@@ -37,12 +37,13 @@ const mockEntries = [
     notes: "close",
     tags: "",
     realized_pl: 500,
-    link_target: { kind: "shares", id: "SPY:pos-abc" } as { kind: string; id: string },
+    link_target: null as { kind: string; id: string } | null,
     has_readiness_pack: false,
   },
 ];
 
 const mockDownloadJournalReadinessPack = vi.fn();
+const mockDownloadJournalReadinessPacksJsonl = vi.fn();
 
 const mockReadinessPackBundle = {
   readiness: {
@@ -68,6 +69,7 @@ vi.mock("@/api/queries", () => ({
   useJournalUpdate: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useJournalExport: () => ({ mutateAsync: vi.fn(), isPending: false }),
   downloadJournalReadinessPack: (...args: unknown[]) => mockDownloadJournalReadinessPack(...args),
+  downloadJournalReadinessPacksJsonl: (...args: unknown[]) => mockDownloadJournalReadinessPacksJsonl(...args),
   useJournalEntryReadinessPack: () => ({ data: mockReadinessPackBundle, isLoading: false, isError: false }),
 }));
 
@@ -184,5 +186,46 @@ describe("JournalPage", () => {
     const fixLinks = screen.getAllByRole("link", { name: "Fix" });
     expect(fixLinks.length).toBeGreaterThanOrEqual(1);
     expect(fixLinks[0]).toHaveAttribute("href", "/positions?source=db&symbol=SPY");
+  });
+
+  it("R30.5: Has readiness pack filter toggle is present and default On", () => {
+    render(<JournalPage />);
+    expect(screen.getByTestId("journal-filter-has-pack")).toBeInTheDocument();
+    expect(screen.getByText(/Has readiness pack/)).toBeInTheDocument();
+    const checkbox = screen.getByRole("checkbox", { name: /Has readiness pack/ });
+    expect(checkbox).toBeChecked();
+  });
+
+  it("R30.5: when filter On, only entries with pack are shown; when Off, all entries shown", async () => {
+    const user = (await import("@testing-library/user-event")).default;
+    render(<JournalPage />);
+    expect(screen.getAllByTestId("journal-view-readiness-pack")).toHaveLength(1);
+    const checkbox = screen.getByRole("checkbox", { name: /Has readiness pack/ });
+    await user.click(checkbox);
+    expect(checkbox).not.toBeChecked();
+    expect(screen.getByText("BUY")).toBeInTheDocument();
+    expect(screen.getByText("SELL")).toBeInTheDocument();
+    expect(screen.getAllByTestId("journal-view-readiness-pack")).toHaveLength(1);
+  });
+
+  it("R30.5: Download readiness packs (JSONL) button calls download with correct params", async () => {
+    const user = (await import("@testing-library/user-event")).default;
+    render(<JournalPage />);
+    const btn = screen.getByTestId("journal-download-readiness-packs");
+    expect(btn).toHaveTextContent("Download readiness packs (JSONL)");
+    await user.click(btn);
+    expect(mockDownloadJournalReadinessPacksJsonl).toHaveBeenCalledTimes(1);
+    const call = mockDownloadJournalReadinessPacksJsonl.mock.calls[0][0];
+    expect(call.has_pack).toBe(true);
+    expect(call.from_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(call.to_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(call.limit).toBe(200);
+  });
+
+  it("R30.5: document has no forbidden tokens", () => {
+    render(<JournalPage />);
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_|WARN_/);
   });
 });

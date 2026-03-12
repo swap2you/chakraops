@@ -517,6 +517,47 @@ export function uiJournalEntryReadinessPackJsonPath(entryId: string): string {
 function uiJournalEntryReadinessPackPath(entryId: string): string {
   return uiJournalEntryReadinessPackJsonPath(entryId);
 }
+
+/** R30.5: GET journal readiness-packs bulk export (JSONL). Params: has_pack, start_utc?, end_utc?, limit. */
+export function uiJournalReadinessPacksExportPath(params: {
+  has_pack?: boolean;
+  start_utc?: string;
+  end_utc?: string;
+  limit?: number;
+}): string {
+  const p = new URLSearchParams();
+  if (params.has_pack !== undefined) p.set("has_pack", String(params.has_pack));
+  if (params.start_utc) p.set("start_utc", params.start_utc);
+  if (params.end_utc) p.set("end_utc", params.end_utc);
+  if (params.limit != null) p.set("limit", String(params.limit));
+  return `/api/ui/journal/readiness-packs/export?${p.toString()}`;
+}
+
+/** R30.5: Download readiness packs as JSONL (uses current filters: has_pack, date range, limit). */
+export async function downloadJournalReadinessPacksJsonl(params: {
+  has_pack: boolean;
+  from_date: string;
+  to_date: string;
+  limit?: number;
+}): Promise<void> {
+  const start_utc = `${params.from_date}T00:00:00Z`;
+  const end_utc = `${params.to_date}T23:59:59Z`;
+  const path = uiJournalReadinessPacksExportPath({
+    has_pack: params.has_pack,
+    start_utc,
+    end_utc,
+    limit: params.limit ?? 200,
+  });
+  const blob = await apiGetBlob(path);
+  const ts = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
+  const filename = `readiness_packs_${ts}Z.jsonl`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 /** R25.5: Reports monthly. R27.0: include_paper */
 function uiReportsMonthlyPath(month: string, include_paper?: boolean): string {
   const p = new URLSearchParams();

@@ -3081,6 +3081,66 @@ def ui_journal_entry_attachment_readiness_pack(
         raise HTTPException(status_code=500, detail="Unable to load attachment")
 
 
+@router.get("/journal/readiness-packs/export")
+def ui_journal_readiness_packs_export(
+    has_pack: bool = Query(True, description="R30.5: Only entries with readiness pack (true) or all (false)"),
+    start_utc: str | None = Query(None, description="Optional ISO created_ts lower bound"),
+    end_utc: str | None = Query(None, description="Optional ISO created_ts upper bound"),
+    limit: int = Query(200, ge=1, le=1000, description="Max lines (default 200)"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+):
+    """R30.5: Bulk export readiness packs as JSONL. Read-only; no state writes. Deterministic order: created_ts ASC, id ASC."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.journal.journal_store import (
+            journal_list_for_readiness_export,
+            journal_attachment_get,
+        )
+        from app.core.portfolio.positions_unified_store_r279 import sanitize_json_for_export
+
+        entries = journal_list_for_readiness_export(
+            start_utc=start_utc.strip() if start_utc else None,
+            end_utc=end_utc.strip() if end_utc else None,
+            has_pack=has_pack,
+            limit=limit,
+        )
+        lines: List[str] = []
+        for e in entries:
+            content_json = journal_attachment_get(e.get("id") or "", "READINESS_PACK")
+            if content_json is None:
+                continue
+            try:
+                bundle = json.loads(content_json)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            bundle = sanitize_json_for_export(bundle)
+            created_ts = e.get("created_ts") or ""
+            is_paper = e.get("is_paper")
+            mode = "paper" if is_paper else "live"
+            safe_entry = {
+                "id": e.get("id"),
+                "symbol": e.get("symbol"),
+                "created_at_utc": created_ts,
+                "mode": mode,
+                "strategy": e.get("strategy"),
+            }
+            line_obj = {"journal_entry": safe_entry, "readiness_pack": bundle}
+            lines.append(json.dumps(line_obj, default=str))
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        filename = f"readiness_packs_{ts}.jsonl"
+        body = "\n".join(lines)
+        from fastapi.responses import Response
+        return Response(
+            content=body.encode("utf-8"),
+            media_type="application/x-ndjson",
+            headers={"Content-Disposition": f"attachment; filename={quote(filename)}"},
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Readiness packs export error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to export readiness packs")
+
+
 @router.post("/journal/export")
 def ui_journal_export(
     from_date: str = Query(..., description="YYYY-MM-DD"),

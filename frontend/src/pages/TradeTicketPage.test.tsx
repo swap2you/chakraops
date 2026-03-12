@@ -72,11 +72,14 @@ describe("TradeTicketPage", () => {
     expect(screen.getByTestId("ticket-copy-csv")).toBeInTheDocument();
   });
 
-  it("Save to Journal calls mutation with journal_draft", async () => {
+  it("Save to Journal calls mutation with journal_draft and attach_readiness_pack (default false)", async () => {
     renderWithRoute(<TradeTicketPage />, ticketUrl);
     const saveBtn = screen.getByTestId("ticket-save-journal");
     await userEvent.click(saveBtn);
-    expect(mockMutate).toHaveBeenCalledWith(mockTicket.journal_draft, expect.any(Object));
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ symbol: "SPY", strategy: "CSP", attach_readiness_pack: false, mode: "live" }),
+      expect.any(Object)
+    );
   });
 
   it("no FAIL or WARN in DOM", () => {
@@ -166,6 +169,27 @@ describe("TradeTicketPage", () => {
   it("R30.2: document has no forbidden tokens when readiness card with download button is shown", () => {
     renderWithRoute(<TradeTicketPage />, ticketUrl);
     expect(screen.getByTestId("ticket-download-readiness-pack")).toBeInTheDocument();
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_|WARN_/);
+  });
+
+  it("R30.3: checkbox toggles; when checked and Save to Journal, payload includes attach_readiness_pack true", async () => {
+    renderWithRoute(<TradeTicketPage />, ticketUrl);
+    const checkbox = screen.getByRole("checkbox", { name: /Attach readiness pack to journal entry/i });
+    expect(checkbox).toBeInTheDocument();
+    await userEvent.click(checkbox);
+    const saveBtn = screen.getByTestId("ticket-save-journal");
+    await userEvent.click(saveBtn);
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ attach_readiness_pack: true, mode: "live" }),
+      expect.any(Object)
+    );
+  });
+
+  it("R30.3: no forbidden tokens in document when attach readiness pack checkbox shown", () => {
+    renderWithRoute(<TradeTicketPage />, ticketUrl);
+    expect(screen.getByText(/Attach readiness pack to journal entry/)).toBeInTheDocument();
     const text = document.body.textContent ?? "";
     expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
     expect(text).not.toMatch(/FAIL_|WARN_/);

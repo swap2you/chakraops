@@ -31,6 +31,7 @@ export function TradeTicketPage() {
   const [contractOpen, setContractOpen] = useState(true);
   const [stepsOpen, setStepsOpen] = useState(true);
   const [journalOpen, setJournalOpen] = useState(true);
+  const [attachReadinessPack, setAttachReadinessPack] = useState(false);
 
   const copyToClipboard = useCallback(async (text: string, section: string) => {
     await navigator.clipboard.writeText(text);
@@ -48,14 +49,15 @@ export function TradeTicketPage() {
   const ticketId = searchParams.get("ticket_id")?.trim() ?? "";
   const handleSaveToJournal = useCallback(() => {
     if (!ticket?.journal_draft) return;
-    saveToJournal.mutate(ticket.journal_draft as Record<string, unknown>, {
+    const payload: Record<string, unknown> = { ...(ticket.journal_draft as Record<string, unknown>), attach_readiness_pack: attachReadinessPack, mode };
+    saveToJournal.mutate(payload, {
       onSuccess: () => {
         if (ticketId) {
           window.dispatchEvent(new CustomEvent("chakraops-journal-saved", { detail: { ticket_id: ticketId } }));
         }
       },
     });
-  }, [ticket?.journal_draft, ticketId, saveToJournal]);
+  }, [ticket?.journal_draft, attachReadinessPack, mode, ticketId, saveToJournal]);
 
   const handleSimulateFill = useCallback(() => {
     const j = ticket?.journal_draft as Record<string, unknown> | undefined;
@@ -281,6 +283,15 @@ export function TradeTicketPage() {
         </summary>
         <div className="border-t border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm space-y-2">
           <pre className="text-xs overflow-x-auto text-zinc-600 dark:text-zinc-400">{journalJson}</pre>
+          <label className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400" data-testid="ticket-attach-readiness-pack">
+            <input
+              type="checkbox"
+              checked={attachReadinessPack}
+              onChange={(e) => setAttachReadinessPack(e.target.checked)}
+              className="rounded border-zinc-300 dark:border-zinc-600"
+            />
+            Attach readiness pack to journal entry
+          </label>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="primary" onClick={handleSaveToJournal} disabled={saveToJournal.isPending} data-testid="ticket-save-journal">
               {saveToJournal.isPending ? "Saving…" : "Save to Journal"}

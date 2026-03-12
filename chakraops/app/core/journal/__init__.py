@@ -10,6 +10,9 @@ from app.core.journal.journal_store import (
     journal_update,
     journal_export_csv,
     journal_monthly_aggregate,
+    journal_attachment_insert,
+    journal_attachment_get,
+    journal_attachment_entry_ids_with_kind,
 )
 
 __all__ = [
@@ -20,4 +23,7 @@ __all__ = [
     "journal_update",
     "journal_export_csv",
     "journal_monthly_aggregate",
+    "journal_attachment_insert",
+    "journal_attachment_get",
+    "journal_attachment_entry_ids_with_kind",
 ]

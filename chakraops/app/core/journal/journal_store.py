@@ -56,7 +56,7 @@ def _get_conn() -> sqlite3.Connection:
 
 
 def init_journal_db() -> None:
-    """Create journal_entries table if not exist. Safe to call repeatedly."""
+    """Create journal_entries table if not exist. Safe to call repeatedly. R30.3: journal_attachments table."""
     sql = """
     CREATE TABLE IF NOT EXISTS journal_entries (
         id TEXT PRIMARY KEY,
@@ -83,6 +83,14 @@ def init_journal_db() -> None:
     CREATE INDEX IF NOT EXISTS idx_journal_symbol ON journal_entries(symbol);
     CREATE INDEX IF NOT EXISTS idx_journal_strategy ON journal_entries(strategy);
     CREATE INDEX IF NOT EXISTS idx_journal_created_ts ON journal_entries(created_ts DESC);
+    CREATE TABLE IF NOT EXISTS journal_attachments (
+        id TEXT PRIMARY KEY,
+        journal_entry_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        content_json TEXT NOT NULL,
+        created_at_utc TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_journal_attachments_entry_id ON journal_attachments(journal_entry_id);
     """
     with _LOCK:
         conn = _get_conn()
@@ -412,5 +420,53 @@ def journal_monthly_paper_live_counts(month: str) -> tuple[int, int]:
                 (from_ym, to_ym),
             ).fetchone()[0]
             return (int(live), int(paper))
+        finally:
+            conn.close()
+
+
+def journal_attachment_insert(journal_entry_id: str, kind: str, content_json: str) -> None:
+    """R30.3: Insert one attachment. content_json must be sanitized (no forbidden tokens)."""
+    init_journal_db()
+    att_id = str(uuid.uuid4())
+    created_at = _now_iso()
+    with _LOCK:
+        conn = _get_conn()
+        try:
+            conn.execute(
+                """INSERT INTO journal_attachments (id, journal_entry_id, kind, content_json, created_at_utc)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (att_id, journal_entry_id.strip(), kind.strip(), content_json, created_at),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def journal_attachment_get(journal_entry_id: str, kind: str) -> Optional[str]:
+    """R30.3: Get content_json for entry and kind, or None if not found."""
+    init_journal_db()
+    with _LOCK:
+        conn = _get_conn()
+        try:
+            row = conn.execute(
+                "SELECT content_json FROM journal_attachments WHERE journal_entry_id = ? AND kind = ? LIMIT 1",
+                (journal_entry_id.strip(), kind.strip()),
+            ).fetchone()
+            return row[0] if row else None
+        finally:
+            conn.close()
+
+
+def journal_attachment_entry_ids_with_kind(kind: str) -> set[str]:
+    """R30.3: Return set of journal_entry_id that have an attachment of this kind."""
+    init_journal_db()
+    with _LOCK:
+        conn = _get_conn()
+        try:
+            rows = conn.execute(
+                "SELECT journal_entry_id FROM journal_attachments WHERE kind = ?",
+                (kind.strip(),),
+            ).fetchall()
+            return {r[0] for r in rows}
         finally:
             conn.close()

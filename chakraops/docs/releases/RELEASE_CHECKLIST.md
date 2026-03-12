@@ -878,6 +878,15 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Trade Ticket shows "Download readiness pack"; download produces zip with expected files; files sanitized (no forbidden tokens); no decision_latest write.
 - **Scope:** GET readiness-pack; ZIP manifest/readiness/system_health_subset/notes; sanitize_json_for_export; no decision write; no forbidden tokens; deterministic. NO GIT.
 
+### R30.3 — Attach readiness pack to Journal/Ticket (manual, sanitized, deterministic)
+
+- [x] **Requirements** — chakraops/docs/releases/R30.3_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R30.3_release_notes.md
+- [x] **Verification** — out/verification/R30.3/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend test_r303: 5 passed; full pytest: 1012 passed, 1 skipped; Frontend: 31 passed | 2 skipped, 299 passed | 18 skipped; Build: built in 7.81s. Evidence: out/verification/R30.3/notes.md.
+- [x] **UAT** — Save/record journal with checkbox ON creates attachment; Journal entry shows Download readiness pack; downloaded JSON has manifest/readiness/system_health_subset/notes; no forbidden tokens.
+- **Scope:** journal_attachments table; from-ticket attach_readiness_pack; GET attachment; has_readiness_pack in list; checkbox + Journal download; no decision write; no forbidden tokens. NO GIT.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

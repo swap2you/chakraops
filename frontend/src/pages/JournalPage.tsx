@@ -8,6 +8,7 @@ import {
   useJournalCreate,
   useJournalUpdate,
   useJournalExport,
+  downloadJournalReadinessPack,
 } from "@/api/queries";
 import type { JournalEntry } from "@/api/queries";
 import { PageHeader } from "@/components/PageHeader";
@@ -294,6 +295,20 @@ export function JournalPage() {
                       <Link to={openUrl} className="text-sm text-emerald-600 hover:underline dark:text-emerald-400" data-testid="journal-open-link">
                         Open
                       </Link>
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {e.has_readiness_pack ? (
+                      <button
+                        type="button"
+                        onClick={() => void downloadJournalReadinessPack(e.id, e.symbol)}
+                        className="text-sm text-blue-600 hover:underline dark:text-blue-400"
+                        data-testid="journal-download-readiness-pack"
+                      >
+                        Download readiness pack
+                      </button>
                     ) : (
                       "—"
                     )}

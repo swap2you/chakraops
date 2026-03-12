@@ -21,6 +21,7 @@ const mockEntries = [
     tags: "tag1",
     realized_pl: null,
     link_target: null as { kind: string; id: string } | null,
+    has_readiness_pack: true,
   },
   {
     id: "e2",
@@ -37,8 +38,11 @@ const mockEntries = [
     tags: "",
     realized_pl: 500,
     link_target: { kind: "shares", id: "SPY:pos-abc" } as { kind: string; id: string },
+    has_readiness_pack: false,
   },
 ];
+
+const mockDownloadJournalReadinessPack = vi.fn();
 
 vi.mock("@/api/queries", () => ({
   useJournal: () => ({
@@ -50,6 +54,7 @@ vi.mock("@/api/queries", () => ({
   useJournalCreate: () => ({ mutateAsync: vi.fn(), isPending: false, reset: vi.fn() }),
   useJournalUpdate: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useJournalExport: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  downloadJournalReadinessPack: (...args: unknown[]) => mockDownloadJournalReadinessPack(...args),
 }));
 
 describe("JournalPage", () => {
@@ -103,5 +108,23 @@ describe("JournalPage", () => {
     const text = container.textContent ?? "";
     expect(text).not.toMatch(/\bFAIL\b/);
     expect(text).not.toMatch(/\bWARN\b/);
+  });
+
+  it("R30.3: when entry has has_readiness_pack, Download readiness pack button appears and click calls download", async () => {
+    const user = (await import("@testing-library/user-event")).default;
+    render(<JournalPage />);
+    const packBtn = screen.getByTestId("journal-download-readiness-pack");
+    expect(packBtn).toBeInTheDocument();
+    expect(packBtn).toHaveTextContent("Download readiness pack");
+    await user.click(packBtn);
+    expect(mockDownloadJournalReadinessPack).toHaveBeenCalledWith("e1", "SPY");
+  });
+
+  it("R30.3: no forbidden tokens in document when Download readiness pack shown", () => {
+    render(<JournalPage />);
+    expect(screen.getByTestId("journal-download-readiness-pack")).toBeInTheDocument();
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/\b(FAIL|WARN|PASS)\b/);
+    expect(text).not.toMatch(/FAIL_|WARN_/);
   });
 });

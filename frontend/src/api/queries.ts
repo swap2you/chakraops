@@ -451,6 +451,20 @@ export async function downloadReadinessPack(
   URL.revokeObjectURL(url);
 }
 
+/** R30.3: Download attached readiness pack JSON for a journal entry. */
+export async function downloadJournalReadinessPack(entryId: string, symbol: string): Promise<void> {
+  const path = uiJournalEntryReadinessPackPath(entryId);
+  const data = await apiGet<Record<string, unknown>>(path);
+  const jsonStr = JSON.stringify(data, null, 2);
+  const blob = new Blob([jsonStr], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `readiness_pack_${symbol}_${entryId}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function uiJournalPath(params: { from_date?: string; to_date?: string; symbol?: string; strategy?: string; limit?: number; offset?: number; include_paper?: boolean; paper_only?: boolean }): string {
   const p = new URLSearchParams();
   if (params.from_date) p.set("from_date", params.from_date);
@@ -472,6 +486,10 @@ function uiJournalExportPath(from_date: string, to_date: string): string {
 }
 function uiJournalEntryPath(id: string): string {
   return `/api/ui/journal/${encodeURIComponent(id)}`;
+}
+/** R30.3: GET journal entry attachment readiness-pack (JSON bundle) */
+function uiJournalEntryReadinessPackPath(entryId: string): string {
+  return `/api/ui/journal/entry/${encodeURIComponent(entryId)}/attachment/readiness-pack`;
 }
 /** R25.5: Reports monthly. R27.0: include_paper */
 function uiReportsMonthlyPath(month: string, include_paper?: boolean): string {
@@ -2151,6 +2169,8 @@ export interface JournalEntry {
   link_target?: { kind: string; id: string } | null;
   /** R27.0: Paper trade flag (0/1 from API) */
   is_paper?: number | null;
+  /** R30.3: True when entry has an attached readiness pack */
+  has_readiness_pack?: boolean;
 }
 export interface JournalListResponse {
   entries: JournalEntry[];

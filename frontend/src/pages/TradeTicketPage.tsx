@@ -1,9 +1,9 @@
 import { useState, useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ChevronDown, ChevronRight, Copy, Check } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardHeader, Button } from "@/components/ui";
-import { useTradeTicket, useJournalFromTicket, usePaperExecute } from "@/api/queries";
+import { useTradeTicket, useTradeTicketReadiness, useJournalFromTicket, usePaperExecute, downloadReadinessPack } from "@/api/queries";
 import { constraintToLabel } from "@/utils/sizingConstraints";
 
 export function TradeTicketPage() {
@@ -17,6 +17,12 @@ export function TradeTicketPage() {
   const paperExecute = usePaperExecute();
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const [paperMode, setPaperMode] = useState(false);
+  const mode: "live" | "paper" = paperMode ? "paper" : "live";
+  const ticketKind =
+    action === "ROLL" ? "ROLL" :
+    strategy === "CC" && (action === "OPEN" || action === "BUY") ? "CC" :
+    action === "CLOSE" || action === "SELL" ? "CLOSE" : "ENTRY";
+  const { data: readiness } = useTradeTicketReadiness(symbol, mode, ticketKind);
   const [paperPrice, setPaperPrice] = useState("");
   const [paperFees, setPaperFees] = useState("0");
   const [paperToast, setPaperToast] = useState<string | null>(null);
@@ -25,6 +31,7 @@ export function TradeTicketPage() {
   const [contractOpen, setContractOpen] = useState(true);
   const [stepsOpen, setStepsOpen] = useState(true);
   const [journalOpen, setJournalOpen] = useState(true);
+  const [attachReadinessPack, setAttachReadinessPack] = useState(false);
 
   const copyToClipboard = useCallback(async (text: string, section: string) => {
     await navigator.clipboard.writeText(text);
@@ -42,14 +49,15 @@ export function TradeTicketPage() {
   const ticketId = searchParams.get("ticket_id")?.trim() ?? "";
   const handleSaveToJournal = useCallback(() => {
     if (!ticket?.journal_draft) return;
-    saveToJournal.mutate(ticket.journal_draft as Record<string, unknown>, {
+    const payload: Record<string, unknown> = { ...(ticket.journal_draft as Record<string, unknown>), attach_readiness_pack: attachReadinessPack, mode };
+    saveToJournal.mutate(payload, {
       onSuccess: () => {
         if (ticketId) {
           window.dispatchEvent(new CustomEvent("chakraops-journal-saved", { detail: { ticket_id: ticketId } }));
         }
       },
     });
-  }, [ticket?.journal_draft, ticketId, saveToJournal]);
+  }, [ticket?.journal_draft, attachReadinessPack, mode, ticketId, saveToJournal]);
 
   const handleSimulateFill = useCallback(() => {
     const j = ticket?.journal_draft as Record<string, unknown> | undefined;
@@ -156,6 +164,61 @@ export function TradeTicketPage() {
         </div>
       </details>
 
+      {/* R30.0/R30.1: Execution readiness — Ready banner, checks with Fix links, Copy order stub */}
+      {readiness && (
+        <Card data-testid="trade-ticket-readiness-card">
+          <CardHeader
+            title="Execution readiness"
+            description={`${readiness.status_label} (as of ${readiness.as_of_utc.slice(0, 19)}Z)`}
+          />
+          <div className="border-t border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm space-y-2">
+            <p className="font-medium" data-testid="readiness-ready-banner">
+              Ready to execute: <span className={readiness.status === "OK" ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>{readiness.status}</span>
+            </p>
+            {readiness.status === "Review" && (
+              <p className="text-amber-600 dark:text-amber-400" data-testid="readiness-review-guidance">
+                Resolve the items below before executing.
+              </p>
+            )}
+            <ul className="list-disc list-inside space-y-1 text-zinc-600 dark:text-zinc-400">
+              {(readiness.checks ?? []).map((c) => (
+                <li key={c.code} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="font-medium text-zinc-700 dark:text-zinc-300">{c.code}</span>: {c.label}
+                  {c.detail ? ` — ${c.detail}` : ""}
+                  {c.action_href != null && c.action_href !== "" && (
+                    <Link
+                      to={c.action_href}
+                      className="text-blue-600 hover:underline dark:text-blue-400 text-xs whitespace-nowrap"
+                      data-testid={`readiness-fix-${c.code.toLowerCase()}`}
+                    >
+                      Fix
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => copyToClipboard((readiness.order_stub?.lines ?? []).join("\n"), "order_stub")}
+                data-testid="ticket-copy-order-stub"
+              >
+                {copiedSection === "order_stub" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} Copy order stub
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => void downloadReadinessPack(symbol, mode, ticketKind, true)}
+                data-testid="ticket-download-readiness-pack"
+              >
+                Download readiness pack
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Sizing */}
       <details open={sizingOpen} onToggle={(e) => setSizingOpen((e.target as HTMLDetailsElement).open)} className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900/60">
         <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-medium">
@@ -220,6 +283,15 @@ export function TradeTicketPage() {
         </summary>
         <div className="border-t border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm space-y-2">
           <pre className="text-xs overflow-x-auto text-zinc-600 dark:text-zinc-400">{journalJson}</pre>
+          <label className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400" data-testid="ticket-attach-readiness-pack">
+            <input
+              type="checkbox"
+              checked={attachReadinessPack}
+              onChange={(e) => setAttachReadinessPack(e.target.checked)}
+              className="rounded border-zinc-300 dark:border-zinc-600"
+            />
+            Attach readiness pack to journal entry
+          </label>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="primary" onClick={handleSaveToJournal} disabled={saveToJournal.isPending} data-testid="ticket-save-journal">
               {saveToJournal.isPending ? "Saving…" : "Save to Journal"}

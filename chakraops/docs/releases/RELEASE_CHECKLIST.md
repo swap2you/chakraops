@@ -851,6 +851,60 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Download integrity bundle when Review; ZIP contains expected files; no forbidden tokens in export (test scans zip).
 - **Scope:** GET integrity-bundle endpoint; sanitized ZIP; Download button when Review; no decision_latest write; deterministic. NO GIT.
 
+### R30.0 — Wheel Execution Readiness Pack v1
+
+- [x] **Requirements** — chakraops/docs/releases/R30.0_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R30.0_release_notes.md
+- [x] **Verification** — chakraops/chakraops/out/verification/R30.0/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend test_r300_*: 4 passed; full pytest: 999 passed, 1 skipped; Frontend: 31 passed | 2 skipped (33), 290 passed | 18 skipped; Build: built in 13.07s. Evidence: chakraops/chakraops/out/verification/R30.0/notes.md.
+- [x] **UAT** — Trade Ticket: Execution readiness card shows status and checks; Copy order stub copies lines; no forbidden tokens.
+- **Scope:** GET trade-ticket/readiness; Execution readiness card; safe labels only; no decision_latest write; deterministic. NO GIT.
+
+### R30.1 — Readiness: fix links + gating-aware UI (manual-only)
+
+- [x] **Requirements** — chakraops/docs/releases/R30.1_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R30.1_release_notes.md
+- [x] **Verification** — out/verification/R30.1/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend test_r301: 4 passed; full pytest: 1003 passed, 1 skipped; Frontend: 31 passed | 2 skipped, 293 passed | 18 skipped; Build: built in 10.59s. Evidence: out/verification/R30.1/notes.md.
+- [x] **UAT** — Readiness card shows "Ready to execute" status (OK/Review); Fix links appear and navigate to expected pages; no FAIL/WARN/PASS visible.
+- **Scope:** Per-check action_label/action_href; Ready banner + Review guidance; Fix links; no decision_latest write; no forbidden tokens; deterministic. NO GIT.
+
+### R30.2 — Readiness Pack Export v1 (manual download, sanitized, deterministic)
+
+- [x] **Requirements** — chakraops/docs/releases/R30.2_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R30.2_release_notes.md
+- [x] **Verification** — out/verification/R30.2/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend test_r302: 4 passed; full pytest: 1007 passed, 1 skipped; Frontend: 31 passed | 2 skipped, 295 passed | 18 skipped; Build: built in 9.95s. Evidence: out/verification/R30.2/notes.md.
+- [x] **UAT** — Trade Ticket shows "Download readiness pack"; download produces zip with expected files; files sanitized (no forbidden tokens); no decision_latest write.
+- **Scope:** GET readiness-pack; ZIP manifest/readiness/system_health_subset/notes; sanitize_json_for_export; no decision write; no forbidden tokens; deterministic. NO GIT.
+
+### R30.3 — Attach readiness pack to Journal/Ticket (manual, sanitized, deterministic)
+
+- [x] **Requirements** — chakraops/docs/releases/R30.3_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R30.3_release_notes.md
+- [x] **Verification** — out/verification/R30.3/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend test_r303: 5 passed; full pytest: 1012 passed, 1 skipped; Frontend: 31 passed | 2 skipped, 299 passed | 18 skipped; Build: built in 7.81s. Evidence: out/verification/R30.3/notes.md.
+- [x] **UAT** — Save/record journal with checkbox ON creates attachment; Journal entry shows Download readiness pack; downloaded JSON has manifest/readiness/system_health_subset/notes; no forbidden tokens.
+- **Scope:** journal_attachments table; from-ticket attach_readiness_pack; GET attachment; has_readiness_pack in list; checkbox + Journal download; no decision write; no forbidden tokens. NO GIT.
+
+### R30.4 — In-app Readiness Pack Viewer v1 (Journal)
+
+- [x] **Requirements** — chakraops/docs/releases/R30.4_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R30.4_release_notes.md
+- [x] **Verification** — out/verification/R30.4/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend test_r304_*: 3 passed; full pytest: 1013 passed, 3 skipped; Frontend: 31 passed | 2 skipped, 304 passed | 18 skipped; Build: built in 8.46s. Evidence: out/verification/R30.4/notes.md.
+- [x] **UAT** — Journal row shows View readiness pack; modal shows summary/checks/order stub; no forbidden tokens.
+- **Scope:** View button + modal; safeForReadinessDisplay; no new backend endpoints; no decision write. NO GIT.
+
+### R30.5 — Journal Readiness Pack Ops: filter + bulk export (JSONL)
+
+- [x] **Requirements** — chakraops/docs/releases/R30.5_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R30.5_release_notes.md
+- [x] **Verification** — out/verification/R30.5/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend test_r305_*: 4 passed; full pytest: 1017 passed, 3 skipped (corrected after full suite pass); Frontend: 31 passed | 2 skipped, 308 passed | 18 skipped; Build: built in 6.45s. Evidence: out/verification/R30.5/notes.md.
+- [x] **UAT** — Journal filter shows only entries with pack when enabled; bulk export downloads JSONL; no forbidden tokens.
+- **Scope:** Has readiness pack filter; Download readiness packs (JSONL); GET readiness-packs/export; sanitize_json_for_export; no decision write. NO GIT.
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

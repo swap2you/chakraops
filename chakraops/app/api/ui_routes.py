@@ -9,6 +9,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, Header, HTTPException, Path, Query, Request
 
@@ -1761,6 +1762,320 @@ def ui_notification_delete(
 # ---------------------------------------------------------------------------
 # R26.2: Trade Ticket v2 — GET ticket payload; POST journal from ticket
 # ---------------------------------------------------------------------------
+# R30.0: Execution readiness — read-only checks from existing state; safe labels only
+# ---------------------------------------------------------------------------
+
+
+def _readiness_sanitize(s: Any) -> str:
+    """R30.0: Sanitize string for readiness response; no FAIL/WARN/PASS or FAIL_/WARN_."""
+    from app.core.portfolio.positions_unified_store_r279 import _sanitize_display_str
+    return _sanitize_display_str(s) if s is not None else ""
+
+
+def _build_trade_ticket_readiness(
+    symbol: str,
+    mode: str,
+    ticket_kind: str,
+) -> Dict[str, Any]:
+    """R30.0: Build readiness payload from existing state only. No broker calls; no decision write. Deterministic checks order."""
+    from datetime import datetime, timezone
+
+    symbol = (symbol or "").strip().upper()
+    mode = (mode or "live").strip().lower()
+    if mode not in ("live", "paper"):
+        mode = "live"
+    ticket_kind = (ticket_kind or "ENTRY").strip().upper()
+    if ticket_kind not in ("ENTRY", "CLOSE", "ROLL", "CC"):
+        ticket_kind = "ENTRY"
+
+    # Map ticket_kind -> strategy, action (deterministic)
+    if ticket_kind == "ENTRY":
+        strategy, action = "CSP", "OPEN"
+    elif ticket_kind == "CLOSE":
+        strategy, action = "CSP", "CLOSE"
+    elif ticket_kind == "ROLL":
+        strategy, action = "CSP", "OPEN"
+    elif ticket_kind == "CC":
+        strategy, action = "CC", "OPEN"
+    else:
+        strategy, action = "CSP", "OPEN"
+
+    as_of_utc = datetime.now(timezone.utc).isoformat()
+    checks: List[Dict[str, Any]] = []
+
+    # Build ticket once for SIZING, EARNINGS, order_stub
+    ticket: Dict[str, Any] = {}
+    try:
+        from app.core.portfolio.trade_ticket_r262 import build_trade_ticket
+        ticket = build_trade_ticket(symbol=symbol, strategy=strategy, action=action)
+    except Exception:
+        pass
+
+    # INTEGRITY (R30.1: action link to positions with symbol)
+    try:
+        integrity = _get_positions_unified_integrity_check_health()
+        st = (integrity.get("last_status") or "OK").strip()
+        status = "Review" if st == "Review" else "OK"
+        href = "/positions?source=db&symbol=" + quote(symbol, safe="")
+        checks.append({
+            "code": "INTEGRITY",
+            "status": status,
+            "label": _readiness_sanitize(integrity.get("last_status_label") or ("Unified positions integrity: " + status)),
+            "detail": _readiness_sanitize("Last check: " + str(integrity.get("last_checked_at_utc") or "—")),
+            "action_label": "Open integrity",
+            "action_href": _readiness_sanitize(href) or href,
+        })
+    except Exception:
+        checks.append({"code": "INTEGRITY", "status": "Review", "label": "Check unavailable", "detail": "", "action_label": "Open integrity", "action_href": "/positions?source=db&symbol=" + quote(symbol, safe="")})
+
+    # MARK_FRESHNESS (R30.1: action link to system)
+    try:
+        mark = _get_mark_refresh_health()
+        st = (mark.get("status") or mark.get("last_result") or "OK").strip()
+        status = "Review" if st not in ("OK", "ok", None) else "OK"
+        if status == "OK" and not mark.get("last_run_at_utc"):
+            status = "Review"
+        checks.append({
+            "code": "MARK_FRESHNESS",
+            "status": status,
+            "label": _readiness_sanitize(mark.get("status_label") or mark.get("last_result") or ("Marks: " + status)),
+            "detail": _readiness_sanitize("Last run: " + str(mark.get("last_run_at_utc") or "—")),
+            "action_label": "Open system diagnostics",
+            "action_href": "/system",
+        })
+    except Exception:
+        checks.append({"code": "MARK_FRESHNESS", "status": "Review", "label": "Check unavailable", "detail": "", "action_label": "Open system diagnostics", "action_href": "/system"})
+
+    # CASH_SECURED_RESERVE (guardrails) (R30.1: action link to portfolio)
+    try:
+        guard = _get_guardrails_health()
+        st = (guard.get("status") or "OK").strip()
+        status = "Review" if st in ("Blocked", "Advisory", "blocked", "advisory") else "OK"
+        cash_pct = guard.get("metrics") or {}
+        cash_pct = cash_pct.get("cash_reserve_pct") if isinstance(cash_pct, dict) else None
+        checks.append({
+            "code": "CASH_SECURED_RESERVE",
+            "status": status,
+            "label": _readiness_sanitize(guard.get("status_label") or ("Cash reserve: " + str(cash_pct) + "%" if cash_pct is not None else "Guardrails: " + st)),
+            "detail": _readiness_sanitize("Reserve %: " + str(cash_pct) if cash_pct is not None else ""),
+            "action_label": "Open portfolio",
+            "action_href": "/portfolio",
+        })
+    except Exception:
+        checks.append({"code": "CASH_SECURED_RESERVE", "status": "Review", "label": "Check unavailable", "detail": "", "action_label": "Open portfolio", "action_href": "/portfolio"})
+
+    # SIZING_CONSTRAINTS (from ticket) (R30.1: action link to system for guardrails)
+    try:
+        sizing = ticket.get("sizing") or {}
+        hit = sizing.get("sizing_constraints_hit") or []
+        status = "Review" if (isinstance(hit, list) and len(hit) > 0) else "OK"
+        label = "Sizing constraints hit: " + ", ".join(str(x) for x in hit)[:80] if hit else "No constraints hit"
+        checks.append({
+            "code": "SIZING_CONSTRAINTS",
+            "status": status,
+            "label": _readiness_sanitize(label),
+            "detail": _readiness_sanitize("Recommended: " + str(sizing.get("recommended_contracts") or sizing.get("recommended_qty") or "—")),
+            "action_label": "Open guardrails",
+            "action_href": "/system",
+        })
+    except Exception:
+        checks.append({"code": "SIZING_CONSTRAINTS", "status": "Review", "label": "Check unavailable", "detail": "", "action_label": "Open guardrails", "action_href": "/system"})
+
+    # EARNINGS_ADVISORY (from ticket) (R30.1: action link to symbol diagnostics)
+    try:
+        ea = ticket.get("earnings_advisory") or {}
+        days = ea.get("days")
+        status = "Review" if (days is not None and isinstance(days, (int, float)) and int(days) <= 14) else "OK"
+        label = "Earnings in " + str(days) + " days" if days is not None else "Earnings data unavailable"
+        href_ea = "/symbol-diagnostics?symbol=" + quote(symbol, safe="")
+        checks.append({
+            "code": "EARNINGS_ADVISORY",
+            "status": status,
+            "label": _readiness_sanitize(label),
+            "detail": _readiness_sanitize("Next: " + str(ea.get("next_date") or "—")),
+            "action_label": "Open symbol",
+            "action_href": href_ea,
+        })
+    except Exception:
+        checks.append({"code": "EARNINGS_ADVISORY", "status": "Review", "label": "Check unavailable", "detail": "", "action_label": "Open symbol", "action_href": "/symbol-diagnostics?symbol=" + quote(symbol, safe="")})
+
+    # ACCOUNT_PRESENT (R30.1: action link to system/settings)
+    try:
+        from app.core.accounts.service import get_default_account
+        account = get_default_account()
+        status = "Review" if account is None else "OK"
+        detail = ""
+        if account is not None and hasattr(account, "account_id"):
+            detail = _readiness_sanitize(str(getattr(account, "account_id")))
+        checks.append({
+            "code": "ACCOUNT_PRESENT",
+            "status": status,
+            "label": "Default account set" if account else "No default account",
+            "detail": detail,
+            "action_label": "Open settings",
+            "action_href": "/system",
+        })
+    except Exception:
+        checks.append({"code": "ACCOUNT_PRESENT", "status": "Review", "label": "Check unavailable", "detail": "", "action_label": "Open settings", "action_href": "/system"})
+
+    # Sanitize all check strings
+    for c in checks:
+        c["label"] = _readiness_sanitize(c.get("label") or "")
+        c["detail"] = _readiness_sanitize(c.get("detail") or "")
+
+    overall = "Review" if any(c.get("status") == "Review" for c in checks) else "OK"
+    status_label = "One or more checks need attention" if overall == "Review" else "All checks OK"
+
+    # order_stub: deterministic lines from ticket
+    try:
+        j = ticket.get("journal_draft") or {}
+        steps = ticket.get("execution_steps") or []
+        lines: List[str] = [
+            "Symbol: " + str(symbol),
+            "Strategy: " + str(strategy),
+            "Action: " + str(action),
+            "Qty: " + str(j.get("qty") or "—"),
+            "Contract: " + str(j.get("contract_key") or "—"),
+            "Expiry: " + str(j.get("expiry") or "—"),
+            "Strike: " + str(j.get("strike") or "—"),
+        ]
+        for step in (steps if isinstance(steps, list) else [])[:10]:
+            lines.append(_readiness_sanitize(step))
+        order_stub = {
+            "title": _readiness_sanitize("Order stub: " + symbol + " " + strategy + " " + action),
+            "lines": [_readiness_sanitize(ln) for ln in lines],
+        }
+    except Exception:
+        order_stub = {
+            "title": _readiness_sanitize("Order stub: " + symbol),
+            "lines": [_readiness_sanitize("Symbol: " + symbol)],
+        }
+
+    return {
+        "status": overall,
+        "status_label": _readiness_sanitize(status_label),
+        "as_of_utc": as_of_utc,
+        "checks": checks,
+        "order_stub": order_stub,
+    }
+
+
+@router.get("/trade-ticket/readiness")
+def ui_trade_ticket_readiness(
+    symbol: str = Query(..., description="Symbol"),
+    mode: str = Query("live", description="live | paper"),
+    ticket_kind: str = Query("ENTRY", description="ENTRY | CLOSE | ROLL | CC"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R30.0: Execution readiness for trade ticket. Read-only from existing state; safe labels only; no decision write."""
+    _require_ui_key(x_ui_key)
+    return _build_trade_ticket_readiness(symbol=symbol, mode=mode, ticket_kind=ticket_kind)
+
+
+def _build_readiness_pack_bundle(symbol: str, mode: str, ticket_kind: str, include_paper: bool = True) -> Dict[str, Any]:
+    """R30.2/R30.3: Build sanitized JSON bundle (manifest, readiness, system_health_subset, notes). No decision write."""
+    from app.core.portfolio.positions_unified_store_r279 import sanitize_json_for_export
+
+    symbol = (symbol or "").strip().upper()
+    mode = (mode or "live").strip().lower()
+    if mode not in ("live", "paper"):
+        mode = "live"
+    ticket_kind = (ticket_kind or "ENTRY").strip().upper()
+    if ticket_kind not in ("ENTRY", "CLOSE", "ROLL", "CC"):
+        ticket_kind = "ENTRY"
+
+    generated_at = datetime.now(timezone.utc).isoformat()
+    readiness = _build_trade_ticket_readiness(symbol=symbol, mode=mode, ticket_kind=ticket_kind)
+    readiness_s = sanitize_json_for_export(readiness)
+
+    system_health_subset = {
+        "positions_unified_reconcile": _get_positions_unified_reconcile_health(),
+        "positions_unified_rebuild": _get_positions_unified_rebuild_health(),
+        "positions_unified_integrity_check": _get_positions_unified_integrity_check_health(),
+        "mark_refresh": _get_mark_refresh_health(),
+        "portfolio_risk_notifier": _get_portfolio_risk_notifier_health(),
+    }
+    system_health_subset_s = sanitize_json_for_export(system_health_subset)
+
+    checks_summary = [{"code": c.get("code"), "status": c.get("status")} for c in (readiness.get("checks") or [])]
+    order_lines = (readiness.get("order_stub") or {}).get("lines") or []
+    notes_obj = {
+        "overall_status": readiness.get("status"),
+        "overall_status_label": readiness.get("status_label"),
+        "checks": checks_summary,
+        "order_stub_lines": order_lines,
+    }
+    notes_s = sanitize_json_for_export(notes_obj)
+
+    included_files = ["manifest.json", "readiness.json", "system_health_subset.json", "notes.json"]
+    manifest = {
+        "generated_at_utc": generated_at,
+        "symbol": symbol,
+        "mode": mode,
+        "ticket_kind": ticket_kind,
+        "include_paper": include_paper,
+        "included_files": included_files,
+        "counts": {
+            "checks": len(readiness.get("checks") or []),
+            "order_stub_lines": len(order_lines),
+            "system_health_blocks": 5,
+        },
+    }
+    manifest_s = sanitize_json_for_export(manifest)
+
+    return {
+        "manifest": manifest_s,
+        "readiness": readiness_s,
+        "system_health_subset": system_health_subset_s,
+        "notes": notes_s,
+    }
+
+
+@router.get("/trade-ticket/readiness-pack")
+def ui_trade_ticket_readiness_pack(
+    symbol: str = Query(..., description="Symbol"),
+    mode: str = Query("live", description="live | paper"),
+    ticket_kind: str = Query("ENTRY", description="ENTRY | CLOSE | ROLL | CC"),
+    include_paper: bool = Query(True, description="Include paper in exported system-health subset (safe)"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+):
+    """R30.2: Manual download of readiness pack (ZIP). Sanitized JSON only; no decision write; no secrets."""
+    import io
+    import zipfile
+
+    from fastapi.responses import Response
+
+    _require_ui_key(x_ui_key)
+    try:
+        symbol = (symbol or "").strip().upper()
+        mode = (mode or "live").strip().lower()
+        if mode not in ("live", "paper"):
+            mode = "live"
+        ticket_kind = (ticket_kind or "ENTRY").strip().upper()
+        if ticket_kind not in ("ENTRY", "CLOSE", "ROLL", "CC"):
+            ticket_kind = "ENTRY"
+
+        bundle = _build_readiness_pack_bundle(symbol=symbol, mode=mode, ticket_kind=ticket_kind, include_paper=include_paper)
+        ts = (datetime.now(timezone.utc).isoformat().replace(":", "-").replace(".", "-"))[:19]
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("manifest.json", json.dumps(bundle["manifest"], indent=2, default=str))
+            zf.writestr("readiness.json", json.dumps(bundle["readiness"], indent=2, default=str))
+            zf.writestr("system_health_subset.json", json.dumps(bundle["system_health_subset"], indent=2, default=str))
+            zf.writestr("notes.json", json.dumps(bundle["notes"], indent=2, default=str))
+
+        zip_bytes = buf.getvalue()
+        filename = f"readiness_pack_{symbol}_{ts}.zip"
+        return Response(
+            content=zip_bytes,
+            media_type="application/zip",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Readiness pack error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/trade-ticket")
@@ -1829,7 +2144,9 @@ async def ui_journal_from_ticket(
         except (TypeError, ValueError):
             pass
     try:
-        from app.core.journal.journal_store import journal_create
+        from app.core.journal.journal_store import journal_create, journal_attachment_insert
+
+        is_paper = body.get("is_paper") is True
         entry = journal_create(
             trade_date=trade_date,
             symbol=symbol,
@@ -1847,7 +2164,27 @@ async def ui_journal_from_ticket(
             tags=(body.get("tags") or "").strip()[:500] or None,
             realized_pl=realized_val,
             link_id=(body.get("link_id") or "").strip() or None,
+            is_paper=is_paper,
         )
+        attach_readiness_pack = body.get("attach_readiness_pack") is True
+        if attach_readiness_pack and entry and entry.get("id"):
+            mode = (body.get("mode") or "live").strip().lower()
+            if mode not in ("live", "paper"):
+                mode = "live"
+            ticket_kind = "ENTRY"
+            if action in ("CLOSE", "SELL"):
+                ticket_kind = "CLOSE"
+            elif action == "ROLL":
+                ticket_kind = "ROLL"
+            elif strategy == "CC" and action in ("OPEN", "BUY"):
+                ticket_kind = "CC"
+            try:
+                bundle = _build_readiness_pack_bundle(symbol=symbol, mode=mode, ticket_kind=ticket_kind, include_paper=True)
+                content_json = json.dumps(bundle, indent=2, default=str)
+                journal_attachment_insert(entry["id"], "READINESS_PACK", content_json)
+            except Exception as att_e:
+                import logging
+                logging.getLogger(__name__).warning("Attach readiness pack failed (entry created): %s", att_e)
         return {"entry": entry}
     except HTTPException:
         raise
@@ -2499,14 +2836,16 @@ def ui_journal_list(
     paper_only: bool = Query(False, description="R27.2: Only paper entries"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """R25.5: List journal entries (ordered by created_ts desc). R27.0: include_paper. R27.2: paper_only. R27.4: link_target (request-time)."""
+    """R25.5: List journal entries (ordered by created_ts desc). R27.0: include_paper. R27.2: paper_only. R27.4: link_target. R30.3: has_readiness_pack."""
     _require_ui_key(x_ui_key)
     try:
-        from app.core.journal.journal_store import journal_list
+        from app.core.journal.journal_store import journal_list, journal_attachment_entry_ids_with_kind
         from app.core.journal.journal_links_r274 import parse_link_id
         entries = journal_list(from_date=from_date, to_date=to_date, symbol=symbol, strategy=strategy, limit=limit, offset=offset, include_paper=include_paper, paper_only=paper_only)
+        readiness_pack_ids = journal_attachment_entry_ids_with_kind("READINESS_PACK")
         for e in entries:
             e["link_target"] = parse_link_id(e.get("link_id"))
+            e["has_readiness_pack"] = e.get("id") in readiness_pack_ids
         return {"entries": entries}
     except Exception as e:
         import logging
@@ -2715,6 +3054,91 @@ async def ui_journal_update(
         import logging
         logging.getLogger(__name__).exception("Journal update error: %s", e)
         raise HTTPException(status_code=500, detail="Unable to update entry")
+
+
+@router.get("/journal/entry/{entry_id}/attachment/readiness-pack")
+def ui_journal_entry_attachment_readiness_pack(
+    entry_id: str,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+):
+    """R30.3: Download attached readiness pack JSON for a journal entry. 404 if not found (safe message)."""
+    _require_ui_key(x_ui_key)
+    if not entry_id or not entry_id.strip():
+        raise HTTPException(status_code=400, detail="entry_id required")
+    try:
+        from app.core.journal.journal_store import journal_attachment_get
+
+        content_json = journal_attachment_get(entry_id.strip(), "READINESS_PACK")
+        if content_json is None:
+            raise HTTPException(status_code=404, detail="No readiness pack attached to this entry")
+        data = json.loads(content_json)
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Journal attachment download error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to load attachment")
+
+
+@router.get("/journal/readiness-packs/export")
+def ui_journal_readiness_packs_export(
+    has_pack: bool = Query(True, description="R30.5: Only entries with readiness pack (true) or all (false)"),
+    start_utc: str | None = Query(None, description="Optional ISO created_ts lower bound"),
+    end_utc: str | None = Query(None, description="Optional ISO created_ts upper bound"),
+    limit: int = Query(200, ge=1, le=1000, description="Max lines (default 200)"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+):
+    """R30.5: Bulk export readiness packs as JSONL. Read-only; no state writes. Deterministic order: created_ts ASC, id ASC."""
+    _require_ui_key(x_ui_key)
+    try:
+        from app.core.journal.journal_store import (
+            journal_list_for_readiness_export,
+            journal_attachment_get,
+        )
+        from app.core.portfolio.positions_unified_store_r279 import sanitize_json_for_export
+
+        entries = journal_list_for_readiness_export(
+            start_utc=start_utc.strip() if start_utc else None,
+            end_utc=end_utc.strip() if end_utc else None,
+            has_pack=has_pack,
+            limit=limit,
+        )
+        lines: List[str] = []
+        for e in entries:
+            content_json = journal_attachment_get(e.get("id") or "", "READINESS_PACK")
+            if content_json is None:
+                continue
+            try:
+                bundle = json.loads(content_json)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            bundle = sanitize_json_for_export(bundle)
+            created_ts = e.get("created_ts") or ""
+            is_paper = e.get("is_paper")
+            mode = "paper" if is_paper else "live"
+            safe_entry = {
+                "id": e.get("id"),
+                "symbol": e.get("symbol"),
+                "created_at_utc": created_ts,
+                "mode": mode,
+                "strategy": e.get("strategy"),
+            }
+            line_obj = {"journal_entry": safe_entry, "readiness_pack": bundle}
+            lines.append(json.dumps(line_obj, default=str))
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        filename = f"readiness_packs_{ts}.jsonl"
+        body = "\n".join(lines)
+        from fastapi.responses import Response
+        return Response(
+            content=body.encode("utf-8"),
+            media_type="application/x-ndjson",
+            headers={"Content-Disposition": f"attachment; filename={quote(filename)}"},
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Readiness packs export error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to export readiness packs")
 
 
 @router.post("/journal/export")

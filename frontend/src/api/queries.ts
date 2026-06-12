@@ -410,6 +410,84 @@ function tradeTicketPath(symbol: string, strategy: string, action: string): stri
   return `/api/ui/trade-ticket?${p.toString()}`;
 }
 
+/** R30.0: GET /api/ui/trade-ticket/readiness — execution readiness checks (safe labels only). */
+function tradeTicketReadinessPath(symbol: string, mode: "live" | "paper", ticketKind: string): string {
+  const p = new URLSearchParams();
+  p.set("symbol", symbol);
+  p.set("mode", mode);
+  p.set("ticket_kind", ticketKind);
+  return `/api/ui/trade-ticket/readiness?${p.toString()}`;
+}
+
+/** R30.2: GET /api/ui/trade-ticket/readiness-pack — returns ZIP; query symbol, mode, ticket_kind, include_paper. */
+export function readinessPackPath(
+  symbol: string,
+  mode: "live" | "paper",
+  ticketKind: string,
+  includePaper: boolean = true
+): string {
+  const p = new URLSearchParams();
+  p.set("symbol", symbol.trim());
+  p.set("mode", mode);
+  p.set("ticket_kind", ticketKind);
+  p.set("include_paper", String(includePaper));
+  return `/api/ui/trade-ticket/readiness-pack?${p.toString()}`;
+}
+
+/** R30.2: Download readiness pack ZIP (manual; sanitized, deterministic). */
+export async function downloadReadinessPack(
+  symbol: string,
+  mode: "live" | "paper",
+  ticketKind: string,
+  includePaper: boolean = true
+): Promise<void> {
+  const path = readinessPackPath(symbol, mode, ticketKind, includePaper);
+  const blob = await apiGetBlob(path);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `readiness_pack_${symbol}_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.zip`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** R30.3: Download attached readiness pack JSON for a journal entry. */
+export async function downloadJournalReadinessPack(entryId: string, symbol: string): Promise<void> {
+  const path = uiJournalEntryReadinessPackPath(entryId);
+  const data = await apiGet<Record<string, unknown>>(path);
+  const jsonStr = JSON.stringify(data, null, 2);
+  const blob = new Blob([jsonStr], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `readiness_pack_${symbol}_${entryId}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** R30.4: Readiness pack bundle shape (from GET attachment). */
+export interface ReadinessPackBundle {
+  manifest?: Record<string, unknown>;
+  readiness?: {
+    status?: string;
+    status_label?: string;
+    as_of_utc?: string;
+    checks?: Array<{ code?: string; status?: string; label?: string; detail?: string; action_label?: string; action_href?: string }>;
+    order_stub?: { title?: string; lines?: string[] };
+  };
+  system_health_subset?: Record<string, unknown>;
+  notes?: Record<string, unknown>;
+}
+
+/** R30.4: Fetch journal entry readiness pack JSON for in-app viewer. */
+export function useJournalEntryReadinessPack(entryId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["ui", "journal", "readiness-pack", entryId],
+    queryFn: () => apiGet<ReadinessPackBundle>(uiJournalEntryReadinessPackJsonPath(entryId!)),
+    enabled: !!entryId && enabled,
+  });
+}
+
 function uiJournalPath(params: { from_date?: string; to_date?: string; symbol?: string; strategy?: string; limit?: number; offset?: number; include_paper?: boolean; paper_only?: boolean }): string {
   const p = new URLSearchParams();
   if (params.from_date) p.set("from_date", params.from_date);
@@ -431,6 +509,54 @@ function uiJournalExportPath(from_date: string, to_date: string): string {
 }
 function uiJournalEntryPath(id: string): string {
   return `/api/ui/journal/${encodeURIComponent(id)}`;
+}
+/** R30.3/R30.4: GET journal entry attachment readiness-pack (JSON bundle) */
+export function uiJournalEntryReadinessPackJsonPath(entryId: string): string {
+  return `/api/ui/journal/entry/${encodeURIComponent(entryId)}/attachment/readiness-pack`;
+}
+function uiJournalEntryReadinessPackPath(entryId: string): string {
+  return uiJournalEntryReadinessPackJsonPath(entryId);
+}
+
+/** R30.5: GET journal readiness-packs bulk export (JSONL). Params: has_pack, start_utc?, end_utc?, limit. */
+export function uiJournalReadinessPacksExportPath(params: {
+  has_pack?: boolean;
+  start_utc?: string;
+  end_utc?: string;
+  limit?: number;
+}): string {
+  const p = new URLSearchParams();
+  if (params.has_pack !== undefined) p.set("has_pack", String(params.has_pack));
+  if (params.start_utc) p.set("start_utc", params.start_utc);
+  if (params.end_utc) p.set("end_utc", params.end_utc);
+  if (params.limit != null) p.set("limit", String(params.limit));
+  return `/api/ui/journal/readiness-packs/export?${p.toString()}`;
+}
+
+/** R30.5: Download readiness packs as JSONL (uses current filters: has_pack, date range, limit). */
+export async function downloadJournalReadinessPacksJsonl(params: {
+  has_pack: boolean;
+  from_date: string;
+  to_date: string;
+  limit?: number;
+}): Promise<void> {
+  const start_utc = `${params.from_date}T00:00:00Z`;
+  const end_utc = `${params.to_date}T23:59:59Z`;
+  const path = uiJournalReadinessPacksExportPath({
+    has_pack: params.has_pack,
+    start_utc,
+    end_utc,
+    limit: params.limit ?? 200,
+  });
+  const blob = await apiGetBlob(path);
+  const ts = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
+  const filename = `readiness_packs_${ts}Z.jsonl`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 /** R25.5: Reports monthly. R27.0: include_paper */
 function uiReportsMonthlyPath(month: string, include_paper?: boolean): string {
@@ -2110,6 +2236,8 @@ export interface JournalEntry {
   link_target?: { kind: string; id: string } | null;
   /** R27.0: Paper trade flag (0/1 from API) */
   is_paper?: number | null;
+  /** R30.3: True when entry has an attached readiness pack */
+  has_readiness_pack?: boolean;
 }
 export interface JournalListResponse {
   entries: JournalEntry[];
@@ -2181,6 +2309,30 @@ export interface TradeTicketResponse {
   earnings_advisory: Record<string, unknown>;
   error?: string;
 }
+
+/** R30.0/R30.1: Trade ticket readiness response (safe labels only; optional action links per check). */
+export interface TradeTicketReadinessResponse {
+  status: "OK" | "Review";
+  status_label: string;
+  as_of_utc: string;
+  checks: Array<{
+    code: string;
+    status: "OK" | "Review";
+    label: string;
+    detail: string;
+    action_label?: string;
+    action_href?: string;
+  }>;
+  order_stub: { title: string; lines: string[] };
+}
+export function useTradeTicketReadiness(symbol: string, mode: "live" | "paper", ticketKind: string) {
+  return useQuery({
+    queryKey: ["ui", "trade-ticket", "readiness", symbol, mode, ticketKind],
+    queryFn: () => apiGet<TradeTicketReadinessResponse>(tradeTicketReadinessPath(symbol, mode, ticketKind)),
+    enabled: !!symbol?.trim(),
+  });
+}
+
 export function useTradeTicket(symbol: string, strategy: string, action: string) {
   return useQuery({
     queryKey: queryKeys.tradeTicket(symbol, strategy, action),

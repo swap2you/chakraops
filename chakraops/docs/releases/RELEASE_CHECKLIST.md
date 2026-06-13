@@ -929,6 +929,22 @@ No code, tests, UI, ORATS, scheduler, broker, deployment, folder moves, or runti
 
 ---
 
+### R30.7 — Runtime-file hygiene cleanup
+
+- [x] Requirements — R30.7_requirements.md
+- [x] Release notes — R30.7_release_notes.md
+- [x] Verification — out/verification/R30.7/notes.md
+- [x] Runtime files untracked — decision_latest.json, mark_refresh_state.json, notifications.jsonl
+- [x] Local files preserved — all three runtime files remain physically present
+- [x] Ignore proof — git check-ignore confirms all three paths matched by .gitignore out/ rule
+- [x] Gate — Backend: 1017 passed, 3 skipped in 66.43s; Frontend: 308 passed, 18 skipped in 43.22s; Build: passed. Evidence: out/verification/R30.7/notes.md.
+- [ ] Release sign-off — PR reviewed, merged, tagged
+
+**Scope:** Stop tracking grandfathered runtime files under out/.
+No code, UI, ORATS, scheduler, database, workflow, brokerage, deployment, or history-rewrite changes.
+
+---
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

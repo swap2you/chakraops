@@ -42,13 +42,17 @@ _Last updated: R30.6 documentation baseline_
 
 ## 4. Tracked Runtime Files Under `out/`
 
-**Issue:** Several runtime output files under `out/` are tracked in git (e.g., `out/decision_latest.json`, `out/mark_refresh_state.json`, `out/notifications.jsonl`).
+**Issue:** Three grandfathered runtime output files under `out/` were tracked in git: `out/decision_latest.json`, `out/mark_refresh_state.json`, and `out/notifications.jsonl`.
 
 **Impact:** Runtime state bleeds into version control. Diff noise. Risk of committing stale or sensitive runtime values.
 
-**Current handling:** Treated as known debt. Files must not be modified unless the release explicitly scopes runtime-file hygiene cleanup.
+**Status: Resolved by R30.7.**
+- All three files removed from the Git index via `git rm --cached`.
+- Physical files remain present locally and continue to be written by the application at runtime.
+- All three paths are matched by `.gitignore` (`out/` rule); `git check-ignore` confirms coverage.
+- Existing Git history was intentionally not rewritten. The files remain visible in commits prior to R30.7.
 
-**Future cleanup required:** Untrack runtime files in a dedicated hygiene release. Update `.gitignore` accordingly. Requires operator explicit approval.
+**Future cleanup required:** None. Issue closed after R30.7 merges.
 
 ---
 

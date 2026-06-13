@@ -907,15 +907,25 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 
 ### R30.6 — Orchestration baseline + documentation governance
 
-- [ ] Requirements — R30.6_requirements.md
-- [ ] Release notes — R30.6_release_notes.md
-- [ ] Verification — out/verification/R30.6/notes.md
-- [ ] Gate — backend pytest, frontend tests, frontend build
-- [ ] Manual UAT — agent files exist, source-of-truth paths correct, known issues registered
-- [ ] Release sign-off — PR reviewed, merged, tagged
+- [x] **Requirements** — chakraops/docs/releases/R30.6_requirements.md
+- [x] **Release notes** — chakraops/docs/releases/R30.6_release_notes.md
+- [x] **Verification** — out/verification/R30.6/notes.md (gate tails + UAT + grep proof)
+- [x] **Gate** — Backend: 1017 passed, 3 skipped; Frontend: 308 passed, 18 skipped; Build: passed. Evidence: out/verification/R30.6/notes.md.
+- [x] **Manual UAT** — agent files exist, source-of-truth paths correct, known issues registered
+- [x] **Release sign-off** — PR reviewed, merged, tagged
 
 **Scope:** Documentation governance and cross-tool orchestration baseline only.
 No code, tests, UI, ORATS, scheduler, broker, deployment, folder moves, or runtime-file cleanup.
+
+**Completion:**
+- PR: #11
+- Merge commit: 6397f32
+- Tag: chakraops-r30.6.0
+- Backend gate: 1017 passed, 3 skipped
+- Frontend gate: 308 passed, 18 skipped
+- Frontend build: passed
+- Claude Code review: approved with non-blocking notes
+- Codex review: approved
 
 ---
 

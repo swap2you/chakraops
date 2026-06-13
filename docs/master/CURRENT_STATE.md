@@ -1,18 +1,18 @@
 # Current State — ChakraOps
 
-_Last updated: R30.6 documentation baseline_
+_Last updated: R30.7 final documentation and verification notes update_
 
 ## Release Status
 
 | Field | Value |
 |-------|-------|
-| Latest merged release | R30.5 |
-| Tag | `chakraops-r30.5.0` |
-| main merge commit | `f8c163f` |
-| Current branch | `release/R30.6` |
-| Current mode | Orchestration baseline, audit, stabilization planning |
+| Latest stable merged release | R30.6.1 (until R30.7 PR merges) |
+| Tag | `chakraops-r30.6.1` |
+| Current branch | `release/R30.7` |
+| Current mode | Runtime-file hygiene completed; awaiting review and merge |
+| Completed | Three grandfathered `out/` runtime files untracked; local copies preserved; Git history not rewritten |
 
-## Baseline Gates (as of R30.5 merge)
+## R30.7 Validation Gates
 
 | Gate | Result |
 |------|--------|
@@ -22,11 +22,11 @@ _Last updated: R30.6 documentation baseline_
 
 ## Next Work Categories
 
-- Runtime-file hygiene cleanup
+- ~~Runtime-file hygiene cleanup~~ — completed in R30.7, awaiting merge
 - Frontend warnings cleanup
 - Documentation tracker refresh
 - Repo audit and operational stabilization
 
 ## Future Releases
 
-Future release numbering and scope remain to be scoped by the operator.
+Future release numbering and scope beyond R30.7 remain to be scoped by the operator.

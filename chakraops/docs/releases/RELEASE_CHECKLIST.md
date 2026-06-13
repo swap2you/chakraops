@@ -905,6 +905,20 @@ Requirements: `docs/enhancements/phase_22_trading_intelligence_and_prod_readines
 - [x] **UAT** — Journal filter shows only entries with pack when enabled; bulk export downloads JSONL; no forbidden tokens.
 - **Scope:** Has readiness pack filter; Download readiness packs (JSONL); GET readiness-packs/export; sanitize_json_for_export; no decision write. NO GIT.
 
+### R30.6 — Orchestration baseline + documentation governance
+
+- [ ] Requirements — R30.6_requirements.md
+- [ ] Release notes — R30.6_release_notes.md
+- [ ] Verification — out/verification/R30.6/notes.md
+- [ ] Gate — backend pytest, frontend tests, frontend build
+- [ ] Manual UAT — agent files exist, source-of-truth paths correct, known issues registered
+- [ ] Release sign-off — PR reviewed, merged, tagged
+
+**Scope:** Documentation governance and cross-tool orchestration baseline only.
+No code, tests, UI, ORATS, scheduler, broker, deployment, folder moves, or runtime-file cleanup.
+
+---
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

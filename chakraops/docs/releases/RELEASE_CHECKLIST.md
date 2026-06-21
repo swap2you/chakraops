@@ -938,10 +938,32 @@ No code, tests, UI, ORATS, scheduler, broker, deployment, folder moves, or runti
 - [x] Local files preserved — all three runtime files remain physically present
 - [x] Ignore proof — git check-ignore confirms all three paths matched by .gitignore out/ rule
 - [x] Gate — Backend: 1017 passed, 3 skipped in 66.43s; Frontend: 308 passed, 18 skipped in 43.22s; Build: passed. Evidence: out/verification/R30.7/notes.md.
-- [ ] Release sign-off — PR reviewed, merged, tagged
+- [x] Release sign-off — PR reviewed, merged, tagged
 
 **Scope:** Stop tracking grandfathered runtime files under out/.
 No code, UI, ORATS, scheduler, database, workflow, brokerage, deployment, or history-rewrite changes.
+
+**Completion:**
+- PR: #13
+- Merge commit: 898b772
+- Tag: chakraops-r30.7.0
+
+### R30.8 — AI operating library + release traveler
+
+- [x] Requirements — R30.8_requirements.md
+- [x] Release notes — R30.8_release_notes.md
+- [x] AI operating library — docs/ai/
+- [x] Prompt library — docs/ai/prompts/
+- [x] Release packet template — docs/ai/releases/TEMPLATE_RELEASE_PACKET.md
+- [x] Release traveler — docs/ai/RELEASE_TRAVELER.md
+- [x] R30.8 release folder — docs/ai/releases/R30.8/
+- [x] R31.0 starter packet — docs/ai/releases/R31.0/
+- [x] Gate — Backend: 541 passed in 436.71s; Frontend: 308 passed / 18 skipped in 48.86s; Build: passed, built in 7.56s. Evidence: out/verification/R30.8/notes.md.
+- [ ] Review — Codex independent review (initial: BLOCKED; second: BLOCKED; final re-review pending)
+- [ ] Release sign-off — PR reviewed, merged, tagged
+
+**Scope:** Repository-native AI operating library, prompt library, release packet workflow, shared status/tool logs, and release traveler only.
+No code, UI, ORATS, scheduler, database, runtime, brokerage, deployment, or workflow automation changes.
 
 ---
 

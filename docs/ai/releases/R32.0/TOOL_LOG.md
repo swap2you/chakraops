@@ -17,10 +17,12 @@
 
 ## Claude Code
 - Checkpoint review of commit 1223884: APPROVED WITH NON-BLOCKING NOTES (import-time constant consumers; runtime.yaml literal; missing-token test). Notes remediated in the R32 completion milestone.
+- Review of completed R32.0 (commit dffa932): APPROVED WITH NON-BLOCKING NOTES. Cursor closed the notes by migrating the two remaining `app/core/data` token consumers to `get_orats_token()`, withdrawing the stale `event_calendar.py` modified-claim from the packet, and adding `tests/test_r320_data_token_consumers.py`. Committed as `fix(R32.0): close ORATS review findings`.
 
 ## Codex
 - Checkpoint review of commit 1223884: BLOCKED — R32 packet lacked exact authorized file paths (generic domain-only permissions) before the 12-file commit.
 - Cursor remediation: RELEASE_PACKET.md updated with exact committed paths + exact remaining-scope paths from the R31 blueprint; generic domains removed; additional-path-requires-approval retained. Recorded before further source edits.
+- Completed R32.0 review: PENDING — Codex quota exhausted; review not run. No Codex approval claimed.
 
 ## Claude Cowork
 - Pending UAT.

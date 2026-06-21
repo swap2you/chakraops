@@ -108,7 +108,7 @@ def get_snapshot(
     """
     from app.core.data.orats_client import fetch_full_equity_snapshots
     from app.core.orats.orats_core_client import fetch_core_snapshot, derive_avg_stock_volume_20d as _derive_avg
-    from app.core.config.orats_secrets import ORATS_API_TOKEN
+    from app.core.config.orats_secrets import get_orats_token
 
     sym = (ticker or "").strip().upper()
     if not sym:
@@ -118,7 +118,7 @@ def get_snapshot(
 
     now_iso = datetime.now(timezone.utc).isoformat()
     date_key = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    token = (ORATS_API_TOKEN or "").strip()
+    token = (get_orats_token() or "").strip()
 
     snapshot = SymbolSnapshot(ticker=sym)
 
@@ -243,7 +243,7 @@ def get_snapshots_batch(
     """Build canonical snapshots for multiple tickers. Uses batched delayed fetch then core per ticker."""
     from app.core.data.orats_client import fetch_full_equity_snapshots
     from app.core.orats.orats_core_client import fetch_core_snapshot, derive_avg_stock_volume_20d as _derive_avg
-    from app.core.config.orats_secrets import ORATS_API_TOKEN
+    from app.core.config.orats_secrets import get_orats_token
 
     if not tickers:
         return {}
@@ -251,7 +251,7 @@ def get_snapshots_batch(
     syms = [str(t).strip().upper() for t in tickers if str(t).strip()]
     now_iso = datetime.now(timezone.utc).isoformat()
     date_key = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    token = (ORATS_API_TOKEN or "").strip()
+    token = (get_orats_token() or "").strip()
 
     # Batch delayed quote + iv_rank
     try:

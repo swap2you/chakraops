@@ -50,8 +50,8 @@ def get_equity_snapshot_from_core(
     timeout_sec: float = 15.0,
 ) -> EquitySnapshot:
     """Build EquitySnapshot from /datav2/cores using app token. Single path for Universe/Ticker/Evaluation."""
-    from app.core.config.orats_secrets import ORATS_API_TOKEN
-    token = ORATS_API_TOKEN or ""
+    from app.core.config.orats_secrets import get_orats_token
+    token = get_orats_token() or ""
     return build_equity_snapshot_from_core(
         ticker,
         token,

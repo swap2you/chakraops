@@ -40,10 +40,12 @@ DELIVERED — R32.0 data-reliability scope:
 - No silent fallback provider; ORATS remains the sole provider.
 
 ## Claude review
-Checkpoint (commit 1223884): APPROVED WITH NON-BLOCKING NOTES. Notes addressed in this milestone: (1) remaining consumers importing the import-time ORATS_API_TOKEN constant migrated to get_orats_token(); (2) runtime.yaml token-field literal `${ORATS_API_TOKEN}` made non-passable (removed/validated, fail-loud); (3) added direct missing-token startup/provider-state test. Full R32 review deferred to consolidated post-R35 review (operator decision 4).
+- Checkpoint (commit 1223884): APPROVED WITH NON-BLOCKING NOTES — addressed in completion commit dffa932.
+- Completed R32.0 (commit dffa932): **APPROVED WITH NON-BLOCKING NOTES.** Notes closed in the R32.0 review-remediation commit: (1) two remaining `app/core/data` consumers (`orats_client.py::get_equity_snapshot_from_core`, `symbol_snapshot_service.py::get_snapshot`/`get_snapshots_batch`) migrated from the import-time `ORATS_API_TOKEN` constant to `get_orats_token()` with explicit missing-token behavior; (2) stale "modified `event_calendar.py`" packet claim withdrawn; (3) focused regression tests added (`tests/test_r320_data_token_consumers.py`). Evidence: `out/verification/R32.0-review-remediation/`.
 
 ## Codex review
-Checkpoint (commit 1223884): BLOCKED — the R32 packet contained generic domain-only permissions, not the exact authorized file paths, before the 12-file commit. Remediation: RELEASE_PACKET.md now lists the exact paths changed by 1223884 plus the exact remaining-scope paths derived from the approved R31 blueprint; generic domain-only permissions removed; "any additional path requires operator approval + packet update" retained. Full R32 review deferred to consolidated post-R35 review (operator decision 4).
+- Checkpoint (commit 1223884): BLOCKED (packet lacked exact paths) — remediated; packet now lists exact authorized paths.
+- Completed R32.0: **PENDING** — Codex review not run (quota exhausted). No Codex approval is claimed. Full Codex R32 review remains outstanding.
 
 ## Cowork UAT
 Deferred to consolidated post-R35 UAT.

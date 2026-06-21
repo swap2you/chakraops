@@ -66,11 +66,10 @@ Exact paths only (copied from the approved R31 execution blueprint). No generic 
 - `chakraops/app/core/universe/refresh_history_store.py`
 - `chakraops/app/api/data_reliability_routes.py`
 
-### Remaining R32.0 scope — modified source (Claude-note token migration + router include + event-calendar status)
+### Remaining R32.0 scope — modified source (Claude-note token migration + router include)
 
 - `chakraops/app/api/server.py`
 - `chakraops/app/api/ui_routes.py`
-- `chakraops/app/core/environment/event_calendar.py`
 - `chakraops/app/core/options/v2/csp_chain_v2.py`
 - `chakraops/app/core/options/v2/cc_chain_v2.py`
 - `chakraops/app/core/orats/orats_client.py`
@@ -80,6 +79,16 @@ Exact paths only (copied from the approved R31 execution blueprint). No generic 
 - `chakraops/app/core/eval/evaluation_service_v2.py`
 - `chakraops/app/core/eval/evaluation_store_v2.py`
 - `chakraops/app/core/eligibility/providers/orats_daily_provider.py`
+
+### R32.0 review remediation (post-`dffa932`, Claude APPROVED-WITH-NOTES)
+
+Migrate the two remaining `app/core/data` consumers off the import-time `ORATS_API_TOKEN` constant to `get_orats_token()`:
+
+- `chakraops/app/core/data/orats_client.py`
+- `chakraops/app/core/data/symbol_snapshot_service.py`
+- `chakraops/tests/test_r320_data_token_consumers.py`
+
+Note: `chakraops/app/core/environment/event_calendar.py` was NOT modified in R32.0 (the data-reliability layer added a separate `event_calendar_status.py`); the earlier "modified" claim is withdrawn.
 
 ### Remaining R32.0 scope — tests
 

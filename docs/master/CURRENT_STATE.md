@@ -1,6 +1,6 @@
 # Current State — ChakraOps
 
-_Last updated: R32.0 complete (program R31–R35)_
+_Last updated: R33.0 complete (program R31–R35)_
 
 ## Release Status
 
@@ -10,8 +10,8 @@ _Last updated: R32.0 complete (program R31–R35)_
 | Tag | `chakraops-r30.7.0` |
 | Current branch | `release/R31-R35-program` |
 | Current mode | Program R31–R35 (single branch, five milestone commits, one final PR) |
-| Active milestone | R32.0 — market data/earnings/universe/freshness (COMPLETE; gate-verified, committed/pushed; awaiting full Claude + Codex review) |
-| Next planned milestone | R33.0 — decision engine / strategy profiles (not started; gated on R32.0 review acceptance) |
+| Active milestone | R33.0 — canonical decision engine / strategy profiles / risk correctness (COMPLETE; gate-verified, committed/pushed; awaiting Claude review + deferred Codex review) |
+| Next planned milestone | R34.0 — persistence + backtest harness (not started; gated on R33.0 review acceptance; must make a deliberate persistence decision before any DB change) |
 
 ## R31.0 Validation Gates (audit milestone)
 

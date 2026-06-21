@@ -1,0 +1,41 @@
+{
+  "_disclaimer": "R34 backtest input fixtures only. These are deterministic decision-engine inputs for future replay harness development. They make NO claim of historical or future profitability and are not performance results.",
+  "schema_version": 1,
+  "profile": "balanced",
+  "portfolio": {"total_value": 100000.0, "available_cash": 60000.0, "symbol_exposure": {}, "sector_exposure": {}},
+  "scenarios": [
+    {
+      "name": "csp_in_range_fresh",
+      "candidate": {
+        "symbol": "AAA", "strategy": "CSP", "market_regime": "BULL",
+        "price": 100.0, "iv_rank": 40.0,
+        "price_as_of": "2026-06-20T16:00:00+00:00", "chain_as_of": "2026-06-20T16:00:00+00:00",
+        "earnings_days": 30, "sector": "TECH",
+        "contract": {"delta": 0.225, "dte": 33, "premium": 2.5, "strike": 100.0,
+                     "open_interest": 1000, "volume": 200, "bid_ask_spread_pct": 0.0}
+      }
+    },
+    {
+      "name": "covered_call_held_shares",
+      "candidate": {
+        "symbol": "BBB", "strategy": "COVERED_CALL", "market_regime": "NEUTRAL",
+        "price": 50.0, "iv_rank": 35.0,
+        "price_as_of": "2026-06-20T16:00:00+00:00", "chain_as_of": "2026-06-20T16:00:00+00:00",
+        "earnings_days": 20, "shares_held": 300, "sector": "TECH",
+        "contract": {"delta": 0.225, "dte": 33, "premium": 1.5, "strike": 52.0,
+                     "open_interest": 1000, "volume": 200, "bid_ask_spread_pct": 0.5}
+      }
+    },
+    {
+      "name": "stale_chain_must_block",
+      "candidate": {
+        "symbol": "CCC", "strategy": "CSP", "market_regime": "BULL",
+        "price": 100.0, "iv_rank": 40.0,
+        "price_as_of": "2026-06-20T16:00:00+00:00", "chain_as_of": "2026-06-10T16:00:00+00:00",
+        "earnings_days": 30, "sector": "TECH",
+        "contract": {"delta": 0.225, "dte": 33, "premium": 2.5, "strike": 100.0,
+                     "open_interest": 1000, "volume": 200, "bid_ask_spread_pct": 0.0}
+      }
+    }
+  ]
+}

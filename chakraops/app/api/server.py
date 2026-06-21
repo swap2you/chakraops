@@ -956,9 +956,11 @@ _CORS_ORIGINS = [o.strip() for o in _UI_CORS_ORIGINS if o.strip()] or ["http://l
 from app.api.ui_routes import router as ui_router
 from app.api.copilot import router as copilot_router
 from app.api.data_reliability_routes import router as data_reliability_router
+from app.api.decision_engine_routes import router as decision_engine_router
 app.include_router(ui_router)
 app.include_router(copilot_router, prefix="/api/ui")
 app.include_router(data_reliability_router, prefix="/api/ui")
+app.include_router(decision_engine_router, prefix="/api/ui")
 
 app.add_middleware(
     CORSMiddleware,

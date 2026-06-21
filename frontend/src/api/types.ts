@@ -1196,3 +1196,82 @@ export interface RefreshHistoryResponse {
   as_of_utc: string;
   records: RefreshHistoryRecord[];
 }
+
+// R33.0: canonical decision-engine read-only contract. Advisory, manual-only.
+export interface StrategyProfileConfig {
+  name: string;
+  acceptable_regimes: string[];
+  csp_delta_range: [number, number];
+  cc_delta_range: [number, number];
+  dte_range: [number, number];
+  min_return_pct: number;
+  earnings_blackout_days: number;
+  liquidity: {
+    min_open_interest: number;
+    min_volume: number;
+    max_bid_ask_spread_pct: number;
+  };
+  max_position_allocation_pct: number;
+  max_symbol_exposure_pct: number;
+  max_sector_exposure_pct: number;
+  cash_buffer_pct: number;
+  actionable_min_score: number;
+  max_recommendations: number;
+  profit_management: Record<string, number>;
+}
+
+export interface DecisionProfilesResponse {
+  profiles: Record<string, StrategyProfileConfig>;
+  manual_only: boolean;
+}
+
+export interface DecisionRecommendation {
+  symbol: string;
+  strategy: string;
+  profile: string;
+  market_regime: string;
+  decision_status: "ACTIONABLE" | "WATCH" | "BLOCKED" | "STAY_IN_CASH";
+  eligibility: boolean;
+  data_quality: "OK" | "DEGRADED" | "BLOCKED";
+  data_freshness: Record<string, unknown>;
+  event_risk: Record<string, unknown>;
+  selected_contract: Record<string, unknown> | null;
+  sizing: { contracts?: number; shares?: number; explanation?: string[] };
+  capital_required: number;
+  expected_return_pct: number | null;
+  expected_return_dollars: number | null;
+  risk_flags: string[];
+  score: number;
+  rank: number | null;
+  reason_codes: string[];
+  manual_only: boolean;
+}
+
+export interface DecisionEvaluateResponse {
+  profile: StrategyProfileConfig;
+  as_of_utc: string;
+  manual_only: boolean;
+  actionable: DecisionRecommendation[];
+  watch: DecisionRecommendation[];
+  blocked: DecisionRecommendation[];
+  stay_in_cash: DecisionRecommendation;
+  counts: {
+    actionable: number;
+    shown: number;
+    watch: number;
+    blocked: number;
+    total_candidates: number;
+  };
+}
+
+export interface DecisionEvaluateRequest {
+  profile?: string;
+  profile_overrides?: Record<string, unknown> | null;
+  portfolio: {
+    total_value: number;
+    available_cash: number;
+    symbol_exposure?: Record<string, number>;
+    sector_exposure?: Record<string, number>;
+  };
+  candidates: Array<Record<string, unknown>>;
+}

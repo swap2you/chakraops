@@ -13,28 +13,28 @@ Make ChakraOps recommendations mathematically consistent, profile-driven, portfo
 Level 4 — trading-decision logic and financial risk
 
 ## Current status
-READY_TO_START
+COMPLETE — canonical decision engine, strategy profiles, portfolio-aware sizing/invariants, and deterministic ranking delivered and gate-verified on `release/R31-R35-program`. Advisory, manual-only.
 
 ## Dependencies
-R32.0 trusted data contracts and freshness gates.
+R32.0 trusted data contracts and freshness gates (COMPLETE; Claude APPROVED-WITH-NOTES, notes closed in 049cb2f; Codex review PENDING — quota).
 
 ## Cursor implementation
-Pending
+COMPLETE — `app/core/decision_engine/*` (canonical profiles + decision contract + gates + strategies + sizing + ranking + engine), `config/strategy_profiles.yaml`, read-only API `app/api/decision_engine_routes.py`, and frontend query contract. R32 `stale_data_gate` wired into every actionable path. Packet normalized with exact paths before source edits.
 
 ## Claude review
-Pending
+Pending (R33 completed milestone)
 
 ## Codex review
-Pending
+PENDING — Codex quota exhausted; review not run. No Codex approval claimed.
 
 ## Cowork UAT
 Required
 
 ## Gates
-- Backend: Pending
-- Frontend tests: Pending
-- Frontend build: Pending
-- Release-specific validation: Pending
+- Backend: PASS — 1127 passed, 3 skipped
+- Frontend tests: PASS — 313 passed, 18 skipped
+- Frontend build: PASS — vite ~7.1s (pre-existing chunk-size warning, M-13)
+- Release-specific validation: PASS — golden vectors (6), profile matrix (4), risk invariants (6), stale/missing-data + gates (14). Evidence: out/verification/R33.0/
 
 ## PR
 Pending
@@ -49,7 +49,7 @@ Pending
 None recorded
 
 ## Next action
-`START R33.0`
+Claude review + deferred Codex review before R34.0. Do not start R34.
 
 ## Stop point
-No work started.
+R33.0 complete and pushed. Awaiting Claude review and deferred Codex review.

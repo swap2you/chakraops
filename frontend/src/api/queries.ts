@@ -35,6 +35,9 @@ import type {
   DataReliabilityHealthResponse,
   WeeklyUniverseResponse,
   RefreshHistoryResponse,
+  DecisionProfilesResponse,
+  DecisionEvaluateRequest,
+  DecisionEvaluateResponse,
 } from "./types";
 import type { DecisionMode, DecisionRef } from "./types";
 export type { DecisionRef };
@@ -676,6 +679,7 @@ export const queryKeys = {
   dataReliabilityWeeklyUniverse: () => ["ui", "dataReliability", "weeklyUniverse"] as const,
   dataReliabilityRefreshHistory: (limit: number) =>
     ["ui", "dataReliability", "refreshHistory", limit] as const,
+  decisionEngineProfiles: () => ["ui", "decisionEngine", "profiles"] as const,
   uiEarningsDebug: (symbol: string) => ["ui", "earningsDebug", symbol] as const,
   sharesCandidates: () => ["ui", "sharesCandidates"] as const,
   actionNeeded: () => ["ui", "actionNeeded"] as const,
@@ -923,6 +927,25 @@ export function useUniverseRefreshHistory(limit = 20) {
     queryFn: () =>
       apiGet<RefreshHistoryResponse>(
         `/api/ui/data-reliability/universe/refresh-history?limit=${limit}`,
+      ),
+  });
+}
+
+// R33.0: canonical decision-engine read-only contract. Advisory, manual-only.
+export function useDecisionProfiles() {
+  return useQuery({
+    queryKey: queryKeys.decisionEngineProfiles(),
+    queryFn: () =>
+      apiGet<DecisionProfilesResponse>("/api/ui/decision-engine/profiles"),
+  });
+}
+
+export function useEvaluateDecisions() {
+  return useMutation({
+    mutationFn: (payload: DecisionEvaluateRequest) =>
+      apiPost<DecisionEvaluateResponse>(
+        "/api/ui/decision-engine/evaluate",
+        payload,
       ),
   });
 }

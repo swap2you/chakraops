@@ -41,19 +41,53 @@ Implement and validate regime gating, CSP, covered call, share-buy, stay-in-cash
 
 ## Allowed tracked paths
 
+Exact paths only (from the R31 blueprint R33 section + R32 contracts). No generic domain-only permissions. The canonical decision engine is implemented as a single new package that is the **one** source of truth for strategy profiles and the decision input/output contract; legacy dual stacks (H-5) are superseded by this canonical layer and physically retired in a later scoped cleanup (documented, not done destructively in this pass).
 
-Exact source/test paths must be copied from R31 blueprint and R32 contracts before work. Expected domains:
-- decision engine
-- eligibility/scoring
-- strategy configuration
-- portfolio/risk
-- positions lifecycle
-- API schemas
-- tests and fixtures
-- release/status/evidence docs
+### New source — canonical decision engine
 
+- `chakraops/app/core/decision_engine/__init__.py`
+- `chakraops/app/core/decision_engine/profiles.py` (canonical profile config source; M-8)
+- `chakraops/app/core/decision_engine/contract.py` (canonical decision input/output contract)
+- `chakraops/app/core/decision_engine/gates.py` (regime/earnings/liquidity/holdings/cash/stale+missing gates; wires R32 `stale_data_gate`)
+- `chakraops/app/core/decision_engine/strategies.py` (CSP/CC/share-buy eligibility + scoring + stay-in-cash)
+- `chakraops/app/core/decision_engine/sizing.py` (portfolio-aware sizing + risk invariants)
+- `chakraops/app/core/decision_engine/ranking.py` (deterministic scoring, tie-break, top 5–7, blocked/watch/cash separation)
+- `chakraops/app/core/decision_engine/engine.py` (orchestration → canonical output)
+- `chakraops/config/strategy_profiles.yaml` (operator-editable canonical profile config)
+- `chakraops/app/api/decision_engine_routes.py` (read-only/advisory API, mounted under `/api/ui`)
 
-Any additional tracked path requires operator approval and packet update before implementation.
+### Modified source
+
+- `chakraops/app/api/server.py` (include decision-engine router)
+- `frontend/src/api/queries.ts` (read-only profile/decision query contract)
+- `frontend/src/api/types.ts` (decision-engine types)
+
+### Tests + fixtures
+
+- `chakraops/tests/test_r330_profiles.py`
+- `chakraops/tests/test_r330_contract.py`
+- `chakraops/tests/test_r330_gates.py`
+- `chakraops/tests/test_r330_strategies.py`
+- `chakraops/tests/test_r330_sizing_invariants.py`
+- `chakraops/tests/test_r330_ranking.py`
+- `chakraops/tests/test_r330_golden_vectors.py`
+- `chakraops/tests/test_r330_profile_matrix.py`
+- `chakraops/tests/test_r330_stale_missing_data.py`
+- `chakraops/tests/test_r330_decision_engine_api.py`
+- `chakraops/tests/test_r330_backward_compat.py`
+- `chakraops/tests/fixtures/r34_backtest/scenarios.json` (R34 backtest fixtures; no performance claims)
+- `frontend/src/api/queries.decisionEngine.test.tsx`
+
+### Docs / governance
+
+- `docs/ai/releases/R33.0/{RELEASE_PACKET,STATUS,TOOL_LOG}.md`
+- `docs/ai/PROGRAM_STATUS.md`
+- `docs/master/CURRENT_STATE.md`
+- `chakraops/docs/releases/R33.0_requirements.md`
+- `chakraops/docs/releases/R33.0_release_notes.md`
+- `chakraops/docs/releases/RELEASE_CHECKLIST.md`
+
+Any additional tracked path requires operator approval and a packet update before editing.
 
 ## Forbidden paths and actions
 

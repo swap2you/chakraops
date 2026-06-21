@@ -999,9 +999,29 @@ No code, UI, ORATS, scheduler, database, runtime, brokerage, deployment, or work
 - [x] Gate — Backend: 1064 passed / 3 skipped; Frontend: 311 passed / 18 skipped; Build: passed (vite 10.04s). Evidence: out/verification/R32.0/notes.md.
 - [x] ORATS read-only smoke (env-only) — HTTP 200 / 6939 rows, redacted. Evidence: out/verification/R32.0/orats_smoke.md.
 - [x] Secret regression scan — clean (no token literal; runtime.yaml api_token field removed). Evidence: out/verification/R32.0/secret_scan.md.
-- [ ] Review / sign-off — full Claude + Codex R32 review deferred to consolidated post-R35 review
+- [x] Review / sign-off — Claude APPROVED WITH NON-BLOCKING NOTES (notes closed in `fix(R32.0): close ORATS review findings`, 049cb2f). Codex review PENDING (quota exhausted; no Codex approval claimed).
 
 **Scope:** Delivered C-1 plus the full R32.0 data-reliability scope on `release/R31-R35-program`, gate-verified. Added the R34 persistence-decision guardrail (no DB migration in R32). No silent fallback; ORATS remains the sole provider.
+
+---
+
+### R33.0 — Decision engine / strategy profiles / risk correctness (program R31–R35, milestone 3) — COMPLETE
+
+- [x] Requirements — R33.0_requirements.md
+- [x] Release notes — R33.0_release_notes.md
+- [x] Packet normalized with exact authorized paths (generic domains removed; additional-path-requires-approval retained)
+- [x] Canonical profile config source (Conservative/Balanced/Aggressive/Custom) — `app/core/decision_engine/profiles.py` + `config/strategy_profiles.yaml` (M-8)
+- [x] Canonical decision input/output contract — `app/core/decision_engine/contract.py`
+- [x] Eligibility + safety gates incl. R32 `stale_data_gate` wired into actionable paths — `gates.py`
+- [x] CSP/CC/share-buy eligibility + deterministic scoring + stay-in-cash — `strategies.py`
+- [x] Portfolio-aware sizing + mandatory risk invariants (no uncovered CC, no over-reserved CSP, no impossible quantity, no action on stale/missing data, no auto orders) — `sizing.py`
+- [x] Deterministic ranking + tie-break + top 5–7 + blocked/watch/cash separation — `ranking.py`
+- [x] Read-only advisory API (`/api/ui/decision-engine/profiles`, `/evaluate`) + frontend query contract
+- [x] Tests — golden vectors, profile matrix, boundary, invariants, ranking, stale/missing-data, API contract, backward-compat (11 backend files + 1 frontend); R34 backtest fixtures (no performance claims)
+- [x] Gate — Backend: 1127 passed / 3 skipped; Frontend: 313 passed / 18 skipped; Build: passed (vite ~7.1s). Evidence: out/verification/R33.0/notes.md.
+- [ ] Review / sign-off — Claude review + deferred Codex review pending (no Codex approval claimed)
+
+**Scope:** One canonical, profile-driven, portfolio-aware ADVISORY decision engine on `release/R31-R35-program`, gate-verified. Manual-only; no order routing; no silent fallback. H-5 legacy dual stacks superseded by the canonical layer; physical retirement deferred to a later scoped cleanup.
 
 ---
 

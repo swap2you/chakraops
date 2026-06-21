@@ -816,25 +816,32 @@ def _collect_api_routes(app: FastAPI) -> list:
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    """Startup: ORATS token (hardcoded), boot probe, route count, scheduler. No token validation."""
+    """Startup: ORATS token (env-only), boot probe, route count, scheduler. No token validation."""
     global _APP_START_TIME_UTC
     _APP_START_TIME_UTC = time.time()
-    logger.info("[CONFIG] ORATS API token loaded (hardcoded, private mode)")
-    print("[CONFIG] ORATS API token loaded (hardcoded, private mode)")
+    from app.core.config.orats_secrets import get_orats_token
+    _orats_token_present = bool(get_orats_token())
+    if _orats_token_present:
+        logger.info("[CONFIG] ORATS API token loaded from environment (redacted)")
+        print("[CONFIG] ORATS API token loaded from environment (redacted)")
+    else:
+        logger.warning("[CONFIG] ORATS_API_TOKEN is not set; ORATS requests will fail until configured (see .env.example)")
+        print("[CONFIG] WARNING: ORATS_API_TOKEN is not set; ORATS requests will fail until configured (see .env.example)")
     base_url = "https://api.orats.io/datav2"
-    probe_status = "DOWN"
-    try:
-        from app.core.data.orats_client import probe_orats_live
-        probe_orats_live("SPY")
-        probe_status = "OK"
-    except Exception as e:
-        logger.warning("ORATS boot probe failed: %s", e)
+    probe_status = "DOWN" if _orats_token_present else "UNAVAILABLE"
+    if _orats_token_present:
+        try:
+            from app.core.data.orats_client import probe_orats_live
+            probe_orats_live("SPY")
+            probe_status = "OK"
+        except Exception as e:
+            logger.warning("ORATS boot probe failed: %s", e)
     api_routes = _collect_api_routes(app)
     count = len(api_routes)
     logger.info("[ROUTES] registered=%s", count)
     print(f"[ROUTES] registered={count}")
     print("===== ORATS BOOT CHECK =====")
-    print("Token present: True")
+    print("Token present:", _orats_token_present)
     print("Base URL:", base_url)
     print("Probe status:", probe_status)
     print("===========================")

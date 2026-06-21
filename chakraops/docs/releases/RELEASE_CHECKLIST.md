@@ -985,6 +985,23 @@ No code, UI, ORATS, scheduler, database, runtime, brokerage, deployment, or work
 
 ---
 
+### R32.0 — Market data / earnings / universe / freshness (program R31–R35, milestone 2) — PARTIAL
+
+- [x] Requirements — R32.0_requirements.md
+- [x] Release notes — R32.0_release_notes.md
+- [x] C-1 ORATS secret remediation — env-only token; no hardcoded value; loud missing-token error; redaction; `.env.example` + gitignore verified; `tests/test_r320_orats_secret_env_only.py`
+- [x] Gate — Backend: 1023 passed / 3 skipped; Frontend: 308 passed / 18 skipped; Build: passed (vite 10.70s). Evidence: out/verification/R32.0/notes.md.
+- [x] ORATS read-only smoke (env-only) — HTTP 200, redacted. Evidence: out/verification/R32.0/orats_smoke.md.
+- [ ] Deterministic weekly universe refresh + history/reasons (M-4) — pending
+- [ ] Macro/earnings event-calendar adapter or explicit-unavailable surfacing (H-4) — pending
+- [ ] Freshness timestamps + stale-data blocking surfaced (M-10) — pending
+- [ ] Cache/retry/rate-limit/provider-health observability — pending
+- [ ] Review / sign-off — deferred to consolidated post-R35 review
+
+**Scope:** Delivered the Critical C-1 ORATS secret remediation (environment-only auth) on `release/R31-R35-program`, gate-verified. Remaining R32.0 data-reliability outcomes are explicitly pending and must not be treated as complete.
+
+---
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

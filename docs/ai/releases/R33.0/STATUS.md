@@ -13,16 +13,16 @@ Make ChakraOps recommendations mathematically consistent, profile-driven, portfo
 Level 4 — trading-decision logic and financial risk
 
 ## Current status
-COMPLETE — canonical decision engine, strategy profiles, portfolio-aware sizing/invariants, and deterministic ranking delivered and gate-verified on `release/R31-R35-program`. Advisory, manual-only.
+TECHNICALLY IMPLEMENTED — AWAITING LIVE INTEGRATION. The canonical decision engine (engine, profiles, contract, gates, strategies, sizing, ranking) is implemented and tested, and the R32 stale-data gate protects canonical-engine actions. **Live application cutover is NOT yet complete:** Dashboard, Today, Symbol Diagnostics, `/api/ui/action-needed`, and related live surfaces still use the legacy evaluator/ranking stack, which retains its existing guards until the R34 cutover. **H-5 remains OPEN and is owned by R34.**
 
 ## Dependencies
 R32.0 trusted data contracts and freshness gates (COMPLETE; Claude APPROVED-WITH-NOTES, notes closed in 049cb2f; Codex review PENDING — quota).
 
 ## Cursor implementation
-COMPLETE — `app/core/decision_engine/*` (canonical profiles + decision contract + gates + strategies + sizing + ranking + engine), `config/strategy_profiles.yaml`, read-only API `app/api/decision_engine_routes.py`, and frontend query contract. R32 `stale_data_gate` wired into every actionable path. Packet normalized with exact paths before source edits.
+IMPLEMENTED + TESTED (not yet live-authoritative) — `app/core/decision_engine/*` (canonical profiles + decision contract + gates + strategies + sizing + ranking + engine), `config/strategy_profiles.yaml`, advisory API `app/api/decision_engine_routes.py` (`/api/ui/decision-engine/*`), and frontend query contract. The R32 `stale_data_gate` is wired into the canonical engine's actionable paths. The engine is NOT yet the live source of truth for the primary recommendation surfaces; that live cutover is R34 (H-5).
 
 ## Claude review
-Pending (R33 completed milestone)
+BLOCKED — the canonical decision engine is internally correct and well-tested, but it is not yet the authoritative live recommendation path. Dashboard, Today, Symbol Diagnostics, `/api/ui/action-needed`, and related live surfaces still use the legacy evaluator/ranking stack. Live cutover (H-5) is assigned to R34.
 
 ## Codex review
 PENDING — Codex quota exhausted; review not run. No Codex approval claimed.
@@ -46,10 +46,10 @@ Pending
 Pending
 
 ## Open blockers
-None recorded
+- Claude R33 verdict: **BLOCKED** — canonical engine is not yet the authoritative live recommendation path. Resolution owned by R34 (live cutover, H-5).
 
 ## Next action
-Claude review + deferred Codex review before R34.0. Do not start R34.
+R34.0 closes the Claude blocker via canonical live cutover (H-5). Codex review remains PENDING (quota); no Codex approval claimed.
 
 ## Stop point
-R33.0 complete and pushed. Awaiting Claude review and deferred Codex review.
+R33.0 technically implemented and pushed; Claude BLOCKED on live integration. H-5 reassigned to R34.

@@ -85,20 +85,47 @@ history, freshness/stale-data gate). R32 deliberately used append-only files —
 not new schema — to avoid premature migration; R34 owns the persistence
 decision.
 
+## Claude R33 blocker (R34 must close first)
+
+R33 implemented and tested the canonical decision engine but did **not** make it the authoritative live recommendation path. Dashboard, Today, Symbol Diagnostics, and `/api/ui/action-needed` still use the legacy `staged_evaluator → evaluation_service_v2 → DecisionArtifactV2` batch pipeline plus request-time `next_action_r241`. **R34 closes H-5 by making the canonical engine the authoritative PRIMARY producer for these live surfaces (adapter-based), before any general UI cleanup.**
+
 ## Allowed tracked paths
 
+Exact paths (identified by repository inspection of the live recommendation path). Generic domain-only permissions removed.
 
-Exact source/database/test paths must be copied from the R31 blueprint and R33 contracts. Expected domains:
-- frontend routes/pages/components
-- API query layer
-- backtest service
-- journal/reporting services
-- database schema/migrations
-- tests
-- release/status/evidence docs
+### Phase 0 — governance (R33 claim correction)
+- `docs/ai/releases/R33.0/{STATUS,TOOL_LOG,RELEASE_PACKET}.md`
+- `chakraops/docs/releases/R33.0_release_notes.md`
+- `chakraops/docs/releases/RELEASE_CHECKLIST.md`
+- `docs/ai/PROGRAM_STATUS.md`, `docs/master/CURRENT_STATE.md`, `docs/master/R31.0_DEFECT_AND_GAP_REGISTER.md`
 
+### Phase 1–2 — canonical live cutover + capital-set safety (closes H-5)
+- NEW `chakraops/app/core/decision_engine/legacy_adapter.py` — canonical `DecisionOutput` → live UI shapes (`next_action_code`, action-needed item, etc.); no FAIL_/WARN_ leakage.
+- NEW `chakraops/app/core/decision_engine/live_service.py` — builds `DecisionInput`s from the persisted v2 artifact + portfolio, runs the canonical engine, applies recommendation-set capital safety, returns the authoritative primary recommendations.
+- MODIFIED `chakraops/app/api/ui_routes.py` — `/api/ui/action-needed` (and the symbol-diagnostics builder) surface the canonical authoritative block; legacy fields relabeled non-authoritative/diagnostic; `stale_data_gate` enforced on the live actionable path.
+- MODIFIED `chakraops/app/api/decision_engine_routes.py` — invalid `profile_overrides` returns HTTP 422 (not 500).
+- MODIFIED `frontend/src/api/{types.ts,queries.ts}` — types/hook for the authoritative live recommendation block + capital-set warning (read-only).
 
-Any additional tracked path requires operator approval and packet update before implementation.
+### Phase 3 — persistence decision (no schema change unless justified)
+- `out/verification/R34.0/persistence_decision.md` (evidence; decision documented before any DB change)
+
+### Tests
+- `chakraops/tests/test_r340_live_cutover.py`
+- `chakraops/tests/test_r340_stale_live_route.py`
+- `chakraops/tests/test_r340_no_conflicting_primary.py`
+- `chakraops/tests/test_r340_capital_set_safety.py`
+- `chakraops/tests/test_r340_profile_overrides_422.py`
+- `frontend/src/api/queries.liveDecision.test.tsx`
+
+### Docs / governance
+- `docs/ai/releases/R34.0/{STATUS,TOOL_LOG}.md`
+- `chakraops/docs/releases/R34.0_requirements.md`, `R34.0_release_notes.md`
+- `docs/ai/PROGRAM_STATUS.md`, `docs/master/CURRENT_STATE.md`, `chakraops/docs/releases/RELEASE_CHECKLIST.md`
+
+### Staged (later R34 work — NOT claimed complete in this pass)
+Full dashboard/navigation consolidation, portfolio/position experience, universe/data-health UI, backtest engine, journal/retention/reporting, and the broader frontend-quality overhaul (packet Phases 4–9) are large and are delivered/iterated after the cutover is proven. They are tracked as remaining R34 scope and must not be claimed complete until implemented and evidenced.
+
+Any additional tracked path requires operator approval and a packet update before implementation.
 
 ## Forbidden paths and actions
 

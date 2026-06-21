@@ -1005,23 +1005,23 @@ No code, UI, ORATS, scheduler, database, runtime, brokerage, deployment, or work
 
 ---
 
-### R33.0 — Decision engine / strategy profiles / risk correctness (program R31–R35, milestone 3) — COMPLETE
+### R33.0 — Decision engine / strategy profiles / risk correctness (program R31–R35, milestone 3) — IMPLEMENTED (Claude BLOCKED on live cutover; H-5 → R34)
 
 - [x] Requirements — R33.0_requirements.md
 - [x] Release notes — R33.0_release_notes.md
 - [x] Packet normalized with exact authorized paths (generic domains removed; additional-path-requires-approval retained)
 - [x] Canonical profile config source (Conservative/Balanced/Aggressive/Custom) — `app/core/decision_engine/profiles.py` + `config/strategy_profiles.yaml` (M-8)
 - [x] Canonical decision input/output contract — `app/core/decision_engine/contract.py`
-- [x] Eligibility + safety gates incl. R32 `stale_data_gate` wired into actionable paths — `gates.py`
+- [x] Eligibility + safety gates incl. R32 `stale_data_gate` wired into the canonical engine's actionable paths — `gates.py`
 - [x] CSP/CC/share-buy eligibility + deterministic scoring + stay-in-cash — `strategies.py`
 - [x] Portfolio-aware sizing + mandatory risk invariants (no uncovered CC, no over-reserved CSP, no impossible quantity, no action on stale/missing data, no auto orders) — `sizing.py`
 - [x] Deterministic ranking + tie-break + top 5–7 + blocked/watch/cash separation — `ranking.py`
 - [x] Read-only advisory API (`/api/ui/decision-engine/profiles`, `/evaluate`) + frontend query contract
 - [x] Tests — golden vectors, profile matrix, boundary, invariants, ranking, stale/missing-data, API contract, backward-compat (11 backend files + 1 frontend); R34 backtest fixtures (no performance claims)
 - [x] Gate — Backend: 1127 passed / 3 skipped; Frontend: 313 passed / 18 skipped; Build: passed (vite ~7.1s). Evidence: out/verification/R33.0/notes.md.
-- [ ] Review / sign-off — Claude review + deferred Codex review pending (no Codex approval claimed)
+- [ ] Review / sign-off — Claude **BLOCKED** (engine not yet authoritative live path; H-5 → R34). Codex PENDING (quota; no approval claimed).
 
-**Scope:** One canonical, profile-driven, portfolio-aware ADVISORY decision engine on `release/R31-R35-program`, gate-verified. Manual-only; no order routing; no silent fallback. H-5 legacy dual stacks superseded by the canonical layer; physical retirement deferred to a later scoped cleanup.
+**Scope:** One canonical, profile-driven, portfolio-aware ADVISORY decision engine on `release/R31-R35-program`, gate-verified and tested. Manual-only; no order routing; no silent fallback. **Live cutover NOT done in R33: the legacy evaluator/ranking stack still drives Dashboard/Today/Symbol-Diagnostics/`/api/ui/action-needed`. H-5 remains OPEN and is owned by R34.**
 
 ---
 

@@ -1,7 +1,7 @@
 # ChakraOps Program Status
 
 Last initialized: 2026-06-21
-Last updated: 2026-06-21 (R33.0 completed: canonical decision engine, strategy profiles, and risk correctness)
+Last updated: 2026-06-21 (R33.0 reviewed BLOCKED on live cutover; H-5 reassigned to R34; R34.0 started: canonical live cutover)
 
 ## Program branch and workflow
 
@@ -15,8 +15,8 @@ Last updated: 2026-06-21 (R33.0 completed: canonical decision engine, strategy p
 |---|---|---|---|
 | R31.0 | IMPLEMENTED (gates green, committed; awaiting review) | Cursor / Claude / Codex | Operator review of audit + blueprint; resolve D-1 (R30.8) |
 | R32.0 | COMPLETE — C-1 + Claude notes + full data-reliability scope delivered and gate-verified; Claude APPROVED-WITH-NOTES (notes closed in 049cb2f); Codex review PENDING (quota) | Cursor / Claude / Codex | Deferred Codex R32 review |
-| R33.0 | COMPLETE — canonical decision engine, strategy profiles, portfolio-aware sizing/invariants, deterministic ranking; gate-verified (committed/pushed) | Cursor / Claude / Codex | Claude review + deferred Codex review before R34.0 |
-| R34.0 | PACKET_READY / DEPENDS_ON_R33 — must make a deliberate persistence decision before any database change | Cursor | Wait for decision-engine acceptance |
+| R33.0 | IMPLEMENTED + TESTED, Claude **BLOCKED** on live cutover — canonical engine is correct/tested but not yet the authoritative live recommendation path; H-5 OPEN, reassigned to R34 | Cursor / Claude / Codex | Closed by R34 live cutover; deferred Codex review |
+| R34.0 | ACTIVE — closing the R33 blocker via canonical live cutover (H-5); persistence decision before any DB change | Cursor | Live cutover + capital-set safety + persistence decision; broader product consolidation staged |
 | R35.0 | PACKET_READY / DEPENDS_ON_R34 | Cursor / Cowork | Wait for product-flow acceptance |
 
 ## Current program rule

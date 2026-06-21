@@ -13,13 +13,13 @@ Consolidate the operator experience around trusted decisions, positions, backtes
 Level 3 — application refactor and analytical presentation
 
 ## Current status
-READY_TO_START
+ACTIVE — closing the R33 Claude BLOCKER via canonical live cutover (H-5) on `release/R31-R35-program` (base after R33 governance remediation). Persistence decision documented before any DB change.
 
 ## Dependencies
-R33.0 canonical decision and profile contracts.
+R33.0 canonical decision and profile contracts (implemented + tested; Claude BLOCKED on live cutover, which R34 closes).
 
 ## Cursor implementation
-Pending
+ACTIVE — Phase 0 (R33 claim correction) done; Phase 1 (canonical live cutover via adapter + live service), Phase 2 (recommendation-set capital safety), Phase 3 (persistence decision doc) in progress. Broader product consolidation (packet Phases 4–9) staged after cutover proof.
 
 ## Claude review
 Pending

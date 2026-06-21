@@ -41,7 +41,7 @@ Implement and validate regime gating, CSP, covered call, share-buy, stay-in-cash
 
 ## Allowed tracked paths
 
-Exact paths only (from the R31 blueprint R33 section + R32 contracts). No generic domain-only permissions. The canonical decision engine is implemented as a single new package that is the **one** source of truth for strategy profiles and the decision input/output contract; legacy dual stacks (H-5) are superseded by this canonical layer and physically retired in a later scoped cleanup (documented, not done destructively in this pass).
+Exact paths only (from the R31 blueprint R33 section + R32 contracts). No generic domain-only permissions. The canonical decision engine is implemented as a single new package for strategy profiles and the decision input/output contract. R33 does NOT make it the authoritative live recommendation path; the legacy dual stacks (H-5) still drive the live surfaces and keep their existing guards. **H-5 remains OPEN and is owned by R34** (live cutover); no "superseded" claim applies to R33.
 
 ### New source — canonical decision engine
 

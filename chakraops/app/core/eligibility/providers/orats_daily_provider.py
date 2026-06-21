@@ -81,8 +81,8 @@ class OratsDailyProvider:
         if self._token:
             return self._token
         try:
-            from app.core.config.orats_secrets import ORATS_API_TOKEN
-            t = (ORATS_API_TOKEN or "").strip()
+            from app.core.config.orats_secrets import get_orats_token
+            t = (get_orats_token() or "").strip()
             if not t:
                 raise ValueError("ORATS_API_TOKEN is missing or empty")
             return t

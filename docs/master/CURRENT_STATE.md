@@ -1,6 +1,6 @@
 # Current State — ChakraOps
 
-_Last updated: R31.0 baseline audit (program R31–R35)_
+_Last updated: R32.0 complete (program R31–R35)_
 
 ## Release Status
 
@@ -10,8 +10,8 @@ _Last updated: R31.0 baseline audit (program R31–R35)_
 | Tag | `chakraops-r30.7.0` |
 | Current branch | `release/R31-R35-program` |
 | Current mode | Program R31–R35 (single branch, five milestone commits, one final PR) |
-| Active milestone | R31.0 — repository/product/live-data baseline audit (IMPLEMENTED; awaiting review) |
-| Next planned milestone | R32.0 — market data/earnings/universe/freshness (blocked on D-1 + approved R31.0 blueprint) |
+| Active milestone | R32.0 — market data/earnings/universe/freshness (COMPLETE; gate-verified, committed/pushed; awaiting full Claude + Codex review) |
+| Next planned milestone | R33.0 — decision engine / strategy profiles (not started; gated on R32.0 review acceptance) |
 
 ## R31.0 Validation Gates (audit milestone)
 

@@ -251,8 +251,8 @@ class OratsDelayedError(Exception):
 
 def _get_orats_token() -> str:
     """Get ORATS API token from config."""
-    from app.core.config.orats_secrets import ORATS_API_TOKEN
-    return ORATS_API_TOKEN
+    from app.core.config.orats_secrets import get_orats_token
+    return get_orats_token()
 
 
 def _redact_params(params: Dict[str, Any]) -> Dict[str, Any]:

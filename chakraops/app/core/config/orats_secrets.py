@@ -24,13 +24,20 @@ ORATS_API_TOKEN = _read_token_from_env()
 
 
 def get_orats_token(required: bool = False) -> str | None:
-    """Return the ORATS token from the environment, re-read on each call.
+    """Return the ORATS token, resolved environment-first.
+
+    Resolution order:
+    1. The module-level ``ORATS_API_TOKEN`` attribute when set. This is the
+       env-resolved value at import time and is the hook used by existing test
+       patches (``patch("...orats_secrets.ORATS_API_TOKEN", ...)``), so runtime
+       consumers migrated to this function stay patch-compatible.
+    2. A live environment read (covers tokens configured after import).
 
     When ``required`` is True, raise a clear error if the token is missing so
     callers fail loudly instead of silently falling back to no/alternate data.
     Never logs or returns the token value in error messages.
     """
-    token = _read_token_from_env()
+    token = ORATS_API_TOKEN or _read_token_from_env()
     if required and not token:
         raise RuntimeError(
             "ORATS_API_TOKEN is not set. Configure it in the environment "

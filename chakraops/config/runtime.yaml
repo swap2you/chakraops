@@ -1,6 +1,9 @@
 # ChakraOps runtime config.
-# The ORATS API token is read from the environment only (ORATS_API_TOKEN).
-# Do not store a real token in this file. See .env.example.
-
-orats:
-  api_token: "${ORATS_API_TOKEN}"
+#
+# The ORATS API token is intentionally NOT configured here. It is resolved
+# exclusively from the environment via app.core.config.orats_secrets
+# (ORATS_API_TOKEN / ORATS_API_KEY), configured locally through a gitignored
+# .env (see .env.example). No token field exists in this file so that no code
+# path can ever read a literal placeholder or value from runtime config and
+# treat it as a valid credential. A missing token fails loudly downstream.
+orats: {}

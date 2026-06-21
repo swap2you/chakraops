@@ -44,9 +44,9 @@ def _orats_get_live(endpoint_path: str, ticker: str, timeout_sec: float = TIMEOU
     Logs [ORATS_CALL] endpoint= ticker= status= latency_ms= rows= (rows from list or data list).
     Raises OratsUnavailableError on request failure or non-200. Token from orats_secrets only.
     """
-    from app.core.config.orats_secrets import ORATS_API_TOKEN
+    from app.core.config.orats_secrets import get_orats_token
     url = f"{ORATS_BASE.rstrip('/')}{endpoint_path}"
-    params: Dict[str, str] = {"token": ORATS_API_TOKEN, "ticker": ticker.upper()}
+    params: Dict[str, str] = {"token": get_orats_token(), "ticker": ticker.upper()}
     t0 = time.perf_counter()
     try:
         r = requests.get(url, params=params, timeout=timeout_sec)

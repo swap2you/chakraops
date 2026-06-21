@@ -1130,3 +1130,69 @@ export interface UiPositionsUnifiedIntegrityCheckResult {
     sample_items?: IntegrityCheckSampleItem[];
   }>;
 }
+
+// R32.0: data-reliability (read-only). No secrets; token presence only.
+export interface DataReliabilityProvider {
+  provider: string;
+  sole_provider: boolean;
+  fallback_provider: string | null;
+  auth_mode: string;
+  token_present: boolean;
+  status: string;
+  blocked_reason: string | null;
+  retry_policy: Record<string, unknown>;
+  rate_limit_policy: Record<string, unknown>;
+  cache_policy: Record<string, unknown>;
+  failure_categories: string[];
+  read_only_contract: {
+    ok: boolean;
+    allowed_endpoints: string[];
+    violations: string[];
+    method: string;
+    mutating_endpoints: boolean;
+  };
+}
+
+export interface CalendarStatusResponse {
+  kind: string;
+  state: "AVAILABLE" | "UNAVAILABLE";
+  available: boolean;
+  reason: string;
+  as_of_utc: string;
+  events: unknown[];
+}
+
+export interface DataReliabilityHealthResponse {
+  as_of_utc: string;
+  provider: DataReliabilityProvider;
+  event_calendar: CalendarStatusResponse;
+  earnings_calendar: CalendarStatusResponse;
+}
+
+export interface WeeklyUniverseResponse {
+  week_id: string;
+  as_of: string;
+  symbols: string[];
+  added: string[];
+  removed: string[];
+  reason_codes: string[];
+  count: number;
+  refresh_due: boolean;
+  last_refresh_at_utc: string | null;
+}
+
+export interface RefreshHistoryRecord {
+  run_at_utc: string;
+  week_id: string;
+  source: string;
+  symbols: string[];
+  count: number;
+  added: string[];
+  removed: string[];
+  reason_codes: string[];
+}
+
+export interface RefreshHistoryResponse {
+  as_of_utc: string;
+  records: RefreshHistoryRecord[];
+}

@@ -39,18 +39,71 @@ Implement approved R31 findings for ORATS request reliability, endpoint contract
 
 ## Allowed tracked paths
 
+Exact paths only (copied from the approved R31 execution blueprint). No generic domain-only permissions.
 
-Exact implementation paths must be copied from the approved R31 execution blueprint into this packet before Cursor edits source. Expected domains:
-- ORATS client/provider modules
-- market calendar and earnings modules
-- universe refresh modules
-- cache/freshness modules
-- diagnostics API/UI
-- corresponding tests
-- release/status/evidence docs
+### Already changed by commit `1223884` (C-1 ORATS secret remediation)
 
+- `chakraops/README.md`
+- `chakraops/app/api/server.py`
+- `chakraops/app/core/config/orats_secrets.py`
+- `chakraops/config/runtime.yaml`
+- `chakraops/scripts/orats_smoke.py`
+- `chakraops/tests/test_r320_orats_secret_env_only.py`
+- `chakraops/docs/releases/R32.0_requirements.md`
+- `chakraops/docs/releases/R32.0_release_notes.md`
+- `chakraops/docs/releases/RELEASE_CHECKLIST.md`
+- `docs/ai/PROGRAM_STATUS.md`
+- `docs/ai/releases/R32.0/STATUS.md`
+- `docs/ai/releases/R32.0/TOOL_LOG.md`
 
-Any additional tracked path requires operator approval and packet update before implementation.
+### Remaining R32.0 scope — new source
+
+- `chakraops/app/core/data_reliability/__init__.py`
+- `chakraops/app/core/data_reliability/freshness.py`
+- `chakraops/app/core/data_reliability/provider_health.py`
+- `chakraops/app/core/data_reliability/event_calendar_status.py`
+- `chakraops/app/core/universe/weekly_refresh.py`
+- `chakraops/app/core/universe/refresh_history_store.py`
+- `chakraops/app/api/data_reliability_routes.py`
+
+### Remaining R32.0 scope — modified source (Claude-note token migration + router include + event-calendar status)
+
+- `chakraops/app/api/server.py`
+- `chakraops/app/api/ui_routes.py`
+- `chakraops/app/core/environment/event_calendar.py`
+- `chakraops/app/core/options/v2/csp_chain_v2.py`
+- `chakraops/app/core/options/v2/cc_chain_v2.py`
+- `chakraops/app/core/orats/orats_client.py`
+- `chakraops/app/core/orats/orats_equity_quote.py`
+- `chakraops/app/core/orats/orats_opra.py`
+- `chakraops/app/core/options/orats_chain_pipeline.py`
+- `chakraops/app/core/eval/evaluation_service_v2.py`
+- `chakraops/app/core/eval/evaluation_store_v2.py`
+- `chakraops/app/core/eligibility/providers/orats_daily_provider.py`
+
+### Remaining R32.0 scope — tests
+
+- `chakraops/tests/test_r320_freshness.py`
+- `chakraops/tests/test_r320_weekly_refresh.py`
+- `chakraops/tests/test_r320_event_calendar_status.py`
+- `chakraops/tests/test_r320_provider_health.py`
+- `chakraops/tests/test_r320_missing_token_startup.py`
+- `chakraops/tests/test_r320_data_reliability_api.py`
+
+### Remaining R32.0 scope — frontend (read-only data contract only; no UI redesign)
+
+- `frontend/src/api/queries.ts`
+- `frontend/src/api/types.ts`
+- `frontend/src/api/queries.dataReliability.test.tsx`
+
+### Docs / governance
+
+- `docs/ai/releases/R32.0/RELEASE_PACKET.md`
+- `docs/master/CURRENT_STATE.md`
+- `docs/ai/releases/R34.0/RELEASE_PACKET.md` (R34 persistence-decision guardrail, Step 5)
+- `docs/ai/PROGRAM_MASTER_PLAN.md` (R34 persistence-decision guardrail, Step 5)
+
+Any additional tracked path requires operator approval and a packet update before editing.
 
 ## Forbidden paths and actions
 

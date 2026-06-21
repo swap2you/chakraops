@@ -22,6 +22,7 @@ The releases are deliberately broad enough to produce meaningful outcomes, but e
 - R32.0 must stabilize data before strategy logic is trusted.
 - R33.0 must stabilize decisions before UI/backtest claims are trusted.
 - R34.0 presents and retains trusted information.
+- R34.0 must make one deliberate persistence decision (retain or one controlled, backed-up migration) before any database/schema change, evaluating data volume, retention, backtest reproducibility, report performance, audit history, backup/restore, rollback, partitioning/archival, and local footprint. No database migration occurs in R32; R32 uses append-only files to avoid premature migration. Heavy jobs/calculations run outside request handlers. See `docs/ai/releases/R34.0/RELEASE_PACKET.md` ("Persistence decision").
 - R35.0 makes the product usable as an ongoing operating system.
 
 ## Program non-goals

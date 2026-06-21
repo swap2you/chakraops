@@ -32,6 +32,9 @@ import type {
   UiPositionsUnifiedIntegrityCheckResult,
   UiReconcileDiffResponse,
   UiPositionsUnifiedDbResponse,
+  DataReliabilityHealthResponse,
+  WeeklyUniverseResponse,
+  RefreshHistoryResponse,
 } from "./types";
 import type { DecisionMode, DecisionRef } from "./types";
 export type { DecisionRef };
@@ -669,6 +672,10 @@ export const queryKeys = {
   symbolDiagnostics: (symbol: string, runId?: string | null) =>
     (["ui", "symbolDiagnostics", symbol, runId ?? ""] as const),
   uiSystemHealth: () => ["ui", "systemHealth"] as const,
+  dataReliabilityHealth: () => ["ui", "dataReliability", "health"] as const,
+  dataReliabilityWeeklyUniverse: () => ["ui", "dataReliability", "weeklyUniverse"] as const,
+  dataReliabilityRefreshHistory: (limit: number) =>
+    ["ui", "dataReliability", "refreshHistory", limit] as const,
   uiEarningsDebug: (symbol: string) => ["ui", "earningsDebug", symbol] as const,
   sharesCandidates: () => ["ui", "sharesCandidates"] as const,
   actionNeeded: () => ["ui", "actionNeeded"] as const,
@@ -888,6 +895,35 @@ export function useUiSystemHealth() {
   return useQuery({
     queryKey: queryKeys.uiSystemHealth(),
     queryFn: () => apiGet<UiSystemHealthResponse>(uiSystemHealthPath()),
+  });
+}
+
+// R32.0: read-only data-reliability hooks (provider health, freshness/cache/
+// retry/rate-limit policy, deterministic weekly universe, refresh history,
+// explicit event/earnings calendar availability). No secrets are exposed.
+export function useDataReliabilityHealth() {
+  return useQuery({
+    queryKey: queryKeys.dataReliabilityHealth(),
+    queryFn: () =>
+      apiGet<DataReliabilityHealthResponse>("/api/ui/data-reliability/health"),
+  });
+}
+
+export function useWeeklyUniverse() {
+  return useQuery({
+    queryKey: queryKeys.dataReliabilityWeeklyUniverse(),
+    queryFn: () =>
+      apiGet<WeeklyUniverseResponse>("/api/ui/data-reliability/universe/weekly"),
+  });
+}
+
+export function useUniverseRefreshHistory(limit = 20) {
+  return useQuery({
+    queryKey: queryKeys.dataReliabilityRefreshHistory(limit),
+    queryFn: () =>
+      apiGet<RefreshHistoryResponse>(
+        `/api/ui/data-reliability/universe/refresh-history?limit=${limit}`,
+      ),
   });
 }
 

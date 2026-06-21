@@ -827,9 +827,9 @@ def ui_earnings_debug(
     if not sym:
         return {"status": "Unavailable", "next_date": None, "days": None, "implied_move_pct": None, "as_of": None}
     try:
-        from app.core.config.orats_secrets import ORATS_API_TOKEN
+        from app.core.config.orats_secrets import get_orats_token
         from app.core.orats.earnings import fetch_earnings_advisory
-        token = (ORATS_API_TOKEN or "").strip() or None
+        token = get_orats_token()
         out = fetch_earnings_advisory(sym, token=token)
         # Map to safe field names only; never raw codes
         status = (out.get("earnings_data_status") or "Unavailable").strip()
@@ -2279,8 +2279,8 @@ def ui_today_summary(
         import os
         sym = (os.environ.get("EARNINGS_PROBE_SYMBOL") or "SPY").strip().upper() or "SPY"
         from app.core.orats.earnings import fetch_earnings_advisory
-        from app.core.config.orats_secrets import ORATS_API_TOKEN
-        token = (ORATS_API_TOKEN or "").strip() or None
+        from app.core.config.orats_secrets import get_orats_token
+        token = get_orats_token()
         out = fetch_earnings_advisory(sym, token=token)
         status = (out.get("earnings_data_status") or "Unavailable").strip()
         if status not in ("OK", "Unavailable", "Stale"):

@@ -34,10 +34,56 @@ Implement the approved navigation and page consolidation, remove duplicated info
 - strategy profile controls
 - backtest inputs, assumptions, and result labeling
 - journal and monthly/weekly reports
+- one deliberate persistence decision before any schema change (see "Persistence decision" section)
 - database migrations/retention policy
 - CSV/export and backup/restore support
 - performance and bundle improvements where justified
+- heavy jobs/calculations run outside request handlers
 
+
+## Persistence decision (mandatory, before any database change)
+
+R34 must make exactly **one deliberate persistence decision** and document it
+**before** changing any database schema or framework. No database migration may
+occur in R32. Do not change frameworks without evidence. Avoid repeated
+database migrations.
+
+Before any schema change, R34 must evaluate and document in the R34 evidence
+folder (`out/verification/R34.0/persistence_decision.md`):
+
+- expected daily and annual data volume
+- market snapshot retention
+- decision and recommendation history
+- position and journal history
+- backtest reproducibility
+- report performance
+- job-run and provider-request audit history
+- backup and restore
+- migration rollback
+- partitioning, retention, and archival
+- local resource footprint
+
+Decision rules:
+
+- If the current database is **retained**, document why it meets these
+  long-term requirements (volume, retention, reproducibility, performance,
+  backup/restore, local footprint).
+- If the current database is **insufficient**, R34 performs **one controlled
+  migration** with backup, forward migrations, rollback, and compatibility
+  tests — never a destructive migration without backup.
+- Heavy jobs and calculations must run **outside request handlers**.
+- Drag-and-drop dashboard customization is **optional** and must not delay core
+  usability.
+
+R34 must retain, regardless of the persistence decision: dashboard
+consolidation, duplicate-content removal, navigation simplification, backtest
+clarity, reporting, and data-retention work.
+
+This guardrail builds on the R32.0 data-reliability layer
+(`app/core/data_reliability/*`, weekly universe refresh + JSONL refresh
+history, freshness/stale-data gate). R32 deliberately used append-only files —
+not new schema — to avoid premature migration; R34 owns the persistence
+decision.
 
 ## Allowed tracked paths
 

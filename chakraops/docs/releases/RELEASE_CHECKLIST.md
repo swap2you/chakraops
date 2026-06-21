@@ -985,20 +985,23 @@ No code, UI, ORATS, scheduler, database, runtime, brokerage, deployment, or work
 
 ---
 
-### R32.0 — Market data / earnings / universe / freshness (program R31–R35, milestone 2) — PARTIAL
+### R32.0 — Market data / earnings / universe / freshness (program R31–R35, milestone 2) — COMPLETE
 
 - [x] Requirements — R32.0_requirements.md
 - [x] Release notes — R32.0_release_notes.md
 - [x] C-1 ORATS secret remediation — env-only token; no hardcoded value; loud missing-token error; redaction; `.env.example` + gitignore verified; `tests/test_r320_orats_secret_env_only.py`
-- [x] Gate — Backend: 1023 passed / 3 skipped; Frontend: 308 passed / 18 skipped; Build: passed (vite 10.70s). Evidence: out/verification/R32.0/notes.md.
-- [x] ORATS read-only smoke (env-only) — HTTP 200, redacted. Evidence: out/verification/R32.0/orats_smoke.md.
-- [ ] Deterministic weekly universe refresh + history/reasons (M-4) — pending
-- [ ] Macro/earnings event-calendar adapter or explicit-unavailable surfacing (H-4) — pending
-- [ ] Freshness timestamps + stale-data blocking surfaced (M-10) — pending
-- [ ] Cache/retry/rate-limit/provider-health observability — pending
-- [ ] Review / sign-off — deferred to consolidated post-R35 review
+- [x] Codex governance blocker remediated — RELEASE_PACKET.md exact authorized paths (committed + remaining scope); generic domains removed
+- [x] Claude non-blocking notes — consumers migrated to `get_orats_token()`; runtime.yaml token field removed; `tests/test_r320_missing_token_startup.py`
+- [x] Deterministic weekly universe refresh + history/reasons (M-4) — `weekly_refresh.py` + `refresh_history_store.py` (append-only JSONL; no DB migration)
+- [x] Macro/earnings event-calendar explicit-available/unavailable state (H-4) — `event_calendar_status.py`
+- [x] Freshness timestamps + stale-data blocking (M-10) — `freshness.py` `stale_data_gate`
+- [x] Provider health / cache / retry / rate-limit / failure classification + read-only contract validation — `provider_health.py`; read-only API `data_reliability_routes.py`; frontend query contract
+- [x] Gate — Backend: 1064 passed / 3 skipped; Frontend: 311 passed / 18 skipped; Build: passed (vite 10.04s). Evidence: out/verification/R32.0/notes.md.
+- [x] ORATS read-only smoke (env-only) — HTTP 200 / 6939 rows, redacted. Evidence: out/verification/R32.0/orats_smoke.md.
+- [x] Secret regression scan — clean (no token literal; runtime.yaml api_token field removed). Evidence: out/verification/R32.0/secret_scan.md.
+- [ ] Review / sign-off — full Claude + Codex R32 review deferred to consolidated post-R35 review
 
-**Scope:** Delivered the Critical C-1 ORATS secret remediation (environment-only auth) on `release/R31-R35-program`, gate-verified. Remaining R32.0 data-reliability outcomes are explicitly pending and must not be treated as complete.
+**Scope:** Delivered C-1 plus the full R32.0 data-reliability scope on `release/R31-R35-program`, gate-verified. Added the R34 persistence-decision guardrail (no DB migration in R32). No silent fallback; ORATS remains the sole provider.
 
 ---
 

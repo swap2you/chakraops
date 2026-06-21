@@ -30,23 +30,35 @@ def test_module_attribute_exists_for_patch_compat():
 
 
 def test_get_orats_token_reads_env(monkeypatch):
+    # Clear the import-time module attribute so the live env read is exercised.
+    monkeypatch.setattr(orats_secrets, "ORATS_API_TOKEN", None)
     monkeypatch.setenv("ORATS_API_TOKEN", "env-token-value")
     assert orats_secrets.get_orats_token() == "env-token-value"
 
 
 def test_get_orats_token_reads_key_alias(monkeypatch):
+    monkeypatch.setattr(orats_secrets, "ORATS_API_TOKEN", None)
     monkeypatch.delenv("ORATS_API_TOKEN", raising=False)
     monkeypatch.setenv("ORATS_API_KEY", "alias-token-value")
     assert orats_secrets.get_orats_token() == "alias-token-value"
 
 
+def test_get_orats_token_prefers_module_attribute(monkeypatch):
+    # An explicit module attribute (test patch / configured override) wins.
+    monkeypatch.setattr(orats_secrets, "ORATS_API_TOKEN", "patched-token")
+    monkeypatch.setenv("ORATS_API_TOKEN", "env-token-value")
+    assert orats_secrets.get_orats_token() == "patched-token"
+
+
 def test_get_orats_token_missing_returns_none(monkeypatch):
+    monkeypatch.setattr(orats_secrets, "ORATS_API_TOKEN", None)
     monkeypatch.delenv("ORATS_API_TOKEN", raising=False)
     monkeypatch.delenv("ORATS_API_KEY", raising=False)
     assert orats_secrets.get_orats_token() is None
 
 
 def test_get_orats_token_required_raises_without_value(monkeypatch):
+    monkeypatch.setattr(orats_secrets, "ORATS_API_TOKEN", None)
     monkeypatch.delenv("ORATS_API_TOKEN", raising=False)
     monkeypatch.delenv("ORATS_API_KEY", raising=False)
     with pytest.raises(RuntimeError) as exc:

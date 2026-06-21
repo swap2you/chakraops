@@ -8,14 +8,19 @@
 - 2026-06-21: Executed C-1 ORATS secret remediation on `release/R31-R35-program`.
 - Removed hardcoded token; env-only auth via `get_orats_token`; server lifespan loud/redacted; fixed misleading docs; verified gitignore + `.env.example`; added `tests/test_r320_orats_secret_env_only.py`.
 - Gates green: backend 1023 passed/3 skipped; frontend 308 passed/18 skipped; build passed. ORATS smoke (env-only) HTTP 200, redacted.
-- Recorded R32.0 as PARTIAL: data-reliability outcomes (M-4, H-4, M-10, observability) NOT implemented this pass.
-- Did not fabricate remaining outcomes; committed/pushed the verified C-1 milestone and stopped for honest follow-up.
+- Recorded R32.0 as PARTIAL after the C-1-only checkpoint commit (1223884).
+- 2026-06-21 (completion): Remediated Codex governance blocker (packet exact paths); preserved ORATS credential as ignored local `.env` (value never printed); resolved Claude notes (consumer migration to `get_orats_token()`, runtime.yaml token field removed, missing-token startup test).
+- Implemented full R32.0 data-reliability scope: freshness + stale-data gate (M-10), deterministic weekly universe refresh + JSONL history/reasons (M-4), explicit event/earnings calendar state (H-4), provider health/cache/retry/rate-limit/failure-classification + read-only contract validation, read-only API + frontend query contract. No DB migration; no fallback provider.
+- Added R34 persistence-decision guardrail to `docs/ai/releases/R34.0/RELEASE_PACKET.md` and `docs/ai/PROGRAM_MASTER_PLAN.md`.
+- Gates green: backend 1064 passed/3 skipped; frontend 311 passed/18 skipped; build passed. ORATS read-only smoke HTTP 200 / 6939 rows / redacted; secret regression scan clean. Evidence in `out/verification/R32.0/`.
+- Marked R32.0 COMPLETE; created completion milestone commit and pushed; R33.0 not started.
 
 ## Claude Code
-- Pending.
+- Checkpoint review of commit 1223884: APPROVED WITH NON-BLOCKING NOTES (import-time constant consumers; runtime.yaml literal; missing-token test). Notes remediated in the R32 completion milestone.
 
 ## Codex
-- Pending.
+- Checkpoint review of commit 1223884: BLOCKED — R32 packet lacked exact authorized file paths (generic domain-only permissions) before the 12-file commit.
+- Cursor remediation: RELEASE_PACKET.md updated with exact committed paths + exact remaining-scope paths from the R31 blueprint; generic domains removed; additional-path-requires-approval retained. Recorded before further source edits.
 
 ## Claude Cowork
 - Pending UAT.

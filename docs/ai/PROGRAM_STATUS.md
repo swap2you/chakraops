@@ -13,7 +13,7 @@ Last updated: 2026-06-21 (single-branch program workflow recorded)
 
 | Release | Status | Owner | Next action |
 |---|---|---|---|
-| R31.0 | ACTIVE | Cursor / Claude / Codex | Execute audit, gates, evidence; milestone commit |
+| R31.0 | IMPLEMENTED (gates green, committed; awaiting review) | Cursor / Claude / Codex | Operator review of audit + blueprint; resolve D-1 (R30.8) |
 | R32.0 | PACKET_READY / DEPENDS_ON_R31 | Cursor | Wait for R31.0 approved blueprint |
 | R33.0 | PACKET_READY / DEPENDS_ON_R32 | Cursor | Wait for data reliability acceptance |
 | R34.0 | PACKET_READY / DEPENDS_ON_R33 | Cursor | Wait for decision-engine acceptance |

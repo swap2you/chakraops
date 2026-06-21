@@ -1,6 +1,6 @@
 # Current State — ChakraOps
 
-_Last updated: R30.8 documentation update_
+_Last updated: R31.0 baseline audit (program R31–R35)_
 
 ## Release Status
 
@@ -8,9 +8,21 @@ _Last updated: R30.8 documentation update_
 |-------|-------|
 | Latest stable merged release | R30.7 |
 | Tag | `chakraops-r30.7.0` |
-| Current branch | `release/R30.8` |
-| Current mode | AI operating library and release traveler creation |
-| Next planned release | R31.0 — repository and product baseline audit |
+| Current branch | `release/R31-R35-program` |
+| Current mode | Program R31–R35 (single branch, five milestone commits, one final PR) |
+| Active milestone | R31.0 — repository/product/live-data baseline audit (IMPLEMENTED; awaiting review) |
+| Next planned milestone | R32.0 — market data/earnings/universe/freshness (blocked on D-1 + approved R31.0 blueprint) |
+
+## R31.0 Validation Gates (audit milestone)
+
+| Gate | Result |
+|------|--------|
+| Backend pytest | 1018 passed, 2 skipped |
+| Frontend tests | 308 passed, 18 skipped |
+| Frontend build | Passed (tsc -b clean; vite 9.56s) |
+| ORATS read-only smoke | PASS (HTTP 200, redacted) |
+
+Evidence: `out/verification/R31.0/`. Deliverables: `docs/master/R31.0_*` (audit, defect register, execution blueprint).
 
 ## R30.7 Validation Gates (baseline)
 

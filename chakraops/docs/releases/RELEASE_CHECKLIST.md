@@ -967,6 +967,24 @@ No code, UI, ORATS, scheduler, database, runtime, brokerage, deployment, or work
 
 ---
 
+### R31.0 — Repository, product, and live-data baseline audit (program R31–R35, milestone 1)
+
+- [x] Requirements — R31.0_requirements.md
+- [x] Release notes — R31.0_release_notes.md
+- [x] Baseline audit — docs/master/R31.0_REPOSITORY_PRODUCT_BASELINE_AUDIT.md
+- [x] Defect/gap register — docs/master/R31.0_DEFECT_AND_GAP_REGISTER.md
+- [x] Execution blueprint — docs/master/R31.0_EXECUTION_BLUEPRINT.md
+- [x] Gate — Backend: 1018 passed / 2 skipped in 259.79s; Frontend: 308 passed / 18 skipped; Build: passed (tsc -b clean, vite 9.56s). Evidence: out/verification/R31.0/notes.md.
+- [x] ORATS read-only smoke — probe_orats_live("SPY") HTTP 200, redacted. Evidence: out/verification/R31.0/orats_smoke.md.
+- [ ] Review — Claude Code architecture review (Level 2); Codex independent review (pending)
+- [ ] Release sign-off — single program PR (after R35.0), operator merge + tag
+
+**Scope:** Read-only repository/product/live-data baseline audit and R32–R35 execution blueprint only. No source, test, runtime, scheduler, database, or workflow changes. Committed as milestone 1 on `release/R31-R35-program`.
+
+**Note:** Program runs on one branch (`release/R31-R35-program`) with five milestone commits and one final PR; no per-milestone merge/tag. Open: D-1 (R30.8 disposition), C-1 (committed ORATS token → rotate out-of-band, fix in R32.0).
+
+---
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

@@ -1,43 +1,27 @@
 # PR Description — R31.0
 
-## Title
+## Summary
+Adds the trusted audit, defect register, and executable five-release blueprint.
 
-R31.0 — Repository and product baseline audit
+## Scope
 
-## Body
+Read the full repository and current application behavior. Inventory backend, frontend, persistence, jobs, notifications, ORATS integration, universe logic, earnings/event handling, strategies, backtest, reports, and operational runbooks. Perform read-only live ORATS smoke checks through existing approved code paths when credentials are locally available. No product behavior changes.
 
-```markdown
-## R31.0 — Repository and product baseline audit
 
-### Summary
+## Validation
+- Backend baseline gate
+- Frontend test gate
+- Frontend build gate
+- Release-specific checks
+- Claude review
+- Codex review
 
-- Read-only audit of backend architecture, frontend architecture, trading decision model, data/database/reporting, jobs/scheduling, notifications, tech stack, and security/hosting readiness
-- Produces audit documentation only — no implementation
-- [List specific audit files created]
 
-### Non-goals (explicitly out of scope)
+## Safety
+- Manual-only trading preserved
+- No broker order routing
+- No silent fallback
+- No secrets committed
 
-- No code, tests, UI, ORATS, scheduler, database, runtime, brokerage, deployment, or workflow automation changes
-- No implementation of audit findings
-
-### Gates
-
-| Gate | Result |
-|------|--------|
-| Git diff review | [result] |
-| Operator audit review | [result] |
-
-### Review
-
-- Cursor: done
-- Claude Code: [result]
-- Codex: [result]
-
-### Rollback
-
-Tag `chakraops-r30.8.0`. Delete all audit documentation created in this release.
-
-### Verification
-
-`out/verification/R31.0/notes.md`
-```
+## Rollback
+Revert the release merge commit and restore required local data from documented backups.

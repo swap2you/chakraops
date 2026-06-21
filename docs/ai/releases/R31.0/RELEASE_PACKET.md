@@ -1,123 +1,146 @@
-﻿# RELEASE_PACKET â€” R31.0
-
-## Release
-
-R31.0
+# R31.0 Release Packet — Repository, Product, and Live-Data Baseline
 
 ## Branch
 
-release/R31.0 â€” **not created yet; create from main after R30.8 merges**
+`release/R31-R35-program`
+
+R31–R35 are sequential milestones on this single program branch, not separate PR branches. The program uses one branch, five milestone commits, and one final PR opened only after R35.0 is complete.
+
+## Risk level
+
+Level 2 — repo-wide audit and planning
 
 ## Objective
 
-Conduct a read-only repository and product baseline audit: architecture, trading decision model, data/database, frontend, jobs, notifications, tech stack, and future security/hosting readiness. Produce audit documentation after approval.
+Produce one trusted architecture map, live-data baseline, defect register, and executable blueprint for R32–R35.
 
-## Risk Level
+## Dependencies
 
-Level 2 â€” repo-wide audit/planning
-
----
+R30.8 merged and tagged.
 
 ## Scope
 
-- Audit backend architecture (`chakraops/app/`)
-- Audit frontend architecture (`frontend/src/`)
-- Audit trading decision model (eligibility, scoring, readiness, PnL)
-- Audit data / database / reporting layer
-- Audit jobs and scheduling
-- Audit notifications and alert system
-- Audit tech stack (Python, FastAPI, React, Vite, SQLite)
-- Audit future security and hosting readiness
-- Produce audit documentation in the exact files listed in the Allowed Files section only. Any additional file requires operator approval and a release packet update before implementation begins.
 
-## Non-Goals
+Read the full repository and current application behavior. Inventory backend, frontend, persistence, jobs, notifications, ORATS integration, universe logic, earnings/event handling, strategies, backtest, reports, and operational runbooks. Perform read-only live ORATS smoke checks through existing approved code paths when credentials are locally available. No product behavior changes.
 
-- No code changes
-- No runtime changes
-- No tests unless explicitly approved by operator
-- No implementation of any findings
-- No trading-logic changes
-- No broker integration
-- No database schema changes
-- No scheduler changes
-- No GitHub Actions changes
-- No deployment changes
 
-## Allowed Files
+## Required deliverables
 
-Tracked files permitted to change:
 
 - `docs/master/R31.0_REPOSITORY_PRODUCT_BASELINE_AUDIT.md`
-- `docs/master/R31.0_ROADMAP_RECOMMENDATIONS.md`
+- `docs/master/R31.0_DEFECT_AND_GAP_REGISTER.md`
+- `docs/master/R31.0_EXECUTION_BLUEPRINT.md`
+- exact updates to current state, traveler, release ledger, status, and tool log
+- local ORATS/data evidence under `out/verification/R31.0/`
+
+
+## Allowed tracked paths
+
+
+- `docs/master/R31.0_REPOSITORY_PRODUCT_BASELINE_AUDIT.md`
+- `docs/master/R31.0_DEFECT_AND_GAP_REGISTER.md`
+- `docs/master/R31.0_EXECUTION_BLUEPRINT.md`
+- `docs/ai/PROGRAM_STATUS.md`
+- `docs/ai/PROGRAM_MASTER_PLAN.md`
+- `docs/ai/PROGRAM_ACCEPTANCE_MATRIX.md`
+- `docs/ai/releases/R31.0/STATUS.md`
+- `docs/ai/releases/R31.0/TOOL_LOG.md`
+- `docs/master/CURRENT_STATE.md`
 - `chakraops/docs/releases/R31.0_requirements.md`
 - `chakraops/docs/releases/R31.0_release_notes.md`
 - `chakraops/docs/releases/RELEASE_CHECKLIST.md`
-- `docs/master/CURRENT_STATE.md`
-- `docs/ai/releases/R31.0/STATUS.md`
-- `docs/ai/releases/R31.0/TOOL_LOG.md`
 
-Allowed ignored local evidence:
 
-- `out/verification/R31.0/notes.md`
+Any additional tracked path requires operator approval and packet update before implementation.
 
-## Forbidden Files
+## Forbidden paths and actions
 
-- All backend source files (`chakraops/app/`)
-- All frontend source files (`frontend/src/`)
-- All test files (`chakraops/tests/`)
-- ORATS logic
-- Trading logic
-- Database files
-- Scheduler files
-- GitHub Actions (`.github/`)
-- Runtime files under `out/` (except `out/verification/R31.0/notes.md`)
-- `data/`
-- Deployment files
 
----
+- all backend/frontend source
+- tests
+- workflows
+- runtime artifacts
+- database content
+- scheduler configuration
+- deployment configuration
+- secrets
+- automatic or manual broker actions
 
-## Implementation Steps
 
-1. Create branch `release/R31.0` from `main`.
-2. Read this packet and all existing architecture docs.
-3. Audit each domain listed in scope.
-4. Produce audit notes per domain.
-5. Produce a summary audit document.
-6. Update STATUS.md and TOOL_LOG.md.
-7. Return STEP report.
+Locked:
+- No auto-trading.
+- No broker order routing.
+- No silent data fallback.
+- No secrets in logs or committed evidence.
+- No unrelated refactor.
 
-## Verification Gates
+## Implementation workstreams
 
-The AGENTS.md baseline gates are mandatory before DONE. Level 2 review adds review expectations but cannot remove these gates. Manual UAT is not required for R31.0 (audit/planning only â€” no UI or code behavior change), unless explicitly added by the operator.
 
-- [ ] Backend: `cd chakraops && python -m pytest tests -q --tb=short`
-- [ ] Frontend tests: `cd frontend && npm run test -- --run`
-- [ ] Frontend build: `cd frontend && npm run build`
-- [ ] Git diff scope check: only exact Allowed Files changed; no source/runtime files modified
-- [ ] Operator review of audit findings
-- [ ] Evidence: `out/verification/R31.0/notes.md`
+1. Repository and documentation truth audit.
+2. Backend module and dependency map.
+3. Frontend route/page/component inventory.
+4. Decision engine and strategy inventory.
+5. Persistence/reporting/backtest inventory.
+6. Jobs/notifications/runbook inventory.
+7. Read-only ORATS endpoint and data-availability smoke.
+8. Defect register ranked Critical/High/Medium/Low.
+9. Exact R32–R35 execution blueprint with file-level targets.
 
-## Review Requirements
 
-- Cursor: required (audit execution)
-- Claude Code: recommended (architecture perspective)
-- Codex: required (scope containment verification)
 
----
+## Mandatory baseline gates
 
-## PR Title
+Before `DONE`, run exactly:
 
-R31.0 â€” Repository and product baseline audit
+```powershell
+cd chakraops
+python -m pytest tests -q --tb=short
+
+cd ..\frontend
+npm run test -- --run
+npm run build
+```
+
+Store local evidence under:
+
+`out/verification/R31.0/`
+
+At minimum:
+
+- `notes.md`
+- `backend_pytest.log`
+- `frontend_test.log`
+- `frontend_build.log`
+
+Risk-specific checks add to these gates; they never replace them.
+
+
+## Release-specific validation
+
+
+- Confirm no tracked source changes.
+- Confirm live checks are read-only and tokens are redacted.
+- Confirm every critical/high issue has an owner release.
+- Confirm R32–R35 packets remain compatible with audit findings or are updated explicitly.
+
+
+## Review requirements
+
+- Cursor implementation and STEP report.
+- Claude Code architecture review for Level 2+.
+- Codex independent review.
+- Cowork UAT when this packet defines UAT.
+- Operator approval before PR merge and tag.
+
+## PR title
+
+`R31.0: Repository, Product, and Live-Data Baseline`
 
 ## Rollback
 
-Rollback tag: `chakraops-r30.8.0`
+Revert the release commit or merge commit. Preserve local evidence and database backups. Never rewrite shared history.
 
-Rollback: delete all audit documentation created in this release.
+## Stop point
 
----
-
-## Stop Point
-
-Cursor produces audit docs only. No code changes. Operator reviews findings before any implementation planning begins.
-
+Stop after approved scope, gates, evidence, reviewer verdicts, and PR preparation. Do not merge or tag without operator approval.

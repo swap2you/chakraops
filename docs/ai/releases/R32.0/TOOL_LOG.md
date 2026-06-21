@@ -1,4 +1,4 @@
-# TOOL LOG — R31.0
+# TOOL LOG — R32.0
 
 ## ChatGPT
 - Program scope prepared.
@@ -14,7 +14,7 @@
 - Pending.
 
 ## Claude Cowork
-- Not required unless escalated.
+- Pending UAT.
 
 ## Operator
 - Pending approval.

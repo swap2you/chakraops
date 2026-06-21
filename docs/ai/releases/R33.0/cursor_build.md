@@ -1,6 +1,6 @@
-# CURSOR BUILD — R31.0
+# CURSOR BUILD — R33.0
 
-Trigger: `CURSOR BUILD R31.0`
+Trigger: `CURSOR BUILD R33.0`
 
 1. Read `AGENTS.md`, `docs/ai/MASTER_CONTROL.md`, and `RELEASE_PACKET.md`.
 2. Verify repo root, branch `release/R31-R35-program`, and clean/expected status.
@@ -9,7 +9,7 @@ Trigger: `CURSOR BUILD R31.0`
 5. Use ORATS only through existing approved clients; redact tokens.
 6. Add or update tests for changed behavior.
 7. Run all mandatory gates and release-specific validation.
-8. Write local evidence to `out/verification/R31.0/`.
+8. Write local evidence to `out/verification/R33.0/`.
 9. Update `STATUS.md` and `TOOL_LOG.md`.
 10. Return a STEP report and stop before commit unless explicitly authorized.
 

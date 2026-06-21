@@ -1,6 +1,6 @@
-# CLAUDE REVIEW — R31.0
+# CLAUDE REVIEW — R35.0
 
-Trigger: `CLAUDE REVIEW R31.0`
+Trigger: `CLAUDE REVIEW R35.0`
 
 Read-only review.
 

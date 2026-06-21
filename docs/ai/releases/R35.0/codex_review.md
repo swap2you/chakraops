@@ -1,6 +1,6 @@
-# CODEX REVIEW — R31.0
+# CODEX REVIEW — R35.0
 
-Trigger: `CODEX REVIEW R31.0`
+Trigger: `CODEX REVIEW R35.0`
 
 Read-only independent review.
 

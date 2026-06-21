@@ -1,22 +1,22 @@
-# STATUS — R31.0
+# STATUS — R33.0
 
 ## Release
-R31.0
+R33.0
 
 ## Branch
 `release/R31-R35-program` (program milestone; single branch for R31–R35, milestone commits, one final PR)
 
 ## Objective
-Produce one trusted architecture map, live-data baseline, defect register, and executable blueprint for R32–R35.
+Make ChakraOps recommendations mathematically consistent, profile-driven, portfolio-aware, and safely ranked.
 
 ## Risk level
-Level 2 — repo-wide audit and planning
+Level 4 — trading-decision logic and financial risk
 
 ## Current status
 READY_TO_START
 
 ## Dependencies
-R30.8 merged and tagged.
+R32.0 trusted data contracts and freshness gates.
 
 ## Cursor implementation
 Pending
@@ -28,7 +28,7 @@ Pending
 Pending
 
 ## Cowork UAT
-Not required unless escalated
+Required
 
 ## Gates
 - Backend: Pending
@@ -49,7 +49,7 @@ Pending
 None recorded
 
 ## Next action
-`START R31.0`
+`START R33.0`
 
 ## Stop point
 No work started.

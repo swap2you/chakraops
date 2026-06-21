@@ -1,22 +1,22 @@
-# STATUS — R31.0
+# STATUS — R32.0
 
 ## Release
-R31.0
+R32.0
 
 ## Branch
 `release/R31-R35-program` (program milestone; single branch for R31–R35, milestone commits, one final PR)
 
 ## Objective
-Produce one trusted architecture map, live-data baseline, defect register, and executable blueprint for R32–R35.
+Make all market inputs observable, fresh, failure-classified, and suitable for downstream decisions.
 
 ## Risk level
-Level 2 — repo-wide audit and planning
+Level 4 — market-data and decision-input correctness
 
 ## Current status
 READY_TO_START
 
 ## Dependencies
-R30.8 merged and tagged.
+R31.0 approved defect register and execution blueprint.
 
 ## Cursor implementation
 Pending
@@ -28,7 +28,7 @@ Pending
 Pending
 
 ## Cowork UAT
-Not required unless escalated
+Required
 
 ## Gates
 - Backend: Pending
@@ -49,7 +49,7 @@ Pending
 None recorded
 
 ## Next action
-`START R31.0`
+`START R32.0`
 
 ## Stop point
 No work started.

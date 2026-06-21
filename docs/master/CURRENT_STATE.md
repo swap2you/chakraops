@@ -1,18 +1,18 @@
 # Current State — ChakraOps
 
-_Last updated: R30.7 final documentation and verification notes update_
+_Last updated: R30.8 documentation update_
 
 ## Release Status
 
 | Field | Value |
 |-------|-------|
-| Latest stable merged release | R30.6.1 (until R30.7 PR merges) |
-| Tag | `chakraops-r30.6.1` |
-| Current branch | `release/R30.7` |
-| Current mode | Runtime-file hygiene completed; awaiting review and merge |
-| Completed | Three grandfathered `out/` runtime files untracked; local copies preserved; Git history not rewritten |
+| Latest stable merged release | R30.7 |
+| Tag | `chakraops-r30.7.0` |
+| Current branch | `release/R30.8` |
+| Current mode | AI operating library and release traveler creation |
+| Next planned release | R31.0 — repository and product baseline audit |
 
-## R30.7 Validation Gates
+## R30.7 Validation Gates (baseline)
 
 | Gate | Result |
 |------|--------|
@@ -22,11 +22,17 @@ _Last updated: R30.7 final documentation and verification notes update_
 
 ## Next Work Categories
 
-- ~~Runtime-file hygiene cleanup~~ — completed in R30.7, awaiting merge
-- Frontend warnings cleanup
-- Documentation tracker refresh
-- Repo audit and operational stabilization
+- ~~Runtime-file hygiene cleanup~~ — completed in R30.7
+- ~~AI operating library~~ — in progress under R30.8
+- R31.0 repository and product baseline audit (next concrete)
+- Frontend warnings cleanup (provisional, post-audit)
+- Documentation tracker refresh (provisional, post-audit)
+- Repo audit and operational stabilization (delivered via R31.0)
+
+## Trading Safety
+
+Manual execution only. No auto-trading. No broker order routing. ORATS is the sole active market-data provider. No silent provider fallback. Stay in cash is a valid outcome.
 
 ## Future Releases
 
-Future release numbering and scope beyond R30.7 remain to be scoped by the operator.
+See `docs/ai/RELEASE_TRAVELER.md` for the full directional roadmap.

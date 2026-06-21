@@ -2309,6 +2309,10 @@ def ui_today_summary(
         "notifications_new_count": notifications_new_count,
         "earnings_probe": earnings_probe,
         "action_needed_count": action_needed_count,
+        # R34.0 (H-5 cutover): Today's actionable list is sourced from the
+        # canonical engine via GET /api/ui/action-needed (authoritative_recommendations).
+        "decision_source": "canonical_decision_engine",
+        "action_needed_source": "/api/ui/action-needed#authoritative_recommendations",
     }
 
 
@@ -6041,8 +6045,17 @@ def _fmt_num(v: Any) -> str:
 @router.get("/action-needed")
 def ui_action_needed(
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
+    profile: str = "balanced",
 ) -> Dict[str, Any]:
-    """R24.1: Top 5 options + top 5 shares actions; recently changed (last 5 transitions). For Dashboard workflow."""
+    """R24.1: Top 5 options + top 5 shares actions; recently changed (last 5 transitions). For Dashboard workflow.
+
+    R34.0 (H-5 cutover): the AUTHORITATIVE primary recommendation is produced by
+    the canonical decision engine and returned under ``authoritative_recommendations``
+    (``decision_source == 'canonical_decision_engine'``). The legacy ``options`` /
+    ``shares`` lists are retained as NON-authoritative diagnostic context only
+    (``legacy_lists_role == 'diagnostic_non_authoritative'``); they no longer
+    define the primary action.
+    """
     _require_ui_key(x_ui_key)
     from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2, get_eval_snapshot
     from app.core.accounts.holdings_db import get_share_position, _DEFAULT_ACCOUNT_ID
@@ -6052,7 +6065,17 @@ def ui_action_needed(
     store.reload_from_disk()
     artifact = store.get_latest()
     if artifact is None:
-        return {"options": [], "shares": [], "recently_changed": _recent_transitions()}
+        return {
+            "options": [],
+            "shares": [],
+            "recently_changed": _recent_transitions(),
+            "decision_source": "canonical_decision_engine",
+            "authoritative_recommendations": None,
+            "capital_safety": None,
+            "active_profile": profile,
+            "manual_only": True,
+            "legacy_lists_role": "diagnostic_non_authoritative",
+        }
 
     # R25.9: Guardrails — compute metrics once for request-time ENTRY suppression
     # R26.0: Sizing uses same snapshot + metrics for portfolio-aware size
@@ -6320,13 +6343,59 @@ def ui_action_needed(
     shares_out.sort(key=lambda x: (_severity_order.get((x.get("severity") or "low"), 2), (x.get("symbol") or "")))
     shares_out = shares_out[:5]
 
-    return {
+    # R34.0 (H-5 cutover): produce the AUTHORITATIVE primary recommendation from
+    # the canonical decision engine. The legacy lists above are diagnostic-only.
+    authoritative_recommendations: Optional[Dict[str, Any]] = None
+    capital_safety: Optional[Dict[str, Any]] = None
+    profile_error: Optional[str] = None
+    try:
+        from app.core.decision_engine.live_service import compute_live_recommendations
+        from app.core.decision_engine.profiles import ProfileValidationError
+
+        shares_by_symbol: Dict[str, int] = {}
+        try:
+            for _s in (getattr(artifact, "symbols", []) or []):
+                _sym = (getattr(_s, "symbol", "") or "").strip().upper()
+                if not _sym:
+                    continue
+                _pos = get_share_position(_DEFAULT_ACCOUNT_ID, _sym)
+                _qty = getattr(_pos, "quantity", None) if _pos is not None else None
+                if _qty:
+                    shares_by_symbol[_sym] = int(_qty)
+        except Exception:
+            shares_by_symbol = {}
+
+        try:
+            canonical = compute_live_recommendations(
+                artifact,
+                profile_name=profile,
+                guardrails_metrics=guardrails_metrics,
+                guardrails_snapshot=guardrails_snapshot,
+                shares_by_symbol=shares_by_symbol,
+            )
+            authoritative_recommendations = canonical.get("recommendations")
+            capital_safety = canonical.get("capital_safety")
+        except ProfileValidationError as exc:
+            profile_error = str(exc)
+    except Exception:
+        authoritative_recommendations = None
+
+    out: Dict[str, Any] = {
         "top_options": options_out,
         "top_shares": shares_out,
         "options": options_out,
         "shares": shares_out,
         "recently_changed": _recent_transitions(),
+        "decision_source": "canonical_decision_engine",
+        "authoritative_recommendations": authoritative_recommendations,
+        "capital_safety": capital_safety,
+        "active_profile": profile,
+        "manual_only": True,
+        "legacy_lists_role": "diagnostic_non_authoritative",
     }
+    if profile_error is not None:
+        out["profile_error"] = profile_error
+    return out
 
 
 def _enrich_diagnostics_with_options_lifecycle(out: Dict[str, Any], symbol: str) -> None:
@@ -6365,11 +6434,50 @@ def _enrich_diagnostics_with_options_lifecycle(out: Dict[str, Any], symbol: str)
         pass
 
 
+def _attach_canonical_decision(out: Dict[str, Any], artifact: Any, sym_upper: str, profile: str) -> None:
+    """R34.0 (H-5 cutover): attach the canonical engine's authoritative decision
+    for this symbol to the diagnostics response. Diagnostics remain explanatory;
+    ``canonical_decision`` is the authoritative recommendation source."""
+    try:
+        from app.core.decision_engine.live_service import compute_live_recommendations
+        from app.core.accounts.holdings_db import get_share_position, _DEFAULT_ACCOUNT_ID
+
+        shares_by_symbol: Dict[str, int] = {}
+        try:
+            _pos = get_share_position(_DEFAULT_ACCOUNT_ID, sym_upper)
+            _qty = getattr(_pos, "quantity", None) if _pos is not None else None
+            if _qty:
+                shares_by_symbol[sym_upper] = int(_qty)
+        except Exception:
+            shares_by_symbol = {}
+
+        canonical = compute_live_recommendations(
+            artifact, profile_name=profile, shares_by_symbol=shares_by_symbol
+        )
+        recs = canonical.get("recommendations") or {}
+        found = None
+        for bucket in ("actionable", "watch", "blocked"):
+            for item in recs.get(bucket, []) or []:
+                if (item.get("symbol") or "").strip().upper() == sym_upper:
+                    found = item
+                    break
+            if found:
+                break
+        out["decision_source"] = "canonical_decision_engine"
+        out["active_profile"] = canonical.get("profile", {}).get("name") if isinstance(canonical.get("profile"), dict) else profile
+        out["manual_only"] = True
+        out["canonical_decision"] = found
+        out["legacy_diagnostics_role"] = "explanatory_non_authoritative"
+    except Exception:
+        pass
+
+
 @router.get("/symbol-diagnostics")
 def ui_symbol_diagnostics(
     symbol: str = Query(..., min_length=1, max_length=12),
     run_id: str | None = Query(default=None, description="Phase 11.2: Fetch from history for this run; fallback to latest if missing"),
     recompute: int = Query(0, description="1 to run single-symbol eval and update store"),
+    profile: str = Query("balanced", description="R34.0: active strategy profile for the canonical decision"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
     """Store-first symbol diagnostics. run_id: try history first. recompute=1: run eval, update store."""
@@ -6423,6 +6531,7 @@ def ui_symbol_diagnostics(
                 result["exact_run"] = True
                 result["run_id"] = (artifact.metadata or {}).get("run_id")
                 _enrich_diagnostics_with_options_lifecycle(result, sym_upper)
+                _attach_canonical_decision(result, artifact, sym_upper, profile)
                 return result
 
     from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
@@ -6452,6 +6561,7 @@ def ui_symbol_diagnostics(
             out["exact_run"] = False
             out["run_id"] = None
         _enrich_diagnostics_with_options_lifecycle(out, sym_upper)
+        _attach_canonical_decision(out, artifact, sym_upper, profile)
         return out
 
     # Symbol not in store — 404 (no legacy path; use recompute=1 to add symbol)

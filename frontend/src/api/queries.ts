@@ -1016,17 +1016,71 @@ export interface ActionNeededItem {
   csp_risk_proxy_cap_contracts?: number | null;
   csp_risk_proxy_enforced?: boolean | null;
 }
+// R34.0 (H-5 cutover): canonical authoritative live recommendation block.
+export interface CanonicalLiveItem {
+  symbol: string;
+  strategy: string;
+  profile?: string;
+  next_action_code: string;
+  decision_status: string;
+  capital_required?: number | null;
+  expected_return_pct?: number | null;
+  expected_return_dollars?: number | null;
+  score?: number | null;
+  rank?: number | null;
+  reason_codes?: string[];
+  risk_flags?: string[];
+  sizing?: Record<string, unknown> | null;
+  selected_contract?: Record<string, unknown> | null;
+  manual_only: boolean;
+  authoritative: boolean;
+  recommended_by: string;
+}
+export interface CapitalSetSafety {
+  per_suggestion_not_additive: boolean;
+  note_code: string;
+  total_capital_required_displayed: number;
+  available_cash: number;
+  cash_buffer_pct: number;
+  cash_buffer_amount: number;
+  deployable_capital: number;
+  exceeds_deployable_capital: boolean;
+  flags: string[];
+  assumes_leverage_or_margin: boolean;
+}
+export interface AuthoritativeRecommendations {
+  decision_source: string;
+  manual_only: boolean;
+  profile?: Record<string, unknown> | null;
+  as_of_utc?: string | null;
+  actionable: CanonicalLiveItem[];
+  watch: CanonicalLiveItem[];
+  blocked: CanonicalLiveItem[];
+  stay_in_cash?: Record<string, unknown> | null;
+  counts?: Record<string, number> | null;
+}
 export interface ActionNeededResponse {
   top_options: ActionNeededItem[];
   top_shares: ActionNeededItem[];
   options?: ActionNeededItem[];
   shares?: ActionNeededItem[];
   recently_changed: unknown[];
+  // R34.0 cutover: the authoritative primary recommendation is canonical.
+  decision_source?: string;
+  authoritative_recommendations?: AuthoritativeRecommendations | null;
+  capital_safety?: CapitalSetSafety | null;
+  active_profile?: string;
+  manual_only?: boolean;
+  legacy_lists_role?: string;
+  profile_error?: string;
 }
-export function useActionNeeded() {
+export function useActionNeeded(profile?: string) {
   return useQuery({
-    queryKey: queryKeys.actionNeeded(),
-    queryFn: () => apiGet<ActionNeededResponse>(actionNeededPath()),
+    queryKey: [...queryKeys.actionNeeded(), profile ?? "balanced"] as const,
+    queryFn: () =>
+      apiGet<ActionNeededResponse>(
+        profile ? `${actionNeededPath()}?profile=${encodeURIComponent(profile)}` : actionNeededPath(),
+      ),
   });
 }
 

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 router = APIRouter()
@@ -77,6 +77,7 @@ def post_decision_evaluate(req: EvaluateRequest) -> dict:
         PortfolioState,
     )
     from app.core.decision_engine.engine import evaluate
+    from app.core.decision_engine.profiles import ProfileValidationError
 
     portfolio = PortfolioState(
         total_value=req.portfolio.total_value,
@@ -114,9 +115,13 @@ def post_decision_evaluate(req: EvaluateRequest) -> dict:
             )
         )
 
-    return evaluate(
-        inputs,
-        profile_name=req.profile,
-        portfolio=portfolio,
-        profile_overrides=req.profile_overrides,
-    )
+    try:
+        return evaluate(
+            inputs,
+            profile_name=req.profile,
+            portfolio=portfolio,
+            profile_overrides=req.profile_overrides,
+        )
+    except ProfileValidationError as exc:
+        # Invalid profile name or profile_overrides is a client error, not a 500.
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

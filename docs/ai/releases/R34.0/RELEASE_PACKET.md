@@ -110,12 +110,9 @@ Exact paths (identified by repository inspection of the live recommendation path
 - `out/verification/R34.0/persistence_decision.md` (evidence; decision documented before any DB change)
 
 ### Tests
-- `chakraops/tests/test_r340_live_cutover.py`
-- `chakraops/tests/test_r340_stale_live_route.py`
-- `chakraops/tests/test_r340_no_conflicting_primary.py`
-- `chakraops/tests/test_r340_capital_set_safety.py`
-- `chakraops/tests/test_r340_profile_overrides_422.py`
-- `frontend/src/api/queries.liveDecision.test.tsx`
+- `chakraops/tests/test_r340_live_cutover.py` — canonical authoritative source, stale-data blocking, no conflicting primary, profile carried, manual-only, top 5–7 cap, capital-set warning, action-needed route markers (consolidated)
+- `chakraops/tests/test_r340_profile_overrides_422.py` — invalid profile/overrides → HTTP 422
+- `frontend/src/api/queries.liveDecision.test.tsx` — authoritative live recommendation hook
 
 ### Docs / governance
 - `docs/ai/releases/R34.0/{STATUS,TOOL_LOG}.md`

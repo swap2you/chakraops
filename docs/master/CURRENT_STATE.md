@@ -1,6 +1,6 @@
 # Current State — ChakraOps
 
-_Last updated: R33.0 reviewed BLOCKED on live cutover; R34.0 active (program R31–R35)_
+_Last updated: R34.0 canonical live cutover complete + gate-verified; product Phases 4–9 staged (program R31–R35)_
 
 ## Release Status
 
@@ -10,8 +10,8 @@ _Last updated: R33.0 reviewed BLOCKED on live cutover; R34.0 active (program R31
 | Tag | `chakraops-r30.7.0` |
 | Current branch | `release/R31-R35-program` |
 | Current mode | Program R31–R35 (single branch, five milestone commits, one final PR) |
-| Active milestone | R34.0 — canonical live cutover + unified product experience (ACTIVE; closing R33 Claude BLOCKER on live integration / H-5; persistence decision before any DB change) |
-| Prior milestone | R33.0 — canonical decision engine implemented + tested, but Claude **BLOCKED** on live cutover; H-5 OPEN, reassigned to R34 |
+| Active milestone | R34.0 — canonical live cutover COMPLETE + gate-verified (H-5 resolved at API/data layer: canonical engine authoritative, legacy non-authoritative, stale-data blocking, capital-set safety, persistence RETAIN). Product Phases 4–9 (dashboard/nav/portfolio/universe/backtest/journal/reports/frontend) STAGED, not claimed complete |
+| Prior milestone | R33.0 — canonical decision engine implemented + tested; Claude BLOCKED on live cutover (closed by R34 cutover) |
 
 ## R31.0 Validation Gates (audit milestone)
 

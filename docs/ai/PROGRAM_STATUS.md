@@ -1,7 +1,7 @@
 # ChakraOps Program Status
 
 Last initialized: 2026-06-21
-Last updated: 2026-06-21 (R33.0 reviewed BLOCKED on live cutover; H-5 reassigned to R34; R34.0 started: canonical live cutover)
+Last updated: 2026-06-21 (R33 governance corrected; R34.0 canonical live cutover complete + gate-verified; H-5 resolved at API/data layer; product Phases 4–9 staged)
 
 ## Program branch and workflow
 
@@ -16,7 +16,7 @@ Last updated: 2026-06-21 (R33.0 reviewed BLOCKED on live cutover; H-5 reassigned
 | R31.0 | IMPLEMENTED (gates green, committed; awaiting review) | Cursor / Claude / Codex | Operator review of audit + blueprint; resolve D-1 (R30.8) |
 | R32.0 | COMPLETE — C-1 + Claude notes + full data-reliability scope delivered and gate-verified; Claude APPROVED-WITH-NOTES (notes closed in 049cb2f); Codex review PENDING (quota) | Cursor / Claude / Codex | Deferred Codex R32 review |
 | R33.0 | IMPLEMENTED + TESTED, Claude **BLOCKED** on live cutover — canonical engine is correct/tested but not yet the authoritative live recommendation path; H-5 OPEN, reassigned to R34 | Cursor / Claude / Codex | Closed by R34 live cutover; deferred Codex review |
-| R34.0 | ACTIVE — closing the R33 blocker via canonical live cutover (H-5); persistence decision before any DB change | Cursor | Live cutover + capital-set safety + persistence decision; broader product consolidation staged |
+| R34.0 | CUTOVER COMPLETE (gate-verified) — canonical engine is the authoritative live recommendation at API/data layer (H-5 resolved there); capital-set safety + persistence decision (RETAIN) done. Product Phases 4–9 (dashboard/nav/portfolio/universe/backtest/journal/reports/frontend) STAGED, not claimed complete | Cursor / Claude / Codex | Claude re-review + Cowork UAT + deferred Codex; then staged product phases / R35 |
 | R35.0 | PACKET_READY / DEPENDS_ON_R34 | Cursor / Cowork | Wait for product-flow acceptance |
 
 ## Current program rule

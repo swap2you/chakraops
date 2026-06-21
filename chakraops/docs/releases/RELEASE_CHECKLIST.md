@@ -1025,6 +1025,29 @@ No code, UI, ORATS, scheduler, database, runtime, brokerage, deployment, or work
 
 ---
 
+### R34.0 — Canonical live cutover (program R31–R35, milestone 4) — CUTOVER COMPLETE (Phases 0–3); product Phases 4–9 STAGED
+
+- [x] Phase 0 — corrected R33 overclaims, recorded Claude BLOCKED, reassigned H-5 to R34 (commit c82b353)
+- [x] Requirements — `R34.0_requirements.md`; Release notes — `R34.0_release_notes.md`
+- [x] Packet normalized with exact live-cutover paths (repository inspection)
+- [x] Canonical→live adapter — `app/core/decision_engine/legacy_adapter.py` (no FAIL_/WARN_)
+- [x] Canonical live service — `app/core/decision_engine/live_service.py` (inputs from persisted v2 artifact; in-process; no ORATS/no fallback in request path)
+- [x] `/api/ui/action-needed` authoritative `authoritative_recommendations` + `capital_safety` + `decision_source` + `active_profile`; legacy `legacy_lists_role=diagnostic_non_authoritative`
+- [x] Symbol Diagnostics `canonical_decision` + `decision_source`; Today summary `decision_source`
+- [x] R32 `stale_data_gate` enforced on the live actionable path (no ACTIONABLE on stale/missing data)
+- [x] `profile_overrides`/invalid profile → HTTP 422
+- [x] Recommendation-set capital safety (per-suggestion-not-additive, total + deployable, over-capital warning, no assumed leverage)
+- [x] Frontend authoritative types + `useActionNeeded(profile?)`
+- [x] Persistence decision (RETAIN; no migration) — `docs/ai/releases/R34.0/persistence_decision.md`
+- [x] Tests — `test_r340_live_cutover.py`, `test_r340_profile_overrides_422.py`, `queries.liveDecision.test.tsx`
+- [x] Gate — Backend 1140 passed/3 skipped; Frontend 315 passed/18 skipped; Build PASS (~6.7s). Evidence: `docs/ai/releases/R34.0/notes.md` (+ local `out/verification/R34.0/`)
+- [ ] STAGED (not done): packet Phases 4–9 — dashboard/nav consolidation, portfolio/position experience, universe/data-health UI, backtest engine, journal/retention/reporting, frontend-quality overhaul (incl. nested-`<tr>`, M-13 bundle)
+- [ ] Review / sign-off — Claude re-review (cutover) + Cowork UAT pending; Codex PENDING (quota; no approval claimed)
+
+**Scope:** Canonical decision engine made the **authoritative** primary live recommendation at the API/data layer; legacy relabeled non-authoritative; stale-data blocking + capital-set safety + persistence decision. **H-5 RESOLVED at API/data layer (evidenced); UI visual re-render + legacy retirement STAGED.** Manual-only; no order routing; no broker; no silent fallback. Product Phases 4–9 staged, not claimed complete.
+
+---
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

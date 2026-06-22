@@ -322,6 +322,27 @@ Governance/evidence (authorized): `docs/ai/releases/R34.0/{STATUS,TOOL_LOG,RELEA
 
 Any additional tracked path requires operator approval and a packet update committed before that path is edited.
 
+### Final lock-race and test-validity remediation (2026-06-22f) — exact authorized paths
+
+Starting commit: `662b81e`. Docs-only authorization commit precedes all source edits. Codex final targeted review **BLOCKED** on unsafe stale-lock reclamation race, invalid unreadable-journal test (patches `Path.read_text` instead of production `open`), and tautological ORATS stage2_trace test. R35 must not start until these blockers close.
+
+Fix 1 — replace unsafe stale-lock reclamation with OS-native file lock:
+- MODIFIED `chakraops/app/core/universe/refresh_lock.py` — `fcntl.flock` (POSIX) / `msvcrt.locking` (Windows); hold fd for entire critical section; timeout/retry; release OS lock on fd; never unlink/reclaim based on age or inferred process death; optional metadata for diagnostics only
+- MODIFIED `chakraops/tests/test_r340_refresh_lock_ownership.py` — real Windows-compatible `multiprocessing` spawn tests (mutual exclusion, long holder not displaced, timeout, process death releases lock, subsequent acquire, no lock theft on unknown liveness); must not skip Windows subprocess tests
+
+Fix 2 — correct unreadable-journal test to exercise production `open` path:
+- MODIFIED `chakraops/tests/test_r340_refresh_journal_history_integrity.py` — patch `builtins.open` for journal path; assert `RefreshJournalError`, journal not absent, no overlay/history mutation, file intact; retain malformed JSON, incomplete fields, history corruption, journal-clear failure tests
+
+Fix 3 — exercise real ORATS pipeline error paths (not direct `redact_secrets()`):
+- MODIFIED `chakraops/tests/test_r340_orats_redaction_complete.py` — drive active chain-provider worker, delayed pipeline, loader, stage-two trace, nested `RequestException` paths; assert fake token absent from logs, exceptions, result.error, trace fields; useful endpoint/status/classification preserved
+
+Governance/evidence (authorized for edit):
+- `docs/ai/releases/R34.0/{STATUS,TOOL_LOG,RELEASE_PACKET}.md`
+- `docs/ai/PROGRAM_STATUS.md` (if status summary update required)
+- `out/verification/R34.0/{final_lock_race_remediation,windows_multiprocess_lock,journal_test_validity,orats_active_path_redaction,backend,frontend,build}.md|.log` (local ignored evidence)
+
+Any additional tracked path requires operator approval and a packet update committed before that path is edited.
+
 ## Forbidden paths and actions
 
 

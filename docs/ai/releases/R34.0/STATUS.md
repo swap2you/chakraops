@@ -13,9 +13,9 @@ Consolidate the operator experience around trusted decisions, positions, backtes
 Level 3 — application refactor and analytical presentation
 
 ## Current status
-IMPLEMENTATION COMPLETE — **final operational-integrity remediation active** (starting commit `50aa600`). Prior cutover pass delivered transaction-safe weekly refresh, complete ORATS application-path redaction, live sector enforcement, rendered canonical cutover, shared-table DOM fix, Backtest SIMULATION label, positions pagination, and navigation grouping. **H-5 CLOSED.**
+IMPLEMENTATION COMPLETE — **final lock-race and test-validity remediation active** (starting commit `662b81e`). Prior operational-integrity pass delivered strict journal/history integrity, ORATS downstream sanitization, and generated-file hygiene. **H-5 CLOSED.**
 
-**Final external validation:** Claude final R34 review **APPROVED WITH NON-BLOCKING NOTES**; Cowork real-browser UAT **PASS WITH NOTES**; Codex final R34 review **BLOCKED** on refresh integrity, remaining ORATS redaction, authorization reconciliation, and generated-file hygiene. This pass addresses Codex blockers. R34 is described as implementation complete — **not** externally approved — awaiting Codex targeted re-review before R35.0.
+**Final external validation:** Claude final R34 review **APPROVED WITH NON-BLOCKING NOTES**; Cowork real-browser UAT **PASS WITH NOTES**; Codex final targeted review **BLOCKED** on (1) unsafe PID/liveness stale-lock reclamation race, (2) unreadable-journal test patching wrong API (`Path.read_text` vs production `open`), (3) tautological ORATS stage2_trace test calling `redact_secrets()` directly. This pass addresses those Codex blockers. R34 remains implementation complete — **not** externally approved — awaiting Codex targeted re-review before R35.0.
 
 **Operator waiver (2026-06-22d):** The operator explicitly accepts the historical exact-path deviation in commit `50aa600`. Documented waiver only — not retroactive authorization and not permission to repeat the pattern.
 
@@ -38,23 +38,19 @@ IMPLEMENTATION COMPLETE — **final operational-integrity remediation active** (
 R33.0 canonical decision and profile contracts (implemented + tested).
 
 ## Cursor implementation
-Final operational-integrity remediation delivered (post-0e860f5): strict journal/history integrity, ownership-safe cross-process lock, downstream ORATS sanitization, generated-file hygiene. Gates: backend 1218/3 skipped; frontend 334/18 skipped; build PASS; secret scan 0 hits.
+Final lock-race and test-validity remediation in progress (post-662b81e): OS-native cross-process lock (`fcntl`/`msvcrt`), production-path journal unreadability test, active ORATS pipeline stage2_trace path tests. Prior integrity pass: backend 1218/3 skipped; frontend 334/18 skipped; build PASS.
 
 ## Claude review
-- Final R34 review: **APPROVED WITH NON-BLOCKING NOTES** (implementation complete; integrity remediation addresses remaining notes).
+- Final R34 review: **APPROVED WITH NON-BLOCKING NOTES** (awaiting lock-race remediation re-review).
 
 ## Codex review
-- Final R34 review: **BLOCKED** — findings remediated in integrity pass (journal/history, ownership-safe lock, downstream ORATS, generated-file hygiene). Awaiting Codex targeted re-review. No Codex approval claimed.
+- Final targeted R34 review: **BLOCKED** — unsafe stale-lock reclamation race; invalid unreadable-journal test; tautological ORATS stage2_trace test. Remediation active. No Codex approval claimed.
 
 ## Cowork UAT
 - Final real-browser UAT: **PASS WITH NOTES**. See `out/verification/R34.0/frontend_uat_plan.md`.
 
-## Gates (integrity remediation pass)
-- Backend: PASS — 1218 passed, 3 skipped
-- Frontend tests: PASS — 334 passed, 18 skipped
-- Frontend build: PASS
-- Secret scan: PASS — 0 real-token hits in tracked code
-- Evidence: out/verification/R34.0/ (final_integrity_notes.md, refresh_corruption_recovery.md, lock_ownership.md, downstream_orats_redaction.md, generated_file_hygiene.md, backend.log, frontend.log, build.log)
+## Gates (lock-race remediation pass)
+- Pending — OS-native lock multiprocessing tests, journal/ORATS path tests, full AGENTS.md gates.
 
 ## PR
 Pending
@@ -66,13 +62,13 @@ Pending
 Pending
 
 ## Open blockers
-- None for R34 scope. All Phase 7 required items delivered and gate-verified. Post-R35 enhancements (drag-and-drop dashboard, broad visual redesign, physical legacy-module deletion, bundle/code-split architecture, multi-user DB architecture) remain explicitly out of R34 scope.
+- Codex BLOCKED findings (lock race, journal test validity, ORATS active-path tests) — remediation in progress.
 
 ## H-5 status
-**CLOSED (R34.0)** — API/data-contract layer fail-closed and authoritative; rendered-UI cutover complete on Dashboard/Today/Symbol; page-level cutover tests pass (`DashboardPage.canonical.test.tsx`, `TodayPage.canonical.test.tsx`, `SymbolDiagnosticsPage.canonical.test.tsx`). Physical legacy-module retirement deferred to post-R35.
+**CLOSED (R34.0)** — API/data-contract layer fail-closed and authoritative; rendered-UI cutover complete on Dashboard/Today/Symbol; page-level cutover tests pass.
 
 ## Next action
-Awaiting Codex targeted re-review of integrity remediation before R35.0. No PR, no tag, no deploy.
+Complete lock-race remediation, run gates, push implementation commit, await Codex targeted re-review before R35.0. No PR, no tag, no deploy.
 
 ## Stop point
-R34.0 implementation complete; integrity remediation delivered and gate-verified. H-5 closed. Awaiting Codex re-review. R35 not started.
+R34.0 implementation complete; final Codex lock-race blockers under remediation. R35 not started.

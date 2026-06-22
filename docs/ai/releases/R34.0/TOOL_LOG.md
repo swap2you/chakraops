@@ -54,8 +54,13 @@
 - Gates: backend 1218 passed/3 skipped; frontend 334 passed/18 skipped; build PASS; secret scan 0 hits.
 - Commit `fix(R34.0): harden refresh recovery and complete ORATS sanitization` pushed. Awaiting Codex targeted re-review.
 
+## Cursor — final lock-race and test-validity remediation: Phase 0 authorization (2026-06-22f)
+- Reviews recorded: Claude final R34 **APPROVED WITH NON-BLOCKING NOTES**; Cowork final UAT **PASS WITH NOTES**; Codex final targeted review **BLOCKED** on unsafe stale-lock reclamation race (`O_EXCL` + dead-owner unlink), invalid unreadable-journal test (`Path.read_text` patch vs production `open`), tautological ORATS stage2_trace test (direct `redact_secrets()` only).
+- RELEASE_PACKET.md updated with exact paths for OS-native lock rewrite, journal test fix, active ORATS pipeline tests. R35 blocked until Codex blockers close.
+- Docs-only commit `docs(R34.0): authorize final lock-race remediation` created and pushed BEFORE source edits.
+
 ## Codex
-- Final R34 review: BLOCKED (refresh integrity, downstream ORATS redaction, authorization reconciliation, generated-file hygiene). Targeted re-review required after integrity remediation.
+- Final targeted R34 review: **BLOCKED** (lock reclaim race; journal test validity; ORATS active-path test validity). Remediation active.
 
 ## Claude Cowork
 - Final real-browser UAT: PASS WITH NOTES.

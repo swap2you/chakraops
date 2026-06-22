@@ -240,10 +240,68 @@ def test_option_chain_loader_nested_request_exception_redacted(monkeypatch) -> N
     assert FAKE_TOKEN not in (result.error or "")
 
 
-def test_chain_pipeline_stage2_trace_error_redacted() -> None:
-    from app.core.security.redact import redact_secrets
+def test_chain_pipeline_stage2_trace_failure_redacts(monkeypatch, caplog) -> None:
+    from datetime import date
 
-    err = RuntimeError(f"trace token={FAKE_TOKEN}")
-    safe = redact_secrets(str(err))
-    trace = {"error": safe, "message": "Trace build failed"}
+    from app.core.options import orats_chain_pipeline as pipeline
+    from app.core.options.orats_chain_pipeline import BaseContract, EnrichedContract
+
+    exp = date(2026, 7, 17)
+    base = BaseContract(
+        symbol="SPY",
+        expiration=exp,
+        strike=400.0,
+        option_type="PUT",
+        dte=25,
+        delta=-0.3,
+        stock_price=450.0,
+    )
+    enriched = EnrichedContract(
+        symbol="SPY",
+        expiration=exp,
+        strike=400.0,
+        option_type="PUT",
+        opra_symbol="SPY260717P00400000",
+        dte=25,
+        stock_price=450.0,
+        bid=1.0,
+        ask=1.1,
+        delta=-0.3,
+        open_interest=100,
+        enriched=True,
+    )
+
+    monkeypatch.setattr(pipeline.OratsDataMode, "get_current_mode", lambda: "delayed")
+    monkeypatch.setattr(pipeline.OratsDataMode, "supports_opra_fields", lambda _m: True)
+    monkeypatch.setattr(
+        pipeline,
+        "fetch_base_chain",
+        lambda *_a, **_k: ([base], 450.0, None, 1),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "fetch_enriched_contracts",
+        lambda *_a, **_k: (
+            {},
+            {"response_rows": 1, "endpoint_used": "https://api.orats.io/datav2/strikes/options"},
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "merge_chain_and_liquidity",
+        lambda *_a, **_k: [enriched],
+    )
+
+    def _trace_boom(_mode):
+        raise RuntimeError(f"trace token={FAKE_TOKEN} url={TOKEN_URL}")
+
+    monkeypatch.setattr(pipeline.OratsDataMode, "get_base_url", _trace_boom)
+
+    caplog.set_level(logging.WARNING)
+    result = pipeline.fetch_option_chain("SPY")
+    trace = result.stage2_trace or {}
+    assert trace.get("message") == "Trace build failed"
     assert FAKE_TOKEN not in str(trace)
+    assert FAKE_TOKEN not in (trace.get("error") or "")
+    assert FAKE_TOKEN not in caplog.text
+    assert "stage2_trace build failed" in caplog.text

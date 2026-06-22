@@ -38,14 +38,54 @@ def test_malformed_journal_json_fails_loud(env) -> None:
 def test_unreadable_journal_fails_loud(env, monkeypatch) -> None:
     path = refresh_lock.journal_path("weekly_refresh")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("{}", encoding="utf-8")
+    original = (
+        '{"week_id":"2026-W26","phase":"apply",'
+        '"prev_overlay":{"added":[],"removed":[]}}'
+    )
+    path.write_text(original, encoding="utf-8")
+    path_str = str(path)
+    real_open = open
 
-    def _boom(_self):
-        raise OSError("permission denied")
+    def fake_open(file, *args, **kwargs):
+        target = file if isinstance(file, str) else str(file)
+        if target == path_str:
+            raise OSError("permission denied")
+        return real_open(file, *args, **kwargs)
 
-    monkeypatch.setattr(refresh_lock.Path, "read_text", _boom, raising=False)
+    monkeypatch.setattr("builtins.open", fake_open)
     with pytest.raises(refresh_lock.RefreshJournalError, match="unreadable"):
         refresh_lock.read_journal("weekly_refresh")
+    assert refresh_lock.journal_exists("weekly_refresh")
+    assert path.read_text(encoding="utf-8") == original
+
+
+def test_unreadable_journal_recovery_does_not_mutate_overlay(env, monkeypatch) -> None:
+    path = refresh_lock.journal_path("weekly_refresh")
+    refresh_lock.write_journal(
+        "weekly_refresh",
+        {
+            "week_id": WEEK,
+            "phase": "apply",
+            "prev_overlay": {"added": ["SPY"], "removed": []},
+        },
+    )
+    overlay_path = env / "universe_overlay.json"
+    overlay_path.write_text('{"added":["QQQ"],"removed":[]}', encoding="utf-8")
+    path_str = str(path)
+    real_open = open
+
+    def fake_open(file, *args, **kwargs):
+        target = file if isinstance(file, str) else str(file)
+        if target == path_str:
+            raise OSError("permission denied")
+        return real_open(file, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", fake_open)
+    store = RefreshHistoryStore(path=env / "history.jsonl")
+    with pytest.raises(WeeklyRefreshCriticalError, match="journal unreadable"):
+        recover_pending_transaction(history_store=store)
+    assert overlay_path.read_text(encoding="utf-8") == '{"added":["QQQ"],"removed":[]}'
+    assert refresh_lock.journal_exists("weekly_refresh")
 
 
 def test_incomplete_journal_structure_fails_loud(env) -> None:

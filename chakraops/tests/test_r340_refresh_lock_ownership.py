@@ -1,36 +1,71 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""R34.0 — ownership-safe cross-process refresh lock tests."""
+"""R34.0 — OS-native cross-process refresh lock tests (Windows spawn)."""
 
 from __future__ import annotations
 
-import json
 import multiprocessing
 import os
 import time
+from pathlib import Path
 
 import pytest
 
 from app.core.universe import refresh_lock
 
 
-def _hold_lock(coord_dir: str, hold_seconds: float) -> None:
+def _configure_coord(coord_dir: str) -> None:
     import app.core.settings as settings
 
     settings.get_output_dir = lambda: coord_dir  # type: ignore[method-assign]
-    with refresh_lock.cross_process_lock("weekly_refresh", timeout=5.0):
+
+
+def _mp_holder(coord_dir: str, hold_seconds: float, ready_q: multiprocessing.Queue) -> None:
+    _configure_coord(coord_dir)
+    with refresh_lock.cross_process_lock("weekly_refresh", timeout=30.0):
+        ready_q.put("holding")
         time.sleep(hold_seconds)
 
 
-def _try_acquire(coord_dir: str, timeout: float, out_q: multiprocessing.Queue) -> None:
-    import app.core.settings as settings
-
-    settings.get_output_dir = lambda: coord_dir  # type: ignore[method-assign]
+def _mp_try_acquire(coord_dir: str, timeout: float, out_q: multiprocessing.Queue) -> None:
+    _configure_coord(coord_dir)
     try:
         with refresh_lock.cross_process_lock("weekly_refresh", timeout=timeout):
             out_q.put("acquired")
     except refresh_lock.RefreshLockTimeout:
         out_q.put("timeout")
+
+
+def _mp_exclusion_worker(
+    coord_dir: str,
+    active_path: str,
+    max_path: str,
+    worker_id: int,
+    out_q: multiprocessing.Queue,
+) -> None:
+    _configure_coord(coord_dir)
+    active = Path(active_path)
+    max_seen = Path(max_path)
+    try:
+        with refresh_lock.cross_process_lock("weekly_refresh", timeout=30.0):
+            current = int(active.read_text(encoding="utf-8") or "0") + 1
+            active.write_text(str(current), encoding="utf-8")
+            prior_max = int(max_seen.read_text(encoding="utf-8") or "0")
+            if current > prior_max:
+                max_seen.write_text(str(current), encoding="utf-8")
+            time.sleep(0.15)
+            active.write_text(str(current - 1), encoding="utf-8")
+        out_q.put(f"done-{worker_id}")
+    except refresh_lock.RefreshLockTimeout:
+        out_q.put(f"timeout-{worker_id}")
+
+
+def _mp_hold_until_killed(coord_dir: str, ready_q: multiprocessing.Queue) -> None:
+    _configure_coord(coord_dir)
+    with refresh_lock.cross_process_lock("weekly_refresh", timeout=60.0):
+        ready_q.put("holding")
+        while True:
+            time.sleep(3600)
 
 
 @pytest.fixture()
@@ -39,98 +74,101 @@ def coord(tmp_path, monkeypatch):
     return tmp_path
 
 
-def test_live_lock_older_than_stale_threshold_is_not_stolen(coord) -> None:
+def _spawn_context() -> multiprocessing.context.BaseContext:
+    return multiprocessing.get_context("spawn")
+
+
+def test_mp_mutual_exclusion_at_most_one_holder(coord) -> None:
+    ctx = _spawn_context()
+    active = coord / "active.count"
+    max_seen = coord / "max.count"
+    active.write_text("0", encoding="utf-8")
+    max_seen.write_text("0", encoding="utf-8")
+    out_q: multiprocessing.Queue = ctx.Queue()
+    workers = [
+        ctx.Process(
+            target=_mp_exclusion_worker,
+            args=(str(coord), str(active), str(max_seen), i, out_q),
+        )
+        for i in range(4)
+    ]
+    for proc in workers:
+        proc.start()
+    for proc in workers:
+        proc.join(timeout=20)
+        assert proc.exitcode == 0
+    results = [out_q.get(timeout=1) for _ in workers]
+    assert all(r.startswith("done-") for r in results)
+    assert int(max_seen.read_text(encoding="utf-8")) == 1
+
+
+def test_mp_long_holder_not_displaced_by_age(coord) -> None:
+    ctx = _spawn_context()
+    ready_q: multiprocessing.Queue = ctx.Queue()
+    out_q: multiprocessing.Queue = ctx.Queue()
+    holder = ctx.Process(target=_mp_holder, args=(str(coord), 2.0, ready_q))
+    holder.start()
+    assert ready_q.get(timeout=5) == "holding"
     lock_path = refresh_lock._lock_path("weekly_refresh")
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    meta = {
-        "lock_id": "live-lock",
-        "pid": os.getpid(),
-        "hostname": refresh_lock._hostname(),
-        "created_at": time.time() - 9999,
-        "process_start_epoch": refresh_lock._process_creation_epoch(os.getpid()),
-    }
-    lock_path.write_text(json.dumps(meta), encoding="utf-8")
-    # Backdate mtime so age-only logic would have stolen this lock pre-remediation.
     old = time.time() - 9999
     os.utime(lock_path, (old, old))
-
-    with pytest.raises(refresh_lock.RefreshLockTimeout):
-        with refresh_lock.cross_process_lock("weekly_refresh", timeout=0.25):
-            pass
-
-
-def test_dead_owner_lock_is_reclaimed_safely(coord) -> None:
-    lock_path = refresh_lock._lock_path("weekly_refresh")
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    meta = {
-        "lock_id": "dead-lock",
-        "pid": 999_999_999,
-        "hostname": refresh_lock._hostname(),
-        "created_at": time.time(),
-        "process_start_epoch": 1.0,
-    }
-    lock_path.write_text(json.dumps(meta), encoding="utf-8")
-
-    with refresh_lock.cross_process_lock("weekly_refresh", timeout=2.0):
-        assert lock_path.exists()
-
-
-def test_pid_reuse_protection_treats_mismatched_start_as_dead(coord, monkeypatch) -> None:
-    lock_path = refresh_lock._lock_path("weekly_refresh")
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    meta = {
-        "lock_id": "reuse-lock",
-        "pid": os.getpid(),
-        "hostname": refresh_lock._hostname(),
-        "created_at": time.time(),
-        "process_start_epoch": 1.0,
-    }
-    lock_path.write_text(json.dumps(meta), encoding="utf-8")
-    monkeypatch.setattr(
-        refresh_lock,
-        "_process_creation_epoch",
-        lambda _pid: time.time(),
-    )
-    with refresh_lock.cross_process_lock("weekly_refresh", timeout=2.0):
-        assert lock_path.exists()
-
-
-def test_ownership_mismatch_on_release_raises(coord) -> None:
-    with pytest.raises(refresh_lock.RefreshLockOwnershipError):
-        with refresh_lock.cross_process_lock("weekly_refresh", timeout=2.0) as meta:
-            lock_path = refresh_lock._lock_path("weekly_refresh")
-            tampered = dict(meta)
-            tampered["lock_id"] = "other-holder"
-            lock_path.write_text(json.dumps(tampered), encoding="utf-8")
-
-
-def test_concurrent_subprocess_contention_one_holder(coord) -> None:
-    if os.name == "nt":
-        pytest.skip("subprocess lock timing flaky on some Windows CI hosts")
-    out_q: multiprocessing.Queue = multiprocessing.Queue()
-    holder = multiprocessing.Process(target=_hold_lock, args=(str(coord), 1.5))
-    waiter = multiprocessing.Process(
-        target=_try_acquire, args=(str(coord), 0.5, out_q)
-    )
-    holder.start()
-    time.sleep(0.2)
+    waiter = ctx.Process(target=_mp_try_acquire, args=(str(coord), 0.5, out_q))
     waiter.start()
-    holder.join(timeout=5)
+    assert out_q.get(timeout=5) == "timeout"
+    holder.join(timeout=10)
+    assert holder.exitcode == 0
     waiter.join(timeout=5)
-    assert out_q.get(timeout=1) == "timeout"
 
 
-def test_lock_timeout_produces_controlled_error(coord) -> None:
+def test_mp_lock_timeout_produces_controlled_error(coord) -> None:
+    ctx = _spawn_context()
+    ready_q: multiprocessing.Queue = ctx.Queue()
+    out_q: multiprocessing.Queue = ctx.Queue()
+    holder = ctx.Process(target=_mp_holder, args=(str(coord), 1.5, ready_q))
+    holder.start()
+    assert ready_q.get(timeout=5) == "holding"
+    waiter = ctx.Process(target=_mp_try_acquire, args=(str(coord), 0.25, out_q))
+    waiter.start()
+    assert out_q.get(timeout=5) == "timeout"
+    holder.join(timeout=10)
+    waiter.join(timeout=5)
+
+
+def test_mp_process_termination_releases_os_lock(coord) -> None:
+    ctx = _spawn_context()
+    ready_q: multiprocessing.Queue = ctx.Queue()
+    out_q: multiprocessing.Queue = ctx.Queue()
+    holder = ctx.Process(target=_mp_hold_until_killed, args=(str(coord), ready_q))
+    holder.start()
+    assert ready_q.get(timeout=5) == "holding"
+    holder.terminate()
+    holder.join(timeout=10)
+    acquirer = ctx.Process(target=_mp_try_acquire, args=(str(coord), 5.0, out_q))
+    acquirer.start()
+    assert out_q.get(timeout=10) == "acquired"
+    acquirer.join(timeout=10)
+    assert acquirer.exitcode == 0
+
+
+def test_mp_subsequent_acquire_after_release(coord) -> None:
+    with refresh_lock.cross_process_lock("weekly_refresh", timeout=2.0):
+        pass
+    with refresh_lock.cross_process_lock("weekly_refresh", timeout=2.0):
+        assert refresh_lock._lock_path("weekly_refresh").exists()
+
+
+def test_mp_unknown_metadata_does_not_cause_lock_theft(coord) -> None:
     lock_path = refresh_lock._lock_path("weekly_refresh")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    meta = {
-        "lock_id": "blocker",
-        "pid": os.getpid(),
-        "hostname": refresh_lock._hostname(),
-        "created_at": time.time(),
-        "process_start_epoch": refresh_lock._process_creation_epoch(os.getpid()),
-    }
-    lock_path.write_text(json.dumps(meta), encoding="utf-8")
-    with pytest.raises(refresh_lock.RefreshLockTimeout, match="within"):
-        with refresh_lock.cross_process_lock("weekly_refresh", timeout=0.15):
-            pass
+    lock_path.write_text('{"pid":999999999,"lock_id":"dead"}', encoding="utf-8")
+    ctx = _spawn_context()
+    ready_q: multiprocessing.Queue = ctx.Queue()
+    out_q: multiprocessing.Queue = ctx.Queue()
+    holder = ctx.Process(target=_mp_holder, args=(str(coord), 1.5, ready_q))
+    holder.start()
+    assert ready_q.get(timeout=5) == "holding"
+    waiter = ctx.Process(target=_mp_try_acquire, args=(str(coord), 0.5, out_q))
+    waiter.start()
+    assert out_q.get(timeout=5) == "timeout"
+    holder.join(timeout=10)
+    waiter.join(timeout=5)

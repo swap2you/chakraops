@@ -13,9 +13,9 @@ Consolidate the operator experience around trusted decisions, positions, backtes
 Level 3 — application refactor and analytical presentation
 
 ## Current status
-IMPLEMENTATION COMPLETE — **final lock-race and test-validity remediation active** (starting commit `662b81e`). Prior operational-integrity pass delivered strict journal/history integrity, ORATS downstream sanitization, and generated-file hygiene. **H-5 CLOSED.**
+IMPLEMENTATION COMPLETE — **final lock-race and test-validity remediation delivered** (authorization `9f6130e`, starting commit `662b81e`). OS-native cross-process lock replaces unsafe stale-lock reclamation; journal unreadability test exercises production `open`; ORATS stage2_trace test drives real `fetch_option_chain` path. **H-5 CLOSED.**
 
-**Final external validation:** Claude final R34 review **APPROVED WITH NON-BLOCKING NOTES**; Cowork real-browser UAT **PASS WITH NOTES**; Codex final targeted review **BLOCKED** on (1) unsafe PID/liveness stale-lock reclamation race, (2) unreadable-journal test patching wrong API (`Path.read_text` vs production `open`), (3) tautological ORATS stage2_trace test calling `redact_secrets()` directly. This pass addresses those Codex blockers. R34 remains implementation complete — **not** externally approved — awaiting Codex targeted re-review before R35.0.
+**Final external validation:** Claude final R34 review **APPROVED WITH NON-BLOCKING NOTES**; Cowork real-browser UAT **PASS WITH NOTES**; Codex final targeted review was **BLOCKED** on lock race, journal test validity, and tautological ORATS tests — **remediated and gate-verified**. Awaiting Codex targeted re-review before R35.0. No Codex approval claimed.
 
 **Operator waiver (2026-06-22d):** The operator explicitly accepts the historical exact-path deviation in commit `50aa600`. Documented waiver only — not retroactive authorization and not permission to repeat the pattern.
 
@@ -38,19 +38,25 @@ IMPLEMENTATION COMPLETE — **final lock-race and test-validity remediation acti
 R33.0 canonical decision and profile contracts (implemented + tested).
 
 ## Cursor implementation
-Final lock-race and test-validity remediation in progress (post-662b81e): OS-native cross-process lock (`fcntl`/`msvcrt`), production-path journal unreadability test, active ORATS pipeline stage2_trace path tests. Prior integrity pass: backend 1218/3 skipped; frontend 334/18 skipped; build PASS.
+Final lock-race and test-validity remediation delivered (post-9f6130e): OS-native cross-process lock (`fcntl`/`msvcrt`), production-path journal unreadability test, active ORATS pipeline stage2_trace path test. Gates: backend 1219/3 skipped; frontend 334/18 skipped; build PASS; R32/R33/R34 targeted 202 passed; secret scan 0 hits.
 
 ## Claude review
-- Final R34 review: **APPROVED WITH NON-BLOCKING NOTES** (awaiting lock-race remediation re-review).
+- Final R34 review: **APPROVED WITH NON-BLOCKING NOTES**. Awaiting re-review after lock-race remediation.
 
 ## Codex review
-- Final targeted R34 review: **BLOCKED** — unsafe stale-lock reclamation race; invalid unreadable-journal test; tautological ORATS stage2_trace test. Remediation active. No Codex approval claimed.
+- Final targeted R34 review was **BLOCKED** (lock reclaim race; journal test validity; ORATS active-path tests). Remediation delivered and gate-verified. Awaiting Codex targeted re-review. No Codex approval claimed.
 
 ## Cowork UAT
 - Final real-browser UAT: **PASS WITH NOTES**. See `out/verification/R34.0/frontend_uat_plan.md`.
 
 ## Gates (lock-race remediation pass)
-- Pending — OS-native lock multiprocessing tests, journal/ORATS path tests, full AGENTS.md gates.
+- Backend: PASS — 1219 passed, 3 skipped
+- Frontend tests: PASS — 334 passed, 18 skipped
+- Frontend build: PASS
+- R32/R33/R34 targeted: PASS — 202 passed
+- Windows multiprocessing lock tests: PASS — 7 passed (spawn, not skipped)
+- Secret scan: PASS — 0 real-token hits in tracked code
+- Evidence: `out/verification/R34.0/` (`final_lock_race_remediation.md`, `windows_multiprocess_lock.md`, `journal_test_validity.md`, `orats_active_path_redaction.md`, `backend.log`, `frontend.log`, `build.log`)
 
 ## PR
 Pending
@@ -62,13 +68,13 @@ Pending
 Pending
 
 ## Open blockers
-- Codex BLOCKED findings (lock race, journal test validity, ORATS active-path tests) — remediation in progress.
+- External Codex re-review pending (implementation blockers closed).
 
 ## H-5 status
-**CLOSED (R34.0)** — API/data-contract layer fail-closed and authoritative; rendered-UI cutover complete on Dashboard/Today/Symbol; page-level cutover tests pass.
+**CLOSED (R34.0)**
 
 ## Next action
-Complete lock-race remediation, run gates, push implementation commit, await Codex targeted re-review before R35.0. No PR, no tag, no deploy.
+Await Codex targeted re-review before R35.0. No PR, no tag, no deploy.
 
 ## Stop point
-R34.0 implementation complete; final Codex lock-race blockers under remediation. R35 not started.
+R34.0 final Codex blockers remediated and pushed. Awaiting targeted Codex and Claude approval before R35.0.

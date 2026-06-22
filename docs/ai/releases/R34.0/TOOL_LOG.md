@@ -57,10 +57,17 @@
 ## Cursor — final lock-race and test-validity remediation: Phase 0 authorization (2026-06-22f)
 - Reviews recorded: Claude final R34 **APPROVED WITH NON-BLOCKING NOTES**; Cowork final UAT **PASS WITH NOTES**; Codex final targeted review **BLOCKED** on unsafe stale-lock reclamation race (`O_EXCL` + dead-owner unlink), invalid unreadable-journal test (`Path.read_text` patch vs production `open`), tautological ORATS stage2_trace test (direct `redact_secrets()` only).
 - RELEASE_PACKET.md updated with exact paths for OS-native lock rewrite, journal test fix, active ORATS pipeline tests. R35 blocked until Codex blockers close.
-- Docs-only commit `docs(R34.0): authorize final lock-race remediation` created and pushed BEFORE source edits.
+- Docs-only commit `docs(R34.0): authorize final lock-race remediation` (`9f6130e`) created and pushed BEFORE source edits.
+
+## Cursor — final lock-race and test-validity remediation: implementation (2026-06-22g)
+- Fix 1 (OS-native lock): `refresh_lock.py` rewritten — `fcntl.flock` / `msvcrt.locking`; hold fd for critical section; timeout/retry; release OS lock; never unlink/reclaim by age or inferred death. Tests: spawn multiprocessing on Windows (7 cases, not skipped).
+- Fix 2 (journal test): `test_unreadable_journal_fails_loud` patches `builtins.open`; recovery overlay non-mutation test added.
+- Fix 3 (ORATS active paths): `test_chain_pipeline_stage2_trace_failure_redacts` drives real `fetch_option_chain` stage2 except path.
+- Gates: backend 1219/3 skipped; frontend 334/18 skipped; build PASS; R32/R33/R34 targeted 202 passed; secret scan 0 hits.
+- Commit `fix(R34.0): eliminate lock reclaim race and validate active error paths` pushed. Awaiting Codex targeted re-review.
 
 ## Codex
-- Final targeted R34 review: **BLOCKED** (lock reclaim race; journal test validity; ORATS active-path test validity). Remediation active.
+- Final targeted R34 review was **BLOCKED** (lock reclaim race; journal test validity; ORATS active-path tests). Remediation delivered; awaiting re-review.
 
 ## Claude Cowork
 - Final real-browser UAT: PASS WITH NOTES.

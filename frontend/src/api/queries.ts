@@ -1032,6 +1032,9 @@ export interface CanonicalLiveItem {
   risk_flags?: string[];
   sizing?: Record<string, unknown> | null;
   selected_contract?: Record<string, unknown> | null;
+  data_quality?: string | null;
+  data_freshness?: Record<string, unknown> | null;
+  event_risk?: Record<string, unknown> | null;
   manual_only: boolean;
   authoritative: boolean;
   recommended_by: string;
@@ -1040,7 +1043,8 @@ export interface CapitalSetSafety {
   per_suggestion_not_additive: boolean;
   note_code: string;
   total_capital_required_displayed: number;
-  available_cash: number;
+  available_cash: number | null;
+  cash_known?: boolean;
   cash_buffer_pct: number;
   cash_buffer_amount: number;
   deployable_capital: number;
@@ -1050,13 +1054,16 @@ export interface CapitalSetSafety {
 }
 export interface AuthoritativeRecommendations {
   decision_source: string;
+  status?: string;
   manual_only: boolean;
+  active_profile?: string;
   profile?: Record<string, unknown> | null;
   as_of_utc?: string | null;
   actionable: CanonicalLiveItem[];
   watch: CanonicalLiveItem[];
   blocked: CanonicalLiveItem[];
   stay_in_cash?: Record<string, unknown> | null;
+  reason_codes?: string[];
   counts?: Record<string, number> | null;
 }
 export interface ActionNeededResponse {

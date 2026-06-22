@@ -59,8 +59,21 @@ class RefreshHistoryStore:
             "reason_codes": list(reason_codes),
         }
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self._path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, sort_keys=True) + "\n")
+        # Atomic append: read existing content, append the new record, then write
+        # the whole file via temp + fsync + os.replace. This makes the history
+        # mutation a single atomic replacement so an interruption can never leave
+        # a torn trailing line, and pairs with the cross-process refresh lock.
+        from app.core.universe.refresh_lock import atomic_write_text
+
+        existing = ""
+        if self._path.exists():
+            try:
+                existing = self._path.read_text(encoding="utf-8")
+            except OSError:
+                existing = ""
+        if existing and not existing.endswith("\n"):
+            existing += "\n"
+        atomic_write_text(self._path, existing + json.dumps(record, sort_keys=True) + "\n")
         return record
 
     def read_recent(self, limit: int = 20) -> List[Dict[str, Any]]:

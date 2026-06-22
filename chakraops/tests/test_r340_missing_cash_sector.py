@@ -110,14 +110,26 @@ def test_covered_call_proceeds_without_cash() -> None:
     assert "AAPL" in _actionable_symbols(res)
 
 
-def test_sector_concentration_unavailable_is_surfaced() -> None:
+def test_sector_unavailable_blocks_incremental_csp() -> None:
+    # ZZZZ has no approved sector mapping -> incremental CSP exposure is BLOCKED,
+    # never silently sized past the sector cap.
+    art = _build(["ZZZZ"], strategy="CSP")
+    res = compute_live_recommendations(
+        art, profile_name="balanced", portfolio=PortfolioState(total_value=1_000_000.0, available_cash=500_000.0), now=NOW
+    )
+    assert "ZZZZ" not in _actionable_symbols(res)
+    blocked = [b for b in res["recommendations"]["blocked"] if b["symbol"] == "ZZZZ"]
+    assert blocked
+    assert "SECTOR_DATA_UNAVAILABLE" in blocked[0]["reason_codes"]
+
+
+def test_known_sector_csp_is_actionable() -> None:
+    # AAPL maps to a known sector with no existing exposure -> below cap -> allowed.
     art = _build(["AAPL"], strategy="CSP")
     res = compute_live_recommendations(
         art, profile_name="balanced", portfolio=PortfolioState(total_value=1_000_000.0, available_cash=500_000.0), now=NOW
     )
-    item = res["recommendations"]["actionable"][0]
-    # Sector data is unavailable -> explicitly flagged, never silently ignored.
-    assert "SECTOR_UNKNOWN" in item["risk_flags"]
+    assert "AAPL" in _actionable_symbols(res)
 
 
 def test_aggregate_displayed_capital_present() -> None:

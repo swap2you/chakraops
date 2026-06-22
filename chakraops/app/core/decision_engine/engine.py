@@ -95,6 +95,12 @@ def evaluate_candidate(
     if not ok:
         return _blocked(inp, profile.name, r, freshness_payload)
 
+    # Sector cap: incremental cash-consuming exposure must not bypass the sector
+    # limit, and unavailable sector data blocks rather than silently proceeds.
+    ok, r = G.sector_gate(inp, profile, portfolio)
+    if not ok:
+        return _blocked(inp, profile.name, r, freshness_payload)
+
     cash_buffer_amount = portfolio.total_value * profile.cash_buffer_pct / 100.0
     available_after_buffer = max(0.0, portfolio.available_cash - cash_buffer_amount)
     ok, r = G.cash_gate(inp, profile, available_after_buffer)

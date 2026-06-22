@@ -40,14 +40,19 @@ class OratsDataUnavailableError(OratsAuthError):
         response_snippet: Optional[str] = None,
         message: Optional[str] = None,
     ) -> None:
+        from app.core.security.redact import redact_secrets
+
         self.endpoint = endpoint
         self.symbol = symbol
         self.http_status = http_status
-        self.response_snippet = (response_snippet or "")[:500]
+        # Sanitize the snippet at construction so the stored attribute and the
+        # exception message can never carry a token, regardless of caller.
+        raw = (response_snippet or "")[:500]
+        self.response_snippet = redact_secrets(raw) if raw else ""
         msg = message or f"ORATS {endpoint} symbol={symbol} HTTP {http_status}"
         if self.response_snippet:
             msg += f" — {self.response_snippet[:200]}"
-        super().__init__(http_status, msg)
+        super().__init__(http_status, redact_secrets(msg))
 
 
 def _get_token() -> Optional[str]:
@@ -79,8 +84,17 @@ def _get(
             resp = session.get(url, params=params, timeout=timeout)
         except requests.RequestException as e:
             from app.core.security.redact import redact_secrets
-            logger.warning("ORATS request failed: %s", redact_secrets(e))
-            raise
+            safe = redact_secrets(e)
+            logger.warning("ORATS request failed: %s", safe)
+            # Never bare-rethrow: the original RequestException carries the
+            # token-bearing URL. Wrap with a sanitized message and drop the
+            # token-bearing cause chain (`from None`).
+            raise OratsDataUnavailableError(
+                endpoint=path.split("?")[0],
+                symbol=(params.get("ticker") or "").upper(),
+                http_status=0,
+                message=f"ORATS request failed: {safe}",
+            ) from None
 
         if resp.status_code in (401, 403):
             logger.warning("ORATS auth failed: HTTP %s", resp.status_code)
@@ -111,8 +125,9 @@ def _get(
             )
 
         if resp.status_code != 200:
+            from app.core.security.redact import redact_secrets
             body_preview = (resp.text or "")[:200]
-            logger.warning("ORATS HTTP %s: %s", resp.status_code, body_preview)
+            logger.warning("ORATS HTTP %s: %s", resp.status_code, redact_secrets(body_preview))
             raise OratsDataUnavailableError(
                 endpoint=path.split("?")[0],
                 symbol=(params.get("ticker") or "").upper(),
@@ -123,8 +138,10 @@ def _get(
         try:
             return resp.json()
         except ValueError as e:
-            logger.warning("ORATS invalid JSON: %s", e)
-            raise ValueError(f"ORATS API returned invalid JSON: {e}") from e
+            from app.core.security.redact import redact_secrets
+            safe = redact_secrets(e)
+            logger.warning("ORATS invalid JSON: %s", safe)
+            raise ValueError(f"ORATS API returned invalid JSON: {safe}") from None
 
     raise last_exc or ValueError("ORATS request failed")
 

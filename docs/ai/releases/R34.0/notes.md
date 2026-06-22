@@ -90,6 +90,44 @@ Modified:
 - Cowork: browser UAT pending (see UAT checklist).
 - Codex: PENDING (quota).
 
+## Final cutover pass — R34.0 COMPLETE (2026-06-22)
+
+This pass completes the remaining R34 work and closes H-5. It supersedes the
+"staged / deferred" notes above for the required Phase 7 items.
+
+Delivered:
+- **Transaction-safe weekly refresh** — one cross-process lock spanning idempotency →
+  snapshot → overlay → history → completion; atomic temp-file writes (flush+fsync+`os.replace`);
+  journal-based deterministic recovery; rollback/recovery failure raises
+  `WeeklyRefreshCriticalError`; admin route returns controlled APPLIED/SKIPPED_IDEMPOTENT/
+  FAILED/CRITICAL status. New `app/core/universe/refresh_lock.py`; tests
+  `test_r340_weekly_refresh_transaction.py`. See `out/verification/R34.0/weekly_refresh_transaction.md`.
+- **Complete ORATS redaction** — sanitized at exception construction; `RequestException`
+  wrapped (`from None`, no bare token-bearing rethrow); bodies/snippets/headers/diagnostics/
+  boot-probe/HTTP errors redacted. Tests `test_r340_orats_redaction_complete.py`; secret scan
+  0 hits in tracked code + evidence. See `out/verification/R34.0/secret_redaction.md`.
+- **Live sector enforcement** — symbol→sector + existing sector exposure from portfolio;
+  profile caps enforced; incremental CSP/share-buy BLOCKED when sector unavailable; existing-share
+  covered calls flagged `SECTOR_DATA_UNAVAILABLE_EXISTING_POSITION`. Tests
+  `test_r340_sector_enforcement.py`. See `out/verification/R34.0/sector_enforcement.md`.
+- **Rendered canonical cutover** — `AuthoritativeRecommendations` is the Dashboard/Today primary;
+  legacy `top_options`/`top_shares` demoted to a collapsed `Diagnostics — non-authoritative legacy
+  output`; Symbol Diagnostics renders the canonical decision primary with a NOT-EVALUATED/Recompute
+  empty state. Page tests `DashboardPage.canonical.test.tsx`, `TodayPage.canonical.test.tsx`,
+  `SymbolDiagnosticsPage.canonical.test.tsx`. See `out/verification/R34.0/rendered_canonical_cutover.md`.
+- **Frontend correctness** — shared-table `<tr>`-in-`<tr>` DOM fix (`Table.dom.test.tsx`),
+  Backtest SIMULATION label (`BacktestPage.simulation.test.tsx`), positions pagination
+  (`PositionsPage.test.tsx`), navigation grouping (`Sidebar.test.tsx`).
+
+Gates (final pass): backend **1200 passed / 1 skipped**; frontend **334 passed / 18 skipped**;
+build **PASS** (only pre-existing chunk-size + dynamic/static-import warnings, deferred post-R35);
+secret scan **0 hits**.
+
+**H-5 CLOSED** after rendered-UI cutover page tests passed.
+
+Out of R34 scope (post-R35): drag-and-drop dashboard, broad visual redesign, physical deletion of
+legacy modules, extensive bundle architecture, multi-user DB architecture.
+
 ## UAT preparation checklist
 
 1. Start backend + frontend locally; confirm `.env` ORATS token present (not committed).

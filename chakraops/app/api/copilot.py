@@ -322,7 +322,8 @@ def _get_system_health_for_copilot() -> Dict[str, Any]:
         out["orats"]["freshness_state"] = fresh.get("state")
         out["orats"]["freshness_label"] = fresh.get("state_label")
     except Exception as e:
-        out["orats"] = {"status": "DOWN", "error": str(e)}
+        from app.core.security.redact import redact_secrets
+        out["orats"] = {"status": "DOWN", "error": redact_secrets(str(e))}
     try:
         from app.market.market_hours import get_market_phase
         out["market"]["phase"] = get_market_phase() or "UNKNOWN"

@@ -803,6 +803,14 @@ export interface SymbolDiagnosticsExplanation {
 }
 
 export interface SymbolDiagnosticsResponseExtended extends SymbolDiagnosticsResponse {
+  /** R34.0 (H-5 cutover): canonical authoritative decision for this symbol. */
+  canonical_decision?: import("@/api/queries").CanonicalLiveItem | null;
+  /** R34.0: "OK" when canonical_decision is authoritative; else "UNAVAILABLE". */
+  canonical_status?: string | null;
+  /** R34.0: decision source identifier (canonical_decision_engine[...unavailable]). */
+  decision_source?: string | null;
+  /** R34.0: active strategy profile used by the canonical engine. */
+  active_profile?: string | null;
   symbol_eligibility?: SymbolEligibilityDetail;
   liquidity?: SymbolLiquidityDetail;
   /** Phase 7.3: Structured explanation. */

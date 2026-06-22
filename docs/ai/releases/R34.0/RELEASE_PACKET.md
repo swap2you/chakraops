@@ -191,6 +191,13 @@ Phase 6 — frontend correctness:
 
 Governance/evidence (authorized for edit): `docs/ai/releases/R34.0/{STATUS,TOOL_LOG,RELEASE_PACKET}.md`, `docs/ai/releases/R32.0/{STATUS,TOOL_LOG}.md`, `docs/ai/PROGRAM_STATUS.md`, `docs/master/CURRENT_STATE.md`, `docs/master/R31.0_DEFECT_AND_GAP_REGISTER.md`, `chakraops/docs/releases/{R34.0_requirements,R34.0_release_notes,RELEASE_CHECKLIST}.md`, `out/verification/R34.0/*` (local ignored).
 
+### Implementation reconciliation (2026-06-22c) — as-built within authorized scope
+- Phase 5 backend: `canonical_decision`/`canonical_status`/`decision_source`/`active_profile` are populated by a new helper `_canonical_decision_for_symbol` in `chakraops/app/api/server.py` (already an authorized ORATS-redaction path; fail-closed UNAVAILABLE on any error). NEW test `frontend/src/pages/SymbolDiagnosticsPage.canonical.test.tsx`.
+- Phase 6 DOM fix: implemented centrally in the shared `frontend/src/components/ui/Table.tsx` (`TableHeader` no longer double-wraps `<tr>`), which fixes every shared-table consumer (Portfolio, Positions, Reports, Backtest, Journal, Universe Admin) without per-page edits. NEW test `frontend/src/components/ui/Table.dom.test.tsx`.
+- Phase 6 new tests: `frontend/src/pages/BacktestPage.simulation.test.tsx`, positions-pagination cases in `frontend/src/pages/PositionsPage.test.tsx`, nav-grouping case in `frontend/src/layout/Sidebar.test.tsx`.
+- Frontend reason-label safety: NEW `frontend/src/utils/reasonLabels.ts` (translates canonical reason/risk codes to safe operator labels; strips raw FAIL_/WARN_/PASS).
+- Evidence (local ignored): `out/verification/R34.0/{notes,changed_files,weekly_refresh_transaction,secret_redaction,sector_enforcement,rendered_canonical_cutover,frontend_uat_plan}.md`, `{backend,frontend,build}.log`.
+
 ### Approved for post-R35 enhancement (NOT required for R34)
 Drag-and-drop dashboard customization; broad visual redesign; physical deletion of all legacy modules; extensive bundle architecture beyond low-risk improvements; advanced multi-user database architecture.
 

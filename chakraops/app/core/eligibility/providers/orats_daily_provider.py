@@ -160,16 +160,18 @@ class OratsDailyProvider:
             return []
 
         if resp.status_code != 200:
+            from app.core.security.redact import redact_secrets
             logger.error(
                 "[ORATS_DAILY] symbol=%s HTTP %s %s",
-                sym, resp.status_code, (resp.text or "")[:300],
+                sym, resp.status_code, redact_secrets((resp.text or "")[:300]),
             )
             return []
 
         try:
             raw: Any = resp.json()
         except Exception as e:
-            logger.error("[ORATS_DAILY] symbol=%s invalid JSON: %s", sym, e)
+            from app.core.security.redact import redact_secrets
+            logger.error("[ORATS_DAILY] symbol=%s invalid JSON: %s", sym, redact_secrets(e))
             return []
 
         rows: List[Dict[str, Any]] = []

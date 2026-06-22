@@ -1025,7 +1025,7 @@ No code, UI, ORATS, scheduler, database, runtime, brokerage, deployment, or work
 
 ---
 
-### R34.0 — Canonical live cutover + consolidated R32–R34 blocker remediation (program R31–R35, milestone 4) — INCOMPLETE / REMEDIATION ACTIVE
+### R34.0 — Canonical live cutover + consolidated R32–R34 blocker remediation (program R31–R35, milestone 4) — COMPLETE (pending final external validation)
 
 - [x] Phase 0 — corrected R33 overclaims, recorded Claude BLOCKED, reassigned H-5 to R34 (commit c82b353)
 - [x] Requirements — `R34.0_requirements.md`; Release notes — `R34.0_release_notes.md`
@@ -1045,12 +1045,17 @@ No code, UI, ORATS, scheduler, database, runtime, brokerage, deployment, or work
 - [x] Phase 2 — ORATS credential log redaction (`app/core/security/redact.py` wired through ORATS request/log/exception + data-health/boot/503) — `test_r340_orats_log_redaction.py` (FAKE token)
 - [x] Phase 3 — fail-closed canonical computation (`ui_action_needed`, `_attach_canonical_decision`, `/api/view/daily-overview`; no false canonical authority; reason codes) — `test_r340_canonical_failclosed.py`
 - [x] Phase 4 — missing-cash/sector safety (no equity→cash inference; cash-strategies blocked when cash unknown; sector unavailability flagged) — `test_r340_missing_cash_sector.py`
-- [x] Gate (latest) — Backend 1169 passed/1 skipped; Frontend 315 passed/18 skipped; Build PASS. Evidence: `out/verification/R34.0/`
-- [ ] STAGED (NOT done): Phase 5 rendered visual cutover (Dashboard/Today/Symbol render canonical primary + WATCH/BLOCKED/STAY_IN_CASH) and Phase 6 product scope (nav, portfolio, universe/data-health, backtest, journal/reports, frontend-quality M-13/nested-table)
-- [ ] H-5 — OPEN; close only after rendered-UI cutover tests pass
-- [ ] Review / sign-off — Codex re-review + Claude re-review + real-browser Cowork UAT pending; no approvals claimed
+- [x] Final Phase 1 — **transaction-safe** weekly refresh (cross-process lock `app/core/universe/refresh_lock.py`; atomic overlay/history writes flush+fsync+`os.replace`; journal recovery; `WeeklyRefreshCriticalError`; admin route controlled status) — `test_r340_weekly_refresh_transaction.py`
+- [x] Final Phase 2 — **complete** ORATS redaction (sanitized at exception construction; `RequestException` wrapped `from None`, no bare token rethrow; bodies/snippets/headers/diagnostics/boot-probe/HTTP errors redacted) — `test_r340_orats_redaction_complete.py`; secret scan 0 hits
+- [x] Final Phase 3 — **live sector enforcement** (symbol→sector + exposure from portfolio; profile caps; BLOCK incremental CSP/share-buy when sector unavailable; existing-share CC flagged `SECTOR_DATA_UNAVAILABLE_EXISTING_POSITION`) — `test_r340_sector_enforcement.py`
+- [x] Final Phase 4 — **rendered** canonical cutover (Dashboard/Today render `AuthoritativeRecommendations` primary; legacy demoted to collapsed diagnostics) — `DashboardPage.canonical.test.tsx`, `TodayPage.canonical.test.tsx`
+- [x] Final Phase 5 — Symbol Diagnostics canonical primary + NOT-EVALUATED/Recompute empty state (backend `_canonical_decision_for_symbol`; no raw codes) — `SymbolDiagnosticsPage.canonical.test.tsx`
+- [x] Final Phase 6 — shared-table `<tr>` DOM fix (`Table.tsx`) — `Table.dom.test.tsx`; Backtest SIMULATION label — `BacktestPage.simulation.test.tsx`; positions pagination — `PositionsPage.test.tsx`; nav grouping — `Sidebar.test.tsx`
+- [x] Gate (final) — Backend 1200 passed/1 skipped; Frontend 334 passed/18 skipped; Build PASS; secret scan 0 hits. Evidence: `out/verification/R34.0/`
+- [x] H-5 — **CLOSED** after rendered-UI cutover page tests passed
+- [ ] Review / sign-off — final Codex re-review + Claude re-review + real-browser Cowork UAT pending; no approvals claimed
 
-**Scope:** Closed the consolidated R32–R34 safety/security/correctness blockers (operational weekly refresh, ORATS log redaction, canonical **fail-closed** at API/data layer, missing-cash/sector safety) + persistence decision (RETAIN). Manual-only; no order routing; no broker; no silent fallback. **R34 is NOT complete:** Phase 5 (rendered cutover) and Phase 6 (product scope) remain; **H-5 OPEN**.
+**Scope:** R34.0 COMPLETE — transaction-safe weekly refresh, complete ORATS application-path redaction, live sector enforcement, rendered canonical cutover (Dashboard/Today/Symbol), shared-table DOM fix, SIMULATION label, navigation grouping, positions pagination; all gate-verified. Manual-only; no order routing; no broker; no silent fallback. **H-5 CLOSED.** Post-R35 enhancements (drag-and-drop, broad redesign, physical legacy-module deletion, bundle architecture, multi-user DB) explicitly out of scope. Awaiting final Claude/Codex/Cowork validation before R35.0.
 
 ---
 

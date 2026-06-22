@@ -55,14 +55,20 @@ def _load_overlay() -> Dict[str, Any]:
 
 
 def _save_overlay(overlay: Dict[str, Any]) -> None:
-    """Write overlay to file. Deterministic: added and removed sorted A-Z. Caller holds _LOCK if needed."""
+    """Write overlay to file atomically. Deterministic: added/removed sorted A-Z.
+
+    Uses a temp-file write with flush + fsync + ``os.replace`` so a concurrent
+    reader (or an interruption between writes) never observes a torn overlay.
+    Caller holds ``_LOCK`` if needed.
+    """
+    from app.core.universe.refresh_lock import atomic_write_json
+
     path = _overlay_path()
     now = datetime.now(timezone.utc).isoformat()
     added = sorted(set(s for s in (overlay.get("added") or []) if str(s).strip()))
     removed = sorted(set(s for s in (overlay.get("removed") or []) if str(s).strip()))
     payload = {"added": added, "removed": removed, "updated_at": now}
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2)
+    atomic_write_json(path, payload)
 
 
 def validate_symbol(symbol: str) -> Tuple[bool, str]:

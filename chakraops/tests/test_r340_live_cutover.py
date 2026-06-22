@@ -163,7 +163,9 @@ def test_manual_only_label_present_everywhere() -> None:
 
 
 def test_top_actionable_capped_to_profile_5_to_7() -> None:
-    symbols = [f"SYM{i}" for i in range(20)]
+    # Use real known-sector symbols so the R34 sector gate does not block them
+    # (synthetic symbols have no approved sector mapping and are blocked).
+    symbols = ["AAPL", "AMD", "AVGO", "CRM", "CRWD", "GOOGL", "META", "MRVL", "MSFT", "MU", "NVDA", "ORCL", "SNOW", "TSM"]
     art = _build_artifact(symbols, as_of=NOW.isoformat())
     res = compute_live_recommendations(art, profile_name="balanced", portfolio=_portfolio(), now=NOW)
     shown = res["recommendations"]["actionable"]
@@ -177,7 +179,7 @@ def test_top_actionable_capped_to_profile_5_to_7() -> None:
 
 
 def test_capital_set_safety_warns_when_combined_exceeds_deployable() -> None:
-    symbols = [f"SYM{i}" for i in range(7)]
+    symbols = ["AAPL", "AMD", "AVGO", "CRM", "CRWD", "GOOGL", "META"]
     art = _build_artifact(symbols, as_of=NOW.isoformat())
     # Small cash: each CSP needs strike*100*contracts collateral; combined set exceeds deployable.
     res = compute_live_recommendations(

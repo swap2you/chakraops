@@ -50,6 +50,23 @@ _STRATEGY_MAP: Dict[str, str] = {
 LIQUIDITY_VALIDATED_UPSTREAM = "LIQUIDITY_VALIDATED_UPSTREAM"
 
 
+def _sector_for(symbol: str) -> Optional[str]:
+    """Map a symbol to its sector from approved local company metadata.
+
+    Returns ``None`` when the sector is unknown so the canonical engine can apply
+    its safe sector policy (block incremental exposure) rather than guessing.
+    """
+    try:
+        from app.core.market.company_data import get_company_metadata
+
+        meta = get_company_metadata(symbol)
+        sector = (meta or {}).get("sector") if meta else None
+        sector = (sector or "").strip()
+        return sector or None
+    except Exception:
+        return None
+
+
 def _g(obj: Any, key: str, default: Any = None) -> Any:
     """Read ``key`` from a dataclass-like object or a dict."""
     if obj is None:
@@ -198,7 +215,7 @@ def build_decision_inputs_from_artifact(
                 earnings_days=int(earnings_days) if earnings_days is not None else None,
                 contract=contract,
                 shares_held=int(shares_by_symbol.get(symbol, 0) or 0),
-                sector=None,
+                sector=_sector_for(symbol),
             )
         )
         if prov:
@@ -248,10 +265,19 @@ def portfolio_state_from_metrics(
         # Fail-closed: unknown cash => not deployable. Do NOT infer from equity.
         available_cash = 0.0
     symbol_exposure = dict(metrics.get("symbol_notionals") or snapshot.get("symbol_notionals") or {})
+    clean_symbol_exposure = {k: float(v) for k, v in symbol_exposure.items() if v is not None}
+    # Derive existing sector exposure from the portfolio's per-symbol notionals so
+    # the sector cap is enforced against live holdings (not silently skipped).
+    sector_exposure: Dict[str, float] = {}
+    for sym, val in clean_symbol_exposure.items():
+        sec = _sector_for(sym)
+        if sec:
+            sector_exposure[sec] = sector_exposure.get(sec, 0.0) + float(val)
     return PortfolioState(
         total_value=float(total_value or 0.0),
         available_cash=float(available_cash or 0.0),
-        symbol_exposure={k: float(v) for k, v in symbol_exposure.items() if v is not None},
+        symbol_exposure=clean_symbol_exposure,
+        sector_exposure=sector_exposure,
     )
 
 

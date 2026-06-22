@@ -162,10 +162,75 @@ def compute_weekly_universe(
 # Outcome codes (code-only labels) for the operational refresh.
 OUTCOME_APPLIED = "APPLIED"
 OUTCOME_SKIPPED_IDEMPOTENT = "SKIPPED_IDEMPOTENT"
+OUTCOME_DRY_RUN = "DRY_RUN"
+
+# Transaction name shared by the cross-process lock + journal.
+_TXN_NAME = "weekly_refresh"
 
 
 class WeeklyRefreshError(RuntimeError):
-    """Raised when an operational refresh fails to apply or record atomically."""
+    """Raised when an operational refresh fails to apply or record atomically.
+
+    Recoverable: the overlay was rolled back to its pre-transaction snapshot, so
+    the universe is left in a consistent (pre-refresh) state.
+    """
+
+
+class WeeklyRefreshCriticalError(WeeklyRefreshError):
+    """Rollback or recovery itself failed; the system may be inconsistent.
+
+    The transaction journal is intentionally preserved as evidence and to allow
+    a subsequent run to attempt deterministic recovery. Requires operator
+    attention — never silently swallowed.
+    """
+
+
+def _recover_pending_transaction(store: Any, *, restore_overlay: Any) -> Optional[Dict[str, Any]]:
+    """Reconcile an interrupted transaction from the journal (caller holds lock).
+
+    Determinism rule: the history append is the single commit point.
+    * If the history already contains a record for the journaled week, the
+      transaction had effectively committed -> clear the journal.
+    * Otherwise the overlay may be partially applied -> roll it back to the
+      pre-transaction snapshot recorded in the journal, then clear the journal.
+    A failed rollback raises :class:`WeeklyRefreshCriticalError` and preserves
+    the journal as evidence.
+    """
+    from app.core.universe.refresh_lock import clear_journal, journal_path, read_journal
+
+    journal = read_journal(_TXN_NAME)
+    if not journal:
+        return None
+    week = journal.get("week_id")
+    prev_overlay = journal.get("prev_overlay") or {"added": [], "removed": []}
+    last = store.last()
+    if last and last.get("week_id") == week:
+        clear_journal(_TXN_NAME)
+        return {"recovered": "COMMITTED", "week_id": week}
+    try:
+        restore_overlay(prev_overlay)
+    except Exception as e:
+        raise WeeklyRefreshCriticalError(
+            f"weekly refresh recovery rollback failed for week {week}; journal "
+            f"preserved at {journal_path(_TXN_NAME)}: {e}"
+        ) from e
+    clear_journal(_TXN_NAME)
+    return {"recovered": "ROLLED_BACK", "week_id": week}
+
+
+def recover_pending_transaction(history_store: Optional[Any] = None) -> Optional[Dict[str, Any]]:
+    """Public, lock-guarded recovery of an interrupted refresh transaction.
+
+    Safe to call at admin-route entry or startup. Returns ``None`` when there is
+    nothing to recover.
+    """
+    from app.core.universe.refresh_history_store import RefreshHistoryStore
+    from app.core.universe.refresh_lock import cross_process_lock
+    from app.core.universe.universe_overrides import restore_overlay
+
+    store = history_store or RefreshHistoryStore()
+    with cross_process_lock(_TXN_NAME):
+        return _recover_pending_transaction(store, restore_overlay=restore_overlay)
 
 
 def apply_weekly_universe_refresh(
@@ -180,23 +245,33 @@ def apply_weekly_universe_refresh(
 ) -> Dict[str, Any]:
     """Operationally apply the deterministic weekly universe (R34.0).
 
-    Pipeline: compute -> idempotency check (week id) -> apply to the canonical
-    overlay store -> append exactly one history record. The apply and the record
-    are coupled atomically: if the history append fails the applied overlay is
-    rolled back, so a partially-applied universe is never left behind.
+    Transaction-safe pipeline, executed under a single cross-process lock that
+    covers the whole unit of work (recovery -> idempotency check -> snapshot ->
+    overlay update -> history update -> completion):
+
+    1. Recover any prior interrupted transaction from the journal.
+    2. Idempotency: skip if a record for this ISO week already exists.
+    3. Snapshot the overlay and write a transaction journal *before* mutating.
+    4. Apply the deterministic universe to the canonical overlay (atomic write).
+    5. Append exactly one history record (atomic write) — the commit point.
+    6. Clear the journal.
+
+    If the overlay apply or the history append fails, the overlay is rolled back
+    to the pre-transaction snapshot. A failed rollback raises
+    :class:`WeeklyRefreshCriticalError` and preserves the journal as evidence —
+    it is never ignored. Concurrent same-week callers produce exactly one applied
+    refresh and one history record; the rest observe ``SKIPPED_IDEMPOTENT``.
 
     Does NOT run automatically; R35 owns scheduling. Intended for a controlled
     manual/admin trigger.
-
-    Parameters
-    ----------
-    as_of: reference date (defaults to today, UTC).
-    manifest: universe manifest (defaults to the configured manifest).
-    base_symbols: CSV base universe (defaults to the canonical base).
-    history_store: ``RefreshHistoryStore`` (defaults to the canonical store).
-    dry_run: compute + diff only; never mutates the overlay or history.
     """
     from app.core.universe.refresh_history_store import RefreshHistoryStore
+    from app.core.universe.refresh_lock import (
+        clear_journal,
+        cross_process_lock,
+        journal_path,
+        write_journal,
+    )
     from app.core.universe.universe_overrides import (
         apply_effective_universe,
         restore_overlay,
@@ -207,72 +282,109 @@ def apply_weekly_universe_refresh(
     store = history_store or RefreshHistoryStore()
     week = iso_week_id(as_of)
 
-    last = store.last()
-    if last and last.get("week_id") == week:
-        # Idempotent: a record for this ISO week already exists. Do not re-apply
-        # and do not append a duplicate weekly record.
-        return {
-            "outcome": OUTCOME_SKIPPED_IDEMPOTENT,
-            "week_id": week,
-            "reason_codes": ["ALREADY_REFRESHED_THIS_WEEK"],
-            "record": last,
-            "applied_added": [],
-            "applied_removed": [],
+    with cross_process_lock(_TXN_NAME):
+        # (1) Reconcile any interrupted prior transaction first.
+        _recover_pending_transaction(store, restore_overlay=restore_overlay)
+
+        # (2) Idempotency check (inside the lock so it is race-free).
+        last = store.last()
+        if last and last.get("week_id") == week:
+            return {
+                "outcome": OUTCOME_SKIPPED_IDEMPOTENT,
+                "week_id": week,
+                "reason_codes": ["ALREADY_REFRESHED_THIS_WEEK"],
+                "record": last,
+                "applied_added": [],
+                "applied_removed": [],
+            }
+
+        if manifest is None:
+            from app.core.universe.universe_manager import load_universe_manifest
+
+            manifest = load_universe_manifest()
+        if base_symbols is None:
+            from app.api.data_health import get_base_universe_symbols
+
+            base_symbols = get_base_universe_symbols()
+
+        previous_symbols = list(last.get("symbols")) if last else None
+        result = compute_weekly_universe(manifest, as_of, previous_symbols=previous_symbols)
+
+        if dry_run:
+            return {
+                "outcome": OUTCOME_DRY_RUN,
+                "week_id": result.week_id,
+                "result": result.to_dict(),
+                "applied_added": [],
+                "applied_removed": [],
+                "record": None,
+            }
+
+        # (3) Snapshot + journal BEFORE any mutation, so recovery can roll back.
+        prev_overlay = snapshot_overlay()
+        journal_payload = {
+            "week_id": result.week_id,
+            "phase": "apply",
+            "prev_overlay": {
+                "added": list(prev_overlay.get("added") or []),
+                "removed": list(prev_overlay.get("removed") or []),
+            },
+            "target_symbols": list(result.symbols),
+            "source": source,
+            "started_at": datetime.now(timezone.utc).isoformat(),
         }
+        write_journal(_TXN_NAME, journal_payload)
 
-    if manifest is None:
-        from app.core.universe.universe_manager import load_universe_manifest
+        # (4) Apply the overlay (atomic). Roll back on any failure.
+        try:
+            applied_added, applied_removed = apply_effective_universe(result.symbols, base_symbols)
+        except Exception as e:
+            try:
+                restore_overlay(prev_overlay)
+            except Exception as re:
+                raise WeeklyRefreshCriticalError(
+                    f"weekly refresh apply failed AND overlay rollback failed; "
+                    f"journal preserved at {journal_path(_TXN_NAME)}: "
+                    f"apply={e}; rollback={re}"
+                ) from re
+            clear_journal(_TXN_NAME)
+            raise WeeklyRefreshError(f"weekly refresh apply failed: {e}") from e
 
-        manifest = load_universe_manifest()
-    if base_symbols is None:
-        from app.api.data_health import get_base_universe_symbols
+        # (5) Commit: append exactly one history record (atomic).
+        journal_payload["phase"] = "history"
+        write_journal(_TXN_NAME, journal_payload)
+        try:
+            record = store.append(
+                week_id=result.week_id,
+                symbols=result.symbols,
+                reason_codes=result.reason_codes,
+                added=result.added,
+                removed=result.removed,
+                source=source,
+                run_at=run_at,
+            )
+        except Exception as e:
+            try:
+                restore_overlay(prev_overlay)
+            except Exception as re:
+                # Rollback failure is NEVER ignored: raise critical + keep journal.
+                raise WeeklyRefreshCriticalError(
+                    f"weekly refresh history append failed AND overlay rollback "
+                    f"failed; journal preserved at {journal_path(_TXN_NAME)}: "
+                    f"append={e}; rollback={re}"
+                ) from re
+            clear_journal(_TXN_NAME)
+            raise WeeklyRefreshError(
+                f"weekly refresh history append failed (overlay rolled back): {e}"
+            ) from e
 
-        base_symbols = get_base_universe_symbols()
-
-    previous_symbols = list(last.get("symbols")) if last else None
-    result = compute_weekly_universe(manifest, as_of, previous_symbols=previous_symbols)
-
-    if dry_run:
+        # (6) Completion.
+        clear_journal(_TXN_NAME)
         return {
-            "outcome": "DRY_RUN",
+            "outcome": OUTCOME_APPLIED,
             "week_id": result.week_id,
             "result": result.to_dict(),
-            "applied_added": [],
-            "applied_removed": [],
-            "record": None,
+            "applied_added": applied_added,
+            "applied_removed": applied_removed,
+            "record": record,
         }
-
-    prev_overlay = snapshot_overlay()
-    try:
-        applied_added, applied_removed = apply_effective_universe(result.symbols, base_symbols)
-    except Exception as e:  # fail-loud; nothing recorded
-        raise WeeklyRefreshError(f"weekly refresh apply failed: {e}") from e
-
-    try:
-        record = store.append(
-            week_id=result.week_id,
-            symbols=result.symbols,
-            reason_codes=result.reason_codes,
-            added=result.added,
-            removed=result.removed,
-            source=source,
-            run_at=run_at,
-        )
-    except Exception as e:
-        # Roll back the applied overlay so the universe is never partially applied.
-        try:
-            restore_overlay(prev_overlay)
-        except Exception:
-            pass
-        raise WeeklyRefreshError(
-            f"weekly refresh history append failed (overlay rolled back): {e}"
-        ) from e
-
-    return {
-        "outcome": OUTCOME_APPLIED,
-        "week_id": result.week_id,
-        "result": result.to_dict(),
-        "applied_added": applied_added,
-        "applied_removed": applied_removed,
-        "record": record,
-    }

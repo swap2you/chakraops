@@ -1,6 +1,6 @@
 # Current State — ChakraOps
 
-_Last updated: consolidated R32–R34 Codex BLOCKED remediated (weekly-refresh operationalized, ORATS log redaction, canonical fail-closed, missing-cash/sector) + gate-verified; R34 INCOMPLETE — rendered visual cutover + product scope staged; H-5 OPEN (program R31–R35)_
+_Last updated: R34.0 COMPLETE — final cutover pass gate-verified (transaction-safe weekly refresh, complete ORATS redaction, live sector enforcement, rendered canonical cutover, table DOM fix, SIMULATION label, positions pagination, nav grouping); **H-5 CLOSED**; awaiting final Claude/Codex/Cowork validation before R35 (program R31–R35)_
 
 ## Release Status
 
@@ -10,7 +10,7 @@ _Last updated: consolidated R32–R34 Codex BLOCKED remediated (weekly-refresh o
 | Tag | `chakraops-r30.7.0` |
 | Current branch | `release/R31-R35-program` |
 | Current mode | Program R31–R35 (single branch, five milestone commits, one final PR) |
-| Active milestone | R34.0 — INCOMPLETE / REMEDIATION ACTIVE. Consolidated Codex R32–R34 **BLOCKED** remediated + gate-verified: weekly-refresh operationalized, ORATS log redaction, canonical **fail-closed** (API/data layer), missing-cash/sector safety, persistence RETAIN. STAGED (not done): Phase 5 rendered visual cutover (Dashboard/Today/Symbol) + Phase 6 product scope. **H-5 OPEN** until rendered-UI cutover tests pass |
+| Active milestone | R34.0 — COMPLETE (pending final external validation). Final cutover pass delivered + gate-verified (backend 1200/1; frontend 334/18; build PASS; secret scan 0 hits): transaction-safe weekly refresh (cross-process lock + journal recovery), complete ORATS application-path redaction, live sector enforcement, **rendered** canonical cutover (Dashboard/Today/Symbol render canonical primary; legacy demoted to collapsed diagnostics), shared-table DOM fix, Backtest SIMULATION label, positions pagination, navigation grouping. **H-5 CLOSED**. Post-R35 enhancements (drag-and-drop, broad redesign, legacy physical retirement, bundle architecture, multi-user DB) explicitly out of scope |
 | Prior milestone | R33.0 — canonical decision engine implemented + tested |
 
 ## R31.0 Validation Gates (audit milestone)

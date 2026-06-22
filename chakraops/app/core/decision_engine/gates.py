@@ -149,6 +149,29 @@ def holdings_gate(inp: DecisionInput) -> Tuple[bool, List[str]]:
     return (True, [])
 
 
+def sector_gate(inp: DecisionInput, profile: StrategyProfile, portfolio) -> Tuple[bool, List[str]]:
+    """Enforce profile sector-exposure caps for incremental cash-consuming exposure.
+
+    Applies to CSP and SHARE_BUY, which add NEW sector exposure. Covered calls on
+    already-owned shares are exempt (no incremental sector exposure) — sizing
+    flags missing sector data on those separately.
+
+    Safe policy (R34.0): when the symbol's sector cannot be determined, BLOCK the
+    incremental exposure rather than silently bypassing the sector cap. When the
+    sector is known and already at/over the profile cap, BLOCK as well.
+    """
+    if inp.strategy not in (CSP, SHARE_BUY):
+        return (True, [])
+    sector = (inp.sector or "").strip()
+    if not sector or sector.upper() == "UNKNOWN":
+        return (False, ["SECTOR_DATA_UNAVAILABLE", "SECTOR_BLOCKED_PENDING_DATA"])
+    max_sector_dollars = portfolio.total_value * profile.max_sector_exposure_pct / 100.0
+    existing = float(portfolio.sector_exposure.get(sector, 0.0))
+    if existing >= max_sector_dollars - 1e-6:
+        return (False, ["SECTOR_EXPOSURE_LIMIT_REACHED"])
+    return (True, [])
+
+
 def cash_gate(inp: DecisionInput, profile: StrategyProfile, available_cash_after_buffer: float) -> Tuple[bool, List[str]]:
     """CSPs require at least one contract of collateral after the cash buffer."""
     if inp.strategy != CSP:

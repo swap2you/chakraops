@@ -63,4 +63,16 @@ describe("Sidebar", () => {
     render(<Sidebar />);
     expect(screen.getByRole("link", { name: /wheel/i })).toBeInTheDocument();
   });
+
+  it("R34.0: renders logical navigation groups", () => {
+    render(<Sidebar />);
+    expect(screen.getByTestId("nav-group-daily")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-group-research")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-group-account")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-group-insights")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-group-admin")).toBeInTheDocument();
+    // All routes remain reachable after grouping.
+    expect(screen.getByRole("link", { name: /^Positions$/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /backtest/i })).toBeInTheDocument();
+  });
 });

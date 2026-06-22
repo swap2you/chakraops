@@ -1927,6 +1927,88 @@ def _diagnostics_liquidity_from_gates(result: Dict[str, Any], full_result: Any) 
     liquidity["reason"] = "; ".join(parts) if parts else "Liquidity not assessed"
 
 
+def _canonical_decision_for_symbol(sym: str, profile: str = "balanced") -> Dict[str, Any]:
+    """R34.0 (H-5 cutover): produce the AUTHORITATIVE per-symbol decision from the
+    canonical engine for Symbol Diagnostics.
+
+    Returns a dict with ``canonical_status`` ("OK" when the engine produced a
+    decision for this symbol, else "UNAVAILABLE"), ``canonical_decision`` (the
+    matching engine item or ``None``), ``decision_source`` and ``active_profile``.
+    Fail-closed: any error yields UNAVAILABLE with no decision (never a guess).
+    """
+    out: Dict[str, Any] = {
+        "canonical_status": "UNAVAILABLE",
+        "canonical_decision": None,
+        "decision_source": "canonical_decision_engine_unavailable",
+        "active_profile": profile,
+    }
+    try:
+        from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2, get_eval_snapshot
+        from app.core.decision_engine.live_service import compute_live_recommendations
+
+        store = get_evaluation_store_v2()
+        store.reload_from_disk()
+        artifact = store.get_latest()
+        if artifact is None:
+            return out
+
+        guardrails_metrics: Dict[str, Any] = {}
+        guardrails_snapshot: Dict[str, Any] = {}
+        try:
+            from app.core.portfolio.guardrails_r259 import (
+                build_guardrails_snapshot,
+                compute_portfolio_metrics,
+            )
+            _guard_snap = build_guardrails_snapshot()
+            guardrails_snapshot = dict(_guard_snap)
+            _snap_for_prices = get_eval_snapshot()
+            _prices: Dict[str, float] = {}
+            if _snap_for_prices and isinstance(_snap_for_prices, dict):
+                for _s, _v in (_snap_for_prices.get("symbols") or {}).items():
+                    if isinstance(_v, dict) and _v.get("price") is not None:
+                        _prices[_s] = float(_v["price"])
+            guardrails_metrics = compute_portfolio_metrics(_guard_snap, symbol_prices=_prices)
+        except Exception:
+            guardrails_metrics = {}
+            guardrails_snapshot = {}
+
+        shares_by_symbol: Dict[str, int] = {}
+        try:
+            from app.core.accounts.holdings_db import get_share_position, _DEFAULT_ACCOUNT_ID
+            _pos = get_share_position(_DEFAULT_ACCOUNT_ID, sym)
+            _qty = getattr(_pos, "quantity", None) if _pos is not None else None
+            if _qty:
+                shares_by_symbol[sym] = int(_qty)
+        except Exception:
+            shares_by_symbol = {}
+
+        canonical = compute_live_recommendations(
+            artifact,
+            profile_name=profile,
+            guardrails_metrics=guardrails_metrics,
+            guardrails_snapshot=guardrails_snapshot,
+            shares_by_symbol=shares_by_symbol,
+        )
+        recs = canonical.get("recommendations") or {}
+        match = None
+        for bucket in ("actionable", "watch", "blocked"):
+            for item in (recs.get(bucket) or []):
+                if (item.get("symbol") or "").strip().upper() == sym:
+                    match = item
+                    break
+            if match is not None:
+                break
+        if match is not None:
+            out["canonical_status"] = "OK"
+            out["canonical_decision"] = match
+            out["decision_source"] = canonical.get("decision_source") or "canonical_decision_engine"
+            prof = canonical.get("profile") or {}
+            out["active_profile"] = (prof.get("name") if isinstance(prof, dict) else None) or profile
+    except Exception as e:
+        logger.debug("[DIAGNOSTICS] canonical decision unavailable for %s: %s", sym, e)
+    return out
+
+
 @app.get("/api/view/symbol-diagnostics")
 def api_view_symbol_diagnostics(
     symbol: str = Query(..., min_length=1, max_length=12),
@@ -1947,11 +2029,12 @@ def api_view_symbol_diagnostics(
     try:
         snap = get_snapshot(sym, derive_avg_stock_volume_20d=True, use_cache=True)
     except Exception as e:
+        from app.core.security.redact import redact_secrets
         raise HTTPException(
             status_code=503,
             detail={
                 "provider": "ORATS",
-                "reason": str(e),
+                "reason": redact_secrets(str(e)),
                 "symbol": sym,
             },
         )
@@ -2204,6 +2287,15 @@ def api_view_symbol_diagnostics(
         logger.debug("[DIAGNOSTICS] %s: expirations_count == 0", sym)
     if contracts_count is None and full_result.stage2 is not None:
         logger.error("[DIAGNOSTICS] %s: contracts_count is null after stage-2", sym)
+
+    # R34.0 (H-5 cutover): attach the AUTHORITATIVE canonical decision as primary.
+    # Legacy diagnostics above remain explanatory / non-authoritative.
+    try:
+        result.update(_canonical_decision_for_symbol(sym))
+    except Exception as e:
+        logger.debug("[DIAGNOSTICS] canonical attach failed for %s: %s", sym, e)
+        result.setdefault("canonical_status", "UNAVAILABLE")
+        result.setdefault("canonical_decision", None)
 
     result["live_evaluation"] = True
     return result

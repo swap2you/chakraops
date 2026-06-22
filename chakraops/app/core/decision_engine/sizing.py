@@ -51,14 +51,17 @@ def _buffer_and_caps(profile: StrategyProfile, portfolio: PortfolioState, symbol
     symbol_headroom = max(0.0, max_symbol_dollars - existing_symbol)
 
     sector_headroom: Optional[float] = None
-    if sector and portfolio.sector_exposure:
+    if sector and str(sector).upper() != "UNKNOWN":
+        # Sector known: always enforce the cap against existing exposure (0 when
+        # the portfolio has no position in that sector yet).
         max_sector_dollars = portfolio.total_value * profile.max_sector_exposure_pct / 100.0
         existing_sector = float(portfolio.sector_exposure.get(sector, 0.0))
         sector_headroom = max(0.0, max_sector_dollars - existing_sector)
-    elif sector:
-        flags.append("SECTOR_DATA_UNAVAILABLE")
+        flags.append("SECTOR_CAP_ENFORCED")
     else:
-        flags.append("SECTOR_UNKNOWN")
+        # Sector unavailable. For incremental cash-consuming strategies the
+        # engine's sector_gate has already blocked; the flag documents the cause.
+        flags.append("SECTOR_DATA_UNAVAILABLE")
 
     return available_after_buffer, max_position_dollars, symbol_headroom, sector_headroom, flags
 
@@ -116,6 +119,11 @@ def size_covered_call(inp: DecisionInput, profile: StrategyProfile, portfolio: P
         f"contracts={contracts} capital_required=$0.00 (shares already held)",
     ]
     flags: List[str] = []
+    # Covered calls write against shares already owned, so they add no incremental
+    # sector exposure and may proceed even when sector data is unavailable — but
+    # we surface the data gap explicitly rather than silently.
+    if not (inp.sector and str(inp.sector).upper() != "UNKNOWN"):
+        flags.append("SECTOR_DATA_UNAVAILABLE_EXISTING_POSITION")
     if contracts == 0:
         flags.append("INSUFFICIENT_SHARES_FOR_ONE_LOT")
     return SizingResult(Sizing(contracts=contracts, explanation=explanation), 0.0, flags)

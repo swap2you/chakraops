@@ -1,3 +1,4 @@
+import { Children, isValidElement } from "react";
 import { clsx } from "clsx";
 
 export function Table({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -9,16 +10,27 @@ export function Table({ children, className }: { children: React.ReactNode; clas
 }
 
 export function TableHeader({ children, className }: { children: React.ReactNode; className?: string }) {
+  // R34.0 DOM fix: consumers use two patterns — passing <TableHead> cells
+  // directly, or wrapping them in a <TableRow>. Wrapping unconditionally caused
+  // `<tr> cannot appear as a child of <tr>`. Detect an existing row and only add
+  // the header <tr> when the caller did not supply one.
+  const alreadyHasRow = Children.toArray(children).some(
+    (child) => isValidElement(child) && child.type === TableRow
+  );
   return (
     <thead className="sticky top-0 z-[1] bg-zinc-50 dark:bg-zinc-950">
-      <tr
-        className={clsx(
-          "border-b border-zinc-200 text-left text-zinc-600 dark:border-zinc-700 dark:text-zinc-500",
-          className
-        )}
-      >
-        {children}
-      </tr>
+      {alreadyHasRow ? (
+        children
+      ) : (
+        <tr
+          className={clsx(
+            "border-b border-zinc-200 text-left text-zinc-600 dark:border-zinc-700 dark:text-zinc-500",
+            className
+          )}
+        >
+          {children}
+        </tr>
+      )}
     </thead>
   );
 }

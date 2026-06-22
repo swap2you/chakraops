@@ -425,9 +425,11 @@ def fetch_universe_from_canonical_snapshot() -> Dict[str, Any]:
     try:
         snapshots = get_snapshots_batch(symbols, derive_avg_stock_volume_20d=True, use_cache=True)
     except Exception as e:
-        logger.warning("[UNIVERSE] Canonical snapshot batch failed: %s", e)
+        from app.core.security.redact import redact_secrets
+        safe = redact_secrets(str(e))
+        logger.warning("[UNIVERSE] Canonical snapshot batch failed: %s", safe)
         for ticker in symbols:
-            excluded.append({"symbol": ticker, "exclusion_reason": str(e)[:200]})
+            excluded.append({"symbol": ticker, "exclusion_reason": safe[:200]})
         return {
             "symbols": [],
             "excluded": excluded,
@@ -492,9 +494,11 @@ def fetch_universe_from_orats() -> Dict[str, Any]:
                 "exclusion_reason": None,
             })
         except OratsUnavailableError as e:
-            excluded.append({"symbol": ticker, "exclusion_reason": f"ORATS error: {e.http_status} — {e.response_snippet[:100]}"})
+            from app.core.security.redact import redact_secrets
+            excluded.append({"symbol": ticker, "exclusion_reason": redact_secrets(f"ORATS error: {e.http_status} — {(e.response_snippet or '')[:100]}")})
         except Exception as e:
-            excluded.append({"symbol": ticker, "exclusion_reason": str(e)[:200]})
+            from app.core.security.redact import redact_secrets
+            excluded.append({"symbol": ticker, "exclusion_reason": redact_secrets(str(e)[:200])})
     return {
         "symbols": symbols_out,
         "excluded": excluded,

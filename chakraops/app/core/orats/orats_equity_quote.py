@@ -87,10 +87,12 @@ class OratsEquityQuoteError(Exception):
         endpoint: str = "",
         tickers: str = "",
     ) -> None:
+        from app.core.security.redact import redact_secrets
+
         self.http_status = http_status
         self.endpoint = endpoint
         self.tickers = tickers
-        super().__init__(message)
+        super().__init__(redact_secrets(message))
 
 
 # ============================================================================
@@ -416,12 +418,14 @@ def _fetch_equity_quotes_single_batch(tickers: List[str]) -> Dict[str, EquityQuo
     latency_ms = int((time.perf_counter() - t0) * 1000)
     
     if r.status_code != 200:
+        from app.core.security.redact import redact_secrets
+        safe_body = redact_secrets(r.text[:200])
         logger.error(
             "[ORATS_EQ_REQ] HTTP %d tickers=%s latency_ms=%d response=%s",
-            r.status_code, tickers[:3], latency_ms, r.text[:200]
+            r.status_code, tickers[:3], latency_ms, safe_body
         )
         raise OratsEquityQuoteError(
-            f"HTTP {r.status_code}: {r.text[:200]}",
+            f"HTTP {r.status_code}: {safe_body}",
             http_status=r.status_code,
             endpoint=ORATS_STRIKES_OPTIONS_PATH,
             tickers=tickers_param[:100],
@@ -745,12 +749,14 @@ def _fetch_iv_ranks_single_batch(tickers: List[str]) -> Dict[str, IVRankData]:
     latency_ms = int((time.perf_counter() - t0) * 1000)
     
     if r.status_code != 200:
+        from app.core.security.redact import redact_secrets
+        safe_body = redact_secrets(r.text[:200])
         logger.error(
             "[ORATS_IVRANK_REQ] HTTP %d ticker=%s latency_ms=%d response=%s",
-            r.status_code, tickers[:3], latency_ms, r.text[:200]
+            r.status_code, tickers[:3], latency_ms, safe_body
         )
         raise OratsEquityQuoteError(
-            f"HTTP {r.status_code}: {r.text[:200]}",
+            f"HTTP {r.status_code}: {safe_body}",
             http_status=r.status_code,
             endpoint=ORATS_IVRANK_PATH,
             tickers=tickers_param[:100],

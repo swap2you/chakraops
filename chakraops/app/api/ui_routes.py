@@ -800,11 +800,38 @@ async def ui_universe_weekly_refresh_apply(
     except Exception:
         body = {}
     dry_run = bool(body.get("dry_run"))
-    from app.core.universe.weekly_refresh import apply_weekly_universe_refresh, WeeklyRefreshError
+    from app.core.universe.weekly_refresh import (
+        OUTCOME_APPLIED,
+        OUTCOME_SKIPPED_IDEMPOTENT,
+        WeeklyRefreshCriticalError,
+        WeeklyRefreshError,
+        apply_weekly_universe_refresh,
+    )
+
     try:
         outcome = apply_weekly_universe_refresh(dry_run=dry_run)
+    except WeeklyRefreshCriticalError as e:
+        # Rollback/recovery failed: surface a controlled critical failure status.
+        # The transaction journal is preserved for operator-led recovery.
+        raise HTTPException(
+            status_code=500,
+            detail={"status": "CRITICAL", "reason_code": "REFRESH_RECOVERY_FAILED", "message": str(e)},
+        )
     except WeeklyRefreshError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Recoverable failure: overlay was rolled back to the pre-refresh state.
+        raise HTTPException(
+            status_code=500,
+            detail={"status": "FAILED", "reason_code": "REFRESH_NOT_APPLIED", "message": str(e)},
+        )
+
+    # Controlled success / idempotent-skip status for the admin caller.
+    oc = outcome.get("outcome")
+    if oc == OUTCOME_APPLIED:
+        outcome["status"] = "APPLIED"
+    elif oc == OUTCOME_SKIPPED_IDEMPOTENT:
+        outcome["status"] = "SKIPPED_IDEMPOTENT"
+    else:
+        outcome["status"] = oc or "UNKNOWN"
     return outcome
 
 

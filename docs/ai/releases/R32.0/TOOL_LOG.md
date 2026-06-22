@@ -25,6 +25,9 @@
 - Completed R32.0 review: PENDING — Codex quota exhausted; review not run. No Codex approval claimed.
 - Consolidated R32–R34 review: **BLOCKED**. R32-owned findings remediated under R34 on this branch — (1) weekly universe refresh operationalized (`app/core/universe/weekly_refresh.py::apply_weekly_universe_refresh` + atomic overlay apply in `universe_overrides.py`; admin POST `/api/ui/universe/weekly-refresh/apply`); (2) ORATS credential log redaction (`app/core/security/redact.py`) wired through the R32 ORATS request/log/exception paths. Re-review required; no Codex approval claimed.
 
+## R32 weekly-refresh behavior change (recorded under R34.0, 2026-06-22)
+- The R32-introduced weekly universe refresh was hardened in R34.0 to be **transaction-safe**: a single cross-process lock (`app/core/universe/refresh_lock.py`) now spans idempotency → snapshot → overlay → history → completion; overlay/history writes are atomic (temp file + flush+fsync + `os.replace`); a journal enables deterministic recovery/rollback after interruption; rollback/recovery failure raises an explicit `WeeklyRefreshCriticalError`. Concurrent same-week calls produce exactly one applied refresh + one history record. The append-only JSONL refresh-history contract is unchanged. See `docs/ai/releases/R34.0/STATUS.md` and `out/verification/R34.0/weekly_refresh_transaction.md`. No scheduler added (R35 still owns scheduling).
+
 ## Claude Cowork
 - Pending UAT.
 

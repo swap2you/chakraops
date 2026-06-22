@@ -31,11 +31,15 @@ class OratsUnavailableError(Exception):
         endpoint: str = "",
         symbol: str = "",
     ) -> None:
+        from app.core.security.redact import redact_secrets
+
         self.http_status = http_status
-        self.response_snippet = (response_snippet or "")[:500]
+        # Sanitize at construction: snippet + message can never carry a token.
+        raw = (response_snippet or "")[:500]
+        self.response_snippet = redact_secrets(raw) if raw else ""
         self.endpoint = endpoint or ""
         self.symbol = symbol or ""
-        super().__init__(message)
+        super().__init__(redact_secrets(message))
 
 
 def _orats_get_live(endpoint_path: str, ticker: str, timeout_sec: float = TIMEOUT_SEC) -> tuple[Any, int, int]:

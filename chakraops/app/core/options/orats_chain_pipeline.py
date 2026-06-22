@@ -1376,8 +1376,11 @@ def fetch_option_chain(
             "rejection_counts": {},  # Filled by evaluator when building contract_data
         }
     except Exception as e:
-        logger.warning("[CHAIN_PIPELINE] %s: stage2_trace build failed: %s", symbol.upper(), e)
-        result.stage2_trace = {"error": str(e), "message": "Trace build failed"}
+        from app.core.security.redact import redact_secrets
+
+        safe = redact_secrets(str(e))
+        logger.warning("[CHAIN_PIPELINE] %s: stage2_trace build failed: %s", symbol.upper(), safe)
+        result.stage2_trace = {"error": safe, "message": "Trace build failed"}
 
     # Merge trace fields into telemetry so diagnostics can show PUT-only request set
     if result.stage2_trace and isinstance(result.stage2_trace, dict):

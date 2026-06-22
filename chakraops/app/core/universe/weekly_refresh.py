@@ -196,16 +196,36 @@ def _recover_pending_transaction(store: Any, *, restore_overlay: Any) -> Optiona
     A failed rollback raises :class:`WeeklyRefreshCriticalError` and preserves
     the journal as evidence.
     """
-    from app.core.universe.refresh_lock import clear_journal, journal_path, read_journal
+    from app.core.universe.refresh_lock import clear_journal, journal_exists, journal_path, read_journal
 
-    journal = read_journal(_TXN_NAME)
-    if not journal:
+    try:
+        journal = read_journal(_TXN_NAME)
+    except Exception as e:
+        from app.core.universe.refresh_lock import RefreshJournalError
+
+        if isinstance(e, RefreshJournalError):
+            raise WeeklyRefreshCriticalError(
+                f"weekly refresh journal unreadable or corrupt; preserved at "
+                f"{journal_path(_TXN_NAME)}: {e}"
+            ) from e
+        raise
+    if journal is None:
         return None
     week = journal.get("week_id")
     prev_overlay = journal.get("prev_overlay") or {"added": [], "removed": []}
     last = store.last()
     if last and last.get("week_id") == week:
-        clear_journal(_TXN_NAME)
+        try:
+            clear_journal(_TXN_NAME)
+        except Exception as e:
+            raise WeeklyRefreshCriticalError(
+                f"weekly refresh recovery could not clear journal for committed week "
+                f"{week}; journal preserved at {journal_path(_TXN_NAME)}: {e}"
+            ) from e
+        if journal_exists(_TXN_NAME):
+            raise WeeklyRefreshCriticalError(
+                f"weekly refresh journal remained after committed recovery for week {week}"
+            )
         return {"recovered": "COMMITTED", "week_id": week}
     try:
         restore_overlay(prev_overlay)
@@ -214,7 +234,17 @@ def _recover_pending_transaction(store: Any, *, restore_overlay: Any) -> Optiona
             f"weekly refresh recovery rollback failed for week {week}; journal "
             f"preserved at {journal_path(_TXN_NAME)}: {e}"
         ) from e
-    clear_journal(_TXN_NAME)
+    try:
+        clear_journal(_TXN_NAME)
+    except Exception as e:
+        raise WeeklyRefreshCriticalError(
+            f"weekly refresh recovery could not clear journal after rollback for week "
+            f"{week}; journal preserved at {journal_path(_TXN_NAME)}: {e}"
+        ) from e
+    if journal_exists(_TXN_NAME):
+        raise WeeklyRefreshCriticalError(
+            f"weekly refresh journal remained after rollback recovery for week {week}"
+        )
     return {"recovered": "ROLLED_BACK", "week_id": week}
 
 
@@ -269,6 +299,7 @@ def apply_weekly_universe_refresh(
     from app.core.universe.refresh_lock import (
         clear_journal,
         cross_process_lock,
+        journal_exists,
         journal_path,
         write_journal,
     )
@@ -347,7 +378,13 @@ def apply_weekly_universe_refresh(
                     f"journal preserved at {journal_path(_TXN_NAME)}: "
                     f"apply={e}; rollback={re}"
                 ) from re
-            clear_journal(_TXN_NAME)
+            try:
+                clear_journal(_TXN_NAME)
+            except Exception as ce:
+                raise WeeklyRefreshCriticalError(
+                    f"weekly refresh apply failed; overlay rolled back but journal "
+                    f"clear failed; journal preserved at {journal_path(_TXN_NAME)}: {ce}"
+                ) from ce
             raise WeeklyRefreshError(f"weekly refresh apply failed: {e}") from e
 
         # (5) Commit: append exactly one history record (atomic).
@@ -373,13 +410,29 @@ def apply_weekly_universe_refresh(
                     f"failed; journal preserved at {journal_path(_TXN_NAME)}: "
                     f"append={e}; rollback={re}"
                 ) from re
-            clear_journal(_TXN_NAME)
+            try:
+                clear_journal(_TXN_NAME)
+            except Exception as ce:
+                raise WeeklyRefreshCriticalError(
+                    f"weekly refresh history append failed; overlay rolled back but "
+                    f"journal clear failed; journal preserved at {journal_path(_TXN_NAME)}: {ce}"
+                ) from ce
             raise WeeklyRefreshError(
                 f"weekly refresh history append failed (overlay rolled back): {e}"
             ) from e
 
-        # (6) Completion.
-        clear_journal(_TXN_NAME)
+        # (6) Completion — verify journal cleared.
+        try:
+            clear_journal(_TXN_NAME)
+        except Exception as ce:
+            raise WeeklyRefreshCriticalError(
+                f"weekly refresh completed but journal clear failed at "
+                f"{journal_path(_TXN_NAME)}: {ce}"
+            ) from ce
+        if journal_exists(_TXN_NAME):
+            raise WeeklyRefreshCriticalError(
+                "weekly refresh completed but journal still present"
+            )
         return {
             "outcome": OUTCOME_APPLIED,
             "week_id": result.week_id,

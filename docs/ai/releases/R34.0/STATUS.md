@@ -38,23 +38,23 @@ IMPLEMENTATION COMPLETE — **final operational-integrity remediation active** (
 R33.0 canonical decision and profile contracts (implemented + tested).
 
 ## Cursor implementation
-DELIVERED this pass: Phases 1–4 + daily-overview source markers, with new tests (`test_r340_orats_log_redaction.py`, `test_r340_weekly_refresh_operational.py`, `test_r340_canonical_failclosed.py`, `test_r340_missing_cash_sector.py`) and updated `test_r340_live_cutover.py`. STAGED: Phase 5 (rendered UI), Phase 6 (product scope).
+Final operational-integrity remediation delivered (post-0e860f5): strict journal/history integrity, ownership-safe cross-process lock, downstream ORATS sanitization, generated-file hygiene. Gates: backend 1218/3 skipped; frontend 334/18 skipped; build PASS; secret scan 0 hits.
 
 ## Claude review
 - Final R34 review: **APPROVED WITH NON-BLOCKING NOTES** (implementation complete; integrity remediation addresses remaining notes).
 
 ## Codex review
-- Final R34 review: **BLOCKED** — refresh journal/history integrity, ownership-safe lock, downstream ORATS sanitization, authorization reconciliation (50aa600 waiver recorded), generated-file hygiene. Remediation pass active. No Codex approval claimed.
+- Final R34 review: **BLOCKED** — findings remediated in integrity pass (journal/history, ownership-safe lock, downstream ORATS, generated-file hygiene). Awaiting Codex targeted re-review. No Codex approval claimed.
 
 ## Cowork UAT
 - Final real-browser UAT: **PASS WITH NOTES**. See `out/verification/R34.0/frontend_uat_plan.md`.
 
-## Gates (final cutover pass)
-- Backend: PASS — 1200 passed, 1 skipped
+## Gates (integrity remediation pass)
+- Backend: PASS — 1218 passed, 3 skipped
 - Frontend tests: PASS — 334 passed, 18 skipped
-- Frontend build: PASS (only pre-existing chunk-size + dynamic/static-import warnings — deferred to post-R35 per Phase 7 scope boundary)
-- Secret scan: PASS — 0 real-token hits in tracked code and in evidence
-- Evidence: out/verification/R34.0/ (notes.md, changed_files.md, weekly_refresh_transaction.md, secret_redaction.md, sector_enforcement.md, rendered_canonical_cutover.md, frontend_uat_plan.md, backend.log, frontend.log, build.log)
+- Frontend build: PASS
+- Secret scan: PASS — 0 real-token hits in tracked code
+- Evidence: out/verification/R34.0/ (final_integrity_notes.md, refresh_corruption_recovery.md, lock_ownership.md, downstream_orats_redaction.md, generated_file_hygiene.md, backend.log, frontend.log, build.log)
 
 ## PR
 Pending
@@ -72,7 +72,7 @@ Pending
 **CLOSED (R34.0)** — API/data-contract layer fail-closed and authoritative; rendered-UI cutover complete on Dashboard/Today/Symbol; page-level cutover tests pass (`DashboardPage.canonical.test.tsx`, `TodayPage.canonical.test.tsx`, `SymbolDiagnosticsPage.canonical.test.tsx`). Physical legacy-module retirement deferred to post-R35.
 
 ## Next action
-Final operational-integrity remediation (Codex blockers); then Codex targeted re-review before R35.0. No PR, no tag, no deploy.
+Awaiting Codex targeted re-review of integrity remediation before R35.0. No PR, no tag, no deploy.
 
 ## Stop point
-R34.0 implementation complete; integrity remediation active for Codex blockers. H-5 closed. No PR, no tag, no deploy. R35 not started.
+R34.0 implementation complete; integrity remediation delivered and gate-verified. H-5 closed. Awaiting Codex re-review. R35 not started.

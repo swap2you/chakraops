@@ -435,10 +435,18 @@ class OratsChainProvider:
                     if self._use_cache and result.success:
                         self._cache.set(symbol, exp, result)
                 except Exception as e:
-                    logger.exception("[ORATS_CHAIN] Error fetching chain for %s %s: %s", symbol, exp, e)
+                    from app.core.security.redact import redact_secrets
+
+                    safe = redact_secrets(str(e))
+                    logger.warning(
+                        "[ORATS_CHAIN] Error fetching chain for %s %s: %s",
+                        symbol,
+                        exp,
+                        safe,
+                    )
                     results[exp] = ChainProviderResult(
                         success=False,
-                        error=str(e),
+                        error=safe,
                         data_quality=DataQuality.ERROR,
                     )
         return results
@@ -461,10 +469,18 @@ class OratsChainProvider:
                 delta_lo=delta_lo, delta_hi=delta_hi, strategy_mode=strategy_mode,
             )
         except Exception as e:
-            logger.warning("[ORATS_CHAIN] DELAYED pipeline failed for %s: %s", symbol, e)
-            return {exp: ChainProviderResult(success=False, error=str(e), data_quality=DataQuality.ERROR) for exp in expirations}
+            from app.core.security.redact import redact_secrets
+
+            safe = redact_secrets(str(e))
+            logger.warning("[ORATS_CHAIN] DELAYED pipeline failed for %s: %s", symbol, safe)
+            return {
+                exp: ChainProviderResult(success=False, error=safe, data_quality=DataQuality.ERROR)
+                for exp in expirations
+            }
         if chain_result.error or not chain_result.contracts:
-            err = chain_result.error or "No contracts"
+            from app.core.security.redact import redact_secrets
+
+            err = redact_secrets(chain_result.error or "No contracts")
             stage2_trace_err = getattr(chain_result, "stage2_trace", None)
             return {
                 exp: ChainProviderResult(success=False, error=err, data_quality=DataQuality.MISSING, stage2_trace=stage2_trace_err)

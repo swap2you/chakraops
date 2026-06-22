@@ -45,8 +45,14 @@
 - RELEASE_PACKET.md updated with complete as-built path list from 50aa600, explicit waiver-reconciled paths (`engine.py`, `gates.py`, `Table.tsx`, `Table.dom.test.tsx`, `reasonLabels.ts`, all frontend test paths), and exact paths for integrity remediation Fixes 1–4.
 - Docs-only commit `docs(R34.0): record authorization waiver and final integrity paths` created and pushed BEFORE source edits.
 
-## Claude Code
-- Final R34 review: APPROVED WITH NON-BLOCKING NOTES.
+## Cursor — final operational-integrity remediation: implementation (2026-06-22e)
+- Fix 1 (journal/history): strict journal read/validate/clear (`RefreshJournalError`); recovery verifies journal cleared; `RefreshHistoryStore` strict read/append preserves file on corruption/read failure.
+- Fix 2 (ownership-safe lock): lock metadata (lock_id, pid, hostname, process_start_epoch); reclaim only when owner proven dead; no age-only steal; ownership-verified release.
+- Fix 3 (downstream ORATS): redacted `orats_chain_provider`, `orats_option_chain_loader`, `orats_chain_pipeline` stage2_trace; removed bare logger.exception paths; extended redaction tests.
+- Fix 4 (hygiene): untracked `frontend/tsconfig.tsbuildinfo`; added `*.tsbuildinfo` to `.gitignore`; cleaned stale duplicate verification logs.
+- Tests: `test_r340_refresh_journal_history_integrity.py`, `test_r340_refresh_lock_ownership.py`, extended `test_r340_orats_redaction_complete.py`.
+- Gates: backend 1218 passed/3 skipped; frontend 334 passed/18 skipped; build PASS; secret scan 0 hits.
+- Commit `fix(R34.0): harden refresh recovery and complete ORATS sanitization` pushed. Awaiting Codex targeted re-review.
 
 ## Codex
 - Final R34 review: BLOCKED (refresh integrity, downstream ORATS redaction, authorization reconciliation, generated-file hygiene). Targeted re-review required after integrity remediation.

@@ -167,3 +167,83 @@ def test_str_of_domain_exception_carries_no_token() -> None:
     # Simulate a downstream surface (e.g. copilot/diagnostics) doing str(e).
     surfaced = f"orats error: {e}"
     assert FAKE_TOKEN not in surfaced
+
+
+# --- Downstream chain provider / loader / pipeline (R34 integrity pass) -----
+
+def test_chain_provider_worker_failure_redacts_error(monkeypatch) -> None:
+    from datetime import date
+    from app.core.options.orats_chain_provider import OratsChainProvider, DataQuality
+
+    provider = OratsChainProvider(use_cache=False)
+
+    def _boom(*_a, **_k):
+        raise requests.RequestException(f"worker failed url={TOKEN_URL}")
+
+    monkeypatch.setattr(provider, "_get_chain_live", _boom)
+    # Force live path with one expiration.
+    provider._chain_source = "LIVE"
+    exp = date(2026, 7, 17)
+    out = provider.get_chains_batch("SPY", [exp], max_concurrent=1)
+    assert FAKE_TOKEN not in (out[exp].error or "")
+    assert out[exp].data_quality == DataQuality.ERROR
+
+
+def test_chain_provider_delayed_pipeline_failure_redacts(monkeypatch) -> None:
+    from datetime import date
+    from app.core.options.orats_chain_provider import OratsChainProvider, DataQuality
+
+    provider = OratsChainProvider(use_cache=False)
+    provider._chain_source = "DELAYED"
+
+    def _boom(*_a, **_k):
+        raise requests.RequestException(f"delayed failed url={TOKEN_URL}")
+
+    monkeypatch.setattr(
+        "app.core.options.orats_chain_pipeline.fetch_option_chain",
+        _boom,
+    )
+    exp = date(2026, 7, 17)
+    out = provider.get_chains_batch("SPY", [exp])
+    assert FAKE_TOKEN not in (out[exp].error or "")
+    assert out[exp].data_quality == DataQuality.ERROR
+
+
+def test_option_chain_loader_failure_redacts_result_and_logs(monkeypatch, caplog) -> None:
+    from app.core.options import orats_option_chain_loader as loader
+
+    def _boom(*_a, **_k):
+        raise requests.RequestException(f"loader failed url={TOKEN_URL}")
+
+    monkeypatch.setattr(
+        "app.core.options.orats_chain_pipeline.fetch_option_chain",
+        _boom,
+    )
+    caplog.set_level(logging.WARNING)
+    result = loader.load_option_chain_liquidity("SPY")
+    assert FAKE_TOKEN not in (result.error or "")
+    assert FAKE_TOKEN not in caplog.text
+
+
+def test_option_chain_loader_nested_request_exception_redacted(monkeypatch) -> None:
+    from app.core.options import orats_option_chain_loader as loader
+    from app.core.options.orats_chain_pipeline import OratsChainError
+
+    def _boom(*_a, **_k):
+        raise OratsChainError(f"nested token={FAKE_TOKEN}")
+
+    monkeypatch.setattr(
+        "app.core.options.orats_chain_pipeline.fetch_option_chain",
+        _boom,
+    )
+    result = loader.load_option_chain_liquidity("SPY")
+    assert FAKE_TOKEN not in (result.error or "")
+
+
+def test_chain_pipeline_stage2_trace_error_redacted() -> None:
+    from app.core.security.redact import redact_secrets
+
+    err = RuntimeError(f"trace token={FAKE_TOKEN}")
+    safe = redact_secrets(str(err))
+    trace = {"error": safe, "message": "Trace build failed"}
+    assert FAKE_TOKEN not in str(trace)

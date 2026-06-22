@@ -394,13 +394,15 @@ class OratsDelayedClient:
         try:
             r = requests.get(url, params=params, timeout=self.timeout)
         except requests.RequestException as e:
+            from app.core.security.redact import redact_secrets
             latency_ms = int((time.perf_counter() - t0) * 1000)
+            safe_err = redact_secrets(e)
             logger.error(
                 "[ORATS_STRIKES] FAIL ticker=%s latency_ms=%d error=%s",
-                ticker.upper(), latency_ms, e
+                ticker.upper(), latency_ms, safe_err
             )
             raise OratsDelayedError(
-                f"Request failed: {e}",
+                f"Request failed: {safe_err}",
                 endpoint=ORATS_STRIKES_PATH,
                 param_name="ticker",
                 param_value=ticker.upper(),
@@ -409,12 +411,14 @@ class OratsDelayedClient:
         latency_ms = int((time.perf_counter() - t0) * 1000)
         
         if r.status_code != 200:
+            from app.core.security.redact import redact_secrets
+            safe_body = redact_secrets(r.text[:200])
             logger.error(
                 "[ORATS_STRIKES] HTTP %d ticker=%s latency_ms=%d response=%s",
-                r.status_code, ticker.upper(), latency_ms, r.text[:200]
+                r.status_code, ticker.upper(), latency_ms, safe_body
             )
             raise OratsDelayedError(
-                f"HTTP {r.status_code}: {r.text[:200]}",
+                f"HTTP {r.status_code}: {safe_body}",
                 http_status=r.status_code,
                 endpoint=ORATS_STRIKES_PATH,
                 param_name="ticker",
@@ -513,13 +517,15 @@ class OratsDelayedClient:
         try:
             r = requests.get(url, params=params, timeout=self.timeout)
         except requests.RequestException as e:
+            from app.core.security.redact import redact_secrets
             latency_ms = int((time.perf_counter() - t0) * 1000)
+            safe_err = redact_secrets(e)
             logger.error(
                 "[ORATS_STRIKES_OPTIONS] FAIL tickers=%s latency_ms=%d error=%s",
-                sample_tickers, latency_ms, e
+                sample_tickers, latency_ms, safe_err
             )
             raise OratsDelayedError(
-                f"Request failed: {e}",
+                f"Request failed: {safe_err}",
                 endpoint=ORATS_STRIKES_OPTIONS_PATH,
                 param_name="tickers",
                 param_value=tickers_param[:100],
@@ -528,12 +534,14 @@ class OratsDelayedClient:
         latency_ms = int((time.perf_counter() - t0) * 1000)
         
         if r.status_code != 200:
+            from app.core.security.redact import redact_secrets
+            safe_body = redact_secrets(r.text[:200])
             logger.error(
                 "[ORATS_STRIKES_OPTIONS] HTTP %d tickers=%s latency_ms=%d response=%s",
-                r.status_code, sample_tickers, latency_ms, r.text[:200]
+                r.status_code, sample_tickers, latency_ms, safe_body
             )
             raise OratsDelayedError(
-                f"HTTP {r.status_code}: {r.text[:200]}",
+                f"HTTP {r.status_code}: {safe_body}",
                 http_status=r.status_code,
                 endpoint=ORATS_STRIKES_OPTIONS_PATH,
                 param_name="tickers",

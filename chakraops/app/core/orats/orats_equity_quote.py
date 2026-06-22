@@ -400,13 +400,15 @@ def _fetch_equity_quotes_single_batch(tickers: List[str]) -> Dict[str, EquityQuo
     try:
         r = requests.get(url, params=params, timeout=TIMEOUT_SEC)
     except requests.RequestException as e:
+        from app.core.security.redact import redact_secrets
         latency_ms = int((time.perf_counter() - t0) * 1000)
+        safe_err = redact_secrets(e)
         logger.error(
             "[ORATS_EQ_REQ] FAIL tickers=%s latency_ms=%d error=%s",
-            tickers[:3], latency_ms, e
+            tickers[:3], latency_ms, safe_err
         )
         raise OratsEquityQuoteError(
-            f"Request failed: {e}",
+            f"Request failed: {safe_err}",
             endpoint=ORATS_STRIKES_OPTIONS_PATH,
             tickers=tickers_param[:100],
         )
@@ -730,10 +732,12 @@ def _fetch_iv_ranks_single_batch(tickers: List[str]) -> Dict[str, IVRankData]:
     try:
         r = requests.get(url, params=params, timeout=TIMEOUT_SEC)
     except requests.RequestException as e:
+        from app.core.security.redact import redact_secrets
         latency_ms = int((time.perf_counter() - t0) * 1000)
-        logger.error("[ORATS_IVRANK_REQ] FAIL ticker=%s latency_ms=%d error=%s", tickers[:3], latency_ms, e)
+        safe_err = redact_secrets(e)
+        logger.error("[ORATS_IVRANK_REQ] FAIL ticker=%s latency_ms=%d error=%s", tickers[:3], latency_ms, safe_err)
         raise OratsEquityQuoteError(
-            f"Request failed: {e}",
+            f"Request failed: {safe_err}",
             endpoint=ORATS_IVRANK_PATH,
             tickers=tickers_param[:100],
         )

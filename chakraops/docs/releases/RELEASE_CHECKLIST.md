@@ -1025,7 +1025,7 @@ No code, UI, ORATS, scheduler, database, runtime, brokerage, deployment, or work
 
 ---
 
-### R34.0 — Canonical live cutover (program R31–R35, milestone 4) — CUTOVER COMPLETE (Phases 0–3); product Phases 4–9 STAGED
+### R34.0 — Canonical live cutover + consolidated R32–R34 blocker remediation (program R31–R35, milestone 4) — INCOMPLETE / REMEDIATION ACTIVE
 
 - [x] Phase 0 — corrected R33 overclaims, recorded Claude BLOCKED, reassigned H-5 to R34 (commit c82b353)
 - [x] Requirements — `R34.0_requirements.md`; Release notes — `R34.0_release_notes.md`
@@ -1040,11 +1040,17 @@ No code, UI, ORATS, scheduler, database, runtime, brokerage, deployment, or work
 - [x] Frontend authoritative types + `useActionNeeded(profile?)`
 - [x] Persistence decision (RETAIN; no migration) — `docs/ai/releases/R34.0/persistence_decision.md`
 - [x] Tests — `test_r340_live_cutover.py`, `test_r340_profile_overrides_422.py`, `queries.liveDecision.test.tsx`
-- [x] Gate — Backend 1140 passed/3 skipped; Frontend 315 passed/18 skipped; Build PASS (~6.7s). Evidence: `docs/ai/releases/R34.0/notes.md` (+ local `out/verification/R34.0/`)
-- [ ] STAGED (not done): packet Phases 4–9 — dashboard/nav consolidation, portfolio/position experience, universe/data-health UI, backtest engine, journal/retention/reporting, frontend-quality overhaul (incl. nested-`<tr>`, M-13 bundle)
-- [ ] Review / sign-off — Claude re-review (cutover) + Cowork UAT pending; Codex PENDING (quota; no approval claimed)
+- [x] Consolidated review recorded — Codex R32–R34 **BLOCKED**; Claude APPROVED-WITH-NOTES (narrow API only); Cowork PASS-WITH-NOTES (narrow API only)
+- [x] Phase 1 — operational weekly universe refresh (`weekly_refresh.apply_weekly_universe_refresh`, atomic overlay `apply_effective_universe`; admin `POST /api/ui/universe/weekly-refresh/apply`; idempotent/atomic) — `test_r340_weekly_refresh_operational.py`
+- [x] Phase 2 — ORATS credential log redaction (`app/core/security/redact.py` wired through ORATS request/log/exception + data-health/boot/503) — `test_r340_orats_log_redaction.py` (FAKE token)
+- [x] Phase 3 — fail-closed canonical computation (`ui_action_needed`, `_attach_canonical_decision`, `/api/view/daily-overview`; no false canonical authority; reason codes) — `test_r340_canonical_failclosed.py`
+- [x] Phase 4 — missing-cash/sector safety (no equity→cash inference; cash-strategies blocked when cash unknown; sector unavailability flagged) — `test_r340_missing_cash_sector.py`
+- [x] Gate (latest) — Backend 1169 passed/1 skipped; Frontend 315 passed/18 skipped; Build PASS. Evidence: `out/verification/R34.0/`
+- [ ] STAGED (NOT done): Phase 5 rendered visual cutover (Dashboard/Today/Symbol render canonical primary + WATCH/BLOCKED/STAY_IN_CASH) and Phase 6 product scope (nav, portfolio, universe/data-health, backtest, journal/reports, frontend-quality M-13/nested-table)
+- [ ] H-5 — OPEN; close only after rendered-UI cutover tests pass
+- [ ] Review / sign-off — Codex re-review + Claude re-review + real-browser Cowork UAT pending; no approvals claimed
 
-**Scope:** Canonical decision engine made the **authoritative** primary live recommendation at the API/data layer; legacy relabeled non-authoritative; stale-data blocking + capital-set safety + persistence decision. **H-5 RESOLVED at API/data layer (evidenced); UI visual re-render + legacy retirement STAGED.** Manual-only; no order routing; no broker; no silent fallback. Product Phases 4–9 staged, not claimed complete.
+**Scope:** Closed the consolidated R32–R34 safety/security/correctness blockers (operational weekly refresh, ORATS log redaction, canonical **fail-closed** at API/data layer, missing-cash/sector safety) + persistence decision (RETAIN). Manual-only; no order routing; no broker; no silent fallback. **R34 is NOT complete:** Phase 5 (rendered cutover) and Phase 6 (product scope) remain; **H-5 OPEN**.
 
 ---
 

@@ -13,7 +13,9 @@ Make all market inputs observable, fresh, failure-classified, and suitable for d
 Level 4 — market-data and decision-input correctness
 
 ## Current status
-COMPLETE — C-1 ORATS secret remediation plus the full R32.0 data-reliability scope delivered and gate-verified. Reviews (Claude full + Codex full) deferred to consolidated post-R35 review per operator; checkpoint verdicts recorded below.
+COMPLETE (with two consolidated-review follow-ups addressed in R34). C-1 ORATS secret remediation plus the full R32.0 data-reliability scope delivered and gate-verified. The consolidated R32–R34 Codex review (**BLOCKED**) cited two R32-owned items now remediated under the R34 pass on this branch:
+- **Weekly universe refresh was preview-only** → operationalized in R34 (`apply_weekly_universe_refresh` applies the computed universe via the canonical overlay store and appends exactly one history record; idempotent; atomic). See R34 STATUS/TOOL_LOG.
+- **ORATS credential leakage in logs/exceptions** → centralized redaction (`app/core/security/redact.py`) wired through the R32 ORATS modules in R34.
 
 ## Dependencies
 R31.0 approved defect register and execution blueprint (operator-approved 2026-06-21).
@@ -45,7 +47,8 @@ DELIVERED — R32.0 data-reliability scope:
 
 ## Codex review
 - Checkpoint (commit 1223884): BLOCKED (packet lacked exact paths) — remediated; packet now lists exact authorized paths.
-- Completed R32.0: **PENDING** — Codex review not run (quota exhausted). No Codex approval is claimed. Full Codex R32 review remains outstanding.
+- Completed R32.0: **PENDING** — initial Codex review not run (quota exhausted).
+- Consolidated R32–R34: **BLOCKED**. R32-owned findings (weekly refresh preview-only; ORATS log redaction) remediated under R34 on this branch. Re-review required; no Codex approval claimed.
 
 ## Cowork UAT
 Deferred to consolidated post-R35 UAT.

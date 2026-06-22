@@ -782,6 +782,32 @@ async def ui_universe_apply(
     raise HTTPException(status_code=400, detail="Provide proposal_id or symbol and action (add|remove)")
 
 
+@router.post("/universe/weekly-refresh/apply")
+async def ui_universe_weekly_refresh_apply(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R34.0: operationally apply the deterministic weekly universe refresh.
+
+    Controlled manual/admin trigger only (R35 owns scheduling). Computes the
+    deterministic weekly universe, applies it to the canonical overlay store, and
+    appends exactly one history record. Idempotent for the same ISO week. Body
+    may include ``{"dry_run": true}`` to preview without mutating anything.
+    """
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    except Exception:
+        body = {}
+    dry_run = bool(body.get("dry_run"))
+    from app.core.universe.weekly_refresh import apply_weekly_universe_refresh, WeeklyRefreshError
+    try:
+        outcome = apply_weekly_universe_refresh(dry_run=dry_run)
+    except WeeklyRefreshError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return outcome
+
+
 @router.get("/universe/health")
 def ui_universe_health(
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
@@ -6042,6 +6068,33 @@ def _fmt_num(v: Any) -> str:
         return str(v) if v is not None else "—"
 
 
+CANONICAL_SOURCE = "canonical_decision_engine"
+CANONICAL_UNAVAILABLE_SOURCE = "canonical_decision_engine_unavailable"
+
+
+def _canonical_unavailable_block(reason_code: str, profile: str) -> Dict[str, Any]:
+    """R34.0 fail-closed contract.
+
+    When the canonical engine cannot produce an authoritative result (missing /
+    stale artifact, profile error, or unexpected failure) the route must NOT
+    claim canonical authority and must NOT fall back to a legacy actionable
+    recommendation. It returns an explicit degraded contract with empty
+    actionable recommendations and a safe reason code. Legacy lists remain
+    diagnostic-only.
+    """
+    return {
+        "decision_source": CANONICAL_UNAVAILABLE_SOURCE,
+        "status": "UNAVAILABLE",
+        "manual_only": True,
+        "active_profile": profile,
+        "actionable": [],
+        "watch": [],
+        "blocked": [],
+        "stay_in_cash": None,
+        "reason_codes": [reason_code],
+    }
+
+
 @router.get("/action-needed")
 def ui_action_needed(
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
@@ -6065,16 +6118,21 @@ def ui_action_needed(
     store.reload_from_disk()
     artifact = store.get_latest()
     if artifact is None:
+        # Fail-closed: no artifact => no canonical authority, no actionable.
         return {
             "options": [],
             "shares": [],
             "recently_changed": _recent_transitions(),
-            "decision_source": "canonical_decision_engine",
-            "authoritative_recommendations": None,
+            "decision_source": CANONICAL_UNAVAILABLE_SOURCE,
+            "canonical_status": "UNAVAILABLE",
+            "authoritative_recommendations": _canonical_unavailable_block(
+                "CANONICAL_ARTIFACT_MISSING", profile
+            ),
             "capital_safety": None,
             "active_profile": profile,
             "manual_only": True,
             "legacy_lists_role": "diagnostic_non_authoritative",
+            "reason_codes": ["CANONICAL_ARTIFACT_MISSING"],
         }
 
     # R25.9: Guardrails — compute metrics once for request-time ENTRY suppression
@@ -6348,6 +6406,7 @@ def ui_action_needed(
     authoritative_recommendations: Optional[Dict[str, Any]] = None
     capital_safety: Optional[Dict[str, Any]] = None
     profile_error: Optional[str] = None
+    canonical_reason: Optional[str] = None
     try:
         from app.core.decision_engine.live_service import compute_live_recommendations
         from app.core.decision_engine.profiles import ProfileValidationError
@@ -6375,10 +6434,26 @@ def ui_action_needed(
             )
             authoritative_recommendations = canonical.get("recommendations")
             capital_safety = canonical.get("capital_safety")
+            if authoritative_recommendations is None:
+                canonical_reason = "CANONICAL_ENGINE_UNAVAILABLE"
         except ProfileValidationError as exc:
             profile_error = str(exc)
+            canonical_reason = "CANONICAL_PROFILE_INVALID"
     except Exception:
-        authoritative_recommendations = None
+        canonical_reason = "CANONICAL_ENGINE_UNAVAILABLE"
+
+    canonical_ok = authoritative_recommendations is not None and canonical_reason is None
+    if canonical_ok:
+        decision_source = CANONICAL_SOURCE
+        canonical_status = "OK"
+    else:
+        # Fail-closed: never claim canonical authority and never promote legacy.
+        decision_source = CANONICAL_UNAVAILABLE_SOURCE
+        canonical_status = "UNAVAILABLE"
+        authoritative_recommendations = _canonical_unavailable_block(
+            canonical_reason or "CANONICAL_ENGINE_UNAVAILABLE", profile
+        )
+        capital_safety = None
 
     out: Dict[str, Any] = {
         "top_options": options_out,
@@ -6386,13 +6461,16 @@ def ui_action_needed(
         "options": options_out,
         "shares": shares_out,
         "recently_changed": _recent_transitions(),
-        "decision_source": "canonical_decision_engine",
+        "decision_source": decision_source,
+        "canonical_status": canonical_status,
         "authoritative_recommendations": authoritative_recommendations,
         "capital_safety": capital_safety,
         "active_profile": profile,
         "manual_only": True,
         "legacy_lists_role": "diagnostic_non_authoritative",
     }
+    if not canonical_ok:
+        out["reason_codes"] = [canonical_reason or "CANONICAL_ENGINE_UNAVAILABLE"]
     if profile_error is not None:
         out["profile_error"] = profile_error
     return out
@@ -6455,6 +6533,8 @@ def _attach_canonical_decision(out: Dict[str, Any], artifact: Any, sym_upper: st
             artifact, profile_name=profile, shares_by_symbol=shares_by_symbol
         )
         recs = canonical.get("recommendations") or {}
+        if not recs:
+            raise RuntimeError("canonical produced no recommendations")
         found = None
         for bucket in ("actionable", "watch", "blocked"):
             for item in recs.get(bucket, []) or []:
@@ -6463,13 +6543,22 @@ def _attach_canonical_decision(out: Dict[str, Any], artifact: Any, sym_upper: st
                     break
             if found:
                 break
-        out["decision_source"] = "canonical_decision_engine"
+        out["decision_source"] = CANONICAL_SOURCE
+        out["canonical_status"] = "OK"
         out["active_profile"] = canonical.get("profile", {}).get("name") if isinstance(canonical.get("profile"), dict) else profile
         out["manual_only"] = True
         out["canonical_decision"] = found
         out["legacy_diagnostics_role"] = "explanatory_non_authoritative"
     except Exception:
-        pass
+        # Fail-closed: never claim canonical authority on this symbol when the
+        # canonical computation fails.
+        out["decision_source"] = CANONICAL_UNAVAILABLE_SOURCE
+        out["canonical_status"] = "UNAVAILABLE"
+        out["active_profile"] = profile
+        out["manual_only"] = True
+        out["canonical_decision"] = None
+        out["reason_codes"] = ["CANONICAL_ENGINE_UNAVAILABLE"]
+        out["legacy_diagnostics_role"] = "explanatory_non_authoritative"
 
 
 @router.get("/symbol-diagnostics")

@@ -551,21 +551,24 @@ def fetch_base_chain(
     try:
         r = requests.get(url, params=params, timeout=TIMEOUT_SEC)
     except requests.RequestException as e:
+        from app.core.security.redact import redact_secrets
         latency_ms = int((time.perf_counter() - t0) * 1000)
+        safe_err = redact_secrets(e)
         logger.warning(
             "[ORATS_RESP] status=ERROR latency_ms=%d error=%s",
-            latency_ms, e
+            latency_ms, safe_err
         )
-        return [], None, f"Request failed: {e}", 0
+        return [], None, f"Request failed: {safe_err}", 0
     
     latency_ms = int((time.perf_counter() - t0) * 1000)
     
     if r.status_code != 200:
+        from app.core.security.redact import redact_secrets
         logger.warning(
             "[ORATS_RESP] status=%d latency_ms=%d rows=0 has_opra_fields=false",
             r.status_code, latency_ms
         )
-        return [], None, f"HTTP {r.status_code}: {r.text[:200]}", 0
+        return [], None, f"HTTP {r.status_code}: {redact_secrets(r.text[:200])}", 0
     
     try:
         raw = r.json()
@@ -852,10 +855,11 @@ def fetch_enriched_contracts(
         try:
             r = requests.get(url, params=params, timeout=TIMEOUT_SEC)
         except requests.RequestException as e:
+            from app.core.security.redact import redact_secrets
             latency_ms = int((time.perf_counter() - t0) * 1000)
             logger.warning(
                 "[ORATS_RESP] status=ERROR latency_ms=%d error=%s",
-                latency_ms, e
+                latency_ms, redact_secrets(e)
             )
             continue
         

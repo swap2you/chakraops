@@ -14,14 +14,23 @@
 - Gates: backend 1140 passed/3 skipped; frontend 315 passed/18 skipped; build PASS (~6.7s). Evidence: `docs/ai/releases/R34.0/notes.md` + local `out/verification/R34.0/*.log`.
 - H-5: RESOLVED at API/data-contract layer (canonical authoritative + legacy non-authoritative, evidenced). UI visual re-render + legacy physical retirement STAGED. Honest scope: packet Phases 4–9 NOT claimed complete. Codex PENDING (quota); no Codex approval claimed. No PR/tag/deploy.
 
+## Cursor — consolidated R32–R34 blocker remediation (2026-06-22)
+- Reviews recorded: Codex consolidated R32–R34 = **BLOCKED**; Claude R34 = APPROVED WITH NON-BLOCKING NOTES (narrow API cutover only); Cowork R34 UAT = PASS WITH NOTES (narrow API cutover only; no true browser rendering). R34 status corrected to INCOMPLETE / REMEDIATION ACTIVE; H-5 re-opened (rendered-UI cutover outstanding).
+- Phase 1 (weekly refresh operational): added `apply_weekly_universe_refresh()` (`app/core/universe/weekly_refresh.py`) + atomic bulk `apply_effective_universe()` / `snapshot_overlay()` / `restore_overlay()` (`universe_overrides.py`); admin POST `/api/ui/universe/weekly-refresh/apply`. Compute→apply→append exactly one history record; idempotent per ISO week; rollback if append fails. R35 still owns scheduling. Tests: `test_r340_weekly_refresh_operational.py`.
+- Phase 2 (ORATS log redaction): new `app/core/security/redact.py` (`redact_secrets`, `redact_params`, `safe_provider_error`). Wired into ORATS request-failure/log/exception sites: `orats/orats_client.py`, `orats_opra.py`, `orats_core_client.py`, `orats_equity_quote.py`, `options/providers/orats_client.py`, `options/orats_chain_pipeline.py`, `options/v2/{csp,cc}_chain_v2.py`, `eligibility/providers/orats_daily_provider.py`, plus `api/data_health.py` last_error_reason and `api/server.py` boot probe + 503. Tests use a FAKE token: `test_r340_orats_log_redaction.py`. Ignored `.env` never read/printed/copied.
+- Phase 3 (fail-closed canonical): `ui_action_needed` + `_attach_canonical_decision` no longer claim `decision_source=canonical_decision_engine` when canonical output is absent; return `canonical_decision_engine_unavailable` with empty actionable + reason code (`CANONICAL_ENGINE_UNAVAILABLE`/`CANONICAL_ARTIFACT_MISSING`/`CANONICAL_PROFILE_INVALID`); legacy never promoted. `/api/view/daily-overview` normalized with canonical source markers. Tests: `test_r340_canonical_failclosed.py`.
+- Phase 4 (missing-cash/sector): `live_service.portfolio_state_from_metrics` no longer infers cash from equity (unknown→0, fail-closed); `cash_is_known()` added; cash-consuming CSP/share-buy non-actionable when cash unknown; covered calls unaffected; `AVAILABLE_CASH_UNKNOWN` + `cash_known` surfaced in capital safety + top-level `data_flags`; sector-unavailable flagged (`SECTOR_UNKNOWN`), never silently ignored. Tests: `test_r340_missing_cash_sector.py`.
+- Gates: backend 1169 passed / 1 skipped; frontend 315 passed / 18 skipped; build PASS (known M-13 chunk-size + UniverseAdminPage nested-table warnings — staged Phase 6). Evidence: `out/verification/R34.0/`.
+- STAGED (NOT done): Phase 5 rendered visual cutover (Dashboard/Today/Symbol render canonical primary + WATCH/BLOCKED/STAY_IN_CASH); Phase 6 product scope (nav, portfolio, universe/data-health, backtest, journal/reports, frontend quality). H-5 stays OPEN until Phase 5 page tests pass. No PR/tag/deploy.
+
 ## Claude Code
 - Pending.
 
 ## Codex
-- Pending.
+- Consolidated R32–R34 verdict: BLOCKED (recorded). Re-review required after blocker remediation.
 
 ## Claude Cowork
-- Pending UAT.
+- R34 UAT: PASS WITH NOTES (narrow API cutover only; true browser rendering unavailable). Rendered-UI UAT pending Phase 5.
 
 ## Operator
 - Pending approval.

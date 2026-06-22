@@ -88,12 +88,14 @@ def fetch_core_snapshot(
         try:
             resp = requests.get(url, params=params, timeout=timeout_sec)
         except requests.RequestException as e:
+            from app.core.security.redact import redact_secrets
+            safe_err = redact_secrets(e)
             if _debug_orats:
-                logger.info("[ORATS_DEBUG] symbol=%s endpoint=cores error=%s", ticker_upper, e)
+                logger.info("[ORATS_DEBUG] symbol=%s endpoint=cores error=%s", ticker_upper, safe_err)
             raise OratsCoreError(
-                f"Request failed: {e}",
+                f"Request failed: {safe_err}",
                 ticker=ticker_upper,
-                response_snippet=str(e)[:200],
+                response_snippet=safe_err[:200],
             ) from e
         if resp.status_code != 200:
             snippet = resp.text[:300] if resp.text else ""
@@ -148,11 +150,13 @@ def fetch_core_snapshot(
     try:
         resp = requests.get(url, params=params, timeout=timeout_sec)
     except requests.RequestException as e:
-        logger.warning("[ORATS_CORE] ticker=%s request failed: %s", ticker_upper, e)
+        from app.core.security.redact import redact_secrets
+        safe_err = redact_secrets(e)
+        logger.warning("[ORATS_CORE] ticker=%s request failed: %s", ticker_upper, safe_err)
         raise OratsCoreError(
-            f"Request failed: {e}",
+            f"Request failed: {safe_err}",
             ticker=ticker_upper,
-            response_snippet=str(e)[:200],
+            response_snippet=safe_err[:200],
         ) from e
 
     if resp.status_code != 200:

@@ -23,6 +23,7 @@
 - Checkpoint review of commit 1223884: BLOCKED — R32 packet lacked exact authorized file paths (generic domain-only permissions) before the 12-file commit.
 - Cursor remediation: RELEASE_PACKET.md updated with exact committed paths + exact remaining-scope paths from the R31 blueprint; generic domains removed; additional-path-requires-approval retained. Recorded before further source edits.
 - Completed R32.0 review: PENDING — Codex quota exhausted; review not run. No Codex approval claimed.
+- Consolidated R32–R34 review: **BLOCKED**. R32-owned findings remediated under R34 on this branch — (1) weekly universe refresh operationalized (`app/core/universe/weekly_refresh.py::apply_weekly_universe_refresh` + atomic overlay apply in `universe_overrides.py`; admin POST `/api/ui/universe/weekly-refresh/apply`); (2) ORATS credential log redaction (`app/core/security/redact.py`) wired through the R32 ORATS request/log/exception paths. Re-review required; no Codex approval claimed.
 
 ## Claude Cowork
 - Pending UAT.

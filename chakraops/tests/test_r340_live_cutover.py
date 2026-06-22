@@ -201,18 +201,34 @@ def test_live_output_has_no_fail_warn_substrings() -> None:
     assert "WARN_" not in raw
 
 
-def test_action_needed_route_declares_canonical_source() -> None:
+def test_action_needed_route_declares_canonical_source(monkeypatch) -> None:
     from unittest.mock import patch
     from fastapi.testclient import TestClient
     from app.api.server import app
+
+    class _FakeStore:
+        def reload_from_disk(self):
+            pass
+
+        def get_latest(self):
+            return _build_artifact(["AAPL"], as_of=datetime.now(timezone.utc).isoformat())
+
+        def get_symbol(self, sym):
+            return None
+
+    monkeypatch.setattr(
+        "app.core.eval.evaluation_store_v2.get_evaluation_store_v2", lambda: _FakeStore()
+    )
+    monkeypatch.setattr("app.core.eval.evaluation_store_v2.get_eval_snapshot", lambda: {})
 
     with patch("app.api.ui_routes._require_ui_key"):
         client = TestClient(app)
         r = client.get("/api/ui/action-needed")
     assert r.status_code == 200
     data = r.json()
-    # Cutover markers present regardless of store contents.
+    # With a seeded artifact, the canonical engine is the authoritative source.
     assert data["decision_source"] == "canonical_decision_engine"
+    assert data["canonical_status"] == "OK"
     assert data["legacy_lists_role"] == "diagnostic_non_authoritative"
     assert data["manual_only"] is True
     assert "authoritative_recommendations" in data

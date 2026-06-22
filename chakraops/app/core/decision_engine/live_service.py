@@ -207,11 +207,31 @@ def build_decision_inputs_from_artifact(
     return inputs, provenance
 
 
+def cash_is_known(
+    guardrails_metrics: Optional[Mapping[str, Any]],
+    guardrails_snapshot: Optional[Mapping[str, Any]],
+) -> bool:
+    """True only when an explicit available-cash figure is present.
+
+    Total equity is never treated as available cash (R34.0 safety fix).
+    """
+    metrics = guardrails_metrics or {}
+    snapshot = guardrails_snapshot or {}
+    return snapshot.get("cash") is not None or metrics.get("cash") is not None
+
+
 def portfolio_state_from_metrics(
     guardrails_metrics: Optional[Mapping[str, Any]],
     guardrails_snapshot: Optional[Mapping[str, Any]],
 ) -> PortfolioState:
-    """Build a PortfolioState from the guardrails snapshot/metrics used by the live route."""
+    """Build a PortfolioState from the guardrails snapshot/metrics used by the live route.
+
+    R34.0 fail-closed cash policy: available cash is NEVER inferred from total
+    equity. When no explicit cash figure exists, ``available_cash`` is 0.0 so
+    cash-consuming strategies (CSP / share buy) are blocked rather than sized
+    against an assumed balance. Covered calls (which need owned shares, not cash)
+    are unaffected.
+    """
     metrics = guardrails_metrics or {}
     snapshot = guardrails_snapshot or {}
     total_value = (
@@ -225,9 +245,8 @@ def portfolio_state_from_metrics(
         else metrics.get("cash")
     )
     if available_cash is None:
-        # No cash figure available; assume fully deployable equity. The capital-set
-        # safety layer surfaces a DATA flag so this assumption is never silent.
-        available_cash = total_value
+        # Fail-closed: unknown cash => not deployable. Do NOT infer from equity.
+        available_cash = 0.0
     symbol_exposure = dict(metrics.get("symbol_notionals") or snapshot.get("symbol_notionals") or {})
     return PortfolioState(
         total_value=float(total_value or 0.0),
@@ -241,7 +260,7 @@ def compute_capital_set_safety(
     portfolio: PortfolioState,
     profile: Mapping[str, Any],
     *,
-    cash_assumed: bool = False,
+    cash_unknown: bool = False,
 ) -> Dict[str, Any]:
     """Recommendation-set capital safety for the displayed actionable set.
 
@@ -261,13 +280,16 @@ def compute_capital_set_safety(
     flags: List[str] = []
     if exceeds:
         flags.append("RECOMMENDATION_SET_EXCEEDS_DEPLOYABLE_CAPITAL")
-    if cash_assumed:
-        flags.append("CASH_BALANCE_ASSUMED_FROM_EQUITY")
+    if cash_unknown:
+        # Cash-consuming strategies are blocked upstream; surface why explicitly.
+        flags.append("AVAILABLE_CASH_UNKNOWN")
+        flags.append("CASH_STRATEGIES_BLOCKED_PENDING_CASH_DATA")
     return {
         "per_suggestion_not_additive": True,
         "note_code": "PER_SUGGESTION_SIZED_INDEPENDENTLY_NOT_JOINTLY_EXECUTABLE",
         "total_capital_required_displayed": total_required,
-        "available_cash": round(portfolio.available_cash, 2),
+        "available_cash": None if cash_unknown else round(portfolio.available_cash, 2),
+        "cash_known": not cash_unknown,
         "cash_buffer_pct": cash_buffer_pct,
         "cash_buffer_amount": buffer_amount,
         "deployable_capital": deployable_capital,
@@ -297,11 +319,9 @@ def compute_live_recommendations(
     primary.
     """
     now = now or datetime.now(timezone.utc)
-    cash_assumed = False
+    cash_unknown = False
     if portfolio is None:
-        cash_assumed = (guardrails_snapshot or {}).get("cash") is None and (
-            (guardrails_metrics or {}).get("cash") is None
-        )
+        cash_unknown = not cash_is_known(guardrails_metrics, guardrails_snapshot)
         portfolio = portfolio_state_from_metrics(guardrails_metrics, guardrails_snapshot)
 
     inputs, provenance = build_decision_inputs_from_artifact(
@@ -334,8 +354,12 @@ def compute_live_recommendations(
         recommendations.get("actionable", []),
         portfolio,
         profile_obj.to_dict(),
-        cash_assumed=cash_assumed,
+        cash_unknown=cash_unknown,
     )
+
+    data_flags: List[str] = []
+    if cash_unknown:
+        data_flags.append("AVAILABLE_CASH_UNKNOWN")
 
     return {
         "decision_source": DECISION_SOURCE,
@@ -347,4 +371,6 @@ def compute_live_recommendations(
         "capital_safety": capital_safety,
         "counts": result.get("counts"),
         "portfolio": portfolio.to_dict(),
+        "cash_known": not cash_unknown,
+        "data_flags": data_flags,
     }

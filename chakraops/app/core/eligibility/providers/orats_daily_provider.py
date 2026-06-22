@@ -155,7 +155,8 @@ class OratsDailyProvider:
         try:
             resp = requests.get(url, params=params, timeout=self._timeout_sec)
         except requests.RequestException as e:
-            logger.error("[ORATS_DAILY] symbol=%s request failed: %s", sym, e)
+            from app.core.security.redact import redact_secrets
+            logger.error("[ORATS_DAILY] symbol=%s request failed: %s", sym, redact_secrets(e))
             return []
 
         if resp.status_code != 200:

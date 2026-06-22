@@ -105,18 +105,19 @@ def run_cc_stage2_v2(
     trace["quote_as_of"] = quote_as_of
     trace["dte_window"] = [dte_min, dte_max]
 
+    from app.core.security.redact import redact_secrets
     try:
         token = _get_orats_token()
     except Exception as e:
-        return _fail("ORATS token unavailable", trace, str(e))
+        return _fail("ORATS token unavailable", trace, redact_secrets(e))
     url = f"{BASE_DATAV2.rstrip('/')}{PATH_STRIKES}"
     params = {"token": token, "ticker": symbol, "dte": f"{dte_min},{dte_max}"}
     try:
         r = requests.get(url, params=params, timeout=TIMEOUT_SEC)
     except requests.RequestException as e:
-        return _fail("Strikes request failed", trace, str(e))
+        return _fail("Strikes request failed", trace, redact_secrets(e))
     if r.status_code != 200:
-        return _fail(f"Strikes HTTP {r.status_code}", trace, r.text[:200])
+        return _fail(f"Strikes HTTP {r.status_code}", trace, redact_secrets(r.text[:200]))
     try:
         raw = r.json()
     except ValueError as e:
@@ -184,7 +185,8 @@ def run_cc_stage2_v2(
         try:
             r2 = requests.get(options_url, params={"token": token, param_name: ",".join(batch)}, timeout=TIMEOUT_SEC)
         except requests.RequestException as e:
-            logger.warning("[CC_V2] options request failed: %s", e)
+            from app.core.security.redact import redact_secrets
+            logger.warning("[CC_V2] options request failed: %s", redact_secrets(e))
             continue
         if r2.status_code != 200:
             continue

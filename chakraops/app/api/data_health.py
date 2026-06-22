@@ -249,13 +249,15 @@ def _attempt_live_summary() -> None:
             _LATENCY_SAMPLES.pop(0)
         _AVG_LATENCY_SECONDS = sum(_LATENCY_SAMPLES) / len(_LATENCY_SAMPLES) if _LATENCY_SAMPLES else elapsed
     except OratsUnavailableError as e:
+        from app.core.security.redact import redact_secrets
         _DATA_STATUS = "DOWN"
         _LAST_ERROR_AT = now
-        _LAST_ERROR_REASON = f"HTTP {e.http_status} — {e.response_snippet[:150]}"
+        _LAST_ERROR_REASON = redact_secrets(f"HTTP {e.http_status} — {(e.response_snippet or '')[:150]}")
     except Exception as e:
+        from app.core.security.redact import redact_secrets
         _DATA_STATUS = "DOWN"
         _LAST_ERROR_AT = now
-        _LAST_ERROR_REASON = str(e)[:500]
+        _LAST_ERROR_REASON = redact_secrets(str(e))[:500]
     _persist_state()
 
 

@@ -119,8 +119,36 @@ Exact paths (identified by repository inspection of the live recommendation path
 - `chakraops/docs/releases/R34.0_requirements.md`, `R34.0_release_notes.md`
 - `docs/ai/PROGRAM_STATUS.md`, `docs/master/CURRENT_STATE.md`, `chakraops/docs/releases/RELEASE_CHECKLIST.md`
 
+### Consolidated R32–R34 blocker remediation (2026-06-22) — exact authorized paths
+Codex consolidated R32–R34 = BLOCKED; Claude R34 = APPROVED WITH NON-BLOCKING NOTES (narrow API cutover only); Cowork = PASS WITH NOTES (narrow API cutover only). This pass closes the concrete safety/security/correctness blockers. Generic domain permissions removed — exact tracked paths only:
+
+Phase 1 — operational weekly universe refresh:
+- MODIFIED `chakraops/app/core/universe/weekly_refresh.py` — `apply_weekly_universe_refresh()` orchestrator (compute → apply → append one history record; idempotent; atomic rollback).
+- MODIFIED `chakraops/app/core/universe/universe_overrides.py` — `apply_effective_universe()` (atomic bulk overlay), `snapshot_overlay()`, `restore_overlay()`.
+- MODIFIED `chakraops/app/api/ui_routes.py` — admin POST `/api/ui/universe/weekly-refresh/apply` (R35 still owns scheduling).
+- NEW `chakraops/tests/test_r340_weekly_refresh_operational.py`.
+
+Phase 2 — ORATS credential log redaction:
+- NEW `chakraops/app/core/security/__init__.py`, `chakraops/app/core/security/redact.py`.
+- MODIFIED ORATS request/log/exception sites: `app/core/orats/{orats_client,orats_opra,orats_core_client,orats_equity_quote}.py`, `app/core/options/providers/orats_client.py`, `app/core/options/orats_chain_pipeline.py`, `app/core/options/v2/{csp,cc}_chain_v2.py`, `app/core/eligibility/providers/orats_daily_provider.py`, `app/api/data_health.py`, `app/api/server.py`.
+- NEW `chakraops/tests/test_r340_orats_log_redaction.py` (FAKE token only).
+
+Phase 3 — fail-closed canonical computation:
+- MODIFIED `chakraops/app/api/ui_routes.py` (`ui_action_needed`, `_attach_canonical_decision`), `chakraops/app/api/server.py` (`/api/view/daily-overview` source markers).
+- NEW `chakraops/tests/test_r340_canonical_failclosed.py`.
+
+Phase 4 — missing-cash/sector safety:
+- MODIFIED `chakraops/app/core/decision_engine/live_service.py`.
+- NEW `chakraops/tests/test_r340_missing_cash_sector.py`.
+
+Governance/evidence (authorized for edit):
+- `docs/ai/releases/R34.0/{STATUS,TOOL_LOG,RELEASE_PACKET}.md`, `docs/ai/releases/R32.0/{STATUS,TOOL_LOG,RELEASE_PACKET}.md`
+- `docs/ai/PROGRAM_STATUS.md`, `docs/master/CURRENT_STATE.md`, `docs/master/R31.0_DEFECT_AND_GAP_REGISTER.md`
+- `chakraops/docs/releases/{R34.0_requirements,R34.0_release_notes,RELEASE_CHECKLIST}.md`
+- `out/verification/R34.0/*` (local ignored evidence)
+
 ### Staged (later R34 work — NOT claimed complete in this pass)
-Full dashboard/navigation consolidation, portfolio/position experience, universe/data-health UI, backtest engine, journal/retention/reporting, and the broader frontend-quality overhaul (packet Phases 4–9) are large and are delivered/iterated after the cutover is proven. They are tracked as remaining R34 scope and must not be claimed complete until implemented and evidenced.
+Phase 5 (rendered visual cutover: Dashboard/Today/Symbol render `authoritative_recommendations.actionable` + separate WATCH/BLOCKED/STAY_IN_CASH) and Phase 6 (full product scope — nav consolidation, portfolio/position experience, universe/data-health UI, backtest engine, journal/retention/reporting, frontend-quality M-13/nested-table) are large and remain remaining R34 scope. They must not be claimed complete until implemented and evidenced. H-5 stays OPEN until Phase 5 page-level cutover tests pass.
 
 Any additional tracked path requires operator approval and a packet update before implementation.
 

@@ -78,7 +78,8 @@ def _get(
         try:
             resp = session.get(url, params=params, timeout=timeout)
         except requests.RequestException as e:
-            logger.warning("ORATS request failed: %s", e)
+            from app.core.security.redact import redact_secrets
+            logger.warning("ORATS request failed: %s", redact_secrets(e))
             raise
 
         if resp.status_code in (401, 403):

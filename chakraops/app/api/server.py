@@ -835,7 +835,8 @@ async def _lifespan(app: FastAPI):
             probe_orats_live("SPY")
             probe_status = "OK"
         except Exception as e:
-            logger.warning("ORATS boot probe failed: %s", e)
+            from app.core.security.redact import redact_secrets
+            logger.warning("ORATS boot probe failed: %s", redact_secrets(e))
     api_routes = _collect_api_routes(app)
     count = len(api_routes)
     logger.info("[ROUTES] registered=%s", count)
@@ -1535,12 +1536,14 @@ def api_ops_refresh_live_data() -> Dict[str, Any]:
         result = probe_orats_live("SPY")
         return result
     except OratsUnavailableError as e:
+        from app.core.security.redact import redact_secrets
         raise HTTPException(
             status_code=503,
-            detail={"provider": "ORATS", "reason": str(e), "http_status": getattr(e, "http_status", 0)},
+            detail={"provider": "ORATS", "reason": redact_secrets(e), "http_status": getattr(e, "http_status", 0)},
         )
     except Exception as e:
-        raise HTTPException(status_code=503, detail={"provider": "ORATS", "reason": str(e)})
+        from app.core.security.redact import redact_secrets
+        raise HTTPException(status_code=503, detail={"provider": "ORATS", "reason": redact_secrets(e)})
 
 
 @app.post("/api/ops/reset-local-state")
@@ -1610,6 +1613,15 @@ def api_view_daily_overview() -> Dict[str, Any]:
     from datetime import datetime, timezone
     fetched_at = datetime.now(timezone.utc).isoformat()
     artifact = load_decision_artifact()
+    # R34.0: normalize the decision source. The authoritative primary
+    # recommendation is produced by the canonical decision engine and exposed via
+    # GET /api/ui/action-needed#authoritative_recommendations; the daily overview
+    # is a non-authoritative summary view.
+    decision_source_markers = {
+        "decision_source": "canonical_decision_engine",
+        "authoritative_recommendations_source": "/api/ui/action-needed#authoritative_recommendations",
+        "view_role": "summary_non_authoritative",
+    }
     if not artifact:
         out = build_daily_overview_from_artifact({
             "daily_trust_report": {},
@@ -1617,9 +1629,11 @@ def api_view_daily_overview() -> Dict[str, Any]:
             "decision_snapshot": {},
         })
         out["fetched_at"] = fetched_at
+        out.update(decision_source_markers)
         return JSONResponse(status_code=200, content=out)
     out = build_daily_overview_from_artifact(artifact)
     out["fetched_at"] = fetched_at
+    out.update(decision_source_markers)
     return out
 
 

@@ -108,9 +108,15 @@ Note: `chakraops/app/core/environment/event_calendar.py` was NOT modified in R32
 ### Docs / governance
 
 - `docs/ai/releases/R32.0/RELEASE_PACKET.md`
+- `docs/ai/releases/R32.0/{STATUS,TOOL_LOG}.md` (consolidated R32–R34 review verdicts)
 - `docs/master/CURRENT_STATE.md`
 - `docs/ai/releases/R34.0/RELEASE_PACKET.md` (R34 persistence-decision guardrail, Step 5)
 - `docs/ai/PROGRAM_MASTER_PLAN.md` (R34 persistence-decision guardrail, Step 5)
+
+### Consolidated R32–R34 remediation (handled under the R34 pass on this branch)
+The consolidated Codex review (BLOCKED) cited two R32-owned items, remediated under R34 and authorized via the R34 packet:
+- Weekly universe refresh operationalized: `chakraops/app/core/universe/weekly_refresh.py`, `chakraops/app/core/universe/universe_overrides.py`.
+- ORATS credential log redaction wired through R32 ORATS modules: `chakraops/app/core/orats/*.py`, `chakraops/app/core/options/**/orats*.py`, `chakraops/app/core/eligibility/providers/orats_daily_provider.py`, `chakraops/app/api/data_health.py` (new shared helper `chakraops/app/core/security/redact.py`).
 
 Any additional tracked path requires operator approval and a packet update before editing.
 

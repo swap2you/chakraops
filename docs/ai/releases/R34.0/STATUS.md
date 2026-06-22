@@ -13,28 +13,35 @@ Consolidate the operator experience around trusted decisions, positions, backtes
 Level 3 — application refactor and analytical presentation
 
 ## Current status
-CUTOVER COMPLETE (Phases 0–3), BROADER PRODUCT PHASES STAGED. The canonical decision engine is now the **authoritative producer of the primary live recommendation** at the API/data-contract layer (`/api/ui/action-needed` → `authoritative_recommendations`; Today + Symbol Diagnostics carry `decision_source`/`canonical_decision`); legacy lists are relabeled `diagnostic_non_authoritative`. R32 `stale_data_gate` enforced on the live actionable path. Recommendation-set capital safety added. Persistence decision documented (RETAIN; no migration). Gate-verified. Packet Phases 4–9 (dashboard/nav redesign, portfolio/universe UI, backtest engine, journal/reports, frontend overhaul) are **staged and NOT claimed complete**.
+INCOMPLETE / REMEDIATION ACTIVE. Consolidated review found Codex **BLOCKED** (R32–R34) with specific safety/security/correctness defects; Claude APPROVED-WITH-NOTES and Cowork PASS-WITH-NOTES for the **narrow API cutover only**. This remediation pass closes the concrete BLOCKERS with tests + passing gates:
+- Phase 1 — weekly universe refresh is now **operational** (computes → applies via the canonical overlay store → appends exactly one history record; idempotent per ISO week; atomic with rollback; admin POST `/api/ui/universe/weekly-refresh/apply`; R35 still owns scheduling).
+- Phase 2 — **ORATS credential log redaction** (central `app/core/security/redact.py`; wired into all ORATS request-failure/log/exception sites and the data-health/boot-probe/503 paths).
+- Phase 3 — **fail-closed canonical live computation** (`/api/ui/action-needed`, `_attach_canonical_decision`): canonical authority is never claimed when canonical output is absent; no legacy actionable fallback; explicit degraded contract with empty actionable + reason code.
+- Phase 4 — **missing-cash and sector safety**: available cash is never inferred from total equity; cash-consuming CSP/share-buy are non-actionable when cash is unknown; covered calls may proceed; sector concentration that cannot be evaluated is surfaced, not silently ignored.
+- `/api/view/daily-overview` normalized with canonical decision-source markers.
+
+STAGED / NOT COMPLETE (must not be claimed done): Phase 5 (rendered visual cutover in Dashboard/Today/Symbol) and Phase 6 (full product scope — nav consolidation, portfolio/positions, universe/data-health pages, backtest engine, journal/reports reconciliation, frontend-quality M-13/nested-table).
 
 ## Dependencies
-R33.0 canonical decision and profile contracts (implemented + tested; Claude BLOCKED on live cutover, which R34 closes at the API/data layer).
+R33.0 canonical decision and profile contracts (implemented + tested).
 
 ## Cursor implementation
-DELIVERED (cutover core): Phase 0 R33 claim correction (commit c82b353); Phase 1 canonical live cutover via `legacy_adapter.py` + `live_service.py` wired into `ui_routes.py` (action-needed/symbol-diagnostics/today) with `stale_data_gate` + `profile_overrides`→422; Phase 2 recommendation-set capital safety; Phase 3 persistence decision (`persistence_decision.md`, RETAIN). Frontend types/hook expose the authoritative block. STAGED (not done): packet Phases 4–9.
+DELIVERED this pass: Phases 1–4 + daily-overview source markers, with new tests (`test_r340_orats_log_redaction.py`, `test_r340_weekly_refresh_operational.py`, `test_r340_canonical_failclosed.py`, `test_r340_missing_cash_sector.py`) and updated `test_r340_live_cutover.py`. STAGED: Phase 5 (rendered UI), Phase 6 (product scope).
 
 ## Claude review
-Re-review requested — canonical live cutover closes the R33 BLOCKER at the API/data layer (authoritative source = canonical engine; legacy non-authoritative; stale-data blocking on the live actionable path).
+Prior: APPROVED WITH NON-BLOCKING NOTES for the narrow API cutover only. Re-review required for the new blocker remediations; rendered-UI cutover (Phase 5) still outstanding.
 
 ## Codex review
-PENDING — Codex quota exhausted; review not run. No Codex approval claimed.
+Consolidated R32–R34: **BLOCKED**. This pass remediates the cited safety/security/correctness blockers (weekly-refresh operationalization, ORATS log redaction, canonical fail-closed, missing-cash/sector). Re-review required. No Codex approval claimed.
 
 ## Cowork UAT
-Required — see UAT checklist in `notes.md`.
+PASS WITH NOTES (narrow API cutover only); true browser rendering was not available. Rendered-UI UAT remains required after Phase 5. See `out/verification/R34.0/browser_uat_plan.md`.
 
-## Gates
-- Backend: PASS — 1140 passed, 3 skipped (was 1127; +13 R34 tests)
-- Frontend tests: PASS — 315 passed, 18 skipped (was 313; +2 R34 tests)
-- Frontend build: PASS — vite ~6.7s (pre-existing chunk-size M-13 + dynamic-import notice; no errors)
-- Release-specific validation: PASS — canonical-cutover proof, stale-data live-route proof, no-conflicting-primary, profile carried, manual-only, top 5–7 cap, capital-set warning, 422. Evidence: docs/ai/releases/R34.0/notes.md (+ local logs out/verification/R34.0/)
+## Gates (this remediation pass)
+- Backend: PASS — 1169 passed, 1 skipped
+- Frontend tests: PASS — 315 passed, 18 skipped
+- Frontend build: PASS (known M-13 chunk-size + UniverseAdminPage nested-table warnings — staged Phase 6)
+- Evidence: out/verification/R34.0/ (notes.md, canonical_cutover.md, changed_files.md, persistence_decision.md, browser_uat_plan.md, gate logs)
 
 ## PR
 Pending
@@ -46,13 +53,14 @@ Pending
 Pending
 
 ## Open blockers
-- H-5 (dual decision/ranking): RESOLVED at the API/data-contract layer — canonical engine is the authoritative primary; legacy relabeled non-authoritative and evidenced. UI visual re-render onto the canonical block and legacy physical retirement are STAGED (packet Phase 4 / later cleanup).
+- H-5 (dual decision/ranking): **OPEN**. Fail-closed canonical authority is enforced at the API/data-contract layer, but the rendered UI (Dashboard/Today/Symbol) still shows legacy primary lists. H-5 cannot be closed until Phase 5 ships and its page-level cutover tests pass.
+- Phase 5 (rendered visual cutover) and Phase 6 (full product scope): not started.
 
 ## H-5 status
-RESOLVED (live cutover evidenced at API/data layer). Visual dashboard re-render + legacy module retirement deferred to staged work.
+OPEN — API/data-contract layer fail-closed and authoritative; rendered-product cutover STAGED (Phase 5). Close only after rendered-UI cutover tests pass.
 
 ## Next action
-Claude re-review of the cutover + Cowork browser UAT + deferred Codex review before R35.0. Staged: packet Phases 4–9 (product consolidation) within R34's broader scope.
+Phase 5 rendered cutover + Phase 6 product scope; then Claude re-review, Codex re-review, and real-browser Cowork UAT before R35.0.
 
 ## Stop point
-R34.0 cutover (Phases 0–3) complete, gate-verified, and pushed. Broader product phases staged. No PR, no tag, no deploy.
+Consolidated R32–R34 safety/security/correctness blockers remediated, gate-verified, and pushed. R34.0 is NOT complete: Phase 5 (rendered cutover) and Phase 6 (product scope) remain. No PR, no tag, no deploy.

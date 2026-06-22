@@ -1,6 +1,6 @@
 # Current State — ChakraOps
 
-_Last updated: R34.0 canonical live cutover complete + gate-verified; product Phases 4–9 staged (program R31–R35)_
+_Last updated: consolidated R32–R34 Codex BLOCKED remediated (weekly-refresh operationalized, ORATS log redaction, canonical fail-closed, missing-cash/sector) + gate-verified; R34 INCOMPLETE — rendered visual cutover + product scope staged; H-5 OPEN (program R31–R35)_
 
 ## Release Status
 
@@ -10,8 +10,8 @@ _Last updated: R34.0 canonical live cutover complete + gate-verified; product Ph
 | Tag | `chakraops-r30.7.0` |
 | Current branch | `release/R31-R35-program` |
 | Current mode | Program R31–R35 (single branch, five milestone commits, one final PR) |
-| Active milestone | R34.0 — canonical live cutover COMPLETE + gate-verified (H-5 resolved at API/data layer: canonical engine authoritative, legacy non-authoritative, stale-data blocking, capital-set safety, persistence RETAIN). Product Phases 4–9 (dashboard/nav/portfolio/universe/backtest/journal/reports/frontend) STAGED, not claimed complete |
-| Prior milestone | R33.0 — canonical decision engine implemented + tested; Claude BLOCKED on live cutover (closed by R34 cutover) |
+| Active milestone | R34.0 — INCOMPLETE / REMEDIATION ACTIVE. Consolidated Codex R32–R34 **BLOCKED** remediated + gate-verified: weekly-refresh operationalized, ORATS log redaction, canonical **fail-closed** (API/data layer), missing-cash/sector safety, persistence RETAIN. STAGED (not done): Phase 5 rendered visual cutover (Dashboard/Today/Symbol) + Phase 6 product scope. **H-5 OPEN** until rendered-UI cutover tests pass |
+| Prior milestone | R33.0 — canonical decision engine implemented + tested |
 
 ## R31.0 Validation Gates (audit milestone)
 

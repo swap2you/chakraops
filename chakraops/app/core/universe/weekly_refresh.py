@@ -16,7 +16,7 @@ supplied ``as_of`` date. Persistence of run history lives in
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 # Reason codes (code-only labels).
@@ -157,3 +157,122 @@ def compute_weekly_universe(
         removed=removed,
         reason_codes=reasons,
     )
+
+
+# Outcome codes (code-only labels) for the operational refresh.
+OUTCOME_APPLIED = "APPLIED"
+OUTCOME_SKIPPED_IDEMPOTENT = "SKIPPED_IDEMPOTENT"
+
+
+class WeeklyRefreshError(RuntimeError):
+    """Raised when an operational refresh fails to apply or record atomically."""
+
+
+def apply_weekly_universe_refresh(
+    *,
+    as_of: Optional[date] = None,
+    manifest: Optional[Dict[str, Any]] = None,
+    base_symbols: Optional[List[str]] = None,
+    history_store: Optional[Any] = None,
+    source: str = "weekly_refresh",
+    run_at: Optional[datetime] = None,
+    dry_run: bool = False,
+) -> Dict[str, Any]:
+    """Operationally apply the deterministic weekly universe (R34.0).
+
+    Pipeline: compute -> idempotency check (week id) -> apply to the canonical
+    overlay store -> append exactly one history record. The apply and the record
+    are coupled atomically: if the history append fails the applied overlay is
+    rolled back, so a partially-applied universe is never left behind.
+
+    Does NOT run automatically; R35 owns scheduling. Intended for a controlled
+    manual/admin trigger.
+
+    Parameters
+    ----------
+    as_of: reference date (defaults to today, UTC).
+    manifest: universe manifest (defaults to the configured manifest).
+    base_symbols: CSV base universe (defaults to the canonical base).
+    history_store: ``RefreshHistoryStore`` (defaults to the canonical store).
+    dry_run: compute + diff only; never mutates the overlay or history.
+    """
+    from app.core.universe.refresh_history_store import RefreshHistoryStore
+    from app.core.universe.universe_overrides import (
+        apply_effective_universe,
+        restore_overlay,
+        snapshot_overlay,
+    )
+
+    as_of = as_of or datetime.now(timezone.utc).date()
+    store = history_store or RefreshHistoryStore()
+    week = iso_week_id(as_of)
+
+    last = store.last()
+    if last and last.get("week_id") == week:
+        # Idempotent: a record for this ISO week already exists. Do not re-apply
+        # and do not append a duplicate weekly record.
+        return {
+            "outcome": OUTCOME_SKIPPED_IDEMPOTENT,
+            "week_id": week,
+            "reason_codes": ["ALREADY_REFRESHED_THIS_WEEK"],
+            "record": last,
+            "applied_added": [],
+            "applied_removed": [],
+        }
+
+    if manifest is None:
+        from app.core.universe.universe_manager import load_universe_manifest
+
+        manifest = load_universe_manifest()
+    if base_symbols is None:
+        from app.api.data_health import get_base_universe_symbols
+
+        base_symbols = get_base_universe_symbols()
+
+    previous_symbols = list(last.get("symbols")) if last else None
+    result = compute_weekly_universe(manifest, as_of, previous_symbols=previous_symbols)
+
+    if dry_run:
+        return {
+            "outcome": "DRY_RUN",
+            "week_id": result.week_id,
+            "result": result.to_dict(),
+            "applied_added": [],
+            "applied_removed": [],
+            "record": None,
+        }
+
+    prev_overlay = snapshot_overlay()
+    try:
+        applied_added, applied_removed = apply_effective_universe(result.symbols, base_symbols)
+    except Exception as e:  # fail-loud; nothing recorded
+        raise WeeklyRefreshError(f"weekly refresh apply failed: {e}") from e
+
+    try:
+        record = store.append(
+            week_id=result.week_id,
+            symbols=result.symbols,
+            reason_codes=result.reason_codes,
+            added=result.added,
+            removed=result.removed,
+            source=source,
+            run_at=run_at,
+        )
+    except Exception as e:
+        # Roll back the applied overlay so the universe is never partially applied.
+        try:
+            restore_overlay(prev_overlay)
+        except Exception:
+            pass
+        raise WeeklyRefreshError(
+            f"weekly refresh history append failed (overlay rolled back): {e}"
+        ) from e
+
+    return {
+        "outcome": OUTCOME_APPLIED,
+        "week_id": result.week_id,
+        "result": result.to_dict(),
+        "applied_added": applied_added,
+        "applied_removed": applied_removed,
+        "record": record,
+    }

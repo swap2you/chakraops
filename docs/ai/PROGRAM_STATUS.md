@@ -1,7 +1,7 @@
 # ChakraOps Program Status
 
 Last initialized: 2026-06-21
-Last updated: 2026-06-21 (R33 governance corrected; R34.0 canonical live cutover complete + gate-verified; H-5 resolved at API/data layer; product Phases 4–9 staged)
+Last updated: 2026-06-22 (consolidated R32–R34 Codex BLOCKED remediated: weekly-refresh operationalized, ORATS log redaction, canonical fail-closed, missing-cash/sector; gate-verified. R34 still INCOMPLETE — rendered visual cutover (Phase 5) + product scope (Phase 6) staged; H-5 OPEN until rendered-UI tests pass)
 
 ## Program branch and workflow
 
@@ -16,7 +16,7 @@ Last updated: 2026-06-21 (R33 governance corrected; R34.0 canonical live cutover
 | R31.0 | IMPLEMENTED (gates green, committed; awaiting review) | Cursor / Claude / Codex | Operator review of audit + blueprint; resolve D-1 (R30.8) |
 | R32.0 | COMPLETE — C-1 + Claude notes + full data-reliability scope delivered and gate-verified; Claude APPROVED-WITH-NOTES (notes closed in 049cb2f); Codex review PENDING (quota) | Cursor / Claude / Codex | Deferred Codex R32 review |
 | R33.0 | IMPLEMENTED + TESTED, Claude **BLOCKED** on live cutover — canonical engine is correct/tested but not yet the authoritative live recommendation path; H-5 OPEN, reassigned to R34 | Cursor / Claude / Codex | Closed by R34 live cutover; deferred Codex review |
-| R34.0 | CUTOVER COMPLETE (gate-verified) — canonical engine is the authoritative live recommendation at API/data layer (H-5 resolved there); capital-set safety + persistence decision (RETAIN) done. Product Phases 4–9 (dashboard/nav/portfolio/universe/backtest/journal/reports/frontend) STAGED, not claimed complete | Cursor / Claude / Codex | Claude re-review + Cowork UAT + deferred Codex; then staged product phases / R35 |
+| R34.0 | INCOMPLETE / REMEDIATION ACTIVE — consolidated Codex R32–R34 **BLOCKED** remediated (gate-verified): weekly-refresh operationalized, ORATS log redaction, canonical **fail-closed** at API/data layer, missing-cash/sector safety. STAGED (not done): Phase 5 rendered visual cutover (Dashboard/Today/Symbol) + Phase 6 product scope. **H-5 OPEN** until rendered-UI cutover tests pass | Cursor / Claude / Codex | Phase 5 + Phase 6; then Claude/Codex re-review + real-browser Cowork UAT |
 | R35.0 | PACKET_READY / DEPENDS_ON_R34 | Cursor / Cowork | Wait for product-flow acceptance |
 
 ## Current program rule

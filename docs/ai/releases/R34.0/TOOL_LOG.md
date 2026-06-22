@@ -39,14 +39,20 @@
 - Gates: backend 1200 passed/1 skipped; frontend 334 passed/18 skipped; build PASS. Evidence under `out/verification/R34.0/`.
 - **H-5 CLOSED** after rendered-UI cutover page tests passed. Implementation commit `R34.0: complete rendered canonical cutover and product hardening` pushed to `release/R31-R35-program`. No PR/tag/deploy. R35 not started.
 
+## Cursor — final operational-integrity remediation: Phase 0 waiver (2026-06-22d)
+- Reviews recorded: Claude final R34 **APPROVED WITH NON-BLOCKING NOTES**; Cowork final UAT **PASS WITH NOTES**; Codex final R34 **BLOCKED** (refresh integrity, ORATS redaction gaps, authorization reconciliation, generated-file hygiene).
+- Operator waiver recorded: accepts exact-path deviation in commit `50aa600` (documented waiver only; not retroactive authorization).
+- RELEASE_PACKET.md updated with complete as-built path list from 50aa600, explicit waiver-reconciled paths (`engine.py`, `gates.py`, `Table.tsx`, `Table.dom.test.tsx`, `reasonLabels.ts`, all frontend test paths), and exact paths for integrity remediation Fixes 1–4.
+- Docs-only commit `docs(R34.0): record authorization waiver and final integrity paths` created and pushed BEFORE source edits.
+
 ## Claude Code
-- Pending.
+- Final R34 review: APPROVED WITH NON-BLOCKING NOTES.
 
 ## Codex
-- Consolidated R32–R34 verdict: BLOCKED (recorded). Re-review required after final remediation.
+- Final R34 review: BLOCKED (refresh integrity, downstream ORATS redaction, authorization reconciliation, generated-file hygiene). Targeted re-review required after integrity remediation.
 
 ## Claude Cowork
-- R34 real-browser UAT: PASS WITH NOTES — rendered canonical cutover incomplete. Re-UAT required after the rendered cutover.
+- Final real-browser UAT: PASS WITH NOTES.
 
 ## Operator
 - Pending approval.

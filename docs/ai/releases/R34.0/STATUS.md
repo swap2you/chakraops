@@ -13,7 +13,11 @@ Consolidate the operator experience around trusted decisions, positions, backtes
 Level 3 — application refactor and analytical presentation
 
 ## Current status
-COMPLETE (pending final external validation). The final pass (authorization commit `30ffa7f` `docs(R34.0): authorize final cutover remediation paths`, implementation commit `R34.0: complete rendered canonical cutover and product hardening`) delivers all required Phase 7 items: transaction-safe weekly refresh (cross-process lock + journal recovery), complete ORATS application-path redaction (no bare token-bearing rethrows; snippets sanitized at construction; secret scan 0 hits), live sector enforcement, **rendered** canonical cutover (Dashboard/Today/Symbol render the authoritative block as primary; legacy demoted to a collapsed diagnostics section), shared-table DOM fix, Backtest SIMULATION label, positions pagination, and navigation grouping. **H-5 is CLOSED** — rendered-UI cutover page tests pass. Awaiting final Claude, Codex, and Cowork R34 validation before R35.0.
+IMPLEMENTATION COMPLETE — **final operational-integrity remediation active** (starting commit `50aa600`). Prior cutover pass delivered transaction-safe weekly refresh, complete ORATS application-path redaction, live sector enforcement, rendered canonical cutover, shared-table DOM fix, Backtest SIMULATION label, positions pagination, and navigation grouping. **H-5 CLOSED.**
+
+**Final external validation:** Claude final R34 review **APPROVED WITH NON-BLOCKING NOTES**; Cowork real-browser UAT **PASS WITH NOTES**; Codex final R34 review **BLOCKED** on refresh integrity, remaining ORATS redaction, authorization reconciliation, and generated-file hygiene. This pass addresses Codex blockers. R34 is described as implementation complete — **not** externally approved — awaiting Codex targeted re-review before R35.0.
+
+**Operator waiver (2026-06-22d):** The operator explicitly accepts the historical exact-path deviation in commit `50aa600`. Documented waiver only — not retroactive authorization and not permission to repeat the pattern.
 
 ### Prior (safety) remediation pass — already delivered + gate-verified:
 - Phase 1 — weekly universe refresh is now **operational** (computes → applies via the canonical overlay store → appends exactly one history record; idempotent per ISO week; atomic with rollback; admin POST `/api/ui/universe/weekly-refresh/apply`; R35 still owns scheduling).
@@ -37,13 +41,13 @@ R33.0 canonical decision and profile contracts (implemented + tested).
 DELIVERED this pass: Phases 1–4 + daily-overview source markers, with new tests (`test_r340_orats_log_redaction.py`, `test_r340_weekly_refresh_operational.py`, `test_r340_canonical_failclosed.py`, `test_r340_missing_cash_sector.py`) and updated `test_r340_live_cutover.py`. STAGED: Phase 5 (rendered UI), Phase 6 (product scope).
 
 ## Claude review
-- Safety remediation: APPROVED WITH NON-BLOCKING NOTES — but R34 INCOMPLETE (rendered cutover, transaction-safe refresh, complete redaction, sector enforcement outstanding). Addressed in the final pass. Re-review required.
+- Final R34 review: **APPROVED WITH NON-BLOCKING NOTES** (implementation complete; integrity remediation addresses remaining notes).
 
 ## Codex review
-- Consolidated R32–R34: **BLOCKED**. Final pass addresses concurrency/atomicity of weekly refresh, complete ORATS redaction (bare rethrows + raw snippets), and rendered cutover. Re-review required. No Codex approval claimed.
+- Final R34 review: **BLOCKED** — refresh journal/history integrity, ownership-safe lock, downstream ORATS sanitization, authorization reconciliation (50aa600 waiver recorded), generated-file hygiene. Remediation pass active. No Codex approval claimed.
 
 ## Cowork UAT
-- Real-browser UAT: PASS WITH NOTES — rendered canonical cutover incomplete. Final pass renders the canonical block as primary on Dashboard/Today/Symbol and demotes legacy. Re-UAT required. See `out/verification/R34.0/frontend_uat_plan.md`.
+- Final real-browser UAT: **PASS WITH NOTES**. See `out/verification/R34.0/frontend_uat_plan.md`.
 
 ## Gates (final cutover pass)
 - Backend: PASS — 1200 passed, 1 skipped
@@ -68,7 +72,7 @@ Pending
 **CLOSED (R34.0)** — API/data-contract layer fail-closed and authoritative; rendered-UI cutover complete on Dashboard/Today/Symbol; page-level cutover tests pass (`DashboardPage.canonical.test.tsx`, `TodayPage.canonical.test.tsx`, `SymbolDiagnosticsPage.canonical.test.tsx`). Physical legacy-module retirement deferred to post-R35.
 
 ## Next action
-Final Claude re-review, Codex re-review, and real-browser Cowork UAT of R34.0; then proceed to R35.0. No PR, no tag, no deploy until validated.
+Final operational-integrity remediation (Codex blockers); then Codex targeted re-review before R35.0. No PR, no tag, no deploy.
 
 ## Stop point
-R34.0 complete: transaction-safe weekly refresh, complete ORATS redaction, live sector enforcement, rendered canonical cutover, Symbol Diagnostics canonical/empty-state, table DOM fix, SIMULATION label, navigation grouping, positions pagination — all gate-verified and pushed. H-5 closed. No PR, no tag, no deploy. R35 not started.
+R34.0 implementation complete; integrity remediation active for Codex blockers. H-5 closed. No PR, no tag, no deploy. R35 not started.

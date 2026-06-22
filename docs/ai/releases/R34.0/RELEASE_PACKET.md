@@ -201,6 +201,125 @@ Governance/evidence (authorized for edit): `docs/ai/releases/R34.0/{STATUS,TOOL_
 ### Approved for post-R35 enhancement (NOT required for R34)
 Drag-and-drop dashboard customization; broad visual redesign; physical deletion of all legacy modules; extensive bundle architecture beyond low-risk improvements; advanced multi-user database architecture.
 
+### Operator authorization waiver — commit 50aa600 (2026-06-22d)
+
+The operator explicitly accepts the historical exact-path deviation in commit `50aa600`
+(`R34.0: complete rendered canonical cutover and product hardening`). This is a
+**documented waiver**, not retroactive authorization and **not permission to repeat the
+pattern**. Any future path discovered after packet authorization still requires a packet
+update committed before edit.
+
+Codex final R34 review: **BLOCKED** on refresh integrity, remaining ORATS redaction,
+authorization reconciliation, and generated-file hygiene. Claude final R34 review:
+APPROVED WITH NON-BLOCKING NOTES. Cowork real-browser UAT: PASS WITH NOTES.
+
+### Complete as-built path list — commit 50aa600 (exact)
+
+**Backend — modified**
+- `chakraops/app/api/copilot.py`
+- `chakraops/app/api/data_health.py`
+- `chakraops/app/api/diagnostics.py`
+- `chakraops/app/api/server.py`
+- `chakraops/app/api/ui_routes.py`
+- `chakraops/app/core/decision_engine/engine.py`
+- `chakraops/app/core/decision_engine/gates.py`
+- `chakraops/app/core/decision_engine/live_service.py`
+- `chakraops/app/core/decision_engine/sizing.py`
+- `chakraops/app/core/eligibility/providers/orats_daily_provider.py`
+- `chakraops/app/core/options/orats_diagnostics.py`
+- `chakraops/app/core/options/providers/orats_client.py`
+- `chakraops/app/core/options/providers/orats_provider.py`
+- `chakraops/app/core/orats/orats_client.py`
+- `chakraops/app/core/orats/orats_core_client.py`
+- `chakraops/app/core/orats/orats_equity_quote.py`
+- `chakraops/app/core/universe/refresh_history_store.py`
+- `chakraops/app/core/universe/universe_overrides.py`
+- `chakraops/app/core/universe/weekly_refresh.py`
+
+**Backend — new**
+- `chakraops/app/core/universe/refresh_lock.py`
+- `chakraops/tests/test_r340_orats_redaction_complete.py`
+- `chakraops/tests/test_r340_sector_enforcement.py`
+- `chakraops/tests/test_r340_weekly_refresh_transaction.py`
+
+**Backend — modified tests**
+- `chakraops/tests/test_r340_live_cutover.py`
+- `chakraops/tests/test_r340_missing_cash_sector.py`
+
+**Frontend — modified**
+- `frontend/src/api/queries.ts`
+- `frontend/src/api/types.ts`
+- `frontend/src/components/ui/Table.tsx`
+- `frontend/src/layout/Sidebar.test.tsx`
+- `frontend/src/layout/Sidebar.tsx`
+- `frontend/src/pages/BacktestPage.tsx`
+- `frontend/src/pages/DashboardPage.tsx`
+- `frontend/src/pages/PositionsPage.test.tsx`
+- `frontend/src/pages/PositionsPage.tsx`
+- `frontend/src/pages/SymbolDiagnosticsPage.tsx`
+- `frontend/src/pages/TodayPage.tsx`
+
+**Frontend — new**
+- `frontend/src/components/AuthoritativeRecommendations.tsx`
+- `frontend/src/components/ui/Table.dom.test.tsx`
+- `frontend/src/pages/BacktestPage.simulation.test.tsx`
+- `frontend/src/pages/DashboardPage.canonical.test.tsx`
+- `frontend/src/pages/SymbolDiagnosticsPage.canonical.test.tsx`
+- `frontend/src/pages/TodayPage.canonical.test.tsx`
+- `frontend/src/utils/reasonLabels.ts`
+
+**Explicit waiver-reconciled paths (authorized in packet intent, delivered in 50aa600)**
+- `chakraops/app/core/decision_engine/engine.py` — sector_gate integration
+- `chakraops/app/core/decision_engine/gates.py` — `sector_gate`
+- `frontend/src/components/ui/Table.tsx` — shared-table DOM fix (centralized)
+- `frontend/src/components/ui/Table.dom.test.tsx`
+- `frontend/src/utils/reasonLabels.ts`
+
+**Frontend test paths (exact, all new in 50aa600)**
+- `frontend/src/components/ui/Table.dom.test.tsx`
+- `frontend/src/pages/BacktestPage.simulation.test.tsx`
+- `frontend/src/pages/DashboardPage.canonical.test.tsx`
+- `frontend/src/pages/SymbolDiagnosticsPage.canonical.test.tsx`
+- `frontend/src/pages/TodayPage.canonical.test.tsx`
+- `frontend/src/layout/Sidebar.test.tsx` (nav-grouping case added)
+
+**Generated-file hygiene note (Codex finding)**
+- `frontend/tsconfig.tsbuildinfo` was modified in 50aa600 — tracked generated artifact;
+  remediation pass will untrack + ignore (Fix 4).
+
+**Docs/governance (50aa600)**
+- `docs/ai/PROGRAM_STATUS.md`, `docs/master/CURRENT_STATE.md`, `docs/master/R31.0_DEFECT_AND_GAP_REGISTER.md`
+- `docs/ai/releases/R32.0/TOOL_LOG.md`, `docs/ai/releases/R34.0/{RELEASE_PACKET,STATUS,TOOL_LOG,notes}.md`
+- `chakraops/docs/releases/{R34.0_requirements,R34.0_release_notes,RELEASE_CHECKLIST}.md`
+
+### Final operational-integrity remediation (2026-06-22d) — exact authorized paths
+
+Starting commit: `50aa600`. Docs-only waiver commit precedes all source edits.
+
+Fix 1 — refresh journal corruption and history safety:
+- MODIFIED `chakraops/app/core/universe/refresh_lock.py` — strict journal read/validate/clear; fail-loud on corruption
+- MODIFIED `chakraops/app/core/universe/refresh_history_store.py` — strict history read for append/transaction; preserve file on failure
+- MODIFIED `chakraops/app/core/universe/weekly_refresh.py` — recovery/clear verification; critical errors on journal/history corruption
+- MODIFIED `chakraops/tests/test_r340_weekly_refresh_transaction.py` — corruption/recovery cases
+- NEW `chakraops/tests/test_r340_refresh_journal_history_integrity.py`
+
+Fix 2 — ownership-safe cross-process lock:
+- MODIFIED `chakraops/app/core/universe/refresh_lock.py` — lock metadata (lock_id, pid, hostname, created_at, process_start); ownership-verified release; no age-only steal
+- NEW `chakraops/tests/test_r340_refresh_lock_ownership.py` — subprocess lock tests, PID-reuse, timeout, live-lock retention
+
+Fix 3 — complete downstream ORATS sanitization:
+- MODIFIED `chakraops/app/core/options/orats_chain_provider.py`
+- MODIFIED `chakraops/app/core/options/orats_option_chain_loader.py`
+- MODIFIED `chakraops/app/core/options/orats_chain_pipeline.py` (stage2_trace error redaction if needed)
+- MODIFIED `chakraops/tests/test_r340_orats_redaction_complete.py` and/or NEW `chakraops/tests/test_r340_orats_redaction_downstream.py`
+
+Fix 4 — generated-file and evidence hygiene:
+- REMOVE FROM GIT `frontend/tsconfig.tsbuildinfo` (if generated)
+- MODIFIED `.gitignore` — add `*.tsbuildinfo` or `frontend/tsconfig.tsbuildinfo`
+- Evidence cleanup under `out/verification/R34.0/` (ignored; latest logs only)
+
+Governance/evidence (authorized): `docs/ai/releases/R34.0/{STATUS,TOOL_LOG,RELEASE_PACKET}.md`, `docs/ai/PROGRAM_STATUS.md`, `out/verification/R34.0/*` (ignored).
+
 Any additional tracked path requires operator approval and a packet update committed before that path is edited.
 
 ## Forbidden paths and actions

@@ -13,7 +13,9 @@ Consolidate the operator experience around trusted decisions, positions, backtes
 Level 3 — application refactor and analytical presentation
 
 ## Current status
-INCOMPLETE / REMEDIATION ACTIVE. Consolidated review found Codex **BLOCKED** (R32–R34) with specific safety/security/correctness defects; Claude APPROVED-WITH-NOTES and Cowork PASS-WITH-NOTES for the **narrow API cutover only**. This remediation pass closes the concrete BLOCKERS with tests + passing gates:
+INCOMPLETE / FINAL REMEDIATION ACTIVE. Post-safety-remediation review: **Claude** APPROVED WITH NON-BLOCKING NOTES for the safety remediation but R34 INCOMPLETE; **Codex** BLOCKED; **Cowork** real-browser UAT PASS WITH NOTES with rendered canonical cutover incomplete. The final pass (authorization commit `docs(R34.0): authorize final cutover remediation paths`) delivers: transaction-safe weekly refresh (cross-process lock + journal recovery), complete ORATS application-path redaction (no bare token-bearing rethrows; snippets sanitized at construction), live sector enforcement, **rendered** canonical cutover (Dashboard/Today/Symbol render the authoritative block as primary; legacy demoted to a collapsed diagnostics section), table DOM fix, Backtest SIMULATION label, positions pagination, and nav grouping. H-5 closes only after rendered-UI cutover tests pass.
+
+### Prior (safety) remediation pass — already delivered + gate-verified:
 - Phase 1 — weekly universe refresh is now **operational** (computes → applies via the canonical overlay store → appends exactly one history record; idempotent per ISO week; atomic with rollback; admin POST `/api/ui/universe/weekly-refresh/apply`; R35 still owns scheduling).
 - Phase 2 — **ORATS credential log redaction** (central `app/core/security/redact.py`; wired into all ORATS request-failure/log/exception sites and the data-health/boot-probe/503 paths).
 - Phase 3 — **fail-closed canonical live computation** (`/api/ui/action-needed`, `_attach_canonical_decision`): canonical authority is never claimed when canonical output is absent; no legacy actionable fallback; explicit degraded contract with empty actionable + reason code.
@@ -29,13 +31,13 @@ R33.0 canonical decision and profile contracts (implemented + tested).
 DELIVERED this pass: Phases 1–4 + daily-overview source markers, with new tests (`test_r340_orats_log_redaction.py`, `test_r340_weekly_refresh_operational.py`, `test_r340_canonical_failclosed.py`, `test_r340_missing_cash_sector.py`) and updated `test_r340_live_cutover.py`. STAGED: Phase 5 (rendered UI), Phase 6 (product scope).
 
 ## Claude review
-Prior: APPROVED WITH NON-BLOCKING NOTES for the narrow API cutover only. Re-review required for the new blocker remediations; rendered-UI cutover (Phase 5) still outstanding.
+- Safety remediation: APPROVED WITH NON-BLOCKING NOTES — but R34 INCOMPLETE (rendered cutover, transaction-safe refresh, complete redaction, sector enforcement outstanding). Addressed in the final pass. Re-review required.
 
 ## Codex review
-Consolidated R32–R34: **BLOCKED**. This pass remediates the cited safety/security/correctness blockers (weekly-refresh operationalization, ORATS log redaction, canonical fail-closed, missing-cash/sector). Re-review required. No Codex approval claimed.
+- Consolidated R32–R34: **BLOCKED**. Final pass addresses concurrency/atomicity of weekly refresh, complete ORATS redaction (bare rethrows + raw snippets), and rendered cutover. Re-review required. No Codex approval claimed.
 
 ## Cowork UAT
-PASS WITH NOTES (narrow API cutover only); true browser rendering was not available. Rendered-UI UAT remains required after Phase 5. See `out/verification/R34.0/browser_uat_plan.md`.
+- Real-browser UAT: PASS WITH NOTES — rendered canonical cutover incomplete. Final pass renders the canonical block as primary on Dashboard/Today/Symbol and demotes legacy. Re-UAT required. See `out/verification/R34.0/frontend_uat_plan.md`.
 
 ## Gates (this remediation pass)
 - Backend: PASS — 1169 passed, 1 skipped

@@ -23,14 +23,20 @@
 - Gates: backend 1169 passed / 1 skipped; frontend 315 passed / 18 skipped; build PASS (known M-13 chunk-size + UniverseAdminPage nested-table warnings — staged Phase 6). Evidence: `out/verification/R34.0/`.
 - STAGED (NOT done): Phase 5 rendered visual cutover (Dashboard/Today/Symbol render canonical primary + WATCH/BLOCKED/STAY_IN_CASH); Phase 6 product scope (nav, portfolio, universe/data-health, backtest, journal/reports, frontend quality). H-5 stays OPEN until Phase 5 page tests pass. No PR/tag/deploy.
 
+## Cursor — final R34 cutover remediation: Phase 0 authorization (2026-06-22b)
+- Reviews recorded: **Claude** APPROVED WITH NON-BLOCKING NOTES (safety remediation) but R34 INCOMPLETE; **Codex** BLOCKED; **Cowork** real-browser UAT PASS WITH NOTES, rendered canonical cutover incomplete.
+- R34 status set INCOMPLETE / FINAL REMEDIATION ACTIVE.
+- RELEASE_PACKET.md updated with every exact tracked source/test/frontend/doc path for the final pass (transaction-safe refresh, complete redaction, sector enforcement, rendered cutover, Symbol Diagnostics, table DOM fix, SIMULATION label, positions pagination, nav grouping). Generic domains removed. Post-R35 enhancements explicitly carved out.
+- Docs-only authorization commit `docs(R34.0): authorize final cutover remediation paths` created and pushed BEFORE any source edits.
+
 ## Claude Code
 - Pending.
 
 ## Codex
-- Consolidated R32–R34 verdict: BLOCKED (recorded). Re-review required after blocker remediation.
+- Consolidated R32–R34 verdict: BLOCKED (recorded). Re-review required after final remediation.
 
 ## Claude Cowork
-- R34 UAT: PASS WITH NOTES (narrow API cutover only; true browser rendering unavailable). Rendered-UI UAT pending Phase 5.
+- R34 real-browser UAT: PASS WITH NOTES — rendered canonical cutover incomplete. Re-UAT required after the rendered cutover.
 
 ## Operator
 - Pending approval.

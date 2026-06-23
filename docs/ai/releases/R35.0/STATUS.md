@@ -6,7 +6,7 @@
 ## Commits
 - Initial implementation: `57b3939`
 - Remediation authorization + waiver: `a75076d`
-- Remediation implementation: _(pending push)_
+- Remediation implementation: `fea0f69`
 
 ## Reviews
 - Claude: APPROVED WITH NON-BLOCKING NOTES → remediation applied

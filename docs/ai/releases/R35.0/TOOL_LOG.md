@@ -24,7 +24,14 @@
 ## Cursor — final consistency authorization (2026-06-23)
 - Codex BLOCKED (atomic occurrence claim, atomic incidents, backup writer locks); Cowork UAT paused.
 - Waiver recorded for `test_r340_refresh_lock_ownership.py` in `fea0f69`.
-- Docs-only commit precedes final consistency source edits.
+- Docs-only commit `6bd7a4e`.
+
+## Cursor — final consistency implementation (2026-06-23)
+- Fix 1: atomic occurrence claim state machine (CLAIMED/COMPLETED/RELEASED)
+- Fix 2: `open_incident_if_absent` + persisted notification dedupe
+- Fix 3: `backup_writer_locks.py` — producer lock coordination
+- Fix 4: full gate logs + multiprocess evidence
+- Gates: backend 1282/1 skip; frontend 335/18 skip; build PASS; R35 suite 56 passed
 
 ## Claude Code
 - Pending.

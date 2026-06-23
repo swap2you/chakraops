@@ -32,9 +32,9 @@ def test_failure_recovery_new_failure_cycle(tmp_path, monkeypatch):
 def test_incident_key_stable(tmp_path, monkeypatch):
     inc_path = tmp_path / "incidents.jsonl"
     monkeypatch.setattr("app.core.operations.incident_store._path", lambda: inc_path)
-    from app.core.operations.incident_store import get_open_incident, open_incident
+    from app.core.operations.incident_store import get_open_incident, open_incident_if_absent
 
-    i1 = open_incident("backup", "CRITICAL")
-    i2 = open_incident("backup", "CRITICAL")
+    i1 = open_incident_if_absent("backup", "CRITICAL")["incident_id"]
+    i2 = open_incident_if_absent("backup", "CRITICAL")["incident_id"]
     assert i1 == i2
     assert get_open_incident("backup")["incident_id"] == i1

@@ -58,9 +58,10 @@ class JobRunStore:
         job_id: str,
         trigger: str,
         metadata: Optional[Dict[str, Any]] = None,
+        run_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         record = {
-            "run_id": str(uuid.uuid4()),
+            "run_id": run_id or str(uuid.uuid4()),
             "job_id": job_id,
             "state": "STARTED",
             "trigger": trigger,

@@ -7,12 +7,19 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import shutil
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from app.core.operations.backup_writer_locks import (
+    SnapshotTarget,
+    acquire_writer_locks,
+    build_snapshot_targets,
+    snapshot_bytes,
+)
+from app.core.universe.refresh_lock import RefreshLockTimeout
 
 logger = logging.getLogger(__name__)
 
@@ -46,14 +53,11 @@ def _backup_sqlite_consistent(src: Path, dest: Path) -> None:
         dest_conn.close()
 
 
-def _snapshot_file_under_lock(src: Path, dest: Path) -> None:
-    """Copy a JSONL/runtime file while holding the writer lock."""
-    from app.core.io.locks import with_file_lock
-
+def _snapshot_target(target: SnapshotTarget, dest: Path) -> Dict[str, Any]:
     dest.parent.mkdir(parents=True, exist_ok=True)
-    with with_file_lock(src, timeout_ms=5000):
-        data = src.read_bytes()
+    data = snapshot_bytes(target)
     dest.write_bytes(data)
+    return _file_entry(target.source, dest, consistency=target.consistency_method)
 
 
 def create_backup(*, label: Optional[str] = None) -> Dict[str, Any]:
@@ -65,6 +69,13 @@ def create_backup(*, label: Optional[str] = None) -> Dict[str, Any]:
     files: List[Dict[str, Any]] = []
 
     try:
+        from app.core.settings import get_output_dir
+
+        out = Path(get_output_dir())
+    except Exception:
+        out = Path("out")
+
+    try:
         from app.core.eval.evaluation_store_v2 import get_decision_store_path
 
         store = get_decision_store_path()
@@ -73,27 +84,32 @@ def create_backup(*, label: Optional[str] = None) -> Dict[str, Any]:
             _backup_sqlite_consistent(store, target)
             files.append(_file_entry(store, target, consistency="sqlite_backup_api"))
         elif store.exists():
-            target = dest / store.name
-            _snapshot_file_under_lock(store, target)
-            files.append(_file_entry(store, target, consistency="file_lock_snapshot"))
+            targets = [t for t in build_snapshot_targets(out) if t.source.resolve() == store.resolve()]
+            if not targets:
+                targets = [
+                    SnapshotTarget(
+                        source=store,
+                        writer_lock_kind="file_lock",
+                        writer_lock_name=str(store),
+                        consistency_method="writer_file_lock_snapshot",
+                        snapshot_procedure="Acquire with_file_lock; read full bytes",
+                    )
+                ]
+            with acquire_writer_locks(targets):
+                files.append(_snapshot_target(targets[0], dest / store.name))
+    except RefreshLockTimeout as exc:
+        raise
     except Exception as exc:
-        logger.warning("[BACKUP] sqlite skip: %s", exc)
+        logger.warning("[BACKUP] decision store skip: %s", exc)
 
-    try:
-        from app.core.settings import get_output_dir
+    json_targets = [t for t in build_snapshot_targets(out) if t.source.parent.resolve() == out.resolve()]
+    existing = {f["name"] for f in files}
+    json_targets = [t for t in json_targets if t.source.name not in existing and t.source.exists()]
 
-        out = Path(get_output_dir())
-        for pattern in ("*.jsonl", "*.json"):
-            for src in out.glob(pattern):
-                if src.name.endswith(".journal.json"):
-                    continue
-                if src.name == "process_ownership.json":
-                    continue
-                target = dest / src.name
-                _snapshot_file_under_lock(src, target)
-                files.append(_file_entry(src, target, consistency="file_lock_snapshot"))
-    except Exception as exc:
-        logger.warning("[BACKUP] jsonl skip: %s", exc)
+    if json_targets:
+        with acquire_writer_locks(json_targets):
+            for target in json_targets:
+                files.append(_snapshot_target(target, dest / target.source.name))
 
     manifest = {
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -101,7 +117,8 @@ def create_backup(*, label: Optional[str] = None) -> Dict[str, Any]:
         "files": files,
         "secrets_excluded": True,
         "env_excluded": True,
-        "snapshot_policy": "sqlite_backup_api_and_file_lock_snapshot",
+        "snapshot_policy": "sqlite_backup_api_and_writer_lock_coordinated_snapshot",
+        "writer_lock_coordination": True,
     }
     _manifest_path(dest).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return {"backup_id": name, "path": str(dest), "manifest": manifest}

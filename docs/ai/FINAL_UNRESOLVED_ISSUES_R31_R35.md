@@ -6,7 +6,9 @@
 | L-4 | KNOWN_ISSUES header stale | Noted |
 | L-5 | Legacy release tree frozen at R27.6 | Accepted; program docs canonical |
 | L-9 | Verification path drift in old checklist | R35 evidence uses `out/verification/R35.0/` |
-| Codex R35 | BLOCKED at `57b3939` — remediation applied; re-review pending |
-| Cowork UAT | STOPPED at `57b3939` (dirty tree) — must re-run on clean checkout |
+| Codex R35 | Was BLOCKED at remediation — atomic fixes applied; **re-review pending** |
+| Cowork UAT | **Paused** — must run on clean tree after Codex re-review |
 
-No blocking defects recorded for R35 implementation gates.
+No blocking defects in R35 final remediation gates (backend/frontend/build green).
+
+R35 **not accepted** until Claude/Codex approval and Cowork operational UAT pass.

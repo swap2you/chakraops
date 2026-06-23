@@ -45,12 +45,13 @@ def execute_job(
     store: Optional[JobRunStore] = None,
     skip_if_locked: bool = False,
     use_subprocess_timeout: bool = True,
+    run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Run a job with OS-native lock, bounded subprocess timeout, retry, persisted run."""
     from app.core.universe.refresh_lock import RefreshLockTimeout, cross_process_lock
 
     run_store = store or JobRunStore()
-    run = run_store.start_run(job_id=definition.job_id, trigger=trigger)
+    run = run_store.start_run(job_id=definition.job_id, trigger=trigger, run_id=run_id)
     run_id = run["run_id"]
     attempt = 0
     last_error: Optional[str] = None

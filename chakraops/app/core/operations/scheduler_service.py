@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from zoneinfo import ZoneInfo
@@ -16,9 +17,10 @@ from app.core.operations.job_registry import get_job_registry
 from app.core.operations.job_run_store import JobRunStore
 from app.core.operations.occurrence_store import (
     MISSED_RUN_POLICY,
-    is_completed,
-    mark_completed,
+    claim_occurrence,
+    complete_occurrence,
     occurrence_key,
+    scheduled_slot,
 )
 
 logger = logging.getLogger(__name__)
@@ -110,13 +112,13 @@ def stop_scheduler_service() -> None:
         logger.info("[OPS_SCHEDULER] stopped")
 
 
-def run_job_now(job_id: str, *, trigger: str = "manual") -> Dict[str, Any]:
+def run_job_now(job_id: str, *, trigger: str = "manual", run_id: Optional[str] = None) -> Dict[str, Any]:
     registry = get_job_registry()
     definition = registry.get(job_id)
     handler = registry.handler(job_id)
     if definition is None or handler is None:
         raise KeyError(f"unknown job: {job_id}")
-    return execute_job(definition, handler, trigger=trigger)
+    return execute_job(definition, handler, trigger=trigger, run_id=run_id)
 
 
 def run_due_jobs(now: Optional[datetime] = None) -> Dict[str, Any]:
@@ -133,20 +135,31 @@ def run_due_jobs(now: Optional[datetime] = None) -> Dict[str, Any]:
         if not _schedule_due(definition.job_id, definition.schedule_cron, now):
             continue
         occ_key = occurrence_key(definition.job_id, now)
-        if is_completed(occ_key):
+        slot = scheduled_slot(definition.job_id, now)
+        run_id = str(uuid.uuid4())
+        claim = claim_occurrence(
+            occ_key,
+            job_id=definition.job_id,
+            run_id=run_id,
+            scheduled_at=slot,
+        )
+        if claim["status"] == "ALREADY_COMPLETED":
+            skipped_occurrence.append(occ_key)
+            continue
+        if claim["status"] == "ALREADY_CLAIMED":
             skipped_occurrence.append(occ_key)
             continue
         handler = registry.handler(definition.job_id)
         if handler is None:
             continue
         try:
-            result = run_job_now(definition.job_id, trigger="schedule")
-            mark_completed(occ_key)
+            result = run_job_now(definition.job_id, trigger="schedule", run_id=run_id)
+            complete_occurrence(occ_key, claim["claim_id"])
             executed.append(definition.job_id)
             if result.get("state") == "SKIPPED":
                 logger.info("[OPS_SCHEDULER] %s skipped: %s", definition.job_id, result.get("skip_reason"))
         except JobExecutionError as exc:
-            mark_completed(occ_key)
+            complete_occurrence(occ_key, claim["claim_id"], outcome="failed")
             logger.warning("[OPS_SCHEDULER] job %s failed: %s", definition.job_id, exc)
     return {
         "executed": executed,

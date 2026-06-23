@@ -11,7 +11,7 @@ Date: 2026-06-23
 | R32.0 | `dffa932` | Data reliability scope + C-1 ORATS remediation (`1223884`) |
 | R33.0 | `ed9febd` | Canonical decision engine and profiles |
 | R34.0 | `50aa600` | Live cutover, refresh safety, ORATS redaction (waiver `902a9cb`) |
-| R35.0 | _(this commit)_ | Operational readiness, scheduling, recovery, handoff |
+| R35.0 | _(final consistency commit)_ | Atomic cross-process consistency: occurrence claim, incident dedupe, backup writer locks |
 
 Authorization commits: R35 Phase 0 `e20ccee`; R34 lock `9f6130e`; R34 provider `3808f66`.
 
@@ -19,9 +19,10 @@ Authorization commits: R35 Phase 0 `e20ccee`; R34 lock `9f6130e`; R34 provider `
 
 | Gate | R35 result |
 |------|------------|
-| Backend pytest | 1248 passed, 3 skipped |
-| Frontend tests | 335 passed, 18 skipped |
+| Backend pytest | **1282 passed**, 1 skipped |
+| Frontend tests | **335 passed**, 18 skipped |
 | Frontend build | PASS |
+| R35 targeted | **56 passed** |
 
 ## Trading safety
 
@@ -38,4 +39,4 @@ Authorization commits: R35 Phase 0 `e20ccee`; R34 lock `9f6130e`; R34 provider `
 
 ## Final PR
 
-Do not open until Claude review, Codex review, Cowork operational UAT, and operator approval. See `docs/ai/FINAL_PR_DESCRIPTION_R31_R35.md`.
+Do not open until Claude review, Codex re-review (post atomic-fix), Cowork operational UAT, and operator approval. See `docs/ai/FINAL_PR_DESCRIPTION_R31_R35.md`.

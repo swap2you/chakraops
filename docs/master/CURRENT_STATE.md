@@ -1,6 +1,6 @@
 # Current State — ChakraOps
 
-_Last updated: R35.0 FINAL REMEDIATION ACTIVE — atomic cross-process consistency (Codex BLOCKED; Cowork UAT paused)_
+_Last updated: R35.0 final remediation complete — backend 1282/1 skip; frontend 335/18 skip; build PASS; awaiting Codex re-review and Cowork UAT_
 
 ## Release Status
 
@@ -10,7 +10,7 @@ _Last updated: R35.0 FINAL REMEDIATION ACTIVE — atomic cross-process consisten
 | Tag | `chakraops-r30.7.0` |
 | Current branch | `release/R31-R35-program` |
 | Current mode | Program R31–R35 (single branch, five milestone commits, one final PR) |
-| Active milestone | R35.0 — **FINAL REMEDIATION ACTIVE** (atomic consistency). Cowork UAT paused |
+| Active milestone | R35.0 — **FINAL REMEDIATION COMPLETE (pending review)**. Cowork UAT paused |
 | Prior milestone | R33.0 — canonical decision engine implemented + tested |
 
 ## R31.0 Validation Gates (audit milestone)

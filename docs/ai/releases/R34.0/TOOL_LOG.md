@@ -60,7 +60,7 @@
 - Docs-only commit `docs(R34.0): authorize final lock-race remediation` (`9f6130e`) created and pushed BEFORE source edits.
 
 ## Cursor — final lock-race and test-validity remediation: implementation (2026-06-22g)
-- Fix 1 (OS-native lock): `refresh_lock.py` rewritten — `fcntl.flock` / `msvcrt.locking`; hold fd for critical section; timeout/retry; release OS lock; never unlink/reclaim by age or inferred death. Tests: spawn multiprocessing on Windows (7 cases, not skipped).
+- Fix 1 (OS-native lock): `refresh_lock.py` rewritten — `fcntl.flock` / `msvcrt.locking`; hold fd for critical section; timeout/retry; release OS lock; never unlink/reclaim by age or inferred death. Tests: spawn multiprocessing on Windows (6 collected, not skipped).
 - Fix 2 (journal test): `test_unreadable_journal_fails_loud` patches `builtins.open`; recovery overlay non-mutation test added.
 - Fix 3 (ORATS active paths): `test_chain_pipeline_stage2_trace_failure_redacts` drives real `fetch_option_chain` stage2 except path.
 - Gates: backend 1219/3 skipped; frontend 334/18 skipped; build PASS; R32/R33/R34 targeted 202 passed; secret scan 0 hits.

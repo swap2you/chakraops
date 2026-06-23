@@ -30,11 +30,14 @@ function Write-Stage {
 function Run-Cmd {
     param([string]$Cwd, [string]$Cmd, [string]$LogFile)
     Push-Location (Join-Path $RepoRoot $Cwd)
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     try {
         $output = Invoke-Expression "$Cmd 2>&1"
         $output | Out-File -FilePath $LogFile -Encoding utf8
         return [int]$LASTEXITCODE
     } finally {
+        $ErrorActionPreference = $prevEap
         Pop-Location
     }
 }

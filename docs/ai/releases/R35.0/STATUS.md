@@ -1,21 +1,18 @@
 # STATUS — R35.0
 
 ## Current status
-**REMEDIATION COMPLETE (pending review)** — blocker fixes pushed after `a75076d`. Awaiting Claude/Codex re-review and Cowork operational UAT on clean tree.
+**IMPLEMENTED / FINAL REMEDIATION ACTIVE** — cross-process atomic consistency remediation in progress.
 
 ## Commits
-- Initial implementation: `57b3939`
-- Remediation authorization + waiver: `a75076d`
-- Remediation implementation: `fea0f69`
+- Initial: `57b3939`
+- Remediation auth: `a75076d`
+- Remediation impl: `fea0f69`
+- STATUS follow-up: `fa3ee0f`
 
 ## Reviews
-- Claude: APPROVED WITH NON-BLOCKING NOTES → remediation applied
-- Codex: BLOCKED → remediation applied, re-review pending
-- Cowork: STOPPED (dirty tree) → UAT pending clean tree
+- Claude remediation: APPROVED WITH NON-BLOCKING NOTES
+- Codex remediation: BLOCKED (atomic claim/incident/backup locks)
+- Cowork UAT: **paused**
 
-## Gates (post-remediation)
-- Backend: pending / re-run
-- Frontend: 335 passed, 18 skipped; build PASS
-
-## PR
-Not opened. Schedules remain disabled by default.
+## Next action
+Complete final consistency fixes; re-gate; await Codex approval and Cowork UAT.

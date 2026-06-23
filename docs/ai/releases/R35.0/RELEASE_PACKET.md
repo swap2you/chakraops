@@ -258,3 +258,67 @@ This waiver:
 - `out/verification/R35.0/*` (local evidence; not committed)
 
 Any additional tracked path requires operator approval and packet update committed before edit.
+
+---
+
+## Phase 0 — final consistency authorization (2026-06-23)
+
+Starting commit: `fa3ee0f`. Docs-only authorization precedes final consistency source edits.
+
+### Review findings recorded
+
+- **Claude remediation review:** APPROVED WITH NON-BLOCKING NOTES
+- **Codex remediation review:** BLOCKED — atomic occurrence claim, atomic incident open, backup writer-lock coordination required
+- **Cowork operational UAT:** paused (must remain paused until external review passes)
+
+### Operator waiver — unauthorized edit in `fea0f69`
+
+Path: `chakraops/tests/test_r340_refresh_lock_ownership.py`  
+Commit: `fea0f69`  
+Not authorized in preceding documentation-only commit `a75076d`.
+
+This waiver states:
+
+- exact path and commit `fea0f69`
+- test-only Event synchronization change for Windows spawn lock tests
+- does **not** constitute retroactive authorization
+- does **not** hide the deviation
+- does **not** allow repetition
+- all future paths require authorization committed before editing
+
+### Allowed tracked paths — final consistency (exact)
+
+#### Fix 1 — atomic scheduled-occurrence claim
+
+- MODIFIED `chakraops/app/core/operations/occurrence_store.py`
+- MODIFIED `chakraops/app/core/operations/scheduler_service.py`
+- MODIFIED `chakraops/tests/test_r350_occurrence_dedup.py`
+- NEW `chakraops/tests/test_r350_occurrence_atomic_claim.py`
+
+#### Fix 2 — atomic notification incidents
+
+- MODIFIED `chakraops/app/core/operations/incident_store.py`
+- MODIFIED `chakraops/app/core/operations/notification_service.py`
+- MODIFIED `chakraops/tests/test_r350_notification_incidents.py`
+- MODIFIED `chakraops/tests/test_r350_notification_dedupe.py`
+- NEW `chakraops/tests/test_r350_notification_atomic_incidents.py`
+
+#### Fix 3 — backup writer-lock mapping
+
+- NEW `chakraops/app/core/operations/backup_writer_locks.py`
+- MODIFIED `chakraops/app/core/operations/backup_service.py`
+- MODIFIED `chakraops/tests/test_r350_backup_consistency.py`
+- NEW `chakraops/tests/test_r350_backup_writer_locks.py`
+
+#### Fix 4 — evidence and documentation
+
+- MODIFIED `docs/ai/releases/R35.0/{STATUS,TOOL_LOG,RELEASE_PACKET}.md`
+- MODIFIED `docs/ai/PROGRAM_STATUS.md`
+- MODIFIED `docs/master/CURRENT_STATE.md`
+- MODIFIED `docs/ai/FINAL_PROGRAM_HANDOFF_R31_R35.md`
+- MODIFIED `docs/ai/FINAL_GATE_SUMMARY_R31_R35.md`
+- MODIFIED `docs/ai/FINAL_UNRESOLVED_ISSUES_R31_R35.md`
+- MODIFIED `docs/ai/FINAL_PR_DESCRIPTION_R31_R35.md`
+- `out/verification/R35.0/*` (local; full gate logs)
+
+Any additional tracked path requires operator approval and packet update committed before edit.

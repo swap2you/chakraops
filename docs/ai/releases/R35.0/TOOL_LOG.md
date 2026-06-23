@@ -21,15 +21,10 @@
 - Codex: BLOCKED.
 - Cowork: STOPPED (dirty working tree); operational UAT not performed.
 
-## Cursor — remediation implementation (2026-06-23)
-- Fix 1: scheduler lifecycle (enable-after-disabled, stop/restart), occurrence dedup store
-- Fix 2: subprocess-isolated timeout with child terminate
-- Fix 3: cross-process JobRunStore lock + terminal state guard
-- Fix 4: EOD skipped semantics + SKIPPED executor state
-- Fix 5: incident-correlated notifications
-- Fix 6: SQLite backup API + JSONL lock snapshots
-- Fix 7: Windows process ownership scripts
-- Gates: backend 1268/1 skip; frontend 335/18 skip; build PASS; R35 suite 42 passed
+## Cursor — final consistency authorization (2026-06-23)
+- Codex BLOCKED (atomic occurrence claim, atomic incidents, backup writer locks); Cowork UAT paused.
+- Waiver recorded for `test_r340_refresh_lock_ownership.py` in `fea0f69`.
+- Docs-only commit precedes final consistency source edits.
 
 ## Claude Code
 - Pending.

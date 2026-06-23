@@ -343,6 +343,24 @@ Governance/evidence (authorized for edit):
 
 Any additional tracked path requires operator approval and a packet update committed before that path is edited.
 
+### Final ORATS provider-error patch (2026-06-23) — exact authorized paths
+
+Starting commit: `b860a73`. Docs-only authorization commit precedes all source edits. Claude final targeted review **APPROVED**; Codex final targeted review **BLOCKED** on remaining ORATS provider logging/tests and evidence Windows lock-test count mismatch (6 collected, not 7); Cowork real-browser R34 UAT **PASS WITH NOTES**. R35 must not start until these blockers close.
+
+Fix 1 — sanitize every active provider expiration/chain path:
+- MODIFIED `chakraops/app/core/options/orats_chain_provider.py` — `_get_expirations_delayed`, `_get_expirations_live`, `_get_chain_live`, worker/batch failures, delayed pipeline result/error/trace paths; use `redact_secrets` / `safe_provider_error`; no raw `str(e)` in logs or returned errors
+
+Fix 2 — real-path provider redaction tests:
+- MODIFIED `chakraops/tests/test_r340_orats_redaction_complete.py` — drive `_get_expirations_delayed`, `_get_expirations_live`, `_get_chain_live`, worker/batch failure, returned result/error paths with fake secrets in exception/URL/header/body; caplog assertions
+
+Fix 3 — correct evidence lock-test count:
+- MODIFIED `docs/ai/releases/R34.0/{STATUS,TOOL_LOG}.md`
+- Evidence (ignored): `out/verification/R34.0/{windows_multiprocess_lock,final_lock_race_remediation,orats_active_path_redaction,backend,frontend,build}.md|.log`
+
+Governance (authorized): `docs/ai/releases/R34.0/{STATUS,TOOL_LOG,RELEASE_PACKET}.md`, `out/verification/R34.0/*` (ignored)
+
+Any additional tracked path requires operator approval and a packet update committed before that path is edited.
+
 ## Forbidden paths and actions
 
 

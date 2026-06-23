@@ -66,8 +66,13 @@
 - Gates: backend 1219/3 skipped; frontend 334/18 skipped; build PASS; R32/R33/R34 targeted 202 passed; secret scan 0 hits.
 - Commit `fix(R34.0): eliminate lock reclaim race and validate active error paths` pushed. Awaiting Codex targeted re-review.
 
+## Cursor — final ORATS provider-error patch: Phase 0 authorization (2026-06-23)
+- Reviews recorded: Claude final targeted **APPROVED**; Codex final targeted **BLOCKED** (remaining ORATS provider logging/tests; evidence lock-test count 6 not 7); Cowork R34 UAT **PASS WITH NOTES**.
+- RELEASE_PACKET.md updated with exact paths for provider sanitization, real-path tests, evidence count correction.
+- Docs-only commit `docs(R34.0): authorize final provider-redaction patch` precedes source edits.
+
 ## Codex
-- Final targeted R34 review was **BLOCKED** (lock reclaim race; journal test validity; ORATS active-path tests). Remediation delivered; awaiting re-review.
+- Final targeted R34 review: **BLOCKED** (remaining ORATS provider paths; evidence count mismatch). Provider patch remediation active.
 
 ## Claude Cowork
 - Final real-browser UAT: PASS WITH NOTES.

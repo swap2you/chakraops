@@ -13,9 +13,9 @@ Consolidate the operator experience around trusted decisions, positions, backtes
 Level 3 — application refactor and analytical presentation
 
 ## Current status
-IMPLEMENTATION COMPLETE — **final lock-race and test-validity remediation delivered** (authorization `9f6130e`, starting commit `662b81e`). OS-native cross-process lock replaces unsafe stale-lock reclamation; journal unreadability test exercises production `open`; ORATS stage2_trace test drives real `fetch_option_chain` path. **H-5 CLOSED.**
+IMPLEMENTATION COMPLETE — **final ORATS provider-error patch active** (starting commit `b860a73`). Prior lock-race remediation delivered (`9f6130e`/`b860a73`). **H-5 CLOSED.**
 
-**Final external validation:** Claude final R34 review **APPROVED WITH NON-BLOCKING NOTES**; Cowork real-browser UAT **PASS WITH NOTES**; Codex final targeted review was **BLOCKED** on lock race, journal test validity, and tautological ORATS tests — **remediated and gate-verified**. Awaiting Codex targeted re-review before R35.0. No Codex approval claimed.
+**Final external validation:** Claude final targeted review **APPROVED**; Cowork real-browser R34 UAT **PASS WITH NOTES**; Codex final targeted review **BLOCKED** on remaining ORATS provider logging/tests and evidence lock-test count mismatch (6 collected, not 7). This pass addresses those Codex blockers. Awaiting Codex confirmation before R35.0. No Codex approval claimed.
 
 **Operator waiver (2026-06-22d):** The operator explicitly accepts the historical exact-path deviation in commit `50aa600`. Documented waiver only — not retroactive authorization and not permission to repeat the pattern.
 

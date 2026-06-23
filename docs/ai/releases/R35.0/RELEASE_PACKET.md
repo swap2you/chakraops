@@ -366,3 +366,42 @@ This waiver:
 - does **not** permit this pattern to be repeated
 
 All future tracked paths must be listed in a committed authorization packet before modification.
+
+---
+
+## Phase 0 — Windows operations hardening authorization (2026-06-23)
+
+Starting commit: `7f0f062`. Docs-only authorization precedes all source/script edits.
+
+### Cowork audit recorded
+
+- **Cowork operational execution:** NOT RUN (Linux sandbox cannot execute Windows PowerShell)
+- **Cowork static audit:** passed core safety invariants
+- **Windows live operational UAT:** remaining final release gate
+- **Recurring schedules:** disabled
+- **Final PR:** not created
+
+### Allowed tracked paths — Windows operations hardening (exact)
+
+- NEW `scripts/backup_chakraops.ps1`
+- NEW `scripts/list_backups_chakraops.ps1`
+- NEW `scripts/verify_backup_chakraops.ps1`
+- NEW `scripts/restore_chakraops_validate.ps1`
+- NEW `scripts/cleanup_expired_backups.ps1`
+- MODIFIED `chakraops/docs/RUNBOOK_BACKUP_RESTORE.md`
+- NEW `chakraops/docs/RUNBOOK_SCHEDULER_OPERATIONS.md`
+- MODIFIED `chakraops/app/core/operations/backup_service.py`
+- MODIFIED `chakraops/tests/test_r350_backup_service.py`
+- MODIFIED `chakraops/tests/test_r350_backup_writer_locks.py`
+- NEW `chakraops/tests/test_r350_retention_safety.py`
+- MODIFIED `docs/ai/releases/R35.0/{RELEASE_PACKET,STATUS,TOOL_LOG}.md`
+- MODIFIED `docs/ai/PROGRAM_STATUS.md`
+- MODIFIED `docs/ai/FINAL_PROGRAM_HANDOFF_R31_R35.md`
+- MODIFIED `docs/ai/FINAL_GATE_SUMMARY_R31_R35.md`
+- MODIFIED `docs/ai/FINAL_UNRESOLVED_ISSUES_R31_R35.md`
+- MODIFIED `docs/ai/FINAL_UAT_PLAN_R31_R35.md`
+- MODIFIED `docs/ai/FINAL_PR_DESCRIPTION_R31_R35.md`
+- MODIFIED `docs/master/CURRENT_STATE.md`
+- `out/verification/R35.0/*` (local evidence; not committed)
+
+Any additional tracked path requires operator approval and packet update committed before edit.

@@ -49,8 +49,14 @@
 ## Codex
 - Final cross-process: APPROVED WITH NON-BLOCKING NOTES
 
+## Cursor — Windows operations hardening authorization (2026-06-23)
+- Cowork static audit passed; operational execution NOT RUN (Linux sandbox)
+- Windows live UAT remains final release gate
+- Docs-only commit precedes script/retention/runbook edits
+
 ## Claude Cowork
-- Operational UAT: **remaining release gate** (may proceed)
+- Static audit: passed core safety invariants
+- Live operational UAT: NOT RUN (PowerShell unavailable in sandbox)
 
 ## Operator
 - R35.0 START authorized. Schedules disabled by default until final UAT approves enablement.

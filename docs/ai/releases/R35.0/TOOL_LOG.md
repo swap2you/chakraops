@@ -32,15 +32,25 @@
 - Fix 3: `backup_writer_locks.py` — producer lock coordination
 - Fix 4: full gate logs + multiprocess evidence
 - Gates: backend 1282/1 skip; frontend 335/18 skip; build PASS; R35 suite 56 passed
+- Implementation commit: `18aa888`; STATUS SHA: `ba529d3`
+
+## Reviews — final cross-process (2026-06-23)
+- Claude: **APPROVED WITH NON-BLOCKING NOTES** (governance note: run-id path waiver)
+- Codex: **APPROVED WITH NON-BLOCKING NOTES**
+- Technical R35 blockers: **closed**
+
+## Cursor — final run-id path waiver (2026-06-23)
+- Operator waiver for `job_executor.py` and `job_run_store.py` in `18aa888` (not listed in auth `6bd7a4e`)
+- Docs-only commit precedes Cowork operational UAT
 
 ## Claude Code
-- Pending.
+- Final cross-process: APPROVED WITH NON-BLOCKING NOTES
 
 ## Codex
-- Pending.
+- Final cross-process: APPROVED WITH NON-BLOCKING NOTES
 
 ## Claude Cowork
-- Operational UAT pending.
+- Operational UAT: **remaining release gate** (may proceed)
 
 ## Operator
 - R35.0 START authorized. Schedules disabled by default until final UAT approves enablement.

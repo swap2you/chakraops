@@ -11,9 +11,26 @@ Date: 2026-06-23
 | R32.0 | `dffa932` | Data reliability scope + C-1 ORATS remediation (`1223884`) |
 | R33.0 | `ed9febd` | Canonical decision engine and profiles |
 | R34.0 | `50aa600` | Live cutover, refresh safety, ORATS redaction (waiver `902a9cb`) |
-| R35.0 | _(final consistency commit)_ | Atomic cross-process consistency: occurrence claim, incident dedupe, backup writer locks |
+| R35.0 | `18aa888` | Atomic cross-process consistency: occurrence claim, incident dedupe, backup writer locks |
 
-Authorization commits: R35 Phase 0 `e20ccee`; R34 lock `9f6130e`; R34 provider `3808f66`.
+Authorization commits: R35 Phase 0 `e20ccee`; R35 final consistency auth `6bd7a4e`; R35 run-id path waiver _(this docs commit)_.
+
+### Operator waiver — run-id path authorization order (`18aa888`)
+
+Paths modified in `18aa888` but not listed in preceding auth `6bd7a4e`:
+
+- `chakraops/app/core/operations/job_executor.py`
+- `chakraops/app/core/operations/job_run_store.py`
+
+Backward-compatible optional `run_id` plumbing for atomic scheduled-occurrence claim. Operator waiver recorded; not retroactive; applies only to these two files in `18aa888`.
+
+## External review (final cross-process)
+
+| Reviewer | Verdict |
+|----------|---------|
+| Codex | APPROVED WITH NON-BLOCKING NOTES |
+| Claude | APPROVED WITH NON-BLOCKING NOTES |
+| Cowork UAT | Remaining release gate |
 
 ## Gates (final)
 
@@ -39,4 +56,4 @@ Authorization commits: R35 Phase 0 `e20ccee`; R34 lock `9f6130e`; R34 provider `
 
 ## Final PR
 
-Do not open until Claude review, Codex re-review (post atomic-fix), Cowork operational UAT, and operator approval. See `docs/ai/FINAL_PR_DESCRIPTION_R31_R35.md`.
+Do not open until Cowork operational UAT and operator approval. Codex and Claude final cross-process reviews approved with non-blocking notes. See `docs/ai/FINAL_PR_DESCRIPTION_R31_R35.md`.

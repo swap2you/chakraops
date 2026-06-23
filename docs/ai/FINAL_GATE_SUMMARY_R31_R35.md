@@ -10,4 +10,6 @@
 
 R35 additional (final remediation): 56 R35-targeted tests; Windows spawn multiprocess consistency for occurrences, incidents, backup writer locks.
 
+External review: Codex and Claude final cross-process **APPROVED WITH NON-BLOCKING NOTES**. Technical blockers closed. Cowork UAT remaining.
+
 Evidence: `out/verification/R35.0/{backend,frontend,build}.log`, `multiprocess_consistency.md`.

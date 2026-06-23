@@ -9,3 +9,12 @@ R35.0 primary additions:
 - `scripts/start_chakraops.ps1`, `stop_chakraops.ps1`, `health_check_chakraops.ps1`
 - `chakraops/docs/RUNBOOK_*.md` (4 runbooks)
 - Frontend operations panel on System Diagnostics
+
+### Authorization-order waiver (commit `18aa888`)
+
+The following paths were modified in `18aa888` but not listed in preceding auth commit `6bd7a4e`:
+
+- `chakraops/app/core/operations/job_executor.py` — optional `run_id` parameter
+- `chakraops/app/core/operations/job_run_store.py` — optional `run_id` in `start_run`
+
+Operator waiver recorded. Applies only to these two files in `18aa888`; not retroactive; pattern not permitted to repeat.

@@ -322,3 +322,47 @@ This waiver states:
 - `out/verification/R35.0/*` (local; full gate logs)
 
 Any additional tracked path requires operator approval and packet update committed before edit.
+
+---
+
+## Phase 0 — final run-id path waiver (2026-06-23)
+
+Starting commit: `ba529d3`. Documentation-only waiver precedes Cowork operational UAT.
+
+### Final cross-process review verdicts
+
+- **Codex final cross-process review:** APPROVED WITH NON-BLOCKING NOTES
+- **Claude final cross-process review:** APPROVED WITH NON-BLOCKING NOTES
+- **Technical R35 blockers:** closed
+- **Cowork operational UAT:** remaining release gate (may proceed on clean tree)
+- **Recurring schedules:** disabled; no final PR created
+
+### Operator waiver — authorization-order deviation in commit `18aa888`
+
+Authorization commit: `6bd7a4e` (documentation-only).  
+Implementation commit: `18aa888`.
+
+The following paths were modified in `18aa888` but were **not** listed in the preceding authorization commit `6bd7a4e`:
+
+- `chakraops/app/core/operations/job_executor.py`
+- `chakraops/app/core/operations/job_run_store.py`
+
+The edits added backward-compatible optional `run_id` plumbing required for the atomic scheduled-occurrence claim.
+
+The operator accepts this single historical authorization-order deviation because:
+
+- the edits were directly required by the approved atomic occurrence-claim remediation
+- the edits did not add new scheduler behavior, broker behavior, financial behavior, or UI behavior
+- the full backend, frontend, build, and R35 targeted gates passed
+- Codex approved the final cross-process implementation
+- Claude approved with this governance note only
+
+This waiver:
+
+- is **not** retroactive authorization
+- does **not** erase or hide the deviation
+- applies **only** to these two exact files in commit `18aa888`
+- does **not** authorize any additional path
+- does **not** permit this pattern to be repeated
+
+All future tracked paths must be listed in a committed authorization packet before modification.

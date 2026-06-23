@@ -1,6 +1,6 @@
 # Current State — ChakraOps
 
-_Last updated: R35.0 final remediation complete — backend 1282/1 skip; frontend 335/18 skip; build PASS; awaiting Codex re-review and Cowork UAT_
+_Last updated: R35.0 technical complete — Codex/Claude final cross-process approved; run-id path waiver recorded; Cowork UAT is remaining gate; schedules disabled; no final PR_
 
 ## Release Status
 
@@ -10,7 +10,7 @@ _Last updated: R35.0 final remediation complete — backend 1282/1 skip; fronten
 | Tag | `chakraops-r30.7.0` |
 | Current branch | `release/R31-R35-program` |
 | Current mode | Program R31–R35 (single branch, five milestone commits, one final PR) |
-| Active milestone | R35.0 — **FINAL REMEDIATION COMPLETE (pending review)**. Cowork UAT paused |
+| Active milestone | R35.0 — **TECHNICAL COMPLETE**. Cowork operational UAT is the remaining release gate. Schedules disabled. No final PR. |
 | Prior milestone | R33.0 — canonical decision engine implemented + tested |
 
 ## R31.0 Validation Gates (audit milestone)

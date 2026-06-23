@@ -4,7 +4,7 @@
 R35.0
 
 ## Branch
-`release/R31-R35-program` (program milestone; single branch for R31–R35, milestone commits, one final PR)
+`release/R31-R35-program`
 
 ## Objective
 Make ChakraOps reliable for daily personal use with observable jobs, clear alerts, recovery procedures, and validated end-to-end workflows.
@@ -13,13 +13,13 @@ Make ChakraOps reliable for daily personal use with observable jobs, clear alert
 Level 3 — operational reliability and release readiness
 
 ## Current status
-READY_TO_START
+**ACTIVE** — operational readiness implementation started (authorization commit pending). R34 closed and approved.
 
 ## Dependencies
-R34.0 unified product flow and trusted reporting.
+R34.0 closed (Claude APPROVED WITH NON-BLOCKING NOTES; Codex APPROVED; Cowork PASS WITH NOTES).
 
 ## Cursor implementation
-Pending
+Phase 0 authorization in progress.
 
 ## Claude review
 Pending
@@ -28,16 +28,16 @@ Pending
 Pending
 
 ## Cowork UAT
-Required
+Required (operational UAT)
 
 ## Gates
 - Backend: Pending
 - Frontend tests: Pending
 - Frontend build: Pending
-- Release-specific validation: Pending
+- R35 release-specific validation: Pending
 
 ## PR
-Pending
+Pending (single final PR after R35 validation — do not open until operator approves)
 
 ## Merge
 Pending
@@ -49,7 +49,7 @@ Pending
 None recorded
 
 ## Next action
-`START R35.0`
+Complete R35 Phases 1–12 per RELEASE_PACKET.md. All schedules disabled by default.
 
 ## Stop point
-No work started.
+Awaiting R35 implementation and gate verification.

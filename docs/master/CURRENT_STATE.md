@@ -10,7 +10,7 @@ _Last updated: R34.0 COMPLETE — implementation and technical validation gate-v
 | Tag | `chakraops-r30.7.0` |
 | Current branch | `release/R31-R35-program` |
 | Current mode | Program R31–R35 (single branch, five milestone commits, one final PR) |
-| Active milestone | R34.0 — COMPLETE (implementation and technical validation complete). Gate-verified (backend 1224/3; frontend 334/18; build PASS): transaction-safe refresh, OS-native lock, complete ORATS provider redaction, live sector enforcement, rendered canonical cutover, frontend correctness. **H-5 CLOSED**. Claude closure **APPROVED WITH NON-BLOCKING NOTES**; Codex closure **BLOCKED only on authorization ordering** — operator waiver recorded for commit `2c41ba2` / `test_r340_refresh_lock_ownership.py`. Final Codex governance confirmation pending before R35.0 |
+| Active milestone | R35.0 — **ACTIVE** (operations, scheduling, recovery, UAT, release readiness). R34 closed and approved. Prior milestone R34.0 complete |
 | Prior milestone | R33.0 — canonical decision engine implemented + tested |
 
 ## R31.0 Validation Gates (audit milestone)

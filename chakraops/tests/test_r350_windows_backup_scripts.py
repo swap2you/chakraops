@@ -39,6 +39,8 @@ def test_all_backup_scripts_dot_source_common():
         "verify_backup_chakraops.ps1",
         "restore_chakraops_validate.ps1",
         "cleanup_expired_backups.ps1",
+        "start_chakraops.ps1",
+        "stop_chakraops.ps1",
     ):
         assert "chakraops_common.ps1" in _read(name)
 

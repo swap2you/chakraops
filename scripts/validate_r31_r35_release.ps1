@@ -31,7 +31,8 @@ function Run-Cmd {
     param([string]$Cwd, [string]$Cmd, [string]$LogFile)
     Push-Location (Join-Path $RepoRoot $Cwd)
     try {
-        cmd /c $Cmd > $LogFile 2>&1
+        $output = Invoke-Expression "$Cmd 2>&1"
+        $output | Out-File -FilePath $LogFile -Encoding utf8
         return [int]$LASTEXITCODE
     } finally {
         Pop-Location

@@ -5,7 +5,7 @@
 
 ## Commits
 - Windows ops auth: `5c7b93e`
-- Windows ops impl: _(this commit)_
+- Windows ops impl: `50919b4`
 
 ## Reviews
 - Claude/Codex technical: **approved**

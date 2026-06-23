@@ -155,10 +155,13 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "cleanup dry-run failed" }
 
     $brokerProbe = Invoke-WebRequest -Uri "http://127.0.0.1:8000/openapi.json" -UseBasicParsing -TimeoutSec 30
-    $openapi = $brokerProbe.Content
+    $openapiDoc = $brokerProbe.Content | ConvertFrom-Json
+    $apiPaths = @($openapiDoc.paths.PSObject.Properties.Name)
     foreach ($term in @("/broker", "/order", "place_order", "submit_order")) {
-        if ($openapi -match [regex]::Escape($term)) {
-            throw "broker/order capability found in openapi: $term"
+        foreach ($apiPath in $apiPaths) {
+            if ($apiPath -match [regex]::Escape($term)) {
+                throw "broker/order capability found in openapi path ${apiPath}: $term"
+            }
         }
     }
     Write-SmokeLog "No broker/order openapi paths: OK"

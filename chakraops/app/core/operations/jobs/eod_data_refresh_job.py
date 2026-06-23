@@ -16,12 +16,19 @@ def _run() -> Dict[str, Any]:
 
     result = run_eod_chain_snapshot_job()
     if result.get("skipped"):
-        return {"output_refs": [result.get("reason", "skipped")], "metadata": result}
-    if result.get("errors", 0) > 0 and result.get("written", 0) == 0:
+        return {
+            "skipped": True,
+            "output_refs": [result.get("skipped_reason", "skipped")],
+            "metadata": result,
+        }
+    if result.get("error_count", 0) > 0 and result.get("written_count", 0) == 0:
         msg = safe_provider_error(provider="ORATS", endpoint="eod_chain", detail="all symbols failed")
         notify_orats_unavailable(msg)
         raise RuntimeError(msg)
-    return {"output_refs": [f"written={result.get('written', 0)}"], "metadata": result}
+    return {
+        "output_refs": [f"written={result.get('written_count', 0)}"],
+        "metadata": result,
+    }
 
 
 def register(registry: JobRegistry) -> None:

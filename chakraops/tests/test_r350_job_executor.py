@@ -40,28 +40,28 @@ def test_execute_job_success(tmp_path):
     def ok():
         return {"output_refs": ["done"]}
 
-    result = execute_job(_job_def(), ok, store=store)
+    result = execute_job(_job_def(), ok, store=store, use_subprocess_timeout=False)
     assert result["state"] == "SUCCEEDED"
 
 
-def test_execute_job_timeout(tmp_path):
-    import time
+def test_execute_job_timeout_uses_subprocess_isolation(tmp_path, monkeypatch):
+    """Thread timeout is replaced by subprocess isolation — see test_r350_timeout_isolation."""
+    monkeypatch.setenv("CHAKRAOPS_TEST_JOB_BEHAVIOR", "hang")
     from dataclasses import replace
 
     from app.core.operations.job_executor import JobExecutionError, execute_job
     from app.core.operations.job_run_store import JobRunStore
 
     store = JobRunStore(path=tmp_path / "runs.jsonl")
-    fast = replace(_job_def(), timeout_seconds=0.1, max_retries=0)
+    fast = replace(_job_def(), job_id="timeout_job", lock_name="job_timeout_job", timeout_seconds=2.0, max_retries=0)
 
-    def slow():
-        time.sleep(1.0)
+    def noop():
         return {"output_refs": []}
 
     with pytest.raises(JobExecutionError):
-        execute_job(fast, slow, store=store)
-    runs = store.read_all()
-    assert runs[-1]["state"] == "TIMED_OUT"
+        execute_job(fast, noop, store=store, use_subprocess_timeout=True)
+    assert store.read_all()[-1]["state"] == "TIMED_OUT"
+    monkeypatch.delenv("CHAKRAOPS_TEST_JOB_BEHAVIOR", raising=False)
 
 
 def test_safe_error_redaction(tmp_path):
@@ -76,5 +76,5 @@ def test_safe_error_redaction(tmp_path):
 
     with patch("app.core.operations.notification_service.notify_job_failure"):
         with pytest.raises(JobExecutionError) as exc:
-            execute_job(d, boom, store=store)
+            execute_job(d, boom, store=store, use_subprocess_timeout=False)
     assert "supersecret" not in str(exc.value).lower() or "redact" in str(exc.value).lower()

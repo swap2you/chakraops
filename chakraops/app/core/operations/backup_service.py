@@ -33,6 +33,29 @@ def _manifest_path(backup_dir: Path) -> Path:
     return backup_dir / "manifest.json"
 
 
+def _backup_sqlite_consistent(src: Path, dest: Path) -> None:
+    """Online-consistent SQLite backup via sqlite3.Connection.backup()."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    src_conn = sqlite3.connect(f"file:{src}?mode=ro", uri=True, timeout=30.0)
+    dest_conn = sqlite3.connect(dest)
+    try:
+        src_conn.backup(dest_conn)
+        dest_conn.commit()
+    finally:
+        src_conn.close()
+        dest_conn.close()
+
+
+def _snapshot_file_under_lock(src: Path, dest: Path) -> None:
+    """Copy a JSONL/runtime file while holding the writer lock."""
+    from app.core.io.locks import with_file_lock
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with with_file_lock(src, timeout_ms=5000):
+        data = src.read_bytes()
+    dest.write_bytes(data)
+
+
 def create_backup(*, label: Optional[str] = None) -> Dict[str, Any]:
     """Create SQLite + JSONL/state backup with manifest. Never includes .env."""
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -45,10 +68,14 @@ def create_backup(*, label: Optional[str] = None) -> Dict[str, Any]:
         from app.core.eval.evaluation_store_v2 import get_decision_store_path
 
         store = get_decision_store_path()
-        if store.exists():
+        if store.exists() and store.suffix.lower() in (".db", ".sqlite", ".sqlite3"):
             target = dest / store.name
-            shutil.copy2(store, target)
-            files.append(_file_entry(store, target))
+            _backup_sqlite_consistent(store, target)
+            files.append(_file_entry(store, target, consistency="sqlite_backup_api"))
+        elif store.exists():
+            target = dest / store.name
+            _snapshot_file_under_lock(store, target)
+            files.append(_file_entry(store, target, consistency="file_lock_snapshot"))
     except Exception as exc:
         logger.warning("[BACKUP] sqlite skip: %s", exc)
 
@@ -60,9 +87,11 @@ def create_backup(*, label: Optional[str] = None) -> Dict[str, Any]:
             for src in out.glob(pattern):
                 if src.name.endswith(".journal.json"):
                     continue
+                if src.name == "process_ownership.json":
+                    continue
                 target = dest / src.name
-                shutil.copy2(src, target)
-                files.append(_file_entry(src, target))
+                _snapshot_file_under_lock(src, target)
+                files.append(_file_entry(src, target, consistency="file_lock_snapshot"))
     except Exception as exc:
         logger.warning("[BACKUP] jsonl skip: %s", exc)
 
@@ -72,6 +101,7 @@ def create_backup(*, label: Optional[str] = None) -> Dict[str, Any]:
         "files": files,
         "secrets_excluded": True,
         "env_excluded": True,
+        "snapshot_policy": "sqlite_backup_api_and_file_lock_snapshot",
     }
     _manifest_path(dest).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return {"backup_id": name, "path": str(dest), "manifest": manifest}
@@ -97,7 +127,7 @@ def verify_backup(backup_id: str) -> Dict[str, Any]:
             ok = False
     sqlite_ok = True
     for entry in manifest.get("files") or []:
-        if not str(entry.get("name", "")).endswith(".db"):
+        if not str(entry.get("name", "")).endswith((".db", ".sqlite", ".sqlite3")):
             continue
         path = dest / entry["name"]
         try:
@@ -153,11 +183,12 @@ def cleanup_expired_backups(retain_count: int = 10) -> Dict[str, Any]:
     return {"removed": removed, "retained": min(len(backups), retain_count)}
 
 
-def _file_entry(src: Path, dest: Path) -> Dict[str, Any]:
+def _file_entry(src: Path, dest: Path, *, consistency: str) -> Dict[str, Any]:
     data = dest.read_bytes()
     return {
         "name": dest.name,
         "source": str(src),
         "size_bytes": len(data),
         "sha256": hashlib.sha256(data).hexdigest(),
+        "consistency": consistency,
     }

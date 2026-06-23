@@ -129,15 +129,22 @@ def test_mp_long_holder_not_displaced_by_age(coord) -> None:
     ready_q: multiprocessing.Queue = ctx.Queue()
     out_q: multiprocessing.Queue = ctx.Queue()
     go_evt = ctx.Event()
-    holder = ctx.Process(target=_mp_holder, args=(str(coord), 2.0, ready_q, go_evt))
+    release_evt = ctx.Event()
+    holder = ctx.Process(
+        target=_mp_holder,
+        args=(str(coord), 30.0, ready_q, go_evt, release_evt),
+    )
     holder.start()
     assert ready_q.get(timeout=30) == "holding"
     lock_path = refresh_lock._lock_path("weekly_refresh")
     old = time.time() - 9999
     os.utime(lock_path, (old, old))
-    waiter = ctx.Process(target=_mp_try_acquire, args=(str(coord), 0.5, out_q, go_evt))
+    waiter = ctx.Process(
+        target=_mp_try_acquire,
+        args=(str(coord), 0.5, out_q, go_evt, release_evt),
+    )
     waiter.start()
-    assert out_q.get(timeout=10) == "timeout"
+    assert out_q.get(timeout=15) == "timeout"
     holder.join(timeout=15)
     assert holder.exitcode == 0
     waiter.join(timeout=10)

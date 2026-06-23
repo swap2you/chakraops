@@ -1,18 +1,15 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""Persisted job-run records for R35.0."""
+"""Persisted job-run records for R35.0 — cross-process safe."""
 
 from __future__ import annotations
 
 import json
 import os
-import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-
-_LOCK = threading.Lock()
 
 RUN_STATES = (
     "STARTED",
@@ -22,6 +19,12 @@ RUN_STATES = (
     "TIMED_OUT",
     "RECOVERED",
 )
+
+TERMINAL_STATES = frozenset({"SUCCEEDED", "FAILED", "SKIPPED", "TIMED_OUT", "RECOVERED"})
+
+
+class JobRunStoreError(RuntimeError):
+    """Raised when job-run persistence is invalid or unsafe."""
 
 
 def _runs_path() -> Path:
@@ -37,6 +40,12 @@ def _runs_path() -> Path:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _store_lock():
+    from app.core.universe.refresh_lock import cross_process_lock
+
+    return cross_process_lock("job_run_store", timeout=30.0)
 
 
 class JobRunStore:
@@ -64,7 +73,8 @@ class JobRunStore:
             "lock_status": "acquired",
             "metadata": metadata or {},
         }
-        self._append(record)
+        with _store_lock():
+            self._append_unlocked(record)
         return record
 
     def finish_run(
@@ -79,39 +89,58 @@ class JobRunStore:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         if state not in RUN_STATES:
-            raise ValueError(f"invalid run state: {state}")
-        runs = self.read_all()
-        updated = False
-        for rec in runs:
-            if rec.get("run_id") != run_id:
-                continue
-            started = rec.get("started_at")
-            ended = _now_iso()
-            rec["state"] = state
-            rec["ended_at"] = ended
-            rec["retry_count"] = retry_count
-            if error_summary is not None:
-                rec["error_summary"] = error_summary
-            if output_refs is not None:
-                rec["output_refs"] = output_refs
-            if lock_status is not None:
-                rec["lock_status"] = lock_status
-            if metadata:
-                rec["metadata"] = {**(rec.get("metadata") or {}), **metadata}
-            if started:
-                try:
-                    s = datetime.fromisoformat(started.replace("Z", "+00:00"))
-                    e = datetime.fromisoformat(ended.replace("Z", "+00:00"))
-                    rec["duration_ms"] = int((e - s).total_seconds() * 1000)
-                except Exception:
-                    pass
-            updated = True
-            break
-        if not updated:
-            return
-        self._rewrite(runs)
+            raise JobRunStoreError(f"invalid run state: {state}")
+        with _store_lock():
+            runs = self._read_all_unlocked()
+            updated = False
+            for rec in runs:
+                if rec.get("run_id") != run_id:
+                    continue
+                current = rec.get("state")
+                if current in TERMINAL_STATES and current != state:
+                    raise JobRunStoreError(
+                        f"cannot regress terminal state {current!r} -> {state!r} for {run_id}"
+                    )
+                started = rec.get("started_at")
+                ended = _now_iso()
+                rec["state"] = state
+                rec["ended_at"] = ended
+                rec["retry_count"] = retry_count
+                if error_summary is not None:
+                    rec["error_summary"] = error_summary
+                if output_refs is not None:
+                    rec["output_refs"] = output_refs
+                if lock_status is not None:
+                    rec["lock_status"] = lock_status
+                if metadata:
+                    rec["metadata"] = {**(rec.get("metadata") or {}), **metadata}
+                if started:
+                    try:
+                        s = datetime.fromisoformat(started.replace("Z", "+00:00"))
+                        e = datetime.fromisoformat(ended.replace("Z", "+00:00"))
+                        rec["duration_ms"] = int((e - s).total_seconds() * 1000)
+                    except Exception:
+                        pass
+                updated = True
+                break
+            if not updated:
+                return
+            self._rewrite_unlocked(runs)
 
     def read_all(self, limit: int = 500) -> List[Dict[str, Any]]:
+        with _store_lock():
+            return self._read_all_unlocked(limit=limit)
+
+    def recent_for_job(self, job_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        return [r for r in reversed(self.read_all()) if r.get("job_id") == job_id][:limit]
+
+    def interrupted_started_runs(self) -> List[Dict[str, Any]]:
+        return [r for r in self.read_all() if r.get("state") == "STARTED"]
+
+    def mark_recovered(self, run_id: str, note: str) -> None:
+        self.finish_run(run_id, state="RECOVERED", error_summary=note)
+
+    def _read_all_unlocked(self, limit: int = 500) -> List[Dict[str, Any]]:
         path = self.path
         if not path.exists():
             return []
@@ -123,35 +152,24 @@ class JobRunStore:
                     continue
                 try:
                     obj = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
+                except json.JSONDecodeError as exc:
+                    raise JobRunStoreError(f"malformed job run line: {exc}") from exc
                 if isinstance(obj, dict):
                     out.append(obj)
         return out[-limit:]
 
-    def recent_for_job(self, job_id: str, limit: int = 20) -> List[Dict[str, Any]]:
-        return [r for r in reversed(self.read_all()) if r.get("job_id") == job_id][:limit]
+    def _append_unlocked(self, record: Dict[str, Any]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, sort_keys=True) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
 
-    def interrupted_started_runs(self) -> List[Dict[str, Any]]:
-        return [r for r in self.read_all() if r.get("state") == "STARTED"]
-
-    def mark_recovered(self, run_id: str, note: str) -> None:
-        self.finish_run(run_id, state="RECOVERED", error_summary=note)
-
-    def _append(self, record: Dict[str, Any]) -> None:
-        with _LOCK:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(record, sort_keys=True) + "\n")
-                f.flush()
-                os.fsync(f.fileno())
-
-    def _rewrite(self, records: List[Dict[str, Any]]) -> None:
-        with _LOCK:
-            tmp = self.path.with_suffix(".tmp")
-            with open(tmp, "w", encoding="utf-8") as f:
-                for rec in records:
-                    f.write(json.dumps(rec, sort_keys=True) + "\n")
-                f.flush()
-                os.fsync(f.fileno())
-            os.replace(tmp, self.path)
+    def _rewrite_unlocked(self, records: List[Dict[str, Any]]) -> None:
+        tmp = self.path.with_suffix(".tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            for rec in records:
+                f.write(json.dumps(rec, sort_keys=True) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, self.path)

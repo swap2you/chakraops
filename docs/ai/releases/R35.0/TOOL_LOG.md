@@ -21,9 +21,15 @@
 - Codex: BLOCKED.
 - Cowork: STOPPED (dirty working tree); operational UAT not performed.
 
-## Cursor — remediation authorization (2026-06-23)
-- Packet updated with exact remediation paths; operator waiver recorded for `test_r340_refresh_lock_ownership.py` and `SystemDiagnosticsPage.test.tsx` (57b3939 deviation).
-- Docs-only commit precedes remediation source edits.
+## Cursor — remediation implementation (2026-06-23)
+- Fix 1: scheduler lifecycle (enable-after-disabled, stop/restart), occurrence dedup store
+- Fix 2: subprocess-isolated timeout with child terminate
+- Fix 3: cross-process JobRunStore lock + terminal state guard
+- Fix 4: EOD skipped semantics + SKIPPED executor state
+- Fix 5: incident-correlated notifications
+- Fix 6: SQLite backup API + JSONL lock snapshots
+- Fix 7: Windows process ownership scripts
+- Gates: backend 1268/1 skip; frontend 335/18 skip; build PASS; R35 suite 42 passed
 
 ## Claude Code
 - Pending.

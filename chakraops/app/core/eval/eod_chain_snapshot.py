@@ -119,13 +119,31 @@ def run_eod_chain_snapshot_job(*, tz_name: str = "America/New_York") -> dict:
 
     today_et = datetime.now(ZoneInfo(tz_name)).date()
     if not should_run_eod_chain_today(today_et):
-        return {"skipped": True, "reason": "not_trading_day", "written": 0, "skipped": 0, "errors": 0}
+        return {
+            "skipped": True,
+            "skipped_reason": "NON_TRADING_DAY",
+            "skipped_count": 0,
+            "written_count": 0,
+            "error_count": 0,
+        }
     symbols = list(UNIVERSE_SYMBOLS) if UNIVERSE_SYMBOLS else []
     if not symbols:
-        return {"skipped": True, "reason": "empty_universe", "written": 0, "skipped": 0, "errors": 0}
-    result = run_eod_chain_snapshot(today_et, symbols)
-    result["skipped"] = False
-    return result
+        return {
+            "skipped": True,
+            "skipped_reason": "EMPTY_UNIVERSE",
+            "skipped_count": 0,
+            "written_count": 0,
+            "error_count": 0,
+        }
+    raw = run_eod_chain_snapshot(today_et, symbols)
+    return {
+        "skipped": False,
+        "skipped_reason": None,
+        "skipped_count": int(raw.get("skipped", 0)),
+        "written_count": int(raw.get("written", 0)),
+        "error_count": int(raw.get("errors", 0)),
+        "path": raw.get("path"),
+    }
 
 
 __all__ = [

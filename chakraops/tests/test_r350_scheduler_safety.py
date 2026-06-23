@@ -39,13 +39,15 @@ def test_schedule_due_weekly_sunday(monkeypatch):
     assert "weekly_universe_refresh" in result["executed"]
 
 
-def test_no_duplicate_registry_on_scheduler_start():
+def test_no_duplicate_registry_on_scheduler_start(monkeypatch):
     from app.core.operations.job_registry import get_job_registry
-    from app.core.operations.scheduler_service import start_scheduler_service, stop_scheduler_service
+    from app.core.operations import scheduler_service as svc
 
+    svc.reset_scheduler_state_for_tests()
     before = len(get_job_registry().list_jobs())
-    start_scheduler_service()
-    start_scheduler_service()
+    monkeypatch.setenv("CHAKRAOPS_SCHEDULER_ENABLED", "false")
+    svc.start_scheduler_service()
+    svc.start_scheduler_service()
     after = len(get_job_registry().list_jobs())
-    stop_scheduler_service()
+    svc.stop_scheduler_service()
     assert before == after

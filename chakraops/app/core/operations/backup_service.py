@@ -7,11 +7,13 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import shutil
 import sqlite3
+import stat
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.core.operations.backup_writer_locks import (
     SnapshotTarget,
@@ -22,6 +24,12 @@ from app.core.operations.backup_writer_locks import (
 from app.core.universe.refresh_lock import RefreshLockTimeout
 
 logger = logging.getLogger(__name__)
+
+CLEANUP_CONFIRM_TOKEN = "DELETE-EXPIRED-BACKUPS"
+
+
+class BackupCleanupError(RuntimeError):
+    """Raised when backup retention cleanup is unsafe or not authorized."""
 
 
 def _backup_root() -> Path:
@@ -189,15 +197,152 @@ def restore_to_temp(backup_id: str, temp_root: Optional[Path] = None) -> Dict[st
     return {"ok": True, "temp_path": str(temp)}
 
 
-def cleanup_expired_backups(retain_count: int = 10) -> Dict[str, Any]:
-    backups = list_backups()
+def _is_strict_descendant(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return path.resolve() != root.resolve()
+    except ValueError:
+        return False
+
+
+def _is_reparse_point(path: Path) -> bool:
+    if path.is_symlink():
+        return True
+    if os.name != "nt":
+        return False
+    try:
+        mode = os.lstat(path).st_mode
+        if stat.S_ISLNK(mode):
+            return True
+        if hasattr(os, "stat_result"):
+            attrs = os.lstat(path).st_file_attributes  # type: ignore[attr-defined]
+            return bool(attrs & 0x400)
+    except OSError:
+        return False
+    return False
+
+
+def _protected_live_paths() -> set[Path]:
+    protected: set[Path] = set()
+    try:
+        from app.core.settings import get_output_dir
+
+        out = Path(get_output_dir()).resolve()
+        from app.core.eval.evaluation_store_v2 import get_decision_store_path
+
+        protected.add(get_decision_store_path().resolve())
+        for pattern in ("*.jsonl", "*.json"):
+            for item in out.glob(pattern):
+                if "backups" in item.parts:
+                    continue
+                protected.add(item.resolve())
+    except Exception:
+        pass
+    return protected
+
+
+def _assess_cleanup_candidate(
+    candidate: Path,
+    *,
+    backup_root: Path,
+    protected: set[Path],
+) -> Tuple[str, Optional[str]]:
+    """Return (eligible|rejected, reason)."""
+    root = backup_root.resolve()
+    try:
+        resolved = candidate.resolve()
+    except OSError as exc:
+        return "rejected", f"unresolvable path: {exc}"
+
+    if resolved == root:
+        return "rejected", "backup root itself"
+    if not _is_strict_descendant(resolved, root):
+        return "rejected", "outside backup root"
+
+    for protected_path in protected:
+        if resolved == protected_path:
+            return "rejected", "protected live state path"
+
+    if not resolved.is_dir():
+        return "rejected", "not a directory"
+
+    if _is_reparse_point(resolved):
+        return "rejected", "reparse point (symlink/junction)"
+
+    manifest = _manifest_path(resolved)
+    if not manifest.exists():
+        return "rejected", "malformed or missing manifest"
+
+    try:
+        json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "rejected", "malformed manifest"
+
+    return "eligible", None
+
+
+def _sorted_backups_newest_first(backups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return sorted(
+        backups,
+        key=lambda b: (b.get("created_at") or "", b.get("backup_id") or ""),
+        reverse=True,
+    )
+
+
+def cleanup_expired_backups(
+    retain_count: int = 10,
+    *,
+    dry_run: bool = True,
+    confirm: bool = False,
+    confirm_token: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Expire old backups under canonical backup root with containment checks."""
+    if retain_count < 0:
+        raise BackupCleanupError("retain_count must be non-negative")
+
+    if not dry_run:
+        if not confirm:
+            raise BackupCleanupError("destructive cleanup requires confirm=True")
+        if confirm_token != CLEANUP_CONFIRM_TOKEN:
+            raise BackupCleanupError("destructive cleanup requires valid confirm_token")
+
+    backup_root = _backup_root().resolve()
+    protected = _protected_live_paths()
+    backups = _sorted_backups_newest_first(list_backups())
+    retain = backups[:retain_count]
+    expire_candidates = backups[retain_count:]
+
+    would_retain = [b["backup_id"] for b in retain]
+    would_remove: List[str] = []
     removed: List[str] = []
-    for entry in backups[retain_count:]:
-        path = Path(entry["path"])
-        if path.exists() and path.is_dir():
-            shutil.rmtree(path)
+    skipped: List[str] = []
+    rejected: List[Dict[str, str]] = []
+
+    for entry in expire_candidates:
+        candidate = Path(entry["path"])
+        status, reason = _assess_cleanup_candidate(
+            candidate, backup_root=backup_root, protected=protected
+        )
+        if status == "rejected":
+            rejected.append({"backup_id": entry["backup_id"], "path": str(candidate), "reason": reason or "rejected"})
+            skipped.append(entry["backup_id"])
+            continue
+        would_remove.append(entry["backup_id"])
+        if not dry_run and candidate.exists() and candidate.is_dir():
+            shutil.rmtree(candidate)
             removed.append(entry["backup_id"])
-    return {"removed": removed, "retained": min(len(backups), retain_count)}
+
+    return {
+        "dry_run": dry_run,
+        "retain_count": retain_count,
+        "backup_root": str(backup_root),
+        "would_retain": would_retain,
+        "would_remove": would_remove,
+        "removed": removed,
+        "skipped": skipped,
+        "rejected": rejected,
+        "retained": len(would_retain),
+    }
 
 
 def _file_entry(src: Path, dest: Path, *, consistency: str) -> Dict[str, Any]:

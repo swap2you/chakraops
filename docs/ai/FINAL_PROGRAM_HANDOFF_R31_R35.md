@@ -11,35 +11,22 @@ Date: 2026-06-23
 | R32.0 | `dffa932` | Data reliability scope + C-1 ORATS remediation (`1223884`) |
 | R33.0 | `ed9febd` | Canonical decision engine and profiles |
 | R34.0 | `50aa600` | Live cutover, refresh safety, ORATS redaction (waiver `902a9cb`) |
-| R35.0 | `18aa888` | Atomic cross-process consistency: occurrence claim, incident dedupe, backup writer locks |
-
-Authorization commits: R35 Phase 0 `e20ccee`; R35 final consistency auth `6bd7a4e`; R35 run-id path waiver _(this docs commit)_.
-
-### Operator waiver — run-id path authorization order (`18aa888`)
-
-Paths modified in `18aa888` but not listed in preceding auth `6bd7a4e`:
-
-- `chakraops/app/core/operations/job_executor.py`
-- `chakraops/app/core/operations/job_run_store.py`
-
-Backward-compatible optional `run_id` plumbing for atomic scheduled-occurrence claim. Operator waiver recorded; not retroactive; applies only to these two files in `18aa888`.
-
-## External review (final cross-process)
-
-| Reviewer | Verdict |
-|----------|---------|
-| Codex | APPROVED WITH NON-BLOCKING NOTES |
-| Claude | APPROVED WITH NON-BLOCKING NOTES |
-| Cowork UAT | Remaining release gate |
+| R35.0 | `18aa888`+ | Atomic consistency + Windows backup scripts + retention safeguards |
 
 ## Gates (final)
 
 | Gate | R35 result |
 |------|------------|
-| Backend pytest | **1282 passed**, 1 skipped |
+| Backend pytest | **1291 passed**, 2 skipped |
 | Frontend tests | **335 passed**, 18 skipped |
 | Frontend build | PASS |
-| R35 targeted | **56 passed** |
+| R35 targeted | **65 passed**, 1 skipped |
+
+## UAT status
+
+- Static audit: **complete**
+- Technical reviews: **approved**
+- Live Windows operational UAT: **pending**
 
 ## Trading safety
 
@@ -56,4 +43,4 @@ Backward-compatible optional `run_id` plumbing for atomic scheduled-occurrence c
 
 ## Final PR
 
-Do not open until Cowork operational UAT and operator approval. Codex and Claude final cross-process reviews approved with non-blocking notes. See `docs/ai/FINAL_PR_DESCRIPTION_R31_R35.md`.
+Do not open until **live Windows operational UAT** and operator approval. Codex and Claude final cross-process reviews approved with non-blocking notes. See `docs/ai/FINAL_PR_DESCRIPTION_R31_R35.md`.

@@ -18,3 +18,11 @@ The following paths were modified in `18aa888` but not listed in preceding auth 
 - `chakraops/app/core/operations/job_run_store.py` — optional `run_id` in `start_run`
 
 Operator waiver recorded. Applies only to these two files in `18aa888`; not retroactive; pattern not permitted to repeat.
+
+### Windows operations hardening (commit after `5c7b93e`)
+
+- `scripts/*.ps1` — 5 backup/retention PowerShell tools
+- `chakraops/docs/RUNBOOK_SCHEDULER_OPERATIONS.md` — new
+- `chakraops/docs/RUNBOOK_BACKUP_RESTORE.md` — updated
+- `backup_service.py` — retention dry-run + containment
+- `test_r350_retention_safety.py` — new

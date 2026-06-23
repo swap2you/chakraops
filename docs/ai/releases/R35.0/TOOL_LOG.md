@@ -49,14 +49,16 @@
 ## Codex
 - Final cross-process: APPROVED WITH NON-BLOCKING NOTES
 
-## Cursor — Windows operations hardening authorization (2026-06-23)
-- Cowork static audit passed; operational execution NOT RUN (Linux sandbox)
-- Windows live UAT remains final release gate
-- Docs-only commit precedes script/retention/runbook edits
+## Cursor — Windows operations hardening implementation (2026-06-23)
+- Fix 1: PowerShell backup scripts (5) calling canonical Python backup_service
+- Fix 2: retention dry-run + backup-root containment in cleanup_expired_backups
+- Fix 3: RUNBOOK_SCHEDULER_OPERATIONS.md + RUNBOOK_BACKUP_RESTORE.md updated
+- Fix 4: test_r350_retention_safety.py + gates; evidence under out/verification/R35.0/
+- Gates: backend 1291/2 skip; frontend 335/18 skip; build PASS; R35 suite 65/1 skip
 
 ## Claude Cowork
 - Static audit: passed core safety invariants
-- Live operational UAT: NOT RUN (PowerShell unavailable in sandbox)
+- Live operational UAT: NOT RUN (PowerShell unavailable in sandbox) — **remaining gate**
 
 ## Operator
 - R35.0 START authorized. Schedules disabled by default until final UAT approves enablement.

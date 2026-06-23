@@ -10,9 +10,14 @@ from app.core.operations.job_registry import JobDefinition, JobRegistry
 
 
 def _run() -> Dict[str, Any]:
-    from app.core.operations.backup_service import cleanup_expired_backups
+    from app.core.operations.backup_service import cleanup_expired_backups, CLEANUP_CONFIRM_TOKEN
 
-    result = cleanup_expired_backups(retain_count=10)
+    result = cleanup_expired_backups(
+        retain_count=10,
+        dry_run=False,
+        confirm=True,
+        confirm_token=CLEANUP_CONFIRM_TOKEN,
+    )
     return {"output_refs": result.get("removed") or [], "metadata": result}
 
 

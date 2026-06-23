@@ -32,9 +32,17 @@ def test_retention_cleanup_safe(tmp_path, monkeypatch):
     for i in range(12):
         d = root / f"backup_auto_{i:02d}"
         d.mkdir()
-        (d / "manifest.json").write_text('{"files":[]}', encoding="utf-8")
+        (d / "manifest.json").write_text(
+            '{"created_at":"2026-06-%02dT00:00:00+00:00","files":[]}' % (i + 1),
+            encoding="utf-8",
+        )
 
     monkeypatch.setattr(backup_service, "_backup_root", lambda: root)
-    result = backup_service.cleanup_expired_backups(retain_count=10)
+    result = backup_service.cleanup_expired_backups(
+        retain_count=10,
+        dry_run=False,
+        confirm=True,
+        confirm_token=backup_service.CLEANUP_CONFIRM_TOKEN,
+    )
     assert len(result["removed"]) == 2
     assert len(list(root.iterdir())) == 10

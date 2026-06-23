@@ -407,3 +407,70 @@ Starting commit: `7f0f062`. Docs-only authorization precedes all source/script e
 **Companion path (implicit to backup_service API):** `chakraops/app/core/operations/jobs/retention_cleanup_job.py`
 
 Any additional tracked path requires operator approval and packet update committed before edit.
+
+---
+
+## Phase 0 — release acceptance factory authorization (2026-06-23)
+
+Starting commit: `26bd27e`. Docs-only authorization precedes all implementation edits.
+
+### Cowork / UAT status recorded
+
+- Cowork operational execution: **NOT RUN** (Linux sandbox)
+- Cowork static audit: **passed**
+- Windows live operational smoke: **required by acceptance harness** (Cursor-executed)
+- Cowork browser UAT: **pending** after acceptance factory PASS
+- Recurring schedules: **disabled**
+- Final PR: **not created**
+
+### Operator waiver — `retention_cleanup_job.py` in commit `50919b4`
+
+Path: `chakraops/app/core/operations/jobs/retention_cleanup_job.py`  
+Commit: `50919b4`  
+Not listed in prior authorization commit `5c7b93e`.  
+Later companion-path note in RELEASE_PACKET was **not** prior authorization.
+
+This waiver states:
+
+- exact path and commit `50919b4`
+- change was retention-safety wiring (confirm token to canonical cleanup service)
+- deviation remains visible in program history
+- is **not** retroactive authorization
+- applies only to that exact path and commit
+- does **not** permit repetition
+
+### Allowed tracked paths — release acceptance factory (exact)
+
+- NEW `docs/ai/validation/R31_R35_ACCEPTANCE_CONTRACT.md`
+- NEW `docs/ai/validation/R31_R35_ACCEPTANCE_MANIFEST.json`
+- NEW `docs/ai/validation/R31_R35_SELF_REVIEW_CHECKLIST.md`
+- NEW `docs/ai/validation/R31_R35_COWORK_UAT_HANDOFF.md`
+- NEW `scripts/chakraops_common.ps1`
+- NEW `scripts/validate_r31_r35_release.ps1`
+- NEW `scripts/run_r31_r35_live_smoke.ps1`
+- MODIFIED `scripts/backup_chakraops.ps1`
+- MODIFIED `scripts/list_backups_chakraops.ps1`
+- MODIFIED `scripts/verify_backup_chakraops.ps1`
+- MODIFIED `scripts/restore_chakraops_validate.ps1`
+- MODIFIED `scripts/cleanup_expired_backups.ps1`
+- MODIFIED `chakraops/app/core/operations/backup_service.py`
+- MODIFIED `chakraops/app/core/operations/jobs/retention_cleanup_job.py`
+- MODIFIED `chakraops/tests/test_r350_backup_service.py`
+- MODIFIED `chakraops/tests/test_r350_backup_writer_locks.py`
+- MODIFIED `chakraops/tests/test_r350_retention_safety.py`
+- NEW `chakraops/tests/test_r350_windows_backup_scripts.py`
+- NEW `chakraops/tests/test_r350_release_acceptance.py`
+- MODIFIED `chakraops/docs/RUNBOOK_BACKUP_RESTORE.md`
+- MODIFIED `chakraops/docs/RUNBOOK_SCHEDULER_OPERATIONS.md`
+- MODIFIED `docs/ai/releases/R35.0/{RELEASE_PACKET,STATUS,TOOL_LOG}.md`
+- MODIFIED `docs/ai/PROGRAM_STATUS.md`
+- MODIFIED `docs/ai/FINAL_PROGRAM_HANDOFF_R31_R35.md`
+- MODIFIED `docs/ai/FINAL_CHANGED_FILE_INVENTORY_R31_R35.md`
+- MODIFIED `docs/ai/FINAL_GATE_SUMMARY_R31_R35.md`
+- MODIFIED `docs/ai/FINAL_UNRESOLVED_ISSUES_R31_R35.md`
+- MODIFIED `docs/ai/FINAL_UAT_PLAN_R31_R35.md`
+- MODIFIED `docs/ai/FINAL_PR_DESCRIPTION_R31_R35.md`
+- MODIFIED `docs/master/CURRENT_STATE.md`
+- `out/verification/R35.0/*` (local evidence; not committed)
+
+Any additional tracked path requires operator approval and packet update committed before edit.

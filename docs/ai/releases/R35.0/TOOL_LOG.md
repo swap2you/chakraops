@@ -49,6 +49,10 @@
 ## Codex
 - Final cross-process: APPROVED WITH NON-BLOCKING NOTES
 
+## Cursor — release acceptance factory authorization (2026-06-23)
+- Retention-path waiver for `retention_cleanup_job.py` in `50919b4` recorded
+- Docs-only commit precedes acceptance harness implementation
+
 ## Cursor — Windows operations hardening implementation (2026-06-23)
 - Fix 1: PowerShell backup scripts (5) calling canonical Python backup_service
 - Fix 2: retention dry-run + backup-root containment in cleanup_expired_backups

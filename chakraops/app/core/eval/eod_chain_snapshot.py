@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import List
 
@@ -108,8 +108,29 @@ def should_run_eod_chain_today(et_date: date) -> bool:
     return is_market_open_today(et_date)
 
 
+def run_eod_chain_snapshot_job(*, tz_name: str = "America/New_York") -> dict:
+    """Job-safe entry: resolve today's ET date, universe symbols, and run snapshot."""
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        from backports.zoneinfo import ZoneInfo  # type: ignore
+
+    from app.api.data_health import UNIVERSE_SYMBOLS
+
+    today_et = datetime.now(ZoneInfo(tz_name)).date()
+    if not should_run_eod_chain_today(today_et):
+        return {"skipped": True, "reason": "not_trading_day", "written": 0, "skipped": 0, "errors": 0}
+    symbols = list(UNIVERSE_SYMBOLS) if UNIVERSE_SYMBOLS else []
+    if not symbols:
+        return {"skipped": True, "reason": "empty_universe", "written": 0, "skipped": 0, "errors": 0}
+    result = run_eod_chain_snapshot(today_et, symbols)
+    result["skipped"] = False
+    return result
+
+
 __all__ = [
     "get_eod_chain_dir",
     "run_eod_chain_snapshot",
+    "run_eod_chain_snapshot_job",
     "should_run_eod_chain_today",
 ]

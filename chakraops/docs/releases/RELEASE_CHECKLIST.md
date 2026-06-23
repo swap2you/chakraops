@@ -1059,6 +1059,23 @@ No code, UI, ORATS, scheduler, database, runtime, brokerage, deployment, or work
 
 ---
 
+### R35.0 — Operations, scheduling, recovery, UAT, release readiness (program R31–R35, milestone 5) — IMPLEMENTED
+
+- [x] Phase 0 — authorization `e20ccee`
+- [x] Requirements — `R35.0_requirements.md`; Release notes — `R35.0_release_notes.md`
+- [x] Canonical job registry (8 jobs) + job run store + executor
+- [x] Unified scheduler (disabled-by-default) + legacy scheduler gate
+- [x] Notifications dedupe + backup/restore + retention
+- [x] Operations API + System Diagnostics ops panel
+- [x] Windows startup/shutdown scripts + runbooks
+- [x] Final handoff pack — `docs/ai/FINAL_*_R31_R35.md`
+- [x] Gate — Backend 1248 passed/3 skipped; Frontend 335 passed/18 skipped; Build PASS. Evidence: `out/verification/R35.0/`
+- [ ] Review / sign-off — Claude, Codex, Cowork operational UAT pending; single final PR after operator approval
+
+**Scope:** Operational readiness for daily personal use. Schedules disabled by default. No broker execution. Manual-only advisory decisions. Final program handoff for R31–R35.
+
+---
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

@@ -88,7 +88,7 @@ _scheduler_run_count_date: Optional[str] = None  # YYYY-MM-DD UTC
 # Nightly evaluation time: default 19:00 ET. Set NIGHTLY_EVAL_TIME (HH:MM).
 NIGHTLY_EVAL_TIME = os.getenv("NIGHTLY_EVAL_TIME", "19:00")
 NIGHTLY_EVAL_TZ = os.getenv("NIGHTLY_EVAL_TZ", "America/New_York")
-NIGHTLY_EVAL_ENABLED = os.getenv("NIGHTLY_EVAL_ENABLED", "true").lower() in ("true", "1", "yes")
+NIGHTLY_EVAL_ENABLED = os.getenv("NIGHTLY_EVAL_ENABLED", "false").lower() in ("true", "1", "yes")
 _nightly_stop_event: Optional[threading.Event] = None
 _nightly_thread: Optional[threading.Thread] = None
 _last_nightly_eval_at: Optional[str] = None
@@ -106,7 +106,7 @@ _last_eod_freeze_snapshot_dir: Optional[str] = None
 # EOD chain snapshot: 16:05 ET on trading days (Phase 3.1.3)
 EOD_CHAIN_TIME = os.getenv("EOD_CHAIN_TIME", "16:05")
 EOD_CHAIN_TZ = os.getenv("EOD_CHAIN_TZ", "America/New_York")
-EOD_CHAIN_ENABLED = os.getenv("EOD_CHAIN_ENABLED", "true").lower() in ("true", "1", "yes")
+EOD_CHAIN_ENABLED = os.getenv("EOD_CHAIN_ENABLED", "false").lower() in ("true", "1", "yes")
 _eod_chain_stop_event: Optional[threading.Event] = None
 _eod_chain_thread: Optional[threading.Thread] = None
 _last_eod_chain_run_date: Optional[str] = None  # YYYY-MM-DD to avoid double-run same day
@@ -887,42 +887,55 @@ async def _lifespan(app: FastAPI):
     except Exception:
         pass
 
-    # Start background scheduler for universe evaluation
-    print("===== SCHEDULER STARTUP =====")
-    print(f"Interval: {UNIVERSE_EVAL_MINUTES} minutes")
-    print(f"Market open: {is_market_open()}")
-    print(f"Market phase: {get_market_phase()}")
-    start_evaluation_scheduler()
-    print("Scheduler: STARTED")
-    print("=============================")
-    
-    # Start nightly scheduler
-    print("===== NIGHTLY SCHEDULER STARTUP =====")
-    print(f"Enabled: {NIGHTLY_EVAL_ENABLED}")
-    print(f"Time: {NIGHTLY_EVAL_TIME} {NIGHTLY_EVAL_TZ}")
-    start_nightly_scheduler()
-    nightly_status = get_nightly_scheduler_status()
-    print(f"Running: {nightly_status['running']}")
-    print(f"Next scheduled: {nightly_status.get('next_scheduled_at', 'N/A')}")
-    print("=====================================")
+    # R35.0: Unified operations scheduler (disabled-by-default) + optional legacy schedulers
+    print("===== OPERATIONS SCHEDULER STARTUP =====")
+    from app.core.operations.scheduler_service import (
+        is_master_enabled,
+        legacy_schedulers_enabled,
+        scheduler_status,
+        start_scheduler_service,
+    )
 
-    # EOD chain snapshot: 16:05 ET on trading days
-    print("===== EOD CHAIN SCHEDULER STARTUP =====")
-    print(f"Enabled: {EOD_CHAIN_ENABLED}")
-    print(f"Time: {EOD_CHAIN_TIME} {EOD_CHAIN_TZ}")
-    start_eod_chain_scheduler()
-    print("=======================================")
+    start_scheduler_service()
+    ops_status = scheduler_status()
+    print(f"Master enabled: {is_master_enabled()}")
+    print(f"Legacy schedulers: {legacy_schedulers_enabled()}")
+    print(f"Registered jobs: {len(ops_status.get('jobs') or [])}")
+    print("========================================")
+
+    if legacy_schedulers_enabled():
+        print("===== LEGACY SCHEDULER STARTUP =====")
+        print(f"Interval: {UNIVERSE_EVAL_MINUTES} minutes")
+        print(f"Market open: {is_market_open()}")
+        print(f"Market phase: {get_market_phase()}")
+        start_evaluation_scheduler()
+        print("Universe eval scheduler: STARTED")
+        print(f"Nightly enabled: {NIGHTLY_EVAL_ENABLED}")
+        print(f"Time: {NIGHTLY_EVAL_TIME} {NIGHTLY_EVAL_TZ}")
+        start_nightly_scheduler()
+        nightly_status = get_nightly_scheduler_status()
+        print(f"Nightly running: {nightly_status['running']}")
+        print(f"EOD chain enabled: {EOD_CHAIN_ENABLED}")
+        print(f"Time: {EOD_CHAIN_TIME} {EOD_CHAIN_TZ}")
+        start_eod_chain_scheduler()
+        print("====================================")
+    else:
+        print("===== LEGACY SCHEDULERS DISABLED =====")
+        print("Set CHAKRAOPS_LEGACY_SCHEDULERS_ENABLED=true to restore in-process schedulers.")
+        print("Use R35 operations jobs via /api/operations instead.")
+        print("======================================")
     
     yield
     
-    # Shutdown: stop the schedulers
+    # Shutdown: stop schedulers
     print("===== SCHEDULER SHUTDOWN =====")
-    stop_evaluation_scheduler()
-    print("Scheduler: STOPPED")
-    stop_nightly_scheduler()
-    print("Nightly: STOPPED")
-    stop_eod_chain_scheduler()
-    print("EOD chain: STOPPED")
+    from app.core.operations.scheduler_service import stop_scheduler_service
+
+    stop_scheduler_service()
+    if legacy_schedulers_enabled():
+        stop_evaluation_scheduler()
+        stop_nightly_scheduler()
+        stop_eod_chain_scheduler()
     print("===============================")
 
 
@@ -954,10 +967,12 @@ async def api_key_middleware(request: Request, call_next):
 _UI_CORS_ORIGINS = (os.getenv("UI_CORS_ORIGINS") or "http://localhost:5173").strip().split(",")
 _CORS_ORIGINS = [o.strip() for o in _UI_CORS_ORIGINS if o.strip()] or ["http://localhost:5173"]
 
+from app.api.operations_routes import router as operations_router
 from app.api.ui_routes import router as ui_router
 from app.api.copilot import router as copilot_router
 from app.api.data_reliability_routes import router as data_reliability_router
 from app.api.decision_engine_routes import router as decision_engine_router
+app.include_router(operations_router)
 app.include_router(ui_router)
 app.include_router(copilot_router, prefix="/api/ui")
 app.include_router(data_reliability_router, prefix="/api/ui")

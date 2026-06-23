@@ -1,6 +1,6 @@
 # Current State — ChakraOps
 
-_Last updated: R34.0 COMPLETE — implementation and technical validation gate-verified (backend 1224/3; frontend 334/18; build PASS); **H-5 CLOSED**; Claude closure **APPROVED WITH NON-BLOCKING NOTES**; Codex closure **BLOCKED only on authorization ordering** (operator waiver for `2c41ba2`/`test_r340_refresh_lock_ownership.py` recorded); final Codex governance confirmation pending before R35 (program R31–R35)_
+_Last updated: R35.0 IMPLEMENTED — operational readiness (scheduling, recovery, backup, runbooks, handoff); gates green (backend 1248/3; frontend 335/18; build PASS); schedules disabled by default; awaiting reviews and Cowork UAT before final PR_
 
 ## Release Status
 
@@ -10,7 +10,7 @@ _Last updated: R34.0 COMPLETE — implementation and technical validation gate-v
 | Tag | `chakraops-r30.7.0` |
 | Current branch | `release/R31-R35-program` |
 | Current mode | Program R31–R35 (single branch, five milestone commits, one final PR) |
-| Active milestone | R35.0 — **ACTIVE** (operations, scheduling, recovery, UAT, release readiness). R34 closed and approved. Prior milestone R34.0 complete |
+| Active milestone | R35.0 — **IMPLEMENTED** (operations, scheduling, recovery, handoff). Awaiting reviews/UAT before final PR. R34 complete |
 | Prior milestone | R33.0 — canonical decision engine implemented + tested |
 
 ## R31.0 Validation Gates (audit milestone)

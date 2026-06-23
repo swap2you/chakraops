@@ -1283,3 +1283,32 @@ export interface DecisionEvaluateRequest {
   };
   candidates: Array<Record<string, unknown>>;
 }
+
+// R35.0 Operations API
+export interface OperationsJob {
+  job_id: string;
+  purpose: string;
+  enabled: boolean;
+  schedule: string;
+  timezone: string;
+  notification_policy: string;
+}
+
+export interface OperationsStatusResponse {
+  application_version: string;
+  commit: string | null;
+  manual_only: boolean;
+  trade_execution: boolean;
+  orats_token_present: boolean;
+  scheduler: {
+    master_enabled: boolean;
+    legacy_schedulers_enabled?: boolean;
+    running: boolean;
+    jobs: OperationsJob[];
+    recent_runs: Array<Record<string, unknown>>;
+  };
+  backup: {
+    latest: { backup_id: string; created_at?: string } | null;
+    count: number;
+  };
+}

@@ -25,12 +25,16 @@ def _mp_holder(
     hold_seconds: float,
     ready_q: multiprocessing.Queue,
     go_evt: multiprocessing.synchronize.Event,
+    release_evt: multiprocessing.synchronize.Event | None = None,
 ) -> None:
     _configure_coord(coord_dir)
     with refresh_lock.cross_process_lock("weekly_refresh", timeout=30.0):
         ready_q.put("holding")
         go_evt.set()
-        time.sleep(hold_seconds)
+        if release_evt is not None:
+            release_evt.wait(timeout=hold_seconds)
+        else:
+            time.sleep(hold_seconds)
 
 
 def _mp_try_acquire(
@@ -38,6 +42,7 @@ def _mp_try_acquire(
     timeout: float,
     out_q: multiprocessing.Queue,
     go_evt: multiprocessing.synchronize.Event,
+    release_evt: multiprocessing.synchronize.Event | None = None,
 ) -> None:
     _configure_coord(coord_dir)
     if not go_evt.wait(timeout=30.0):
@@ -48,6 +53,9 @@ def _mp_try_acquire(
             out_q.put("acquired")
     except refresh_lock.RefreshLockTimeout:
         out_q.put("timeout")
+    finally:
+        if release_evt is not None:
+            release_evt.set()
 
 
 def _mp_exclusion_worker(
@@ -140,12 +148,19 @@ def test_mp_lock_timeout_produces_controlled_error(coord) -> None:
     ready_q: multiprocessing.Queue = ctx.Queue()
     out_q: multiprocessing.Queue = ctx.Queue()
     go_evt = ctx.Event()
-    holder = ctx.Process(target=_mp_holder, args=(str(coord), 2.0, ready_q, go_evt))
+    release_evt = ctx.Event()
+    holder = ctx.Process(
+        target=_mp_holder,
+        args=(str(coord), 30.0, ready_q, go_evt, release_evt),
+    )
     holder.start()
     assert ready_q.get(timeout=30) == "holding"
-    waiter = ctx.Process(target=_mp_try_acquire, args=(str(coord), 0.25, out_q, go_evt))
+    waiter = ctx.Process(
+        target=_mp_try_acquire,
+        args=(str(coord), 0.25, out_q, go_evt, release_evt),
+    )
     waiter.start()
-    assert out_q.get(timeout=10) == "timeout"
+    assert out_q.get(timeout=15) == "timeout"
     holder.join(timeout=15)
     waiter.join(timeout=10)
 
@@ -183,11 +198,18 @@ def test_mp_unknown_metadata_does_not_cause_lock_theft(coord) -> None:
     ready_q: multiprocessing.Queue = ctx.Queue()
     out_q: multiprocessing.Queue = ctx.Queue()
     go_evt = ctx.Event()
-    holder = ctx.Process(target=_mp_holder, args=(str(coord), 2.0, ready_q, go_evt))
+    release_evt = ctx.Event()
+    holder = ctx.Process(
+        target=_mp_holder,
+        args=(str(coord), 30.0, ready_q, go_evt, release_evt),
+    )
     holder.start()
     assert ready_q.get(timeout=30) == "holding"
-    waiter = ctx.Process(target=_mp_try_acquire, args=(str(coord), 0.5, out_q, go_evt))
+    waiter = ctx.Process(
+        target=_mp_try_acquire,
+        args=(str(coord), 0.5, out_q, go_evt, release_evt),
+    )
     waiter.start()
-    assert out_q.get(timeout=10) == "timeout"
+    assert out_q.get(timeout=15) == "timeout"
     holder.join(timeout=15)
     waiter.join(timeout=10)

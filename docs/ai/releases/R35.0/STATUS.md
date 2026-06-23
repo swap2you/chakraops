@@ -13,13 +13,13 @@ Make ChakraOps reliable for daily personal use with observable jobs, clear alert
 Level 3 — operational reliability and release readiness
 
 ## Current status
-**ACTIVE** — operational readiness implementation started (authorization commit pending). R34 closed and approved.
+**IMPLEMENTED** — milestone commit pushed; awaiting Claude review, Codex review, Cowork operational UAT, and operator approval before single final PR.
 
 ## Dependencies
 R34.0 closed (Claude APPROVED WITH NON-BLOCKING NOTES; Codex APPROVED; Cowork PASS WITH NOTES).
 
 ## Cursor implementation
-Phase 0 authorization in progress.
+Phases 0–12 complete. Authorization `e20ccee`. Gates green.
 
 ## Claude review
 Pending
@@ -31,13 +31,13 @@ Pending
 Required (operational UAT)
 
 ## Gates
-- Backend: Pending
-- Frontend tests: Pending
-- Frontend build: Pending
-- R35 release-specific validation: Pending
+- Backend: 1248 passed, 3 skipped
+- Frontend tests: 335 passed, 18 skipped
+- Frontend build: PASS
+- R35 release-specific validation: PASS
 
 ## PR
-Pending (single final PR after R35 validation — do not open until operator approves)
+Pending (single final PR after reviews — do not open until operator approves)
 
 ## Merge
 Pending
@@ -49,7 +49,7 @@ Pending
 None recorded
 
 ## Next action
-Complete R35 Phases 1–12 per RELEASE_PACKET.md. All schedules disabled by default.
+Claude review, Codex review, Cowork operational UAT, operator approval, then open final PR.
 
 ## Stop point
-Awaiting R35 implementation and gate verification.
+R35.0 complete and pushed. Schedules remain disabled by default.

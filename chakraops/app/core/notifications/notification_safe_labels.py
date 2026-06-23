@@ -46,3 +46,20 @@ def sanitize_message_for_api(msg: str | None) -> str:
         lambda m: {"FAIL": "Review", "WARN": "Advisory", "PASS": "OK"}.get(m.group(1).upper(), "Review"),
         msg,
     )
+
+
+_JOB_LABELS = {
+    "weekly_universe_refresh": "Weekly universe refresh",
+    "eod_data_refresh": "EOD data refresh",
+    "decision_generation": "Decision generation",
+    "nightly_reports": "Nightly reports",
+    "backup": "Backup",
+    "provider_health": "Provider health",
+    "retention_cleanup": "Retention cleanup",
+    "recovery_reconciliation": "Recovery reconciliation",
+}
+
+
+def to_safe_operator_label(job_id: str) -> str:
+    """Map internal job id to operator-friendly label (no raw codes)."""
+    return _JOB_LABELS.get(job_id, job_id.replace("_", " ").title())

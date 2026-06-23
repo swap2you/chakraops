@@ -675,6 +675,7 @@ export const queryKeys = {
   symbolDiagnostics: (symbol: string, runId?: string | null) =>
     (["ui", "symbolDiagnostics", symbol, runId ?? ""] as const),
   uiSystemHealth: () => ["ui", "systemHealth"] as const,
+  operationsStatus: () => ["operations", "status"] as const,
   dataReliabilityHealth: () => ["ui", "dataReliability", "health"] as const,
   dataReliabilityWeeklyUniverse: () => ["ui", "dataReliability", "weeklyUniverse"] as const,
   dataReliabilityRefreshHistory: (limit: number) =>
@@ -899,6 +900,14 @@ export function useUiSystemHealth() {
   return useQuery({
     queryKey: queryKeys.uiSystemHealth(),
     queryFn: () => apiGet<UiSystemHealthResponse>(uiSystemHealthPath()),
+  });
+}
+
+/** R35.0: operations scheduler, jobs, backup status */
+export function useOperationsStatus() {
+  return useQuery({
+    queryKey: queryKeys.operationsStatus(),
+    queryFn: () => apiGet<import("./types").OperationsStatusResponse>("/api/operations/status"),
   });
 }
 

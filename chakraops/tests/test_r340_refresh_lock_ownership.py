@@ -20,15 +20,29 @@ def _configure_coord(coord_dir: str) -> None:
     settings.get_output_dir = lambda: coord_dir  # type: ignore[method-assign]
 
 
-def _mp_holder(coord_dir: str, hold_seconds: float, ready_q: multiprocessing.Queue) -> None:
+def _mp_holder(
+    coord_dir: str,
+    hold_seconds: float,
+    ready_q: multiprocessing.Queue,
+    go_evt: multiprocessing.synchronize.Event,
+) -> None:
     _configure_coord(coord_dir)
     with refresh_lock.cross_process_lock("weekly_refresh", timeout=30.0):
         ready_q.put("holding")
+        go_evt.set()
         time.sleep(hold_seconds)
 
 
-def _mp_try_acquire(coord_dir: str, timeout: float, out_q: multiprocessing.Queue) -> None:
+def _mp_try_acquire(
+    coord_dir: str,
+    timeout: float,
+    out_q: multiprocessing.Queue,
+    go_evt: multiprocessing.synchronize.Event,
+) -> None:
     _configure_coord(coord_dir)
+    if not go_evt.wait(timeout=30.0):
+        out_q.put("timeout")
+        return
     try:
         with refresh_lock.cross_process_lock("weekly_refresh", timeout=timeout):
             out_q.put("acquired")
@@ -106,32 +120,34 @@ def test_mp_long_holder_not_displaced_by_age(coord) -> None:
     ctx = _spawn_context()
     ready_q: multiprocessing.Queue = ctx.Queue()
     out_q: multiprocessing.Queue = ctx.Queue()
-    holder = ctx.Process(target=_mp_holder, args=(str(coord), 2.0, ready_q))
+    go_evt = ctx.Event()
+    holder = ctx.Process(target=_mp_holder, args=(str(coord), 2.0, ready_q, go_evt))
     holder.start()
-    assert ready_q.get(timeout=5) == "holding"
+    assert ready_q.get(timeout=30) == "holding"
     lock_path = refresh_lock._lock_path("weekly_refresh")
     old = time.time() - 9999
     os.utime(lock_path, (old, old))
-    waiter = ctx.Process(target=_mp_try_acquire, args=(str(coord), 0.5, out_q))
+    waiter = ctx.Process(target=_mp_try_acquire, args=(str(coord), 0.5, out_q, go_evt))
     waiter.start()
-    assert out_q.get(timeout=5) == "timeout"
-    holder.join(timeout=10)
+    assert out_q.get(timeout=10) == "timeout"
+    holder.join(timeout=15)
     assert holder.exitcode == 0
-    waiter.join(timeout=5)
+    waiter.join(timeout=10)
 
 
 def test_mp_lock_timeout_produces_controlled_error(coord) -> None:
     ctx = _spawn_context()
     ready_q: multiprocessing.Queue = ctx.Queue()
     out_q: multiprocessing.Queue = ctx.Queue()
-    holder = ctx.Process(target=_mp_holder, args=(str(coord), 1.5, ready_q))
+    go_evt = ctx.Event()
+    holder = ctx.Process(target=_mp_holder, args=(str(coord), 2.0, ready_q, go_evt))
     holder.start()
-    assert ready_q.get(timeout=5) == "holding"
-    waiter = ctx.Process(target=_mp_try_acquire, args=(str(coord), 0.25, out_q))
+    assert ready_q.get(timeout=30) == "holding"
+    waiter = ctx.Process(target=_mp_try_acquire, args=(str(coord), 0.25, out_q, go_evt))
     waiter.start()
-    assert out_q.get(timeout=5) == "timeout"
-    holder.join(timeout=10)
-    waiter.join(timeout=5)
+    assert out_q.get(timeout=10) == "timeout"
+    holder.join(timeout=15)
+    waiter.join(timeout=10)
 
 
 def test_mp_process_termination_releases_os_lock(coord) -> None:
@@ -143,7 +159,9 @@ def test_mp_process_termination_releases_os_lock(coord) -> None:
     assert ready_q.get(timeout=5) == "holding"
     holder.terminate()
     holder.join(timeout=10)
-    acquirer = ctx.Process(target=_mp_try_acquire, args=(str(coord), 5.0, out_q))
+    go_evt = ctx.Event()
+    go_evt.set()
+    acquirer = ctx.Process(target=_mp_try_acquire, args=(str(coord), 5.0, out_q, go_evt))
     acquirer.start()
     assert out_q.get(timeout=10) == "acquired"
     acquirer.join(timeout=10)
@@ -164,11 +182,12 @@ def test_mp_unknown_metadata_does_not_cause_lock_theft(coord) -> None:
     ctx = _spawn_context()
     ready_q: multiprocessing.Queue = ctx.Queue()
     out_q: multiprocessing.Queue = ctx.Queue()
-    holder = ctx.Process(target=_mp_holder, args=(str(coord), 1.5, ready_q))
+    go_evt = ctx.Event()
+    holder = ctx.Process(target=_mp_holder, args=(str(coord), 2.0, ready_q, go_evt))
     holder.start()
-    assert ready_q.get(timeout=5) == "holding"
-    waiter = ctx.Process(target=_mp_try_acquire, args=(str(coord), 0.5, out_q))
+    assert ready_q.get(timeout=30) == "holding"
+    waiter = ctx.Process(target=_mp_try_acquire, args=(str(coord), 0.5, out_q, go_evt))
     waiter.start()
-    assert out_q.get(timeout=5) == "timeout"
-    holder.join(timeout=10)
-    waiter.join(timeout=5)
+    assert out_q.get(timeout=10) == "timeout"
+    holder.join(timeout=15)
+    waiter.join(timeout=10)

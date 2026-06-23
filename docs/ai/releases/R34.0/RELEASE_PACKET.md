@@ -355,6 +355,7 @@ Fix 2 — real-path provider redaction tests:
 
 Fix 3 — correct evidence lock-test count:
 - MODIFIED `docs/ai/releases/R34.0/{STATUS,TOOL_LOG}.md`
+- MODIFIED `chakraops/tests/test_r340_refresh_lock_ownership.py` — Windows spawn timing sync (`Event` gate) so waiter starts while holder still holds; truthful count 6 collected
 - Evidence (ignored): `out/verification/R34.0/{windows_multiprocess_lock,final_lock_race_remediation,orats_active_path_redaction,backend,frontend,build}.md|.log`
 
 Governance (authorized): `docs/ai/releases/R34.0/{STATUS,TOOL_LOG,RELEASE_PACKET}.md`, `out/verification/R34.0/*` (ignored)

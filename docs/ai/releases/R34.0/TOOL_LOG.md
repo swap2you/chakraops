@@ -69,10 +69,17 @@
 ## Cursor — final ORATS provider-error patch: Phase 0 authorization (2026-06-23)
 - Reviews recorded: Claude final targeted **APPROVED**; Codex final targeted **BLOCKED** (remaining ORATS provider logging/tests; evidence lock-test count 6 not 7); Cowork R34 UAT **PASS WITH NOTES**.
 - RELEASE_PACKET.md updated with exact paths for provider sanitization, real-path tests, evidence count correction.
-- Docs-only commit `docs(R34.0): authorize final provider-redaction patch` precedes source edits.
+- Docs-only commit `docs(R34.0): authorize final provider-redaction patch` (`3808f66`) precedes source edits.
+
+## Cursor — final ORATS provider-error patch: implementation (2026-06-23)
+- Fix 1 (provider paths): `orats_chain_provider.py` — `_provider_safe_error`, `_sanitize_diag`; sanitized `_get_expirations_delayed`, `_get_expirations_live`, `_get_chain_live`, worker/batch, delayed pipeline result/trace paths via `safe_provider_error` / `redact_secrets`.
+- Fix 2 (real-path tests): five new tests in `test_r340_orats_redaction_complete.py` (19 total); caplog + result/trace assertions with fake token in URL/header/body.
+- Fix 3 (evidence count): corrected lock-test count to **6 collected, 6 passed**; Windows spawn `Event` gate on holder/waiter contention tests.
+- Gates: backend 1224/3 skipped; frontend 334/18 skipped; build PASS; R32/R33/R34 targeted 207 passed; secret scan 0 hits.
+- Commit `fix(R34.0): sanitize remaining provider error paths` pushed. Awaiting final targeted reviewer confirmation.
 
 ## Codex
-- Final targeted R34 review: **BLOCKED** (remaining ORATS provider paths; evidence count mismatch). Provider patch remediation active.
+- Final targeted R34 review was **BLOCKED** (remaining ORATS provider paths; evidence count mismatch). Remediation delivered; awaiting final confirmation.
 
 ## Claude Cowork
 - Final real-browser UAT: PASS WITH NOTES.

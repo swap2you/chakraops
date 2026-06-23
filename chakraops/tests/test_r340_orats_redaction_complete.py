@@ -171,7 +171,7 @@ def test_str_of_domain_exception_carries_no_token() -> None:
 
 # --- Downstream chain provider / loader / pipeline (R34 integrity pass) -----
 
-def test_chain_provider_worker_failure_redacts_error(monkeypatch) -> None:
+def test_chain_provider_worker_failure_redacts_error(monkeypatch, caplog) -> None:
     from datetime import date
     from app.core.options.orats_chain_provider import OratsChainProvider, DataQuality
 
@@ -184,9 +184,13 @@ def test_chain_provider_worker_failure_redacts_error(monkeypatch) -> None:
     # Force live path with one expiration.
     provider._chain_source = "LIVE"
     exp = date(2026, 7, 17)
+    caplog.set_level(logging.WARNING)
     out = provider.get_chains_batch("SPY", [exp], max_concurrent=1)
     assert FAKE_TOKEN not in (out[exp].error or "")
     assert out[exp].data_quality == DataQuality.ERROR
+    assert "provider=ORATS" in (out[exp].error or "")
+    for rec in caplog.records:
+        assert FAKE_TOKEN not in rec.getMessage()
 
 
 def test_chain_provider_delayed_pipeline_failure_redacts(monkeypatch) -> None:
@@ -305,3 +309,116 @@ def test_chain_pipeline_stage2_trace_failure_redacts(monkeypatch, caplog) -> Non
     assert FAKE_TOKEN not in (trace.get("error") or "")
     assert FAKE_TOKEN not in caplog.text
     assert "stage2_trace build failed" in caplog.text
+
+
+# --- Active chain provider real paths (R34 provider-error patch) ----------------
+
+def test_get_expirations_delayed_request_exception_redacts_logs(monkeypatch, caplog) -> None:
+    from app.core.options.orats_chain_provider import OratsChainProvider
+
+    def _boom(*_a, **_k):
+        raise requests.RequestException(
+            f"exp delayed url={TOKEN_URL} Authorization: Bearer {FAKE_TOKEN}"
+        )
+
+    monkeypatch.setattr("app.core.options.orats_chain_pipeline.fetch_base_chain", _boom)
+    provider = OratsChainProvider(use_cache=False, chain_source="DELAYED")
+    caplog.set_level(logging.WARNING)
+    out = provider._get_expirations_delayed("SPY")
+    assert out == []
+    assert "SPY" in caplog.text
+    assert "provider=ORATS" in caplog.text
+    for rec in caplog.records:
+        assert FAKE_TOKEN not in rec.getMessage()
+
+
+def test_get_expirations_delayed_error_field_redacts_logs(monkeypatch, caplog) -> None:
+    from app.core.options.orats_chain_provider import OratsChainProvider
+
+    monkeypatch.setattr(
+        "app.core.options.orats_chain_pipeline.fetch_base_chain",
+        lambda *_a, **_k: ([], None, f"token={FAKE_TOKEN} url={TOKEN_URL}", 0),
+    )
+    provider = OratsChainProvider(use_cache=False, chain_source="DELAYED")
+    caplog.set_level(logging.WARNING)
+    out = provider._get_expirations_delayed("SPY")
+    assert out == []
+    for rec in caplog.records:
+        assert FAKE_TOKEN not in rec.getMessage()
+    assert "endpoint=delayed/strikes" in caplog.text
+
+
+def test_get_expirations_live_failure_redacts_logs(monkeypatch, caplog) -> None:
+    from app.core.data.orats_client import OratsUnavailableError
+    from app.core.options.orats_chain_provider import OratsChainProvider
+
+    def _boom(symbol: str):
+        raise OratsUnavailableError(
+            f"failed url={TOKEN_URL}",
+            http_status=503,
+            response_snippet=TOKEN_BODY,
+            endpoint="/live/strikes",
+            symbol=symbol,
+        )
+
+    monkeypatch.setattr("app.core.data.orats_client.get_orats_live_strikes", _boom)
+    provider = OratsChainProvider(use_cache=False, chain_source="LIVE")
+    caplog.set_level(logging.WARNING)
+    out = provider._get_expirations_live("SPY")
+    assert out == []
+    assert "http_status=503" in caplog.text
+    for rec in caplog.records:
+        assert FAKE_TOKEN not in rec.getMessage()
+
+
+def test_get_chain_live_failure_redacts_result(monkeypatch) -> None:
+    from datetime import date
+
+    from app.core.data.orats_client import OratsUnavailableError
+    from app.core.options.orats_chain_provider import DataQuality, OratsChainProvider
+
+    def _boom(symbol: str):
+        raise OratsUnavailableError(
+            f"strikes url={TOKEN_URL}",
+            http_status=500,
+            response_snippet=TOKEN_BODY,
+            endpoint="/live/strikes",
+            symbol=symbol,
+        )
+
+    monkeypatch.setattr("app.core.data.orats_client.get_orats_live_strikes", _boom)
+    provider = OratsChainProvider(use_cache=False, chain_source="LIVE")
+    result = provider._get_chain_live("SPY", date(2026, 7, 17))
+    assert result.success is False
+    assert result.data_quality == DataQuality.ERROR
+    assert FAKE_TOKEN not in (result.error or "")
+    assert "http_status=500" in (result.error or "")
+    assert "provider=ORATS" in (result.error or "")
+
+
+def test_chain_provider_delayed_result_error_redacts_trace(monkeypatch) -> None:
+    from datetime import date
+    from types import SimpleNamespace
+
+    from app.core.options.orats_chain_provider import DataQuality, OratsChainProvider
+
+    chain_result = SimpleNamespace(
+        error=f"pipeline failed token={FAKE_TOKEN}",
+        contracts=[],
+        stage2_trace={"error": TOKEN_BODY, "endpoint": TOKEN_URL},
+        strikes_options_telemetry={"endpoint_used": TOKEN_URL},
+        fetched_at=None,
+        fetch_duration_ms=None,
+        underlying_price=None,
+    )
+    monkeypatch.setattr(
+        "app.core.options.orats_chain_pipeline.fetch_option_chain",
+        lambda *_a, **_k: chain_result,
+    )
+    provider = OratsChainProvider(use_cache=False, chain_source="DELAYED")
+    exp = date(2026, 7, 17)
+    out = provider.get_chains_batch("SPY", [exp])
+    assert out[exp].data_quality == DataQuality.MISSING
+    assert FAKE_TOKEN not in (out[exp].error or "")
+    assert FAKE_TOKEN not in str(out[exp].stage2_trace or {})
+    assert "provider=ORATS" in (out[exp].error or "")

@@ -13,9 +13,9 @@ Consolidate the operator experience around trusted decisions, positions, backtes
 Level 3 — application refactor and analytical presentation
 
 ## Current status
-IMPLEMENTATION COMPLETE — **final ORATS provider-error patch active** (starting commit `b860a73`). Prior lock-race remediation delivered (`9f6130e`/`b860a73`). **H-5 CLOSED.**
+IMPLEMENTATION COMPLETE — **final ORATS provider-error patch delivered** (authorization `3808f66`, starting commit `b860a73`). All active `orats_chain_provider` expiration/chain error paths sanitized; real-path provider redaction tests added; evidence lock-test count corrected to **6 collected**. **H-5 CLOSED.**
 
-**Final external validation:** Claude final targeted review **APPROVED**; Cowork real-browser R34 UAT **PASS WITH NOTES**; Codex final targeted review **BLOCKED** on remaining ORATS provider logging/tests and evidence lock-test count mismatch (6 collected, not 7). This pass addresses those Codex blockers. Awaiting Codex confirmation before R35.0. No Codex approval claimed.
+**Final external validation:** Claude final targeted review **APPROVED**; Cowork real-browser R34 UAT **PASS WITH NOTES**; Codex final targeted review was **BLOCKED** on remaining ORATS provider logging/tests and evidence count mismatch — **remediated and gate-verified**. Awaiting final targeted reviewer confirmation before R35.0. No Codex approval claimed.
 
 **Operator waiver (2026-06-22d):** The operator explicitly accepts the historical exact-path deviation in commit `50aa600`. Documented waiver only — not retroactive authorization and not permission to repeat the pattern.
 
@@ -38,25 +38,26 @@ IMPLEMENTATION COMPLETE — **final ORATS provider-error patch active** (startin
 R33.0 canonical decision and profile contracts (implemented + tested).
 
 ## Cursor implementation
-Final lock-race and test-validity remediation delivered (post-9f6130e): OS-native cross-process lock (`fcntl`/`msvcrt`), production-path journal unreadability test, active ORATS pipeline stage2_trace path test. Gates: backend 1219/3 skipped; frontend 334/18 skipped; build PASS; R32/R33/R34 targeted 202 passed; secret scan 0 hits.
+Final ORATS provider-error patch delivered (post-3808f66): `_provider_safe_error` / `_sanitize_diag` in `orats_chain_provider.py`; real-path tests for `_get_expirations_delayed`, `_get_expirations_live`, `_get_chain_live`, worker/batch, delayed result/trace; evidence lock-test count corrected to 6; Windows spawn `Event` gate on holder/waiter lock tests. Gates: backend 1224/3 skipped; frontend 334/18 skipped; build PASS; R32/R33/R34 targeted 207 passed; ORATS redaction file 19 passed; secret scan 0 hits.
 
 ## Claude review
-- Final R34 review: **APPROVED WITH NON-BLOCKING NOTES**. Awaiting re-review after lock-race remediation.
+- Final targeted R34 review: **APPROVED**.
 
 ## Codex review
-- Final targeted R34 review was **BLOCKED** (lock reclaim race; journal test validity; ORATS active-path tests). Remediation delivered and gate-verified. Awaiting Codex targeted re-review. No Codex approval claimed.
+- Final targeted R34 review was **BLOCKED** (remaining ORATS provider paths; evidence count 6 not 7). Remediation delivered and gate-verified. Awaiting final targeted confirmation. No Codex approval claimed.
 
 ## Cowork UAT
-- Final real-browser UAT: **PASS WITH NOTES**. See `out/verification/R34.0/frontend_uat_plan.md`.
+- Real-browser R34 UAT: **PASS WITH NOTES**.
 
-## Gates (lock-race remediation pass)
-- Backend: PASS — 1219 passed, 3 skipped
+## Gates (provider-error patch)
+- Backend: PASS — 1224 passed, 3 skipped
 - Frontend tests: PASS — 334 passed, 18 skipped
 - Frontend build: PASS
-- R32/R33/R34 targeted: PASS — 202 passed
-- Windows multiprocessing lock tests: PASS — 7 passed (spawn, not skipped)
+- R32/R33/R34 targeted: PASS — 207 passed
+- ORATS redaction file: PASS — 19 passed
+- Windows multiprocessing lock tests: PASS — **6 collected, 6 passed** (spawn, not skipped)
 - Secret scan: PASS — 0 real-token hits in tracked code
-- Evidence: `out/verification/R34.0/` (`final_lock_race_remediation.md`, `windows_multiprocess_lock.md`, `journal_test_validity.md`, `orats_active_path_redaction.md`, `backend.log`, `frontend.log`, `build.log`)
+- Evidence: `out/verification/R34.0/` (`orats_active_path_redaction.md`, `windows_multiprocess_lock.md`, `final_lock_race_remediation.md`, `backend.log`, `frontend.log`, `build.log`)
 
 ## PR
 Pending
@@ -68,13 +69,13 @@ Pending
 Pending
 
 ## Open blockers
-- External Codex re-review pending (implementation blockers closed).
+- External Codex/Claude final confirmation pending (implementation blockers closed).
 
 ## H-5 status
 **CLOSED (R34.0)**
 
 ## Next action
-Await Codex targeted re-review before R35.0. No PR, no tag, no deploy.
+Await final targeted reviewer confirmation before R35.0. No PR, no tag, no deploy.
 
 ## Stop point
-R34.0 final Codex blockers remediated and pushed. Awaiting targeted Codex and Claude approval before R35.0.
+R34.0 remaining Codex findings closed and pushed. Awaiting final targeted reviewer confirmation before R35.0.

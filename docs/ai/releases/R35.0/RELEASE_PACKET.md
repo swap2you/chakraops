@@ -404,4 +404,6 @@ Starting commit: `7f0f062`. Docs-only authorization precedes all source/script e
 - MODIFIED `docs/master/CURRENT_STATE.md`
 - `out/verification/R35.0/*` (local evidence; not committed)
 
+**Companion path (implicit to backup_service API):** `chakraops/app/core/operations/jobs/retention_cleanup_job.py`
+
 Any additional tracked path requires operator approval and packet update committed before edit.

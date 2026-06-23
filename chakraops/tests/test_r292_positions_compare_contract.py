@@ -59,8 +59,8 @@ def test_symbol_filter_parity_db_vs_computed(positions_db_override, out_dir_over
          patch("app.core.positions.store.list_positions", return_value=[]), \
          patch("app.core.paper.paper_store_r270.paper_list_positions", return_value=[]):
         rebuild_positions_unified(include_paper=True)
+        computed = build_unified_positions(state="open", include_paper=True, symbol="AAPL")
 
-    computed = build_unified_positions(state="open", include_paper=True, symbol="AAPL")
     db_result = read_positions_unified_from_db(state="open", include_paper=True, symbol="AAPL", limit=500)
 
     assert all((p.get("symbol") or "").upper() == "AAPL" for p in computed)

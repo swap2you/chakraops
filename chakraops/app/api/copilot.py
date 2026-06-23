@@ -601,6 +601,11 @@ async def copilot_ask(
     _require_ui_key(x_ui_key)
     _copilot_startup_log()
 
+    symbol = (body.get("symbol") or "").strip().upper()
+    question = (body.get("question") or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="question is required")
+
     global LAST_COPILOT_ERROR_CODE
     status = get_copilot_status()
     if not status["key_present"]:
@@ -623,11 +628,6 @@ async def copilot_ask(
                 "message": "Copilot API key looks malformed (quotes, spaces, or invalid format). Fix .env and restart.",
             },
         )
-
-    symbol = (body.get("symbol") or "").strip().upper()
-    question = (body.get("question") or "").strip()
-    if not question:
-        raise HTTPException(status_code=400, detail="question is required")
     mode = (body.get("mode") or "symbol").strip().lower()
     if mode not in ("symbol", "general"):
         mode = "symbol"

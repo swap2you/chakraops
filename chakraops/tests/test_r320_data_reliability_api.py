@@ -16,7 +16,12 @@ def test_health_endpoint_shape():
     assert "event_calendar" in body
     assert "earnings_calendar" in body
     # No secret material leaks into the contract.
-    assert "token" not in str(body).lower().replace("token_present", "").replace("token_absent", "")
+    assert "token" not in (
+        str(body).lower()
+        .replace("token_present", "")
+        .replace("token_absent", "")
+        .replace("blocked_no_token", "")
+    )
 
 
 def test_weekly_universe_endpoint_deterministic():

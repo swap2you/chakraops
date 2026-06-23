@@ -24,6 +24,14 @@ function Assert-GitClean {
     if ($status) { throw "Repository not clean: $status" }
 }
 
+function Invoke-ChakraOpsStop {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File "$script:ChakraOpsScriptsRoot\stop_chakraops.ps1"
+}
+
+function Invoke-ChakraOpsStart {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File "$script:ChakraOpsScriptsRoot\start_chakraops.ps1"
+}
+
 function Invoke-Api {
     param([string]$Method, [string]$Path, [int[]]$AllowedStatus = @(200))
     try {
@@ -49,18 +57,18 @@ try {
 
     if (-not $SkipStartStop) {
         Write-SmokeLog "Shutdown pass 1"
-        & "$script:ChakraOpsScriptsRoot\stop_chakraops.ps1" | Out-Null
+        Invoke-ChakraOpsStop | Out-Null
         Write-SmokeLog "Shutdown pass 2 (idempotent)"
-        & "$script:ChakraOpsScriptsRoot\stop_chakraops.ps1" | Out-Null
+        Invoke-ChakraOpsStop | Out-Null
 
         Write-SmokeLog "Starting ChakraOps"
-        & "$script:ChakraOpsScriptsRoot\start_chakraops.ps1"
+        Invoke-ChakraOpsStart
         $started = $true
         Start-Sleep -Seconds 8
     }
 
     Write-SmokeLog "Health check"
-    & "$script:ChakraOpsScriptsRoot\health_check_chakraops.ps1"
+    & powershell -NoProfile -ExecutionPolicy Bypass -File "$script:ChakraOpsScriptsRoot\health_check_chakraops.ps1"
     if ($LASTEXITCODE -ne 0) { throw "health check failed" }
 
     $status = Invoke-Api -Method GET -Path "/api/operations/status"
@@ -133,10 +141,15 @@ try {
 } finally {
     if ($started -and -not $SkipStartStop) {
         Write-SmokeLog "Final shutdown pass 1"
-        & "$script:ChakraOpsScriptsRoot\stop_chakraops.ps1" | Out-Null
+        Invoke-ChakraOpsStop | Out-Null
         Write-SmokeLog "Final shutdown pass 2"
-        & "$script:ChakraOpsScriptsRoot\stop_chakraops.ps1" | Out-Null
+        Invoke-ChakraOpsStop | Out-Null
     }
-    Assert-GitClean
-    Write-SmokeLog "Repository clean after smoke"
+    try {
+        Assert-GitClean
+        Write-SmokeLog "Repository clean after smoke"
+    } catch {
+        Write-SmokeLog "Repository clean check failed: $_"
+        throw
+    }
 }

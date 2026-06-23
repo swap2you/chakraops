@@ -1,0 +1,137 @@
+{
+  "schema_version": "1.0",
+  "program": "R31-R35",
+  "approved_branch": "release/R31-R35-program",
+  "expected_base_commit": "26bd27e",
+  "authorization_base_commit": "40e7528",
+  "repository_root": "C:\\Development\\Workspace\\ChakraOps-dev\\chakraops",
+  "stale_repository_root": "C:\\Development\\Workspace\\ChakraOps",
+  "authorized_implementation_paths": [
+    "docs/ai/validation/R31_R35_ACCEPTANCE_CONTRACT.md",
+    "docs/ai/validation/R31_R35_ACCEPTANCE_MANIFEST.json",
+    "docs/ai/validation/R31_R35_SELF_REVIEW_CHECKLIST.md",
+    "docs/ai/validation/R31_R35_COWORK_UAT_HANDOFF.md",
+    "scripts/chakraops_common.ps1",
+    "scripts/validate_r31_r35_release.ps1",
+    "scripts/run_r31_r35_live_smoke.ps1",
+    "scripts/backup_chakraops.ps1",
+    "scripts/list_backups_chakraops.ps1",
+    "scripts/verify_backup_chakraops.ps1",
+    "scripts/restore_chakraops_validate.ps1",
+    "scripts/cleanup_expired_backups.ps1",
+    "chakraops/app/core/operations/backup_service.py",
+    "chakraops/app/core/operations/jobs/retention_cleanup_job.py",
+    "chakraops/tests/test_r350_backup_service.py",
+    "chakraops/tests/test_r350_backup_writer_locks.py",
+    "chakraops/tests/test_r350_retention_safety.py",
+    "chakraops/tests/test_r350_windows_backup_scripts.py",
+    "chakraops/tests/test_r350_release_acceptance.py",
+    "chakraops/docs/RUNBOOK_BACKUP_RESTORE.md",
+    "chakraops/docs/RUNBOOK_SCHEDULER_OPERATIONS.md",
+    "docs/ai/releases/R35.0/RELEASE_PACKET.md",
+    "docs/ai/releases/R35.0/STATUS.md",
+    "docs/ai/releases/R35.0/TOOL_LOG.md",
+    "docs/ai/PROGRAM_STATUS.md",
+    "docs/ai/FINAL_PROGRAM_HANDOFF_R31_R35.md",
+    "docs/ai/FINAL_CHANGED_FILE_INVENTORY_R31_R35.md",
+    "docs/ai/FINAL_GATE_SUMMARY_R31_R35.md",
+    "docs/ai/FINAL_UNRESOLVED_ISSUES_R31_R35.md",
+    "docs/ai/FINAL_UAT_PLAN_R31_R35.md",
+    "docs/ai/FINAL_PR_DESCRIPTION_R31_R35.md",
+    "docs/master/CURRENT_STATE.md"
+  ],
+  "required_powershell_scripts": [
+    "scripts/chakraops_common.ps1",
+    "scripts/backup_chakraops.ps1",
+    "scripts/list_backups_chakraops.ps1",
+    "scripts/verify_backup_chakraops.ps1",
+    "scripts/restore_chakraops_validate.ps1",
+    "scripts/cleanup_expired_backups.ps1",
+    "scripts/validate_r31_r35_release.ps1",
+    "scripts/run_r31_r35_live_smoke.ps1",
+    "scripts/start_chakraops.ps1",
+    "scripts/stop_chakraops.ps1",
+    "scripts/health_check_chakraops.ps1"
+  ],
+  "backend_test_commands": [
+    {
+      "name": "agents_gate",
+      "cwd": "chakraops",
+      "command": "python -m pytest tests -q --tb=short"
+    },
+    {
+      "name": "r350_targeted",
+      "cwd": "chakraops",
+      "command": "python -m pytest tests -k r350 -q --tb=short"
+    }
+  ],
+  "frontend_test_commands": [
+    {
+      "name": "frontend_tests",
+      "cwd": "frontend",
+      "command": "npm run test -- --run"
+    }
+  ],
+  "build_command": {
+    "cwd": "frontend",
+    "command": "npm run build"
+  },
+  "evidence_paths": [
+    "out/verification/R35.0/backend.log",
+    "out/verification/R35.0/r350_suite.log",
+    "out/verification/R35.0/frontend.log",
+    "out/verification/R35.0/build.log",
+    "out/verification/R35.0/windows_live_smoke.log",
+    "out/verification/R35.0/powershell_validation.log",
+    "out/verification/R35.0/authorization_validation.log",
+    "out/verification/R35.0/security_scan.log",
+    "out/verification/R35.0/release_acceptance.json",
+    "out/verification/R35.0/release_acceptance.md",
+    "out/verification/R35.0/cowork_uat_handoff.md"
+  ],
+  "api_checks": [
+    {"method": "GET", "path": "/api/operations/status", "expect_fields": ["manual_only", "trade_execution", "scheduler"]},
+    {"method": "POST", "path": "/api/operations/scheduler/enable", "expect_status": 422},
+    {"method": "POST", "path": "/api/operations/scheduler/enable?confirm=WRONG", "expect_status": 400},
+    {"method": "POST", "path": "/api/operations/jobs/provider_health/run", "expect_status": [200, 500]}
+  ],
+  "scheduler_defaults": {
+    "CHAKRAOPS_SCHEDULER_ENABLED": "false",
+    "CHAKRAOPS_LEGACY_SCHEDULERS_ENABLED": "false"
+  },
+  "job_defaults_env_prefix": "CHAKRAOPS_JOB_",
+  "job_defaults_suffix": "_ENABLED",
+  "job_defaults_value": "false",
+  "allowed_safe_manual_jobs": ["provider_health", "backup", "recovery_reconciliation"],
+  "prohibited_live_uat_jobs": ["decision_generation", "eod_data_refresh", "weekly_universe_refresh", "nightly_reports"],
+  "prohibited_broker_capabilities": ["order", "broker", "trade_execution", "submit_order", "place_order"],
+  "backup_guarantees": {
+    "env_excluded": true,
+    "destructive_restore_forbidden": true,
+    "cleanup_dry_run_default": true,
+    "cleanup_confirm_token": "DELETE-EXPIRED-BACKUPS",
+    "restore_temp_only": true
+  },
+  "required_documentation_files": [
+    "docs/ai/validation/R31_R35_ACCEPTANCE_CONTRACT.md",
+    "chakraops/docs/RUNBOOK_BACKUP_RESTORE.md",
+    "chakraops/docs/RUNBOOK_SCHEDULER_OPERATIONS.md"
+  ],
+  "forbidden_tracked_generated_files": [
+    "chakraops/.pytest_cache",
+    "frontend/dist",
+    "out/",
+    "chakraops/artifacts/cache"
+  ],
+  "review_uat_status": {
+    "claude_technical": "APPROVED",
+    "codex_technical": "APPROVED",
+    "cowork_static_audit": "PASS",
+    "cowork_browser_uat": "PENDING",
+    "cursor_windows_smoke": "REQUIRED",
+    "final_pr": false,
+    "schedules_enabled": false
+  },
+  "cleanup_confirm_token": "DELETE-EXPIRED-BACKUPS",
+  "scheduler_enable_confirm_token": "ENABLE"
+}

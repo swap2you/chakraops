@@ -1,0 +1,142 @@
+# ChakraOps R31-R35 live operational smoke (Windows only)
+param(
+    [switch]$SkipStartStop
+)
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+. "$PSScriptRoot\chakraops_common.ps1"
+
+$LogPath = Join-Path $script:ChakraOpsRepoRoot "out\verification\R35.0\windows_live_smoke.log"
+New-Item -ItemType Directory -Force -Path (Split-Path $LogPath) | Out-Null
+$script:SmokeLog = $LogPath
+
+function Write-SmokeLog {
+    param([string]$Message)
+    $line = "[$(Get-Date -Format o)] $Message"
+    Add-Content -LiteralPath $script:SmokeLog -Value $line
+    Write-Host $line
+}
+
+function Assert-GitClean {
+    Set-Location -LiteralPath $script:ChakraOpsRepoRoot
+    $status = git status --porcelain
+    if ($status) { throw "Repository not clean: $status" }
+}
+
+function Invoke-Api {
+    param([string]$Method, [string]$Path, [int[]]$AllowedStatus = @(200))
+    try {
+        $uri = "http://127.0.0.1:8000$Path"
+        if ($Method -eq "GET") {
+            $r = Invoke-RestMethod -Uri $uri -Method Get -TimeoutSec 30
+            return @{ status = 200; body = $r }
+        }
+        $r = Invoke-WebRequest -Uri $uri -Method Post -TimeoutSec 120 -UseBasicParsing
+        return @{ status = [int]$r.StatusCode; body = $null }
+    } catch {
+        if ($_.Exception.Response) {
+            return @{ status = [int]$_.Exception.Response.StatusCode.value__; body = $null }
+        }
+        throw
+    }
+}
+
+$started = $false
+try {
+    Write-SmokeLog "=== R31-R35 live smoke start ==="
+    Assert-GitClean
+
+    if (-not $SkipStartStop) {
+        Write-SmokeLog "Shutdown pass 1"
+        & "$script:ChakraOpsScriptsRoot\stop_chakraops.ps1" | Out-Null
+        Write-SmokeLog "Shutdown pass 2 (idempotent)"
+        & "$script:ChakraOpsScriptsRoot\stop_chakraops.ps1" | Out-Null
+
+        Write-SmokeLog "Starting ChakraOps"
+        & "$script:ChakraOpsScriptsRoot\start_chakraops.ps1"
+        $started = $true
+        Start-Sleep -Seconds 8
+    }
+
+    Write-SmokeLog "Health check"
+    & "$script:ChakraOpsScriptsRoot\health_check_chakraops.ps1"
+    if ($LASTEXITCODE -ne 0) { throw "health check failed" }
+
+    $status = Invoke-Api -Method GET -Path "/api/operations/status"
+    if ($status.body.scheduler.master_enabled -ne $false) {
+        throw "scheduler master must be disabled"
+    }
+    Write-SmokeLog "Scheduler master disabled: OK"
+    if ($status.body.trade_execution -ne $false) {
+        throw "trade_execution must be false"
+    }
+    Write-SmokeLog "trade_execution false: OK"
+    if ($status.body.manual_only -ne $true) {
+        throw "manual_only must be true"
+    }
+    Write-SmokeLog "manual_only true: OK"
+    $tokenPresent = [bool]$status.body.orats_token_present
+    Write-SmokeLog "orats_token_present (boolean only): $tokenPresent"
+
+    $enableNoConfirm = Invoke-Api -Method POST -Path "/api/operations/scheduler/enable" -AllowedStatus @(400, 422)
+    if ($enableNoConfirm.status -notin 400, 422) {
+        throw "scheduler enable without confirm must be rejected"
+    }
+    Write-SmokeLog "scheduler enable without confirm rejected: OK"
+
+    $enableWrong = Invoke-Api -Method POST -Path "/api/operations/scheduler/enable?confirm=WRONG" -AllowedStatus @(400)
+    if ($enableWrong.status -ne 400) {
+        throw "scheduler enable wrong confirm must be rejected"
+    }
+    Write-SmokeLog "scheduler enable wrong confirm rejected: OK"
+
+    Write-SmokeLog "Manual provider_health"
+    $run = Invoke-Api -Method POST -Path "/api/operations/jobs/provider_health/run" -AllowedStatus @(200, 500)
+    Write-SmokeLog "provider_health run status: $($run.status)"
+
+    Write-SmokeLog "PowerShell backup create"
+    & "$script:ChakraOpsScriptsRoot\backup_chakraops.ps1" -Label "smoke"
+    if ($LASTEXITCODE -ne 0) { throw "backup create failed" }
+
+    Write-SmokeLog "PowerShell list backups"
+    & "$script:ChakraOpsScriptsRoot\list_backups_chakraops.ps1" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "list backups failed" }
+
+    $latestId = python -c "from app.core.operations.backup_service import list_backups; b=list_backups(); print(b[0]['backup_id'] if b else '')"
+    if (-not $latestId) { throw "no backup id" }
+    Write-SmokeLog "Latest backup: $latestId"
+
+    Write-SmokeLog "Verify backup"
+    & "$script:ChakraOpsScriptsRoot\verify_backup_chakraops.ps1" -BackupId $latestId
+    if ($LASTEXITCODE -ne 0) { throw "verify failed" }
+
+    Write-SmokeLog "Restore to temp"
+    & "$script:ChakraOpsScriptsRoot\restore_chakraops_validate.ps1" -BackupId $latestId
+    if ($LASTEXITCODE -ne 0) { throw "restore validate failed" }
+
+    Write-SmokeLog "Cleanup dry-run"
+    & "$script:ChakraOpsScriptsRoot\cleanup_expired_backups.ps1"
+    if ($LASTEXITCODE -ne 0) { throw "cleanup dry-run failed" }
+
+    $brokerProbe = Invoke-WebRequest -Uri "http://127.0.0.1:8000/openapi.json" -UseBasicParsing -TimeoutSec 30
+    $openapi = $brokerProbe.Content
+    foreach ($term in @("/broker", "/order", "place_order", "submit_order")) {
+        if ($openapi -match [regex]::Escape($term)) {
+            throw "broker/order capability found in openapi: $term"
+        }
+    }
+    Write-SmokeLog "No broker/order openapi paths: OK"
+
+    Write-SmokeLog "=== live smoke PASS ==="
+    exit 0
+} finally {
+    if ($started -and -not $SkipStartStop) {
+        Write-SmokeLog "Final shutdown pass 1"
+        & "$script:ChakraOpsScriptsRoot\stop_chakraops.ps1" | Out-Null
+        Write-SmokeLog "Final shutdown pass 2"
+        & "$script:ChakraOpsScriptsRoot\stop_chakraops.ps1" | Out-Null
+    }
+    Assert-GitClean
+    Write-SmokeLog "Repository clean after smoke"
+}

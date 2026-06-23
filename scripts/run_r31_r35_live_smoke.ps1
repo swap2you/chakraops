@@ -32,6 +32,22 @@ function Invoke-ChakraOpsStart {
     & powershell -NoProfile -ExecutionPolicy Bypass -File "$script:ChakraOpsScriptsRoot\start_chakraops.ps1"
 }
 
+function Clear-StaleChakraOpsPorts {
+    foreach ($port in @(8000, 5173)) {
+        $listeners = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
+        foreach ($listener in $listeners) {
+            $processId = [int]$listener.OwningProcess
+            if (-not $processId) { continue }
+            $wmi = Get-CimInstance Win32_Process -Filter "ProcessId=$processId" -ErrorAction SilentlyContinue
+            $cmd = $wmi.CommandLine
+            if ($cmd -and $cmd -match [regex]::Escape($script:ChakraOpsRepoRoot)) {
+                Write-SmokeLog "Clearing stale listener on port $port (PID $processId)"
+                Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+}
+
 function Invoke-Api {
     param([string]$Method, [string]$Path, [int[]]$AllowedStatus = @(200))
     try {
@@ -60,6 +76,8 @@ try {
         Invoke-ChakraOpsStop | Out-Null
         Write-SmokeLog "Shutdown pass 2 (idempotent)"
         Invoke-ChakraOpsStop | Out-Null
+
+        Clear-StaleChakraOpsPorts
 
         Write-SmokeLog "Starting ChakraOps"
         Invoke-ChakraOpsStart
@@ -148,11 +166,12 @@ try {
     Write-SmokeLog "=== live smoke PASS ==="
     exit 0
 } finally {
-    if ($started -and -not $SkipStartStop) {
+    if (-not $SkipStartStop) {
         Write-SmokeLog "Final shutdown pass 1"
         Invoke-ChakraOpsStop | Out-Null
         Write-SmokeLog "Final shutdown pass 2"
         Invoke-ChakraOpsStop | Out-Null
+        Clear-StaleChakraOpsPorts
     }
     try {
         Assert-GitClean

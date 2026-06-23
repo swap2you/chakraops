@@ -474,3 +474,23 @@ This waiver states:
 - `out/verification/R35.0/*` (local evidence; not committed)
 
 Any additional tracked path requires operator approval and packet update committed before edit.
+
+---
+
+## Phase 0 — startup/shutdown script remediation authorization (2026-06-23)
+
+Starting commit: `20eb62e`. Docs-only authorization precedes startup/shutdown script edits required for live smoke PASS.
+
+### Allowed tracked paths — startup/shutdown remediation (exact)
+
+- MODIFIED `scripts/start_chakraops.ps1`
+- MODIFIED `scripts/stop_chakraops.ps1`
+- MODIFIED `scripts/health_check_chakraops.ps1`
+- MODIFIED `chakraops/tests/test_r350_startup_scripts.py`
+- MODIFIED `chakraops/tests/test_r350_windows_backup_scripts.py`
+- MODIFIED `docs/ai/validation/R31_R35_ACCEPTANCE_MANIFEST.json`
+- MODIFIED `docs/ai/releases/R35.0/RELEASE_PACKET.md`
+
+Rationale: `start_chakraops.ps1` used a wildcard stale-path check (`-like "$StaleRoot*"`) that falsely rejects the canonical `ChakraOps-dev` checkout during Windows live smoke.
+
+Any additional tracked path requires operator approval and packet update committed before edit.

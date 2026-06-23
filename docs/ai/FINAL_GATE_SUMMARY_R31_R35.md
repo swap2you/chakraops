@@ -6,10 +6,27 @@
 | R32.0 | (see R32 evidence) | PASS | PASS |
 | R33.0 | (see R33 evidence) | PASS | PASS |
 | R34.0 | 1248/3 skip | 334/18 skip | PASS |
-| R35.0 | **1291/2 skip** | **335/18 skip** | **PASS** |
+| R35.0 | **1300/4 skip** | **335/18 skip** | **PASS** |
 
-R35 Windows ops hardening: 65 R35-targeted tests (1 skip); retention safety suite; PowerShell backup scripts.
+R35 targeted suite (`pytest -k r350`): **76 passed, 1 skipped** (parsed from `out/verification/R35.0/r350_suite.log`).
 
-Static audit complete. Live Windows operational UAT **not claimed passed**.
+## Acceptance factory (2026-06-23)
+| Stage | Result |
+|-------|--------|
+| Git integrity | PASS |
+| Authorization integrity | PASS |
+| PowerShell integrity | PASS |
+| Backend + R35 suites | PASS |
+| Frontend tests + build | PASS |
+| Windows live operational smoke | PASS |
+| Security scan | PASS |
+| Evidence consistency | PASS |
+| Final repository integrity | PASS |
 
-Evidence: `out/verification/R35.0/{backend,frontend,build}.log`, `windows_backup_scripts.md`, `retention_*.md`.
+## UAT distinction
+- **Cursor Windows operational smoke:** PASS (`scripts/run_r31_r35_live_smoke.ps1`)
+- **Automated backend/frontend/build:** PASS
+- **Internal adversarial reviews:** PASS (`out/verification/R35.0/self_review/`)
+- **Cowork browser UAT:** PENDING — not claimed passed
+
+Evidence: `out/verification/R35.0/`

@@ -1,6 +1,6 @@
 # Current State — ChakraOps
 
-_Last updated: R35.0 Windows ops complete — static audit passed; live Windows UAT pending; schedules disabled; no final PR_
+_Last updated: R35.0 acceptance factory PASS (2026-06-23) — backend 1300/4 skip; R35 targeted 76/1 skip; frontend 335/18 skip; build PASS; Windows live smoke PASS; Cowork browser UAT PENDING; schedules disabled; no final PR_
 
 ## Release Status
 
@@ -10,7 +10,7 @@ _Last updated: R35.0 Windows ops complete — static audit passed; live Windows 
 | Tag | `chakraops-r30.7.0` |
 | Current branch | `release/R31-R35-program` |
 | Current mode | Program R31–R35 (single branch, five milestone commits, one final PR) |
-| Active milestone | R35.0 — **WINDOWS OPS COMPLETE**. Live Windows UAT pending. Schedules disabled. No final PR. |
+| Active milestone | R35.0 — **ACCEPTANCE FACTORY PASS**. Cowork browser UAT pending. Schedules disabled. No final PR. |
 | Prior milestone | R33.0 — canonical decision engine implemented + tested |
 
 ## R31.0 Validation Gates (audit milestone)

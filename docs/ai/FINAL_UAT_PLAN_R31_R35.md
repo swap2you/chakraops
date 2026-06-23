@@ -4,22 +4,26 @@
 
 1. Claude/Codex technical reviews — approved
 2. Cowork static audit — passed core safety invariants
-3. Automated gates — backend 1291/2 skip; frontend 335/18 skip; build PASS
+3. Automated gates — backend **1300/4 skip**; R35 targeted **76/1 skip**; frontend **335/18 skip**; build PASS (2026-06-23 harness)
+4. **Cursor Windows operational smoke** — PASS (`scripts/run_r31_r35_live_smoke.ps1`; log `out/verification/R35.0/windows_live_smoke.log`)
+5. PowerShell backup scripts — exercised in live smoke (create/list/verify/restore-validate/cleanup dry-run)
+6. Internal adversarial self-reviews A/B/C — PASS (`out/verification/R35.0/self_review/`)
 
 ## Pending (final release gate)
 
-1. **Live Windows operational UAT** — Cowork cannot execute PowerShell in Linux sandbox; operator must run on Windows
-2. Daily startup/shutdown scripts on Windows (`scripts/start_chakraops.ps1`, `stop_chakraops.ps1`)
-3. PowerShell backup scripts (`scripts/*_chakraops.ps1`, `cleanup_expired_backups.ps1`)
-4. Operations panel on System Diagnostics
-5. Manual job run (provider health, backup) — no auto-trading
-6. Scheduler enablement requires explicit confirmation (`confirm=ENABLE`)
-7. Canonical live recommendations (R34) still authoritative on Dashboard/Today
-8. Stay in Cash valid outcome
+1. **Cowork browser-only UAT** — see `docs/ai/validation/R31_R35_COWORK_UAT_HANDOFF.md` (no PowerShell)
+   - Operations page scheduler/job disabled display
+   - Boolean ORATS presence only
+   - No broker controls
+   - Dashboard/Today canonical recommendations
+   - Symbol Diagnostics fail-closed
+   - Manual-only wording; Stay in Cash; backtest warning
+   - Pagination; console errors; network credential leakage check
 
 ## Not claimed
 
-- Live operational UAT pass
+- Cowork browser UAT pass
 - Recurring schedule enablement (remains disabled)
+- Final PR or deployment
 
-Evidence template: `out/verification/R35.0/final_uat_plan.md`
+Evidence: `out/verification/R35.0/`

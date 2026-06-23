@@ -9,7 +9,7 @@
 - Remediation impl: `fea0f69`
 - STATUS follow-up: `fa3ee0f`
 - Final consistency auth: `6bd7a4e`
-- Final consistency impl: _(this commit)_
+- Final consistency impl: `18aa888`
 
 ## Reviews
 - Claude remediation: APPROVED WITH NON-BLOCKING NOTES (pre-final-fix)

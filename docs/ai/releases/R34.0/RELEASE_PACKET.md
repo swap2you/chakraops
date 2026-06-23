@@ -362,6 +362,33 @@ Governance (authorized): `docs/ai/releases/R34.0/{STATUS,TOOL_LOG,RELEASE_PACKET
 
 Any additional tracked path requires operator approval and a packet update committed before that path is edited.
 
+### Operator authorization waiver — authorization-order deviation (2026-06-23)
+
+The operator explicitly accepts the authorization-order deviation involving
+`chakraops/tests/test_r340_refresh_lock_ownership.py` in commit `2c41ba2`.
+
+**Facts (accurate record):**
+
+1. Commit `3808f66` was the documentation-only authorization commit for the final ORATS provider-error patch.
+2. Commit `2c41ba2` modified `chakraops/tests/test_r340_refresh_lock_ownership.py`.
+3. The exact path was added to the packet in the same implementation commit (`2c41ba2`) rather than in the preceding authorization commit (`3808f66`).
+4. This violated the program's authorization-before-edit rule.
+5. The operator accepts this single historical deviation because:
+   - the changed file was test-only
+   - the change synchronized the Windows spawn multiprocessing test using an `Event` gate
+   - it did not alter production lock behavior
+   - it remained within the already approved lock-test correction intent
+   - six Windows lock tests passed
+   - full backend, frontend, and build gates passed
+6. This waiver:
+   - is **not** retroactive authorization
+   - does **not** erase or hide the process deviation
+   - does **not** create permission to repeat the pattern
+   - applies only to this exact file and commit (`2c41ba2` / `test_r340_refresh_lock_ownership.py`)
+7. All future paths must still be authorized in a committed packet **before** modification.
+
+**Closure state (2026-06-23):** Claude closure verdict **APPROVED WITH NON-BLOCKING NOTES**; Codex closure verdict **BLOCKED only on authorization ordering** — technical provider-redaction findings closed; R34 implementation and technical validation complete; final Codex governance confirmation pending.
+
 ## Forbidden paths and actions
 
 

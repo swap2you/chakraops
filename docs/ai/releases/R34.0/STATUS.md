@@ -13,11 +13,13 @@ Consolidate the operator experience around trusted decisions, positions, backtes
 Level 3 — application refactor and analytical presentation
 
 ## Current status
-IMPLEMENTATION COMPLETE — **final ORATS provider-error patch delivered** (authorization `3808f66`, starting commit `b860a73`). All active `orats_chain_provider` expiration/chain error paths sanitized; real-path provider redaction tests added; evidence lock-test count corrected to **6 collected**. **H-5 CLOSED.**
+IMPLEMENTATION COMPLETE — **technical validation complete** (HEAD `ff78458`). All R34 deliverables delivered and gate-verified: transaction-safe refresh, OS-native lock, ORATS provider redaction, rendered canonical cutover, sector enforcement, frontend correctness. **H-5 CLOSED.**
 
-**Final external validation:** Claude final targeted review **APPROVED**; Cowork real-browser R34 UAT **PASS WITH NOTES**; Codex final targeted review was **BLOCKED** on remaining ORATS provider logging/tests and evidence count mismatch — **remediated and gate-verified**. Awaiting final targeted reviewer confirmation before R35.0. No Codex approval claimed.
+**Final external validation:** Claude closure verdict **APPROVED WITH NON-BLOCKING NOTES**; Cowork real-browser R34 UAT **PASS WITH NOTES**; Codex closure verdict **BLOCKED only on authorization ordering** — technical provider-redaction and lock-race findings closed. Final Codex governance confirmation pending before R35.0. No Codex governance approval claimed.
 
 **Operator waiver (2026-06-22d):** The operator explicitly accepts the historical exact-path deviation in commit `50aa600`. Documented waiver only — not retroactive authorization and not permission to repeat the pattern.
+
+**Operator waiver (2026-06-23):** The operator explicitly accepts the authorization-order deviation in commit `2c41ba2` for `chakraops/tests/test_r340_refresh_lock_ownership.py` (path added to packet in implementation commit `2c41ba2`, not authorization commit `3808f66`). Test-only Windows spawn `Event` gate sync; no production lock behavior change. Documented waiver only — applies only to this exact file and commit; not permission to repeat the pattern.
 
 ### Prior (safety) remediation pass — already delivered + gate-verified:
 - Phase 1 — weekly universe refresh is now **operational** (computes → applies via the canonical overlay store → appends exactly one history record; idempotent per ISO week; atomic with rollback; admin POST `/api/ui/universe/weekly-refresh/apply`; R35 still owns scheduling).
@@ -41,10 +43,10 @@ R33.0 canonical decision and profile contracts (implemented + tested).
 Final ORATS provider-error patch delivered (post-3808f66): `_provider_safe_error` / `_sanitize_diag` in `orats_chain_provider.py`; real-path tests for `_get_expirations_delayed`, `_get_expirations_live`, `_get_chain_live`, worker/batch, delayed result/trace; evidence lock-test count corrected to 6; Windows spawn `Event` gate on holder/waiter lock tests. Gates: backend 1224/3 skipped; frontend 334/18 skipped; build PASS; R32/R33/R34 targeted 207 passed; ORATS redaction file 19 passed; secret scan 0 hits.
 
 ## Claude review
-- Final targeted R34 review: **APPROVED**.
+- Closure verdict: **APPROVED WITH NON-BLOCKING NOTES**.
 
 ## Codex review
-- Final targeted R34 review was **BLOCKED** (remaining ORATS provider paths; evidence count 6 not 7). Remediation delivered and gate-verified. Awaiting final targeted confirmation. No Codex approval claimed.
+- Closure verdict: **BLOCKED only on authorization ordering** (commit `2c41ba2` modified `test_r340_refresh_lock_ownership.py` before path was in authorization commit `3808f66`). Technical provider-redaction findings closed. Operator waiver recorded (2026-06-23). Final Codex governance confirmation pending. No Codex governance approval claimed.
 
 ## Cowork UAT
 - Real-browser R34 UAT: **PASS WITH NOTES**.
@@ -69,13 +71,13 @@ Pending
 Pending
 
 ## Open blockers
-- External Codex/Claude final confirmation pending (implementation blockers closed).
+- Final Codex **governance** confirmation pending (authorization-order only; technical findings closed).
 
 ## H-5 status
 **CLOSED (R34.0)**
 
 ## Next action
-Await final targeted reviewer confirmation before R35.0. No PR, no tag, no deploy.
+Await final Codex governance closure before R35.0. No PR, no tag, no deploy.
 
 ## Stop point
-R34.0 remaining Codex findings closed and pushed. Awaiting final targeted reviewer confirmation before R35.0.
+R34.0 implementation and technical validation complete. Authorization-order waiver recorded. Awaiting final Codex governance closure before R35.0.

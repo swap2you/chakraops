@@ -1,6 +1,6 @@
 # Current State — ChakraOps
 
-_Last updated: R34.0 COMPLETE — final cutover pass gate-verified (transaction-safe weekly refresh, complete ORATS redaction, live sector enforcement, rendered canonical cutover, table DOM fix, SIMULATION label, positions pagination, nav grouping); **H-5 CLOSED**; awaiting final Claude/Codex/Cowork validation before R35 (program R31–R35)_
+_Last updated: R34.0 COMPLETE — implementation and technical validation gate-verified (backend 1224/3; frontend 334/18; build PASS); **H-5 CLOSED**; Claude closure **APPROVED WITH NON-BLOCKING NOTES**; Codex closure **BLOCKED only on authorization ordering** (operator waiver for `2c41ba2`/`test_r340_refresh_lock_ownership.py` recorded); final Codex governance confirmation pending before R35 (program R31–R35)_
 
 ## Release Status
 
@@ -10,7 +10,7 @@ _Last updated: R34.0 COMPLETE — final cutover pass gate-verified (transaction-
 | Tag | `chakraops-r30.7.0` |
 | Current branch | `release/R31-R35-program` |
 | Current mode | Program R31–R35 (single branch, five milestone commits, one final PR) |
-| Active milestone | R34.0 — COMPLETE (pending final external validation). Final cutover pass delivered + gate-verified (backend 1200/1; frontend 334/18; build PASS; secret scan 0 hits): transaction-safe weekly refresh (cross-process lock + journal recovery), complete ORATS application-path redaction, live sector enforcement, **rendered** canonical cutover (Dashboard/Today/Symbol render canonical primary; legacy demoted to collapsed diagnostics), shared-table DOM fix, Backtest SIMULATION label, positions pagination, navigation grouping. **H-5 CLOSED**. Post-R35 enhancements (drag-and-drop, broad redesign, legacy physical retirement, bundle architecture, multi-user DB) explicitly out of scope |
+| Active milestone | R34.0 — COMPLETE (implementation and technical validation complete). Gate-verified (backend 1224/3; frontend 334/18; build PASS): transaction-safe refresh, OS-native lock, complete ORATS provider redaction, live sector enforcement, rendered canonical cutover, frontend correctness. **H-5 CLOSED**. Claude closure **APPROVED WITH NON-BLOCKING NOTES**; Codex closure **BLOCKED only on authorization ordering** — operator waiver recorded for commit `2c41ba2` / `test_r340_refresh_lock_ownership.py`. Final Codex governance confirmation pending before R35.0 |
 | Prior milestone | R33.0 — canonical decision engine implemented + tested |
 
 ## R31.0 Validation Gates (audit milestone)

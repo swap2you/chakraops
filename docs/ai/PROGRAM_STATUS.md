@@ -1,7 +1,7 @@
 # ChakraOps Program Status
 
 Last initialized: 2026-06-21
-Last updated: 2026-06-22 (R34.0 COMPLETE — final cutover pass delivered + gate-verified: transaction-safe weekly refresh, complete ORATS redaction, live sector enforcement, rendered canonical cutover (Dashboard/Today/Symbol), table DOM fix, SIMULATION label, positions pagination, nav grouping. **H-5 CLOSED**. Awaiting final Claude/Codex/Cowork validation before R35.0)
+Last updated: 2026-06-23 (R34.0 COMPLETE — implementation and technical validation complete; backend 1224/3; frontend 334/18; build PASS; **H-5 CLOSED**. Claude closure **APPROVED WITH NON-BLOCKING NOTES**; Codex closure **BLOCKED only on authorization ordering** — operator waiver recorded for `2c41ba2`/`test_r340_refresh_lock_ownership.py`; final Codex governance confirmation pending before R35.0)
 
 ## Program branch and workflow
 
@@ -16,7 +16,7 @@ Last updated: 2026-06-22 (R34.0 COMPLETE — final cutover pass delivered + gate
 | R31.0 | IMPLEMENTED (gates green, committed; awaiting review) | Cursor / Claude / Codex | Operator review of audit + blueprint; resolve D-1 (R30.8) |
 | R32.0 | COMPLETE — C-1 + Claude notes + full data-reliability scope delivered and gate-verified; Claude APPROVED-WITH-NOTES (notes closed in 049cb2f); Codex review PENDING (quota) | Cursor / Claude / Codex | Deferred Codex R32 review |
 | R33.0 | IMPLEMENTED + TESTED, Claude **BLOCKED** on live cutover — canonical engine is correct/tested but not yet the authoritative live recommendation path; H-5 OPEN, reassigned to R34 | Cursor / Claude / Codex | Closed by R34 live cutover; deferred Codex review |
-| R34.0 | COMPLETE (pending final external validation) — final cutover pass delivered + gate-verified (backend 1200/1; frontend 334/18; build PASS; secret scan 0 hits): transaction-safe weekly refresh, complete ORATS redaction, live sector enforcement, **rendered** canonical cutover (Dashboard/Today/Symbol primary; legacy demoted), table DOM fix, SIMULATION label, positions pagination, nav grouping. **H-5 CLOSED** | Cursor / Claude / Codex | Final Claude/Codex re-review + real-browser Cowork UAT, then R35.0 |
+| R34.0 | COMPLETE — implementation and technical validation complete (backend 1224/3; frontend 334/18; build PASS; secret scan 0 hits): transaction-safe refresh, OS-native lock, complete ORATS provider redaction, live sector enforcement, rendered canonical cutover, frontend correctness. **H-5 CLOSED**. Claude closure **APPROVED WITH NON-BLOCKING NOTES**; Codex closure **BLOCKED only on authorization ordering** (operator waiver `2c41ba2` recorded) | Cursor / Claude / Codex | Final Codex governance closure, then R35.0 |
 | R35.0 | PACKET_READY / DEPENDS_ON_R34 | Cursor / Cowork | Wait for product-flow acceptance |
 
 ## Current program rule

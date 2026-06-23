@@ -76,13 +76,21 @@
 - Fix 2 (real-path tests): five new tests in `test_r340_orats_redaction_complete.py` (19 total); caplog + result/trace assertions with fake token in URL/header/body.
 - Fix 3 (evidence count): corrected lock-test count to **6 collected, 6 passed**; Windows spawn `Event` gate on holder/waiter contention tests.
 - Gates: backend 1224/3 skipped; frontend 334/18 skipped; build PASS; R32/R33/R34 targeted 207 passed; secret scan 0 hits.
-- Commit `fix(R34.0): sanitize remaining provider error paths` pushed. Awaiting final targeted reviewer confirmation.
+- Commit `fix(R34.0): sanitize remaining provider error paths` (`2c41ba2`) pushed. Follow-up `ff78458` corrected historical lock-test count in TOOL_LOG.
+
+## Cursor — final authorization-order waiver (2026-06-23)
+- Operator waiver recorded: accepts authorization-order deviation in `2c41ba2` — `test_r340_refresh_lock_ownership.py` modified before path authorized in `3808f66` (path added in same implementation commit). Test-only Event gate; no production lock change; 6 lock tests passed; full gates passed.
+- Closure verdicts recorded: Claude **APPROVED WITH NON-BLOCKING NOTES**; Codex **BLOCKED only on authorization ordering**; technical provider-redaction findings closed.
+- Docs-only commit `docs(R34.0): record final authorization-order waiver` pushed.
 
 ## Codex
-- Final targeted R34 review was **BLOCKED** (remaining ORATS provider paths; evidence count mismatch). Remediation delivered; awaiting final confirmation.
+- Closure verdict: **BLOCKED only on authorization ordering**. Technical findings closed. Operator waiver recorded. Final governance confirmation pending.
+
+## Claude
+- Closure verdict: **APPROVED WITH NON-BLOCKING NOTES**.
 
 ## Claude Cowork
 - Final real-browser UAT: PASS WITH NOTES.
 
 ## Operator
-- Pending approval.
+- Authorization-order waiver for `2c41ba2` / `test_r340_refresh_lock_ownership.py` recorded (2026-06-23). Pending final Codex governance closure.

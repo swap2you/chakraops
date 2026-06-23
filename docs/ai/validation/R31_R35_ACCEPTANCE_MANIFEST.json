@@ -28,6 +28,7 @@
     "chakraops/tests/test_r350_backup_writer_locks.py",
     "chakraops/tests/test_r350_retention_safety.py",
     "chakraops/tests/test_r350_windows_backup_scripts.py",
+    "chakraops/tests/test_r350_startup_scripts.py",
     "chakraops/tests/test_r350_release_acceptance.py",
     "chakraops/docs/RUNBOOK_BACKUP_RESTORE.md",
     "chakraops/docs/RUNBOOK_SCHEDULER_OPERATIONS.md",

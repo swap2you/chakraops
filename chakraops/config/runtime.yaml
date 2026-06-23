@@ -1,5 +1,9 @@
-# ChakraOps runtime config (required for app startup).
-# Replace 89041e02-da33-46ec-a0c4-d499744b0911 with your ORATS API token from https://orats.com
-
-orats:
-  api_token: "89041e02-da33-46ec-a0c4-d499744b0911"
+# ChakraOps runtime config.
+#
+# The ORATS API token is intentionally NOT configured here. It is resolved
+# exclusively from the environment via app.core.config.orats_secrets
+# (ORATS_API_TOKEN / ORATS_API_KEY), configured locally through a gitignored
+# .env (see .env.example). No token field exists in this file so that no code
+# path can ever read a literal placeholder or value from runtime config and
+# treat it as a valid credential. A missing token fails loudly downstream.
+orats: {}

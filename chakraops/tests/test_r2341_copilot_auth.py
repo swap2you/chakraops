@@ -33,10 +33,19 @@ def test_copilot_returns_502_copilot_auth_failed_on_openai_authentication_error(
         "app.api.copilot._openai_chat_with_tools"
     ) as mock_chat:
         try:
+            from unittest.mock import MagicMock
             from openai import AuthenticationError
+            _mock_resp = MagicMock()
+            _mock_resp.status_code = 401
+            _mock_resp.headers = MagicMock()
+            _mock_resp.headers.get.return_value = None
+            mock_chat.side_effect = AuthenticationError(
+                "Invalid API key provided", response=_mock_resp, body=None
+            )
         except ImportError:
-            AuthenticationError = type("AuthenticationError", (Exception,), {})
-        mock_chat.side_effect = AuthenticationError("Invalid API key provided")
+            mock_chat.side_effect = type("AuthenticationError", (Exception,), {})(
+                "Invalid API key provided"
+            )
         resp = client.post(
             "/api/ui/copilot/ask",
             json={"symbol": "NVDA", "question": "Why not eligible?", "mode": "symbol"},

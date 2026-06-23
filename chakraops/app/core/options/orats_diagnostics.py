@@ -102,9 +102,10 @@ def run_orats_diagnostic(symbol: str = "SPY") -> Dict[str, Any]:
         result.expirations_count = len(expirations)
         result.first_expiration = expirations[0].isoformat()
     except Exception as e:
-        result.error = str(e)
+        from app.core.security.redact import redact_secrets
+        result.error = redact_secrets(str(e))
         result.error_type = type(e).__name__
-        logger.warning("ORATS diagnostic expirations failed for %s: %s", symbol_upper, e)
+        logger.warning("ORATS diagnostic expirations failed for %s: %s", symbol_upper, result.error)
         return asdict(result)
 
     # Nearest expiry in range
@@ -137,9 +138,10 @@ def run_orats_diagnostic(symbol: str = "SPY") -> Dict[str, Any]:
             result.error = "Empty chain from ORATS"
             result.error_type = "EMPTY_CHAIN"
     except Exception as e:
-        result.error = str(e)
+        from app.core.security.redact import redact_secrets
+        result.error = redact_secrets(str(e))
         result.error_type = type(e).__name__
-        logger.warning("ORATS diagnostic chain failed for %s: %s", symbol_upper, e)
+        logger.warning("ORATS diagnostic chain failed for %s: %s", symbol_upper, result.error)
 
     logger.info(
         "ORATS diag symbol=%s option_available=%s exp_ok=%s chain_ok=%s exp_count=%d chain_count=%d",

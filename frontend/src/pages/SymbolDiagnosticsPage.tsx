@@ -11,7 +11,9 @@ import { Card, CardHeader, Badge, StatusBadge, Button, Tooltip } from "@/compone
 import type { SymbolDiagnosticsCandidate } from "@/api/types";
 import { buildReasonsFromPrimary, formatGateReason } from "@/reasons/parsePrimaryReason";
 import { constraintToLabel } from "@/utils/sizingConstraints";
+import { reasonLabels } from "@/utils/reasonLabels";
 import { pushSystemNotification } from "@/lib/notifications";
+import { ApiError } from "@/api/client";
 
 function regimeColor(r: string | null | undefined): string {
   const s = (r ?? "").toUpperCase();
@@ -101,11 +103,12 @@ export function SymbolDiagnosticsPage({ initialTabForTest }: { initialTabForTest
   const [copilotDrawerOpen, setCopilotDrawerOpen] = useState(false);
 
   const shouldFetch = activeSymbol != null && isValidSymbol(activeSymbol);
-  const { data, isLoading, isError } = useSymbolDiagnostics(
+  const { data, isLoading, isError, error } = useSymbolDiagnostics(
     activeSymbol ?? "",
     shouldFetch,
     runIdFromUrl || undefined
   );
+  const notFound = isError && error instanceof ApiError && error.status === 404;
   const recompute = useRecomputeSymbolDiagnostics();
   const { data: accountData } = useDefaultAccount();
   const { data: health } = useUiSystemHealth();
@@ -177,7 +180,30 @@ export function SymbolDiagnosticsPage({ initialTabForTest }: { initialTabForTest
       </div>
 
       {isLoading && <p className="text-xs text-zinc-500">Loading…</p>}
-      {isError && <p className="text-xs text-red-400">Failed to load.</p>}
+      {isError && (
+        <Card data-testid="symbol-unavailable">
+          <CardHeader
+            title={notFound ? "Not evaluated yet" : "Diagnostics unavailable"}
+            description={
+              notFound
+                ? `${activeSymbol ?? "This symbol"} is not in the latest evaluation store. Recompute to evaluate it now.`
+                : "We could not load diagnostics for this symbol. Try recomputing or check again shortly."
+            }
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => activeSymbol && recompute.mutate(activeSymbol)}
+            disabled={!activeSymbol || recompute.isPending || marketClosed}
+            data-testid="symbol-unavailable-recompute"
+          >
+            {recompute.isPending ? "Recomputing…" : "Recompute now"}
+          </Button>
+          {marketClosed && (
+            <p className="mt-1 text-xs text-zinc-500">Market is closed — recompute is disabled to protect the canonical decision.</p>
+          )}
+        </Card>
+      )}
 
       {runIdFromUrl && data && data.exact_run === false && (
         <div className="rounded border border-amber-500/50 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
@@ -188,6 +214,45 @@ export function SymbolDiagnosticsPage({ initialTabForTest }: { initialTabForTest
 
       {data && !isLoading && (
         <>
+          {/* R34.0 (H-5 cutover): canonical decision is the PRIMARY authority. */}
+          {data.canonical_status === "OK" && data.canonical_decision ? (
+            <Card data-testid="symbol-canonical-decision">
+              <CardHeader
+                title="Canonical decision"
+                description="Authoritative engine decision. Manual execution only — diagnostics below are explanatory and non-authoritative."
+                actions={
+                  <Badge variant={data.canonical_decision.next_action_code === "ENTRY" ? "success" : data.canonical_decision.next_action_code === "BLOCKED" ? "danger" : "neutral"}>
+                    {data.canonical_decision.next_action_code === "ENTRY" ? "Entry" : data.canonical_decision.next_action_code}
+                  </Badge>
+                }
+              />
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-zinc-600 dark:text-zinc-400">
+                <span className="uppercase">{data.canonical_decision.strategy}</span>
+                {data.active_profile && <span>Profile: {data.active_profile}</span>}
+                {data.canonical_decision.capital_required != null && (
+                  <span>Capital: ${Math.round(data.canonical_decision.capital_required).toLocaleString()}</span>
+                )}
+                {data.canonical_decision.expected_return_pct != null && (
+                  <span>Est. return: {data.canonical_decision.expected_return_pct.toFixed(1)}%</span>
+                )}
+                {data.canonical_decision.score != null && <span>Score: {Math.round(data.canonical_decision.score)}</span>}
+              </div>
+              {reasonLabels([...(data.canonical_decision.reason_codes ?? []), ...(data.canonical_decision.risk_flags ?? [])]).length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1" data-testid="symbol-canonical-reasons">
+                  {reasonLabels([...(data.canonical_decision.reason_codes ?? []), ...(data.canonical_decision.risk_flags ?? [])]).map((l) => (
+                    <span key={l} className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">{l}</span>
+                  ))}
+                </div>
+              )}
+            </Card>
+          ) : (
+            <Card data-testid="symbol-canonical-unavailable">
+              <CardHeader
+                title="Canonical decision unavailable"
+                description="The authoritative engine has no current decision for this symbol. The diagnostics below are explanatory only and are not a recommendation."
+              />
+            </Card>
+          )}
           {/* R26.0: Suggested size when this symbol has ENTRY with r260 sizing */}
           {entrySizingItem && (
             <Card data-testid="suggested-size-card">

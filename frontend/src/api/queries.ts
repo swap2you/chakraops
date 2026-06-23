@@ -32,6 +32,12 @@ import type {
   UiPositionsUnifiedIntegrityCheckResult,
   UiReconcileDiffResponse,
   UiPositionsUnifiedDbResponse,
+  DataReliabilityHealthResponse,
+  WeeklyUniverseResponse,
+  RefreshHistoryResponse,
+  DecisionProfilesResponse,
+  DecisionEvaluateRequest,
+  DecisionEvaluateResponse,
 } from "./types";
 import type { DecisionMode, DecisionRef } from "./types";
 export type { DecisionRef };
@@ -669,6 +675,12 @@ export const queryKeys = {
   symbolDiagnostics: (symbol: string, runId?: string | null) =>
     (["ui", "symbolDiagnostics", symbol, runId ?? ""] as const),
   uiSystemHealth: () => ["ui", "systemHealth"] as const,
+  operationsStatus: () => ["operations", "status"] as const,
+  dataReliabilityHealth: () => ["ui", "dataReliability", "health"] as const,
+  dataReliabilityWeeklyUniverse: () => ["ui", "dataReliability", "weeklyUniverse"] as const,
+  dataReliabilityRefreshHistory: (limit: number) =>
+    ["ui", "dataReliability", "refreshHistory", limit] as const,
+  decisionEngineProfiles: () => ["ui", "decisionEngine", "profiles"] as const,
   uiEarningsDebug: (symbol: string) => ["ui", "earningsDebug", symbol] as const,
   sharesCandidates: () => ["ui", "sharesCandidates"] as const,
   actionNeeded: () => ["ui", "actionNeeded"] as const,
@@ -891,6 +903,62 @@ export function useUiSystemHealth() {
   });
 }
 
+/** R35.0: operations scheduler, jobs, backup status */
+export function useOperationsStatus() {
+  return useQuery({
+    queryKey: queryKeys.operationsStatus(),
+    queryFn: () => apiGet<import("./types").OperationsStatusResponse>("/api/operations/status"),
+  });
+}
+
+// R32.0: read-only data-reliability hooks (provider health, freshness/cache/
+// retry/rate-limit policy, deterministic weekly universe, refresh history,
+// explicit event/earnings calendar availability). No secrets are exposed.
+export function useDataReliabilityHealth() {
+  return useQuery({
+    queryKey: queryKeys.dataReliabilityHealth(),
+    queryFn: () =>
+      apiGet<DataReliabilityHealthResponse>("/api/ui/data-reliability/health"),
+  });
+}
+
+export function useWeeklyUniverse() {
+  return useQuery({
+    queryKey: queryKeys.dataReliabilityWeeklyUniverse(),
+    queryFn: () =>
+      apiGet<WeeklyUniverseResponse>("/api/ui/data-reliability/universe/weekly"),
+  });
+}
+
+export function useUniverseRefreshHistory(limit = 20) {
+  return useQuery({
+    queryKey: queryKeys.dataReliabilityRefreshHistory(limit),
+    queryFn: () =>
+      apiGet<RefreshHistoryResponse>(
+        `/api/ui/data-reliability/universe/refresh-history?limit=${limit}`,
+      ),
+  });
+}
+
+// R33.0: canonical decision-engine read-only contract. Advisory, manual-only.
+export function useDecisionProfiles() {
+  return useQuery({
+    queryKey: queryKeys.decisionEngineProfiles(),
+    queryFn: () =>
+      apiGet<DecisionProfilesResponse>("/api/ui/decision-engine/profiles"),
+  });
+}
+
+export function useEvaluateDecisions() {
+  return useMutation({
+    mutationFn: (payload: DecisionEvaluateRequest) =>
+      apiPost<DecisionEvaluateResponse>(
+        "/api/ui/decision-engine/evaluate",
+        payload,
+      ),
+  });
+}
+
 /** R25.8: Earnings debug for probe symbol (diagnostics only; safe fields). */
 export function useEarningsDebug(symbol: string) {
   return useQuery({
@@ -957,17 +1025,78 @@ export interface ActionNeededItem {
   csp_risk_proxy_cap_contracts?: number | null;
   csp_risk_proxy_enforced?: boolean | null;
 }
+// R34.0 (H-5 cutover): canonical authoritative live recommendation block.
+export interface CanonicalLiveItem {
+  symbol: string;
+  strategy: string;
+  profile?: string;
+  next_action_code: string;
+  decision_status: string;
+  capital_required?: number | null;
+  expected_return_pct?: number | null;
+  expected_return_dollars?: number | null;
+  score?: number | null;
+  rank?: number | null;
+  reason_codes?: string[];
+  risk_flags?: string[];
+  sizing?: Record<string, unknown> | null;
+  selected_contract?: Record<string, unknown> | null;
+  data_quality?: string | null;
+  data_freshness?: Record<string, unknown> | null;
+  event_risk?: Record<string, unknown> | null;
+  manual_only: boolean;
+  authoritative: boolean;
+  recommended_by: string;
+}
+export interface CapitalSetSafety {
+  per_suggestion_not_additive: boolean;
+  note_code: string;
+  total_capital_required_displayed: number;
+  available_cash: number | null;
+  cash_known?: boolean;
+  cash_buffer_pct: number;
+  cash_buffer_amount: number;
+  deployable_capital: number;
+  exceeds_deployable_capital: boolean;
+  flags: string[];
+  assumes_leverage_or_margin: boolean;
+}
+export interface AuthoritativeRecommendations {
+  decision_source: string;
+  status?: string;
+  manual_only: boolean;
+  active_profile?: string;
+  profile?: Record<string, unknown> | null;
+  as_of_utc?: string | null;
+  actionable: CanonicalLiveItem[];
+  watch: CanonicalLiveItem[];
+  blocked: CanonicalLiveItem[];
+  stay_in_cash?: Record<string, unknown> | null;
+  reason_codes?: string[];
+  counts?: Record<string, number> | null;
+}
 export interface ActionNeededResponse {
   top_options: ActionNeededItem[];
   top_shares: ActionNeededItem[];
   options?: ActionNeededItem[];
   shares?: ActionNeededItem[];
   recently_changed: unknown[];
+  // R34.0 cutover: the authoritative primary recommendation is canonical.
+  decision_source?: string;
+  authoritative_recommendations?: AuthoritativeRecommendations | null;
+  capital_safety?: CapitalSetSafety | null;
+  active_profile?: string;
+  manual_only?: boolean;
+  legacy_lists_role?: string;
+  profile_error?: string;
 }
-export function useActionNeeded() {
+export function useActionNeeded(profile?: string) {
   return useQuery({
-    queryKey: queryKeys.actionNeeded(),
-    queryFn: () => apiGet<ActionNeededResponse>(actionNeededPath()),
+    queryKey: [...queryKeys.actionNeeded(), profile ?? "balanced"] as const,
+    queryFn: () =>
+      apiGet<ActionNeededResponse>(
+        profile ? `${actionNeededPath()}?profile=${encodeURIComponent(profile)}` : actionNeededPath(),
+      ),
   });
 }
 

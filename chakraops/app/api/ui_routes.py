@@ -782,6 +782,59 @@ async def ui_universe_apply(
     raise HTTPException(status_code=400, detail="Provide proposal_id or symbol and action (add|remove)")
 
 
+@router.post("/universe/weekly-refresh/apply")
+async def ui_universe_weekly_refresh_apply(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R34.0: operationally apply the deterministic weekly universe refresh.
+
+    Controlled manual/admin trigger only (R35 owns scheduling). Computes the
+    deterministic weekly universe, applies it to the canonical overlay store, and
+    appends exactly one history record. Idempotent for the same ISO week. Body
+    may include ``{"dry_run": true}`` to preview without mutating anything.
+    """
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    except Exception:
+        body = {}
+    dry_run = bool(body.get("dry_run"))
+    from app.core.universe.weekly_refresh import (
+        OUTCOME_APPLIED,
+        OUTCOME_SKIPPED_IDEMPOTENT,
+        WeeklyRefreshCriticalError,
+        WeeklyRefreshError,
+        apply_weekly_universe_refresh,
+    )
+
+    try:
+        outcome = apply_weekly_universe_refresh(dry_run=dry_run)
+    except WeeklyRefreshCriticalError as e:
+        # Rollback/recovery failed: surface a controlled critical failure status.
+        # The transaction journal is preserved for operator-led recovery.
+        raise HTTPException(
+            status_code=500,
+            detail={"status": "CRITICAL", "reason_code": "REFRESH_RECOVERY_FAILED", "message": str(e)},
+        )
+    except WeeklyRefreshError as e:
+        # Recoverable failure: overlay was rolled back to the pre-refresh state.
+        raise HTTPException(
+            status_code=500,
+            detail={"status": "FAILED", "reason_code": "REFRESH_NOT_APPLIED", "message": str(e)},
+        )
+
+    # Controlled success / idempotent-skip status for the admin caller.
+    oc = outcome.get("outcome")
+    if oc == OUTCOME_APPLIED:
+        outcome["status"] = "APPLIED"
+    elif oc == OUTCOME_SKIPPED_IDEMPOTENT:
+        outcome["status"] = "SKIPPED_IDEMPOTENT"
+    else:
+        outcome["status"] = oc or "UNKNOWN"
+    return outcome
+
+
 @router.get("/universe/health")
 def ui_universe_health(
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
@@ -827,9 +880,9 @@ def ui_earnings_debug(
     if not sym:
         return {"status": "Unavailable", "next_date": None, "days": None, "implied_move_pct": None, "as_of": None}
     try:
-        from app.core.config.orats_secrets import ORATS_API_TOKEN
+        from app.core.config.orats_secrets import get_orats_token
         from app.core.orats.earnings import fetch_earnings_advisory
-        token = (ORATS_API_TOKEN or "").strip() or None
+        token = get_orats_token()
         out = fetch_earnings_advisory(sym, token=token)
         # Map to safe field names only; never raw codes
         status = (out.get("earnings_data_status") or "Unavailable").strip()
@@ -2279,8 +2332,8 @@ def ui_today_summary(
         import os
         sym = (os.environ.get("EARNINGS_PROBE_SYMBOL") or "SPY").strip().upper() or "SPY"
         from app.core.orats.earnings import fetch_earnings_advisory
-        from app.core.config.orats_secrets import ORATS_API_TOKEN
-        token = (ORATS_API_TOKEN or "").strip() or None
+        from app.core.config.orats_secrets import get_orats_token
+        token = get_orats_token()
         out = fetch_earnings_advisory(sym, token=token)
         status = (out.get("earnings_data_status") or "Unavailable").strip()
         if status not in ("OK", "Unavailable", "Stale"):
@@ -2309,6 +2362,10 @@ def ui_today_summary(
         "notifications_new_count": notifications_new_count,
         "earnings_probe": earnings_probe,
         "action_needed_count": action_needed_count,
+        # R34.0 (H-5 cutover): Today's actionable list is sourced from the
+        # canonical engine via GET /api/ui/action-needed (authoritative_recommendations).
+        "decision_source": "canonical_decision_engine",
+        "action_needed_source": "/api/ui/action-needed#authoritative_recommendations",
     }
 
 
@@ -6038,11 +6095,47 @@ def _fmt_num(v: Any) -> str:
         return str(v) if v is not None else "—"
 
 
+CANONICAL_SOURCE = "canonical_decision_engine"
+CANONICAL_UNAVAILABLE_SOURCE = "canonical_decision_engine_unavailable"
+
+
+def _canonical_unavailable_block(reason_code: str, profile: str) -> Dict[str, Any]:
+    """R34.0 fail-closed contract.
+
+    When the canonical engine cannot produce an authoritative result (missing /
+    stale artifact, profile error, or unexpected failure) the route must NOT
+    claim canonical authority and must NOT fall back to a legacy actionable
+    recommendation. It returns an explicit degraded contract with empty
+    actionable recommendations and a safe reason code. Legacy lists remain
+    diagnostic-only.
+    """
+    return {
+        "decision_source": CANONICAL_UNAVAILABLE_SOURCE,
+        "status": "UNAVAILABLE",
+        "manual_only": True,
+        "active_profile": profile,
+        "actionable": [],
+        "watch": [],
+        "blocked": [],
+        "stay_in_cash": None,
+        "reason_codes": [reason_code],
+    }
+
+
 @router.get("/action-needed")
 def ui_action_needed(
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
+    profile: str = "balanced",
 ) -> Dict[str, Any]:
-    """R24.1: Top 5 options + top 5 shares actions; recently changed (last 5 transitions). For Dashboard workflow."""
+    """R24.1: Top 5 options + top 5 shares actions; recently changed (last 5 transitions). For Dashboard workflow.
+
+    R34.0 (H-5 cutover): the AUTHORITATIVE primary recommendation is produced by
+    the canonical decision engine and returned under ``authoritative_recommendations``
+    (``decision_source == 'canonical_decision_engine'``). The legacy ``options`` /
+    ``shares`` lists are retained as NON-authoritative diagnostic context only
+    (``legacy_lists_role == 'diagnostic_non_authoritative'``); they no longer
+    define the primary action.
+    """
     _require_ui_key(x_ui_key)
     from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2, get_eval_snapshot
     from app.core.accounts.holdings_db import get_share_position, _DEFAULT_ACCOUNT_ID
@@ -6052,7 +6145,22 @@ def ui_action_needed(
     store.reload_from_disk()
     artifact = store.get_latest()
     if artifact is None:
-        return {"options": [], "shares": [], "recently_changed": _recent_transitions()}
+        # Fail-closed: no artifact => no canonical authority, no actionable.
+        return {
+            "options": [],
+            "shares": [],
+            "recently_changed": _recent_transitions(),
+            "decision_source": CANONICAL_UNAVAILABLE_SOURCE,
+            "canonical_status": "UNAVAILABLE",
+            "authoritative_recommendations": _canonical_unavailable_block(
+                "CANONICAL_ARTIFACT_MISSING", profile
+            ),
+            "capital_safety": None,
+            "active_profile": profile,
+            "manual_only": True,
+            "legacy_lists_role": "diagnostic_non_authoritative",
+            "reason_codes": ["CANONICAL_ARTIFACT_MISSING"],
+        }
 
     # R25.9: Guardrails — compute metrics once for request-time ENTRY suppression
     # R26.0: Sizing uses same snapshot + metrics for portfolio-aware size
@@ -6320,13 +6428,79 @@ def ui_action_needed(
     shares_out.sort(key=lambda x: (_severity_order.get((x.get("severity") or "low"), 2), (x.get("symbol") or "")))
     shares_out = shares_out[:5]
 
-    return {
+    # R34.0 (H-5 cutover): produce the AUTHORITATIVE primary recommendation from
+    # the canonical decision engine. The legacy lists above are diagnostic-only.
+    authoritative_recommendations: Optional[Dict[str, Any]] = None
+    capital_safety: Optional[Dict[str, Any]] = None
+    profile_error: Optional[str] = None
+    canonical_reason: Optional[str] = None
+    try:
+        from app.core.decision_engine.live_service import compute_live_recommendations
+        from app.core.decision_engine.profiles import ProfileValidationError
+
+        shares_by_symbol: Dict[str, int] = {}
+        try:
+            for _s in (getattr(artifact, "symbols", []) or []):
+                _sym = (getattr(_s, "symbol", "") or "").strip().upper()
+                if not _sym:
+                    continue
+                _pos = get_share_position(_DEFAULT_ACCOUNT_ID, _sym)
+                _qty = getattr(_pos, "quantity", None) if _pos is not None else None
+                if _qty:
+                    shares_by_symbol[_sym] = int(_qty)
+        except Exception:
+            shares_by_symbol = {}
+
+        try:
+            canonical = compute_live_recommendations(
+                artifact,
+                profile_name=profile,
+                guardrails_metrics=guardrails_metrics,
+                guardrails_snapshot=guardrails_snapshot,
+                shares_by_symbol=shares_by_symbol,
+            )
+            authoritative_recommendations = canonical.get("recommendations")
+            capital_safety = canonical.get("capital_safety")
+            if authoritative_recommendations is None:
+                canonical_reason = "CANONICAL_ENGINE_UNAVAILABLE"
+        except ProfileValidationError as exc:
+            profile_error = str(exc)
+            canonical_reason = "CANONICAL_PROFILE_INVALID"
+    except Exception:
+        canonical_reason = "CANONICAL_ENGINE_UNAVAILABLE"
+
+    canonical_ok = authoritative_recommendations is not None and canonical_reason is None
+    if canonical_ok:
+        decision_source = CANONICAL_SOURCE
+        canonical_status = "OK"
+    else:
+        # Fail-closed: never claim canonical authority and never promote legacy.
+        decision_source = CANONICAL_UNAVAILABLE_SOURCE
+        canonical_status = "UNAVAILABLE"
+        authoritative_recommendations = _canonical_unavailable_block(
+            canonical_reason or "CANONICAL_ENGINE_UNAVAILABLE", profile
+        )
+        capital_safety = None
+
+    out: Dict[str, Any] = {
         "top_options": options_out,
         "top_shares": shares_out,
         "options": options_out,
         "shares": shares_out,
         "recently_changed": _recent_transitions(),
+        "decision_source": decision_source,
+        "canonical_status": canonical_status,
+        "authoritative_recommendations": authoritative_recommendations,
+        "capital_safety": capital_safety,
+        "active_profile": profile,
+        "manual_only": True,
+        "legacy_lists_role": "diagnostic_non_authoritative",
     }
+    if not canonical_ok:
+        out["reason_codes"] = [canonical_reason or "CANONICAL_ENGINE_UNAVAILABLE"]
+    if profile_error is not None:
+        out["profile_error"] = profile_error
+    return out
 
 
 def _enrich_diagnostics_with_options_lifecycle(out: Dict[str, Any], symbol: str) -> None:
@@ -6365,11 +6539,61 @@ def _enrich_diagnostics_with_options_lifecycle(out: Dict[str, Any], symbol: str)
         pass
 
 
+def _attach_canonical_decision(out: Dict[str, Any], artifact: Any, sym_upper: str, profile: str) -> None:
+    """R34.0 (H-5 cutover): attach the canonical engine's authoritative decision
+    for this symbol to the diagnostics response. Diagnostics remain explanatory;
+    ``canonical_decision`` is the authoritative recommendation source."""
+    try:
+        from app.core.decision_engine.live_service import compute_live_recommendations
+        from app.core.accounts.holdings_db import get_share_position, _DEFAULT_ACCOUNT_ID
+
+        shares_by_symbol: Dict[str, int] = {}
+        try:
+            _pos = get_share_position(_DEFAULT_ACCOUNT_ID, sym_upper)
+            _qty = getattr(_pos, "quantity", None) if _pos is not None else None
+            if _qty:
+                shares_by_symbol[sym_upper] = int(_qty)
+        except Exception:
+            shares_by_symbol = {}
+
+        canonical = compute_live_recommendations(
+            artifact, profile_name=profile, shares_by_symbol=shares_by_symbol
+        )
+        recs = canonical.get("recommendations") or {}
+        if not recs:
+            raise RuntimeError("canonical produced no recommendations")
+        found = None
+        for bucket in ("actionable", "watch", "blocked"):
+            for item in recs.get(bucket, []) or []:
+                if (item.get("symbol") or "").strip().upper() == sym_upper:
+                    found = item
+                    break
+            if found:
+                break
+        out["decision_source"] = CANONICAL_SOURCE
+        out["canonical_status"] = "OK"
+        out["active_profile"] = canonical.get("profile", {}).get("name") if isinstance(canonical.get("profile"), dict) else profile
+        out["manual_only"] = True
+        out["canonical_decision"] = found
+        out["legacy_diagnostics_role"] = "explanatory_non_authoritative"
+    except Exception:
+        # Fail-closed: never claim canonical authority on this symbol when the
+        # canonical computation fails.
+        out["decision_source"] = CANONICAL_UNAVAILABLE_SOURCE
+        out["canonical_status"] = "UNAVAILABLE"
+        out["active_profile"] = profile
+        out["manual_only"] = True
+        out["canonical_decision"] = None
+        out["reason_codes"] = ["CANONICAL_ENGINE_UNAVAILABLE"]
+        out["legacy_diagnostics_role"] = "explanatory_non_authoritative"
+
+
 @router.get("/symbol-diagnostics")
 def ui_symbol_diagnostics(
     symbol: str = Query(..., min_length=1, max_length=12),
     run_id: str | None = Query(default=None, description="Phase 11.2: Fetch from history for this run; fallback to latest if missing"),
     recompute: int = Query(0, description="1 to run single-symbol eval and update store"),
+    profile: str = Query("balanced", description="R34.0: active strategy profile for the canonical decision"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
     """Store-first symbol diagnostics. run_id: try history first. recompute=1: run eval, update store."""
@@ -6423,6 +6647,7 @@ def ui_symbol_diagnostics(
                 result["exact_run"] = True
                 result["run_id"] = (artifact.metadata or {}).get("run_id")
                 _enrich_diagnostics_with_options_lifecycle(result, sym_upper)
+                _attach_canonical_decision(result, artifact, sym_upper, profile)
                 return result
 
     from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
@@ -6452,6 +6677,7 @@ def ui_symbol_diagnostics(
             out["exact_run"] = False
             out["run_id"] = None
         _enrich_diagnostics_with_options_lifecycle(out, sym_upper)
+        _attach_canonical_decision(out, artifact, sym_upper, profile)
         return out
 
     # Symbol not in store — 404 (no legacy path; use recompute=1 to add symbol)

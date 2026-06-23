@@ -302,13 +302,17 @@ class OratsOptionsChainProvider:
             elapsed_ms = (time.monotonic() - start) * 1000
             return {"ok": True, "message": f"ORATS OK ({elapsed_ms:.0f}ms)", "response_time_ms": elapsed_ms}
         except OratsAuthError as e:
+            from app.core.security.redact import redact_secrets
             elapsed_ms = (time.monotonic() - start) * 1000
-            logger.warning("ORATS healthcheck auth failed: %s", e)
-            return {"ok": False, "message": f"ORATS auth failed: {e}", "response_time_ms": elapsed_ms}
+            safe = redact_secrets(str(e))
+            logger.warning("ORATS healthcheck auth failed: %s", safe)
+            return {"ok": False, "message": f"ORATS auth failed: {safe}", "response_time_ms": elapsed_ms}
         except Exception as e:
+            from app.core.security.redact import redact_secrets
             elapsed_ms = (time.monotonic() - start) * 1000
-            logger.warning("ORATS healthcheck failed: %s", e)
-            return {"ok": False, "message": str(e), "response_time_ms": elapsed_ms}
+            safe = redact_secrets(str(e))
+            logger.warning("ORATS healthcheck failed: %s", safe)
+            return {"ok": False, "message": safe, "response_time_ms": elapsed_ms}
 
     def clear_cache(self) -> None:
         self._expiration_cache.clear()

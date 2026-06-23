@@ -81,8 +81,8 @@ class OratsDailyProvider:
         if self._token:
             return self._token
         try:
-            from app.core.config.orats_secrets import ORATS_API_TOKEN
-            t = (ORATS_API_TOKEN or "").strip()
+            from app.core.config.orats_secrets import get_orats_token
+            t = (get_orats_token() or "").strip()
             if not t:
                 raise ValueError("ORATS_API_TOKEN is missing or empty")
             return t
@@ -155,20 +155,23 @@ class OratsDailyProvider:
         try:
             resp = requests.get(url, params=params, timeout=self._timeout_sec)
         except requests.RequestException as e:
-            logger.error("[ORATS_DAILY] symbol=%s request failed: %s", sym, e)
+            from app.core.security.redact import redact_secrets
+            logger.error("[ORATS_DAILY] symbol=%s request failed: %s", sym, redact_secrets(e))
             return []
 
         if resp.status_code != 200:
+            from app.core.security.redact import redact_secrets
             logger.error(
                 "[ORATS_DAILY] symbol=%s HTTP %s %s",
-                sym, resp.status_code, (resp.text or "")[:300],
+                sym, resp.status_code, redact_secrets((resp.text or "")[:300]),
             )
             return []
 
         try:
             raw: Any = resp.json()
         except Exception as e:
-            logger.error("[ORATS_DAILY] symbol=%s invalid JSON: %s", sym, e)
+            from app.core.security.redact import redact_secrets
+            logger.error("[ORATS_DAILY] symbol=%s invalid JSON: %s", sym, redact_secrets(e))
             return []
 
         rows: List[Dict[str, Any]] = []

@@ -34,6 +34,36 @@ from app.core.options.chain_provider import (
 logger = logging.getLogger(__name__)
 
 
+def _provider_safe_error(
+    exc: BaseException,
+    *,
+    endpoint: Optional[str] = None,
+) -> str:
+    """Credential-safe provider error text for logs and returned results."""
+    from app.core.security.redact import safe_provider_error
+
+    return safe_provider_error(
+        endpoint=endpoint or getattr(exc, "endpoint", None),
+        http_status=getattr(exc, "http_status", None),
+        detail=exc,
+    )
+
+
+def _sanitize_diag(value: Any) -> Any:
+    """Recursively redact credential-bearing strings in diagnostic payloads."""
+    from app.core.security.redact import redact_secrets
+
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return {k: _sanitize_diag(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_diag(v) for v in value]
+    if isinstance(value, str):
+        return redact_secrets(value)
+    return value
+
+
 def normalize_put_call(raw: Any) -> Optional[OptionType]:
     """
     Normalize raw put/call string to OptionType. Handles case and common variants.
@@ -195,9 +225,20 @@ class OratsChainProvider:
                 symbol, dte_min=dte_min, dte_max=dte_max, chain_mode="DELAYED"
             )
         except Exception as e:
-            logger.warning("[ORATS_CHAIN] DELAYED expirations failed for %s: %s", symbol, e)
+            safe = _provider_safe_error(e, endpoint="delayed/strikes")
+            logger.warning(
+                "[ORATS_CHAIN] DELAYED expirations failed for %s: %s", symbol, safe
+            )
             return []
-        if err or not base_contracts:
+        if err:
+            from app.core.security.redact import safe_provider_error
+
+            safe = safe_provider_error(endpoint="delayed/strikes", detail=err)
+            logger.warning(
+                "[ORATS_CHAIN] DELAYED expirations empty for %s: %s", symbol, safe
+            )
+            return []
+        if not base_contracts:
             return []
         today = date.today()
         expirations_map: Dict[date, int] = defaultdict(int)
@@ -226,7 +267,10 @@ class OratsChainProvider:
         try:
             strikes = get_orats_live_strikes(symbol)
         except OratsUnavailableError as e:
-            logger.warning("[ORATS_CHAIN] Failed to get expirations for %s: %s", symbol, e)
+            safe = _provider_safe_error(e, endpoint="live/strikes")
+            logger.warning(
+                "[ORATS_CHAIN] Failed to get expirations for %s: %s", symbol, safe
+            )
             return []
         
         if not strikes:
@@ -298,9 +342,10 @@ class OratsChainProvider:
         try:
             all_strikes = get_orats_live_strikes(symbol)
         except OratsUnavailableError as e:
+            safe = _provider_safe_error(e, endpoint="live/strikes")
             result = ChainProviderResult(
                 success=False,
-                error=f"Failed to fetch strikes: {e}",
+                error=safe,
                 data_quality=DataQuality.ERROR,
             )
             return result
@@ -435,10 +480,16 @@ class OratsChainProvider:
                     if self._use_cache and result.success:
                         self._cache.set(symbol, exp, result)
                 except Exception as e:
-                    logger.exception("[ORATS_CHAIN] Error fetching chain for %s %s: %s", symbol, exp, e)
+                    safe = _provider_safe_error(e, endpoint="live/chain")
+                    logger.warning(
+                        "[ORATS_CHAIN] Error fetching chain for %s %s: %s",
+                        symbol,
+                        exp,
+                        safe,
+                    )
                     results[exp] = ChainProviderResult(
                         success=False,
-                        error=str(e),
+                        error=safe,
                         data_quality=DataQuality.ERROR,
                     )
         return results
@@ -461,13 +512,27 @@ class OratsChainProvider:
                 delta_lo=delta_lo, delta_hi=delta_hi, strategy_mode=strategy_mode,
             )
         except Exception as e:
-            logger.warning("[ORATS_CHAIN] DELAYED pipeline failed for %s: %s", symbol, e)
-            return {exp: ChainProviderResult(success=False, error=str(e), data_quality=DataQuality.ERROR) for exp in expirations}
-        if chain_result.error or not chain_result.contracts:
-            err = chain_result.error or "No contracts"
-            stage2_trace_err = getattr(chain_result, "stage2_trace", None)
+            safe = _provider_safe_error(e, endpoint="delayed/pipeline")
+            logger.warning("[ORATS_CHAIN] DELAYED pipeline failed for %s: %s", symbol, safe)
             return {
-                exp: ChainProviderResult(success=False, error=err, data_quality=DataQuality.MISSING, stage2_trace=stage2_trace_err)
+                exp: ChainProviderResult(success=False, error=safe, data_quality=DataQuality.ERROR)
+                for exp in expirations
+            }
+        if chain_result.error or not chain_result.contracts:
+            from app.core.security.redact import safe_provider_error
+
+            err = safe_provider_error(
+                endpoint="delayed/pipeline",
+                detail=chain_result.error or "No contracts",
+            )
+            stage2_trace_err = _sanitize_diag(getattr(chain_result, "stage2_trace", None))
+            return {
+                exp: ChainProviderResult(
+                    success=False,
+                    error=err,
+                    data_quality=DataQuality.MISSING,
+                    stage2_trace=stage2_trace_err,
+                )
                 for exp in expirations
             }
         exp_set = set(expirations)
@@ -486,8 +551,12 @@ class OratsChainProvider:
                     data_quality=DataQuality.MISSING,
                 )
                 continue
-            telemetry = getattr(chain_result, "strikes_options_telemetry", None) if chain_result else None
-            stage2_trace = getattr(chain_result, "stage2_trace", None) if chain_result else None
+            telemetry = _sanitize_diag(
+                getattr(chain_result, "strikes_options_telemetry", None) if chain_result else None
+            )
+            stage2_trace = _sanitize_diag(
+                getattr(chain_result, "stage2_trace", None) if chain_result else None
+            )
             option_contracts = [self._enriched_to_option_contract(ec, symbol) for ec in contracts_list]
             for oc in option_contracts:
                 oc.compute_derived_fields()

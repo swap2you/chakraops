@@ -967,6 +967,115 @@ No code, UI, ORATS, scheduler, database, runtime, brokerage, deployment, or work
 
 ---
 
+### R31.0 — Repository, product, and live-data baseline audit (program R31–R35, milestone 1)
+
+- [x] Requirements — R31.0_requirements.md
+- [x] Release notes — R31.0_release_notes.md
+- [x] Baseline audit — docs/master/R31.0_REPOSITORY_PRODUCT_BASELINE_AUDIT.md
+- [x] Defect/gap register — docs/master/R31.0_DEFECT_AND_GAP_REGISTER.md
+- [x] Execution blueprint — docs/master/R31.0_EXECUTION_BLUEPRINT.md
+- [x] Gate — Backend: 1018 passed / 2 skipped in 259.79s; Frontend: 308 passed / 18 skipped; Build: passed (tsc -b clean, vite 9.56s). Evidence: out/verification/R31.0/notes.md.
+- [x] ORATS read-only smoke — probe_orats_live("SPY") HTTP 200, redacted. Evidence: out/verification/R31.0/orats_smoke.md.
+- [ ] Review — Claude Code architecture review (Level 2); Codex independent review (pending)
+- [ ] Release sign-off — single program PR (after R35.0), operator merge + tag
+
+**Scope:** Read-only repository/product/live-data baseline audit and R32–R35 execution blueprint only. No source, test, runtime, scheduler, database, or workflow changes. Committed as milestone 1 on `release/R31-R35-program`.
+
+**Note:** Program runs on one branch (`release/R31-R35-program`) with five milestone commits and one final PR; no per-milestone merge/tag. Open: D-1 (R30.8 disposition), C-1 (committed ORATS token → rotate out-of-band, fix in R32.0).
+
+---
+
+### R32.0 — Market data / earnings / universe / freshness (program R31–R35, milestone 2) — COMPLETE
+
+- [x] Requirements — R32.0_requirements.md
+- [x] Release notes — R32.0_release_notes.md
+- [x] C-1 ORATS secret remediation — env-only token; no hardcoded value; loud missing-token error; redaction; `.env.example` + gitignore verified; `tests/test_r320_orats_secret_env_only.py`
+- [x] Codex governance blocker remediated — RELEASE_PACKET.md exact authorized paths (committed + remaining scope); generic domains removed
+- [x] Claude non-blocking notes — consumers migrated to `get_orats_token()`; runtime.yaml token field removed; `tests/test_r320_missing_token_startup.py`
+- [x] Deterministic weekly universe refresh + history/reasons (M-4) — `weekly_refresh.py` + `refresh_history_store.py` (append-only JSONL; no DB migration)
+- [x] Macro/earnings event-calendar explicit-available/unavailable state (H-4) — `event_calendar_status.py`
+- [x] Freshness timestamps + stale-data blocking (M-10) — `freshness.py` `stale_data_gate`
+- [x] Provider health / cache / retry / rate-limit / failure classification + read-only contract validation — `provider_health.py`; read-only API `data_reliability_routes.py`; frontend query contract
+- [x] Gate — Backend: 1064 passed / 3 skipped; Frontend: 311 passed / 18 skipped; Build: passed (vite 10.04s). Evidence: out/verification/R32.0/notes.md.
+- [x] ORATS read-only smoke (env-only) — HTTP 200 / 6939 rows, redacted. Evidence: out/verification/R32.0/orats_smoke.md.
+- [x] Secret regression scan — clean (no token literal; runtime.yaml api_token field removed). Evidence: out/verification/R32.0/secret_scan.md.
+- [x] Review / sign-off — Claude APPROVED WITH NON-BLOCKING NOTES (notes closed in `fix(R32.0): close ORATS review findings`, 049cb2f). Codex review PENDING (quota exhausted; no Codex approval claimed).
+
+**Scope:** Delivered C-1 plus the full R32.0 data-reliability scope on `release/R31-R35-program`, gate-verified. Added the R34 persistence-decision guardrail (no DB migration in R32). No silent fallback; ORATS remains the sole provider.
+
+---
+
+### R33.0 — Decision engine / strategy profiles / risk correctness (program R31–R35, milestone 3) — IMPLEMENTED (Claude BLOCKED on live cutover; H-5 → R34)
+
+- [x] Requirements — R33.0_requirements.md
+- [x] Release notes — R33.0_release_notes.md
+- [x] Packet normalized with exact authorized paths (generic domains removed; additional-path-requires-approval retained)
+- [x] Canonical profile config source (Conservative/Balanced/Aggressive/Custom) — `app/core/decision_engine/profiles.py` + `config/strategy_profiles.yaml` (M-8)
+- [x] Canonical decision input/output contract — `app/core/decision_engine/contract.py`
+- [x] Eligibility + safety gates incl. R32 `stale_data_gate` wired into the canonical engine's actionable paths — `gates.py`
+- [x] CSP/CC/share-buy eligibility + deterministic scoring + stay-in-cash — `strategies.py`
+- [x] Portfolio-aware sizing + mandatory risk invariants (no uncovered CC, no over-reserved CSP, no impossible quantity, no action on stale/missing data, no auto orders) — `sizing.py`
+- [x] Deterministic ranking + tie-break + top 5–7 + blocked/watch/cash separation — `ranking.py`
+- [x] Read-only advisory API (`/api/ui/decision-engine/profiles`, `/evaluate`) + frontend query contract
+- [x] Tests — golden vectors, profile matrix, boundary, invariants, ranking, stale/missing-data, API contract, backward-compat (11 backend files + 1 frontend); R34 backtest fixtures (no performance claims)
+- [x] Gate — Backend: 1127 passed / 3 skipped; Frontend: 313 passed / 18 skipped; Build: passed (vite ~7.1s). Evidence: out/verification/R33.0/notes.md.
+- [ ] Review / sign-off — Claude **BLOCKED** (engine not yet authoritative live path; H-5 → R34). Codex PENDING (quota; no approval claimed).
+
+**Scope:** One canonical, profile-driven, portfolio-aware ADVISORY decision engine on `release/R31-R35-program`, gate-verified and tested. Manual-only; no order routing; no silent fallback. **Live cutover NOT done in R33: the legacy evaluator/ranking stack still drives Dashboard/Today/Symbol-Diagnostics/`/api/ui/action-needed`. H-5 remains OPEN and is owned by R34.**
+
+---
+
+### R34.0 — Canonical live cutover + consolidated R32–R34 blocker remediation (program R31–R35, milestone 4) — COMPLETE (pending final external validation)
+
+- [x] Phase 0 — corrected R33 overclaims, recorded Claude BLOCKED, reassigned H-5 to R34 (commit c82b353)
+- [x] Requirements — `R34.0_requirements.md`; Release notes — `R34.0_release_notes.md`
+- [x] Packet normalized with exact live-cutover paths (repository inspection)
+- [x] Canonical→live adapter — `app/core/decision_engine/legacy_adapter.py` (no FAIL_/WARN_)
+- [x] Canonical live service — `app/core/decision_engine/live_service.py` (inputs from persisted v2 artifact; in-process; no ORATS/no fallback in request path)
+- [x] `/api/ui/action-needed` authoritative `authoritative_recommendations` + `capital_safety` + `decision_source` + `active_profile`; legacy `legacy_lists_role=diagnostic_non_authoritative`
+- [x] Symbol Diagnostics `canonical_decision` + `decision_source`; Today summary `decision_source`
+- [x] R32 `stale_data_gate` enforced on the live actionable path (no ACTIONABLE on stale/missing data)
+- [x] `profile_overrides`/invalid profile → HTTP 422
+- [x] Recommendation-set capital safety (per-suggestion-not-additive, total + deployable, over-capital warning, no assumed leverage)
+- [x] Frontend authoritative types + `useActionNeeded(profile?)`
+- [x] Persistence decision (RETAIN; no migration) — `docs/ai/releases/R34.0/persistence_decision.md`
+- [x] Tests — `test_r340_live_cutover.py`, `test_r340_profile_overrides_422.py`, `queries.liveDecision.test.tsx`
+- [x] Consolidated review recorded — Codex R32–R34 **BLOCKED**; Claude APPROVED-WITH-NOTES (narrow API only); Cowork PASS-WITH-NOTES (narrow API only)
+- [x] Phase 1 — operational weekly universe refresh (`weekly_refresh.apply_weekly_universe_refresh`, atomic overlay `apply_effective_universe`; admin `POST /api/ui/universe/weekly-refresh/apply`; idempotent/atomic) — `test_r340_weekly_refresh_operational.py`
+- [x] Phase 2 — ORATS credential log redaction (`app/core/security/redact.py` wired through ORATS request/log/exception + data-health/boot/503) — `test_r340_orats_log_redaction.py` (FAKE token)
+- [x] Phase 3 — fail-closed canonical computation (`ui_action_needed`, `_attach_canonical_decision`, `/api/view/daily-overview`; no false canonical authority; reason codes) — `test_r340_canonical_failclosed.py`
+- [x] Phase 4 — missing-cash/sector safety (no equity→cash inference; cash-strategies blocked when cash unknown; sector unavailability flagged) — `test_r340_missing_cash_sector.py`
+- [x] Final Phase 1 — **transaction-safe** weekly refresh (cross-process lock `app/core/universe/refresh_lock.py`; atomic overlay/history writes flush+fsync+`os.replace`; journal recovery; `WeeklyRefreshCriticalError`; admin route controlled status) — `test_r340_weekly_refresh_transaction.py`
+- [x] Final Phase 2 — **complete** ORATS redaction (sanitized at exception construction; `RequestException` wrapped `from None`, no bare token rethrow; bodies/snippets/headers/diagnostics/boot-probe/HTTP errors redacted) — `test_r340_orats_redaction_complete.py`; secret scan 0 hits
+- [x] Final Phase 3 — **live sector enforcement** (symbol→sector + exposure from portfolio; profile caps; BLOCK incremental CSP/share-buy when sector unavailable; existing-share CC flagged `SECTOR_DATA_UNAVAILABLE_EXISTING_POSITION`) — `test_r340_sector_enforcement.py`
+- [x] Final Phase 4 — **rendered** canonical cutover (Dashboard/Today render `AuthoritativeRecommendations` primary; legacy demoted to collapsed diagnostics) — `DashboardPage.canonical.test.tsx`, `TodayPage.canonical.test.tsx`
+- [x] Final Phase 5 — Symbol Diagnostics canonical primary + NOT-EVALUATED/Recompute empty state (backend `_canonical_decision_for_symbol`; no raw codes) — `SymbolDiagnosticsPage.canonical.test.tsx`
+- [x] Final Phase 6 — shared-table `<tr>` DOM fix (`Table.tsx`) — `Table.dom.test.tsx`; Backtest SIMULATION label — `BacktestPage.simulation.test.tsx`; positions pagination — `PositionsPage.test.tsx`; nav grouping — `Sidebar.test.tsx`
+- [x] Gate (final) — Backend 1200 passed/1 skipped; Frontend 334 passed/18 skipped; Build PASS; secret scan 0 hits. Evidence: `out/verification/R34.0/`
+- [x] H-5 — **CLOSED** after rendered-UI cutover page tests passed
+- [ ] Review / sign-off — final Codex re-review + Claude re-review + real-browser Cowork UAT pending; no approvals claimed
+
+**Scope:** R34.0 COMPLETE — transaction-safe weekly refresh, complete ORATS application-path redaction, live sector enforcement, rendered canonical cutover (Dashboard/Today/Symbol), shared-table DOM fix, SIMULATION label, navigation grouping, positions pagination; all gate-verified. Manual-only; no order routing; no broker; no silent fallback. **H-5 CLOSED.** Post-R35 enhancements (drag-and-drop, broad redesign, physical legacy-module deletion, bundle architecture, multi-user DB) explicitly out of scope. Awaiting final Claude/Codex/Cowork validation before R35.0.
+
+---
+
+### R35.0 — Operations, scheduling, recovery, UAT, release readiness (program R31–R35, milestone 5) — IMPLEMENTED
+
+- [x] Phase 0 — authorization `e20ccee`
+- [x] Requirements — `R35.0_requirements.md`; Release notes — `R35.0_release_notes.md`
+- [x] Canonical job registry (8 jobs) + job run store + executor
+- [x] Unified scheduler (disabled-by-default) + legacy scheduler gate
+- [x] Notifications dedupe + backup/restore + retention
+- [x] Operations API + System Diagnostics ops panel
+- [x] Windows startup/shutdown scripts + runbooks
+- [x] Final handoff pack — `docs/ai/FINAL_*_R31_R35.md`
+- [x] Gate — Backend 1248 passed/3 skipped; Frontend 335 passed/18 skipped; Build PASS. Evidence: `out/verification/R35.0/`
+- [ ] Review / sign-off — Claude, Codex, Cowork operational UAT pending; single final PR after operator approval
+
+**Scope:** Operational readiness for daily personal use. Schedules disabled by default. No broker execution. Manual-only advisory decisions. Final program handoff for R31–R35.
+
+---
+
 ### R22.8 — Offline Proof Harness (after-hours) + Golden Verification
 
 *Superseded by R25.1 (same harness delivered there).*

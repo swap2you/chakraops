@@ -87,10 +87,12 @@ class OratsEquityQuoteError(Exception):
         endpoint: str = "",
         tickers: str = "",
     ) -> None:
+        from app.core.security.redact import redact_secrets
+
         self.http_status = http_status
         self.endpoint = endpoint
         self.tickers = tickers
-        super().__init__(message)
+        super().__init__(redact_secrets(message))
 
 
 # ============================================================================
@@ -262,8 +264,8 @@ def reset_run_cache() -> None:
 
 def _get_orats_token() -> str:
     """Get ORATS API token from config."""
-    from app.core.config.orats_secrets import ORATS_API_TOKEN
-    return ORATS_API_TOKEN
+    from app.core.config.orats_secrets import get_orats_token
+    return get_orats_token()
 
 
 def _extract_rows(raw: Any) -> List[Dict[str, Any]]:
@@ -400,13 +402,15 @@ def _fetch_equity_quotes_single_batch(tickers: List[str]) -> Dict[str, EquityQuo
     try:
         r = requests.get(url, params=params, timeout=TIMEOUT_SEC)
     except requests.RequestException as e:
+        from app.core.security.redact import redact_secrets
         latency_ms = int((time.perf_counter() - t0) * 1000)
+        safe_err = redact_secrets(e)
         logger.error(
             "[ORATS_EQ_REQ] FAIL tickers=%s latency_ms=%d error=%s",
-            tickers[:3], latency_ms, e
+            tickers[:3], latency_ms, safe_err
         )
         raise OratsEquityQuoteError(
-            f"Request failed: {e}",
+            f"Request failed: {safe_err}",
             endpoint=ORATS_STRIKES_OPTIONS_PATH,
             tickers=tickers_param[:100],
         )
@@ -414,12 +418,14 @@ def _fetch_equity_quotes_single_batch(tickers: List[str]) -> Dict[str, EquityQuo
     latency_ms = int((time.perf_counter() - t0) * 1000)
     
     if r.status_code != 200:
+        from app.core.security.redact import redact_secrets
+        safe_body = redact_secrets(r.text[:200])
         logger.error(
             "[ORATS_EQ_REQ] HTTP %d tickers=%s latency_ms=%d response=%s",
-            r.status_code, tickers[:3], latency_ms, r.text[:200]
+            r.status_code, tickers[:3], latency_ms, safe_body
         )
         raise OratsEquityQuoteError(
-            f"HTTP {r.status_code}: {r.text[:200]}",
+            f"HTTP {r.status_code}: {safe_body}",
             http_status=r.status_code,
             endpoint=ORATS_STRIKES_OPTIONS_PATH,
             tickers=tickers_param[:100],
@@ -730,10 +736,12 @@ def _fetch_iv_ranks_single_batch(tickers: List[str]) -> Dict[str, IVRankData]:
     try:
         r = requests.get(url, params=params, timeout=TIMEOUT_SEC)
     except requests.RequestException as e:
+        from app.core.security.redact import redact_secrets
         latency_ms = int((time.perf_counter() - t0) * 1000)
-        logger.error("[ORATS_IVRANK_REQ] FAIL ticker=%s latency_ms=%d error=%s", tickers[:3], latency_ms, e)
+        safe_err = redact_secrets(e)
+        logger.error("[ORATS_IVRANK_REQ] FAIL ticker=%s latency_ms=%d error=%s", tickers[:3], latency_ms, safe_err)
         raise OratsEquityQuoteError(
-            f"Request failed: {e}",
+            f"Request failed: {safe_err}",
             endpoint=ORATS_IVRANK_PATH,
             tickers=tickers_param[:100],
         )
@@ -741,12 +749,14 @@ def _fetch_iv_ranks_single_batch(tickers: List[str]) -> Dict[str, IVRankData]:
     latency_ms = int((time.perf_counter() - t0) * 1000)
     
     if r.status_code != 200:
+        from app.core.security.redact import redact_secrets
+        safe_body = redact_secrets(r.text[:200])
         logger.error(
             "[ORATS_IVRANK_REQ] HTTP %d ticker=%s latency_ms=%d response=%s",
-            r.status_code, tickers[:3], latency_ms, r.text[:200]
+            r.status_code, tickers[:3], latency_ms, safe_body
         )
         raise OratsEquityQuoteError(
-            f"HTTP {r.status_code}: {r.text[:200]}",
+            f"HTTP {r.status_code}: {safe_body}",
             http_status=r.status_code,
             endpoint=ORATS_IVRANK_PATH,
             tickers=tickers_param[:100],

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import List
 
@@ -108,8 +108,47 @@ def should_run_eod_chain_today(et_date: date) -> bool:
     return is_market_open_today(et_date)
 
 
+def run_eod_chain_snapshot_job(*, tz_name: str = "America/New_York") -> dict:
+    """Job-safe entry: resolve today's ET date, universe symbols, and run snapshot."""
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        from backports.zoneinfo import ZoneInfo  # type: ignore
+
+    from app.api.data_health import UNIVERSE_SYMBOLS
+
+    today_et = datetime.now(ZoneInfo(tz_name)).date()
+    if not should_run_eod_chain_today(today_et):
+        return {
+            "skipped": True,
+            "skipped_reason": "NON_TRADING_DAY",
+            "skipped_count": 0,
+            "written_count": 0,
+            "error_count": 0,
+        }
+    symbols = list(UNIVERSE_SYMBOLS) if UNIVERSE_SYMBOLS else []
+    if not symbols:
+        return {
+            "skipped": True,
+            "skipped_reason": "EMPTY_UNIVERSE",
+            "skipped_count": 0,
+            "written_count": 0,
+            "error_count": 0,
+        }
+    raw = run_eod_chain_snapshot(today_et, symbols)
+    return {
+        "skipped": False,
+        "skipped_reason": None,
+        "skipped_count": int(raw.get("skipped", 0)),
+        "written_count": int(raw.get("written", 0)),
+        "error_count": int(raw.get("errors", 0)),
+        "path": raw.get("path"),
+    }
+
+
 __all__ = [
     "get_eod_chain_dir",
     "run_eod_chain_snapshot",
+    "run_eod_chain_snapshot_job",
     "should_run_eod_chain_today",
 ]

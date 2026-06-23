@@ -175,4 +175,31 @@ def compute_system_health(
     return snapshot
 
 
-__all__ = ["SystemHealthSnapshot", "compute_system_health"]
+def operations_health_snapshot() -> dict:
+    """Lightweight operations fields for system health / diagnostics UI."""
+    try:
+        from app.core.operations.scheduler_service import scheduler_status
+        from app.core.operations.backup_service import list_backups
+        from app.core.config.orats_secrets import get_orats_token
+
+        sched = scheduler_status()
+        backups = list_backups()
+        failed = [
+            r for r in (sched.get("recent_runs") or [])
+            if r.get("state") in ("FAILED", "TIMED_OUT")
+        ]
+        return {
+            "scheduler_master_enabled": sched.get("master_enabled"),
+            "scheduler_running": sched.get("running"),
+            "jobs_registered": len(sched.get("jobs") or []),
+            "jobs_enabled": sum(1 for j in (sched.get("jobs") or []) if j.get("enabled")),
+            "recent_failed_runs": len(failed),
+            "backup_count": len(backups),
+            "latest_backup_at": (backups[0].get("created_at") if backups else None),
+            "orats_token_present": bool(get_orats_token()),
+        }
+    except Exception:
+        return {"scheduler_master_enabled": False, "scheduler_running": False}
+
+
+__all__ = ["SystemHealthSnapshot", "compute_system_health", "operations_health_snapshot"]

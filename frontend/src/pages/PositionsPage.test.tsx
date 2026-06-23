@@ -199,6 +199,31 @@ describe("PositionsPage", () => {
     expect(screen.getAllByTestId("positions-link-paper").length).toBeGreaterThanOrEqual(1);
   });
 
+  it("R34.0: paginates large position sets (bounded rows + controls)", async () => {
+    const many = Array.from({ length: 120 }, (_, i) => ({
+      ...mockPositions[0],
+      id: `row_${i}`,
+      symbol: `S${i}`,
+    }));
+    mockUseUnifiedPositionsFromDb.mockReturnValue({
+      data: { items: many, count: many.length, status: "OK", status_label: "OK" },
+      isLoading: false,
+      isError: false,
+    });
+    renderWithRoute(<PositionsPage />, "/positions?source=db");
+    expect(screen.getAllByTestId("positions-row").length).toBe(50);
+    expect(screen.getByTestId("positions-pagination")).toBeInTheDocument();
+    expect(screen.getByTestId("positions-pagination-page")).toHaveTextContent(/Page 1 of 3/);
+    await userEvent.click(screen.getByTestId("positions-pagination-next"));
+    expect(screen.getByTestId("positions-pagination-page")).toHaveTextContent(/Page 2 of 3/);
+    expect(screen.getAllByTestId("positions-row").length).toBe(50);
+  });
+
+  it("R34.0: no pagination control for small position sets", () => {
+    renderWithRoute(<PositionsPage />, "/positions?source=db");
+    expect(screen.queryByTestId("positions-pagination")).not.toBeInTheDocument();
+  });
+
   it("shows Mark/Unrealized for paper row when API provides mark_value and unrealized_pl", () => {
     const { container } = render(<PositionsPage />);
     expect(container.textContent).toMatch(/4\.25/);

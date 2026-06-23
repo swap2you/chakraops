@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # ORATS live smoke test. Usage: python scripts/orats_smoke.py SPY
 # Exit 0 = PASS, 1 = FAIL. Prints endpoint, HTTP status, row count, sample keys, FINAL VERDICT.
-# Token from app.core.config.orats_secrets (hardcoded, private mode).
+# Token from environment only (ORATS_API_TOKEN / ORATS_API_KEY); see .env.example. Never hardcoded.
 
 import sys
 from pathlib import Path

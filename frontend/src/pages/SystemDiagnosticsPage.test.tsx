@@ -99,9 +99,17 @@ const mockIntegrityData = {
 
 const mockEarningsDebug = { status: "OK", next_date: "2026-03-15", days: 14, implied_move_pct: 5.2, as_of: "2026-02-27T12:00:00Z" };
 const mockUseEarningsDebug = vi.fn(() => ({ data: mockEarningsDebug }));
+const mockUseOperationsStatus = vi.fn(() => ({
+  data: {
+    scheduler: { master_enabled: false, jobs: [] },
+    orats_token_present: true,
+    backup: { latest: null, count: 0 },
+  },
+}));
 
 vi.mock("@/api/queries", () => ({
   useUiSystemHealth: (...args: unknown[]) => mockUseUiSystemHealth(...args),
+  useOperationsStatus: (...args: unknown[]) => mockUseOperationsStatus(...args),
   useEarningsDebug: (symbol: string) => mockUseEarningsDebug(symbol),
   useDiagnosticsHistory: () => ({ data: mockHistory }),
   useRunDiagnostics: () => ({

@@ -21,6 +21,7 @@ import {
 } from "@/api/queries";
 import type { ActionNeededItem } from "@/api/queries";
 import { PageHeader } from "@/components/PageHeader";
+import { AuthoritativeRecommendations } from "@/components/AuthoritativeRecommendations";
 import { Card, CardHeader, Button, Badge } from "@/components/ui";
 import { constraintToLabel } from "@/utils/sizingConstraints";
 
@@ -108,7 +109,7 @@ export function TodayPage() {
   const [doneToday, setDoneToday] = useState<{ symbol: string; date: string }[]>(() => loadDoneToday());
 
   const { data: summary, isLoading: summaryLoading } = useTodaySummary();
-  const { data: actionNeeded } = useActionNeeded();
+  const { data: actionNeeded, isLoading: actionNeededLoading, isError: actionNeededError } = useActionNeeded();
   const runEval = useRunEval();
   const { data: eodChecklist } = useOpsChecklist("EOD", today);
   const { data: eodSummary } = useOpsEodSummary(today);
@@ -284,9 +285,20 @@ export function TodayPage() {
         </div>
       </Card>
 
-      {/* B) Action Needed */}
-      <Card data-testid="today-action-needed-card">
-        <CardHeader title="Action Needed" description="Top options and shares; add to ticket queue." />
+      {/* B) R34.0 (H-5 cutover): canonical authoritative recommendation is PRIMARY. */}
+      <AuthoritativeRecommendations
+        data={actionNeeded}
+        isLoading={actionNeededLoading}
+        isError={actionNeededError}
+        providerHealth={{ label: summary?.orats_status, ok: summary?.orats_status === "OK" }}
+      />
+      {/* R34.0: legacy options/shares list is NON-authoritative diagnostics only. */}
+      <details data-testid="today-legacy-diagnostics">
+        <summary className="cursor-pointer text-sm font-medium text-zinc-500 dark:text-zinc-400">
+          Diagnostics — non-authoritative legacy output
+        </summary>
+      <Card data-testid="today-action-needed-card" className="mt-2">
+        <CardHeader title="Action Needed (legacy diagnostics)" description="Non-authoritative. Superseded by the canonical recommendations above; queue actions remain here." />
         <div className="space-y-1.5">
           {allOptions.length === 0 ? (
             <p className="text-xs text-zinc-500">No actions.</p>
@@ -344,6 +356,7 @@ export function TodayPage() {
           )}
         </div>
       </Card>
+      </details>
 
       {/* C) Trade Ticket queue */}
       <Card data-testid="today-queue-card">

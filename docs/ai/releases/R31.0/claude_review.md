@@ -1,27 +1,23 @@
-# Claude Code Review Instructions — R31.0
+# CLAUDE REVIEW — R31.0
 
-## Command
+Trigger: `CLAUDE REVIEW R31.0`
 
-```
-CLAUDE REVIEW R31.0
-```
+Read-only review.
 
-## Role
+Verify:
+- architecture and scope alignment
+- coupling and simplification
+- risk controls
+- data-contract correctness
+- implementation completeness
+- test and evidence coverage
+- no auto-trading or broker writes
+- no silent fallback
+- exact changed-file set
 
-Read-only architecture and product audit review. Verify audit coverage, identify roadmap gaps, and assess whether the audit documentation is complete and accurate.
+Return:
+- APPROVED
+- APPROVED WITH NON-BLOCKING NOTES
+- BLOCKED
 
-## Instructions
-
-1. Read `AGENTS.md` and `CLAUDE.md`.
-2. Read `docs/ai/releases/R31.0/RELEASE_PACKET.md` in full.
-3. Read all audit documents produced by Cursor.
-4. Evaluate:
-   - Is audit coverage complete across all domains?
-   - Are there architectural risks or debt not captured?
-   - Are there gaps between current state and the provisional R32–R40 roadmap?
-   - Does anything in the audit suggest the traveler roadmap needs reordering?
-5. Return verdict: **APPROVED** / **APPROVED WITH NOTES** / **BLOCKED** with findings.
-
-## Stop Point
-
-Do not implement. Do not modify any file. Do not update TOOL_LOG.md or STATUS.md. Do not commit. The operator copies the verdict into TOOL_LOG.md.
+Do not modify any file. Cursor or the operator records the verdict.

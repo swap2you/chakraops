@@ -275,9 +275,11 @@ def load_option_chain_liquidity(
         )
         
         if chain_result.error:
-            result.error = chain_result.error
+            from app.core.security.redact import redact_secrets
+
+            result.error = redact_secrets(chain_result.error)
             result.fetch_duration_ms = int((time.time() - start_time) * 1000)
-            logger.warning("[ORATS_CHAIN_LOADER] %s: pipeline error - %s", symbol.upper(), chain_result.error)
+            logger.warning("[ORATS_CHAIN_LOADER] %s: pipeline error - %s", symbol.upper(), result.error)
             return result
         
         result.underlying_price = chain_result.underlying_price
@@ -297,13 +299,26 @@ def load_option_chain_liquidity(
         )
         
     except (OratsOpraModeError, OratsChainError) as e:
-        result.error = str(e)
+        from app.core.security.redact import redact_secrets
+
+        result.error = redact_secrets(str(e))
         result.fetch_duration_ms = int((time.time() - start_time) * 1000)
-        logger.warning("[ORATS_CHAIN_LOADER] %s: pipeline failed - %s", symbol.upper(), e)
+        logger.warning(
+            "[ORATS_CHAIN_LOADER] %s: pipeline failed - %s",
+            symbol.upper(),
+            result.error,
+        )
     except Exception as e:
-        result.error = f"Unexpected error: {e}"
+        from app.core.security.redact import redact_secrets
+
+        safe = redact_secrets(str(e))
+        result.error = f"Unexpected error: {safe}"
         result.fetch_duration_ms = int((time.time() - start_time) * 1000)
-        logger.exception("[ORATS_CHAIN_LOADER] %s: unexpected error", symbol.upper())
+        logger.warning(
+            "[ORATS_CHAIN_LOADER] %s: unexpected error - %s",
+            symbol.upper(),
+            safe,
+        )
     
     return result
 

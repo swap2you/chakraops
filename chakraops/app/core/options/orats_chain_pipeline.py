@@ -396,8 +396,8 @@ def get_strikes_options_param_name() -> str:
 
 def _get_orats_token() -> str:
     """Get ORATS API token from config."""
-    from app.core.config.orats_secrets import ORATS_API_TOKEN
-    return ORATS_API_TOKEN
+    from app.core.config.orats_secrets import get_orats_token
+    return get_orats_token()
 
 
 def _redact_token(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -551,21 +551,24 @@ def fetch_base_chain(
     try:
         r = requests.get(url, params=params, timeout=TIMEOUT_SEC)
     except requests.RequestException as e:
+        from app.core.security.redact import redact_secrets
         latency_ms = int((time.perf_counter() - t0) * 1000)
+        safe_err = redact_secrets(e)
         logger.warning(
             "[ORATS_RESP] status=ERROR latency_ms=%d error=%s",
-            latency_ms, e
+            latency_ms, safe_err
         )
-        return [], None, f"Request failed: {e}", 0
+        return [], None, f"Request failed: {safe_err}", 0
     
     latency_ms = int((time.perf_counter() - t0) * 1000)
     
     if r.status_code != 200:
+        from app.core.security.redact import redact_secrets
         logger.warning(
             "[ORATS_RESP] status=%d latency_ms=%d rows=0 has_opra_fields=false",
             r.status_code, latency_ms
         )
-        return [], None, f"HTTP {r.status_code}: {r.text[:200]}", 0
+        return [], None, f"HTTP {r.status_code}: {redact_secrets(r.text[:200])}", 0
     
     try:
         raw = r.json()
@@ -852,10 +855,11 @@ def fetch_enriched_contracts(
         try:
             r = requests.get(url, params=params, timeout=TIMEOUT_SEC)
         except requests.RequestException as e:
+            from app.core.security.redact import redact_secrets
             latency_ms = int((time.perf_counter() - t0) * 1000)
             logger.warning(
                 "[ORATS_RESP] status=ERROR latency_ms=%d error=%s",
-                latency_ms, e
+                latency_ms, redact_secrets(e)
             )
             continue
         
@@ -1372,8 +1376,11 @@ def fetch_option_chain(
             "rejection_counts": {},  # Filled by evaluator when building contract_data
         }
     except Exception as e:
-        logger.warning("[CHAIN_PIPELINE] %s: stage2_trace build failed: %s", symbol.upper(), e)
-        result.stage2_trace = {"error": str(e), "message": "Trace build failed"}
+        from app.core.security.redact import redact_secrets
+
+        safe = redact_secrets(str(e))
+        logger.warning("[CHAIN_PIPELINE] %s: stage2_trace build failed: %s", symbol.upper(), safe)
+        result.stage2_trace = {"error": safe, "message": "Trace build failed"}
 
     # Merge trace fields into telemetry so diagnostics can show PUT-only request set
     if result.stage2_trace and isinstance(result.stage2_trace, dict):

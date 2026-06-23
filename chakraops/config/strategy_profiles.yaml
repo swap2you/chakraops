@@ -1,0 +1,75 @@
+# ChakraOps canonical strategy-profile configuration (R33.0).
+#
+# This is the SINGLE source of truth for strategy-profile parameters consumed by
+# app.core.decision_engine. Do not duplicate or hardcode these values elsewhere.
+# All values are advisory and manual-only; nothing here routes orders.
+#
+# Percent fields are whole-number percents (e.g. 30.0 == 30%).
+# Delta ranges are absolute option deltas in [0, 1]. DTE is calendar days.
+
+profiles:
+  conservative:
+    acceptable_regimes: [BULL, NEUTRAL]
+    csp_delta_range: [0.10, 0.20]
+    cc_delta_range: [0.10, 0.20]
+    dte_range: [30, 45]
+    min_return_pct: 1.5
+    earnings_blackout_days: 7
+    liquidity:
+      min_open_interest: 500
+      min_volume: 50
+      max_bid_ask_spread_pct: 5.0
+    max_position_allocation_pct: 5.0
+    max_symbol_exposure_pct: 10.0
+    max_sector_exposure_pct: 25.0
+    cash_buffer_pct: 30.0
+    actionable_min_score: 55.0
+    max_recommendations: 5
+    profit_management:
+      take_profit_pct: 50.0
+      roll_at_dte: 21
+
+  balanced:
+    acceptable_regimes: [BULL, NEUTRAL, VOLATILE]
+    csp_delta_range: [0.15, 0.30]
+    cc_delta_range: [0.15, 0.30]
+    dte_range: [21, 45]
+    min_return_pct: 1.0
+    earnings_blackout_days: 3
+    liquidity:
+      min_open_interest: 250
+      min_volume: 25
+      max_bid_ask_spread_pct: 8.0
+    max_position_allocation_pct: 10.0
+    max_symbol_exposure_pct: 20.0
+    max_sector_exposure_pct: 35.0
+    cash_buffer_pct: 20.0
+    actionable_min_score: 50.0
+    max_recommendations: 7
+    profit_management:
+      take_profit_pct: 50.0
+      roll_at_dte: 21
+
+  aggressive:
+    acceptable_regimes: [BULL, NEUTRAL, VOLATILE, BEAR]
+    csp_delta_range: [0.25, 0.45]
+    cc_delta_range: [0.25, 0.45]
+    dte_range: [7, 45]
+    min_return_pct: 0.5
+    earnings_blackout_days: 0
+    liquidity:
+      min_open_interest: 100
+      min_volume: 10
+      max_bid_ask_spread_pct: 12.0
+    max_position_allocation_pct: 20.0
+    max_symbol_exposure_pct: 35.0
+    max_sector_exposure_pct: 50.0
+    cash_buffer_pct: 10.0
+    actionable_min_score: 45.0
+    max_recommendations: 7
+    profit_management:
+      take_profit_pct: 65.0
+      roll_at_dte: 14
+
+# "custom" is not listed here: it is derived from `balanced` at load time and
+# then overlaid with operator-supplied overrides (validated identically).

@@ -65,9 +65,9 @@ def evaluate_universe(
     # R25.7: Fetch earnings advisory once for all symbols so decision artifact never has EARNINGS_NOT_EVALUATED
     earnings_advisory_by_symbol: Dict[str, Dict[str, Any]] = {}
     try:
-        from app.core.config.orats_secrets import ORATS_API_TOKEN
+        from app.core.config.orats_secrets import get_orats_token
         from app.core.orats.earnings import fetch_earnings_advisory_batch
-        token = (ORATS_API_TOKEN or "").strip() or None
+        token = get_orats_token()
         if token:
             as_of_utc = None
             try:
@@ -678,9 +678,9 @@ def _earnings_for_recompute(symbol: str, sr: Any) -> EarningsInfo:
     except Exception:
         pass
     try:
-        from app.core.config.orats_secrets import ORATS_API_TOKEN
+        from app.core.config.orats_secrets import get_orats_token
         from app.core.orats.earnings import fetch_earnings_advisory
-        token = (ORATS_API_TOKEN or "").strip() or None
+        token = get_orats_token()
         if token:
             adv = fetch_earnings_advisory(sym_upper, token=token)
             status = str(adv.get("earnings_data_status") or "Unavailable").strip()

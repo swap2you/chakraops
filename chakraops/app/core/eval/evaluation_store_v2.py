@@ -133,9 +133,9 @@ def _write_eval_snapshot(artifact: DecisionArtifactV2) -> None:
             symbols_list.append(sym)
     if symbols_list:
         try:
-            from app.core.config.orats_secrets import ORATS_API_TOKEN
+            from app.core.config.orats_secrets import get_orats_token
             from app.core.orats.earnings import fetch_earnings_advisory_batch
-            token = (ORATS_API_TOKEN or "").strip() or None
+            token = get_orats_token()
             if token:
                 earnings_map = fetch_earnings_advisory_batch(
                     symbols_list, as_of_utc=as_of_utc, token=token

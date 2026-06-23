@@ -5,6 +5,7 @@ import { ExternalLink, Activity, Droplets, Zap, Info, Settings } from "lucide-re
 import { useArtifactList, useDecision, useUniverse, useUiSystemHealth, useUiTrackedPositions, usePortfolioMtm, useDefaultAccount, useRunEval, useSharesCandidates, useActionNeeded } from "@/api/queries";
 import type { DecisionMode, SymbolEvalSummary, UniverseSymbol } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
+import { AuthoritativeRecommendations } from "@/components/AuthoritativeRecommendations";
 import { constraintToLabel } from "@/utils/sizingConstraints";
 import {
   Card,
@@ -97,7 +98,7 @@ export function DashboardPage() {
   const runEval = useRunEval();
   const { data: sharesCandidatesData } = useSharesCandidates();
   const sharesCandidates = sharesCandidatesData?.shares_candidates ?? [];
-  const { data: actionNeeded } = useActionNeeded();
+  const { data: actionNeeded, isLoading: actionNeededLoading, isError: actionNeededError } = useActionNeeded();
 
   const { universeSymbols, selectedSignals } = useMemo(() => {
     const artifact = decision?.artifact;
@@ -385,9 +386,21 @@ export function DashboardPage() {
               </Link>
             )}
           </Card>
+          {/* R34.0 (H-5 cutover): canonical authoritative recommendation is PRIMARY. */}
+          <AuthoritativeRecommendations
+            data={actionNeeded}
+            isLoading={actionNeededLoading}
+            isError={actionNeededError}
+            providerHealth={{ label: health?.orats?.status, ok: health?.orats?.status === "OK" }}
+          />
+          {/* R34.0: legacy options/shares lists are NON-authoritative diagnostics only. */}
+          <details data-testid="legacy-diagnostics">
+            <summary className="cursor-pointer text-sm font-medium text-zinc-500 dark:text-zinc-400">
+              Diagnostics — non-authoritative legacy output
+            </summary>
           {/* R24.1/R24.2: Action Needed — GET /api/ui/action-needed; sorted by severity; safe labels only */}
-          <Card data-testid="action-needed-card">
-            <CardHeader title="Action Needed" description="Top options and shares actions (by priority); link to symbol diagnostics." />
+          <Card data-testid="action-needed-card" className="mt-2">
+            <CardHeader title="Action Needed (legacy diagnostics)" description="Non-authoritative. Superseded by the canonical recommendations above." />
             <div className="space-y-4">
               <div>
                 <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-500 mb-2">Options</span>
@@ -535,6 +548,7 @@ export function DashboardPage() {
               </div>
             </div>
           </Card>
+          </details>
           {/* R22.5: Shares candidates — top 3 with symbol, eligible, reason, spot, entry zone; link to Symbol Diagnostics Shares tab */}
           <Card>
             <CardHeader title="Shares candidates" description="BUY SHARES recommendation only; no order placement. Top 3." />

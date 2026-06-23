@@ -37,10 +37,13 @@ class OratsCoreError(Exception):
         http_status: Optional[int] = None,
         response_snippet: str = "",
     ) -> None:
+        from app.core.security.redact import redact_secrets
+
         self.ticker = ticker
         self.http_status = http_status
-        self.response_snippet = (response_snippet or "")[:500]
-        super().__init__(message)
+        raw = (response_snippet or "")[:500]
+        self.response_snippet = redact_secrets(raw) if raw else ""
+        super().__init__(redact_secrets(message))
 
 
 def fetch_core_snapshot(
@@ -88,13 +91,15 @@ def fetch_core_snapshot(
         try:
             resp = requests.get(url, params=params, timeout=timeout_sec)
         except requests.RequestException as e:
+            from app.core.security.redact import redact_secrets
+            safe_err = redact_secrets(e)
             if _debug_orats:
-                logger.info("[ORATS_DEBUG] symbol=%s endpoint=cores error=%s", ticker_upper, e)
+                logger.info("[ORATS_DEBUG] symbol=%s endpoint=cores error=%s", ticker_upper, safe_err)
             raise OratsCoreError(
-                f"Request failed: {e}",
+                f"Request failed: {safe_err}",
                 ticker=ticker_upper,
-                response_snippet=str(e)[:200],
-            ) from e
+                response_snippet=safe_err[:200],
+            ) from None
         if resp.status_code != 200:
             snippet = resp.text[:300] if resp.text else ""
             raise OratsCoreError(
@@ -148,16 +153,19 @@ def fetch_core_snapshot(
     try:
         resp = requests.get(url, params=params, timeout=timeout_sec)
     except requests.RequestException as e:
-        logger.warning("[ORATS_CORE] ticker=%s request failed: %s", ticker_upper, e)
+        from app.core.security.redact import redact_secrets
+        safe_err = redact_secrets(e)
+        logger.warning("[ORATS_CORE] ticker=%s request failed: %s", ticker_upper, safe_err)
         raise OratsCoreError(
-            f"Request failed: {e}",
+            f"Request failed: {safe_err}",
             ticker=ticker_upper,
-            response_snippet=str(e)[:200],
-        ) from e
+            response_snippet=safe_err[:200],
+        ) from None
 
     if resp.status_code != 200:
+        from app.core.security.redact import redact_secrets
         snippet = resp.text[:300] if resp.text else ""
-        logger.warning("[ORATS_CORE] ticker=%s HTTP %s %s", ticker_upper, resp.status_code, snippet)
+        logger.warning("[ORATS_CORE] ticker=%s HTTP %s %s", ticker_upper, resp.status_code, redact_secrets(snippet))
         raise OratsCoreError(
             f"ORATS cores returned HTTP {resp.status_code}",
             ticker=ticker_upper,

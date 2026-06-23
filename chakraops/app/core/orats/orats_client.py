@@ -31,11 +31,15 @@ class OratsUnavailableError(Exception):
         endpoint: str = "",
         symbol: str = "",
     ) -> None:
+        from app.core.security.redact import redact_secrets
+
         self.http_status = http_status
-        self.response_snippet = (response_snippet or "")[:500]
+        # Sanitize at construction: snippet + message can never carry a token.
+        raw = (response_snippet or "")[:500]
+        self.response_snippet = redact_secrets(raw) if raw else ""
         self.endpoint = endpoint or ""
         self.symbol = symbol or ""
-        super().__init__(message)
+        super().__init__(redact_secrets(message))
 
 
 def _orats_get_live(endpoint_path: str, ticker: str, timeout_sec: float = TIMEOUT_SEC) -> tuple[Any, int, int]:
@@ -44,17 +48,20 @@ def _orats_get_live(endpoint_path: str, ticker: str, timeout_sec: float = TIMEOU
     Logs [ORATS_CALL] endpoint= ticker= status= latency_ms= rows= (rows from list or data list).
     Raises OratsUnavailableError on request failure or non-200. Token from orats_secrets only.
     """
-    from app.core.config.orats_secrets import ORATS_API_TOKEN
+    from app.core.config.orats_secrets import get_orats_token
+    from app.core.security.redact import redact_secrets
     url = f"{ORATS_BASE.rstrip('/')}{endpoint_path}"
-    params: Dict[str, str] = {"token": ORATS_API_TOKEN, "ticker": ticker.upper()}
+    params: Dict[str, str] = {"token": get_orats_token(), "ticker": ticker.upper()}
     t0 = time.perf_counter()
     try:
         r = requests.get(url, params=params, timeout=timeout_sec)
     except requests.RequestException as e:
         latency_ms = int((time.perf_counter() - t0) * 1000)
-        logger.warning("[ORATS_CALL] endpoint=%s ticker=%s status=FAIL latency_ms=%s error=%s", endpoint_path, ticker.upper(), latency_ms, e)
+        # requests exceptions can embed the full URL incl. the token query param.
+        safe_err = redact_secrets(e)
+        logger.warning("[ORATS_CALL] endpoint=%s ticker=%s status=FAIL latency_ms=%s error=%s", endpoint_path, ticker.upper(), latency_ms, safe_err)
         print(f"[ORATS_CALL] endpoint={endpoint_path} ticker={ticker.upper()} status=FAIL latency_ms={latency_ms} rows=0")
-        raise OratsUnavailableError(f"ORATS request failed: {e}", http_status=0, response_snippet=str(e)[:200], endpoint=endpoint_path, symbol=ticker.upper())
+        raise OratsUnavailableError(f"ORATS request failed: {safe_err}", http_status=0, response_snippet=safe_err[:200], endpoint=endpoint_path, symbol=ticker.upper())
 
     latency_ms = int((time.perf_counter() - t0) * 1000)
     try:

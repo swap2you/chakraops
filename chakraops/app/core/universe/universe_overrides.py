@@ -55,14 +55,20 @@ def _load_overlay() -> Dict[str, Any]:
 
 
 def _save_overlay(overlay: Dict[str, Any]) -> None:
-    """Write overlay to file. Deterministic: added and removed sorted A-Z. Caller holds _LOCK if needed."""
+    """Write overlay to file atomically. Deterministic: added/removed sorted A-Z.
+
+    Uses a temp-file write with flush + fsync + ``os.replace`` so a concurrent
+    reader (or an interruption between writes) never observes a torn overlay.
+    Caller holds ``_LOCK`` if needed.
+    """
+    from app.core.universe.refresh_lock import atomic_write_json
+
     path = _overlay_path()
     now = datetime.now(timezone.utc).isoformat()
     added = sorted(set(s for s in (overlay.get("added") or []) if str(s).strip()))
     removed = sorted(set(s for s in (overlay.get("removed") or []) if str(s).strip()))
     payload = {"added": added, "removed": removed, "updated_at": now}
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2)
+    atomic_write_json(path, payload)
 
 
 def validate_symbol(symbol: str) -> Tuple[bool, str]:
@@ -154,6 +160,47 @@ def reset_overlay() -> None:
     """Clear overlay (added and removed)."""
     with _LOCK:
         _save_overlay({"added": [], "removed": [], "updated_at": ""})
+
+
+def snapshot_overlay() -> Dict[str, Any]:
+    """Return the current overlay (added/removed/updated_at) for rollback."""
+    return _load_overlay()
+
+
+def restore_overlay(overlay: Dict[str, Any]) -> None:
+    """Atomically restore a previously captured overlay (rollback helper)."""
+    with _LOCK:
+        _save_overlay(
+            {
+                "added": list(overlay.get("added") or []),
+                "removed": list(overlay.get("removed") or []),
+            }
+        )
+
+
+def apply_effective_universe(
+    target_symbols: List[str], base_symbols: List[str]
+) -> Tuple[List[str], List[str]]:
+    """Atomically set the effective universe to ``target_symbols``.
+
+    Computes the overlay diff against ``base_symbols`` so that
+    ``(base ∪ added) − removed == target`` and writes the overlay in a single
+    atomic file write. Idempotent: applying the same target yields the same
+    overlay. Raises ``ValueError`` (fail-loud) if any target symbol is invalid.
+
+    Returns ``(added_vs_base, removed_vs_base)``.
+    """
+    target = sorted({str(s).strip().upper() for s in target_symbols if str(s).strip()})
+    base = {str(s).strip().upper() for s in base_symbols if str(s).strip()}
+    for s in target:
+        ok, err = validate_symbol(s)
+        if not ok:
+            raise ValueError(f"invalid target symbol {s!r}: {err}")
+    added = sorted(set(target) - base)
+    removed = sorted(base - set(target))
+    with _LOCK:
+        _save_overlay({"added": added, "removed": removed})
+    return added, removed
 
 
 def get_overlay_counts() -> Tuple[int, int]:

@@ -115,6 +115,7 @@ export function PositionsPage() {
   const [integrityDiffExpanded, setIntegrityDiffExpanded] = useState(false);
   const [integrityDetailsExpanded, setIntegrityDetailsExpanded] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [page, setPage] = useState(0);
 
   const hasSymbolFilter = !!symbolFilter.trim();
   const computedEnabled = source === "recompute" || (compareOpen && hasSymbolFilter);
@@ -164,6 +165,19 @@ export function PositionsPage() {
 
   const { isLoading, isError } = source === "db" ? fromDb : computed;
   const positions: UnifiedPosition[] = source === "db" ? (fromDb.data?.items ?? []) : (computed.data?.positions ?? []);
+
+  // R34.0: bound the rendered rows so large position sets stay responsive.
+  const PAGE_SIZE = 50;
+  const pageCount = Math.max(1, Math.ceil(positions.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const pagedPositions = useMemo(
+    () => positions.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE),
+    [positions, safePage]
+  );
+  // Reset to the first page whenever the underlying set/filters change.
+  useEffect(() => {
+    setPage(0);
+  }, [source, state, instrumentType, symbolFilter, includePaper, positions.length]);
 
   const setSource = (s: "db" | "recompute") => {
     const next = new URLSearchParams(searchParams);
@@ -645,7 +659,7 @@ export function PositionsPage() {
                 )}
               </TableHeader>
               <TableBody>
-                {positions.map((p) => (
+                {pagedPositions.map((p) => (
                   <TableRow key={p.id} data-testid="positions-row">
                     <TableCell className="font-mono">{p.symbol}</TableCell>
                     <TableCell data-testid="positions-cell-source">{p.is_paper ? "PAPER" : "LIVE"}</TableCell>
@@ -711,6 +725,39 @@ export function PositionsPage() {
                 ))}
               </TableBody>
             </Table>
+            {positions.length > PAGE_SIZE && (
+              <div
+                className="flex items-center justify-between border-t border-zinc-100 px-1 py-2 text-sm text-zinc-600 dark:border-zinc-800/50 dark:text-zinc-400"
+                data-testid="positions-pagination"
+              >
+                <span data-testid="positions-pagination-summary">
+                  {safePage * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE + PAGE_SIZE, positions.length)} of {positions.length}
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                    disabled={safePage <= 0}
+                    data-testid="positions-pagination-prev"
+                  >
+                    Previous
+                  </Button>
+                  <span data-testid="positions-pagination-page">
+                    Page {safePage + 1} of {pageCount}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                    disabled={safePage >= pageCount - 1}
+                    data-testid="positions-pagination-next"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </Card>

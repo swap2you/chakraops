@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   useUiSystemHealth,
+  useOperationsStatus,
   useEarningsDebug,
   useDiagnosticsHistory,
   useRunDiagnostics,
@@ -74,6 +75,7 @@ function overallStatusDisplayLabel(raw: string | null | undefined): string {
 
 export function SystemDiagnosticsPage() {
   const { data, isLoading, isError } = useUiSystemHealth();
+  const { data: opsData } = useOperationsStatus();
   const probeSymbol = data?.earnings_probe_symbol ?? "SPY";
   const { data: earningsDebug } = useEarningsDebug(probeSymbol);
   const { data: historyData } = useDiagnosticsHistory(10);
@@ -184,6 +186,27 @@ export function SystemDiagnosticsPage() {
           Cadence: {cadenceLabel} (as of {asOfEt ?? "—"})
         </p>
       )}
+      <Card data-testid="operations-panel-r35">
+        <CardHeader title="Operations (R35)" description="Scheduler, jobs, backup — manual only; no trade execution" />
+        <div className="grid gap-4 p-4 md:grid-cols-2">
+          <div>
+            <p className="text-xs uppercase text-zinc-500">Scheduler master</p>
+            <p className="mt-1 font-mono">{opsData?.scheduler?.master_enabled ? "Enabled" : "Disabled"}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase text-zinc-500">ORATS token</p>
+            <p className="mt-1 font-mono">{opsData?.orats_token_present ? "Present" : "Not configured"}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase text-zinc-500">Registered jobs</p>
+            <p className="mt-1 font-mono">{opsData?.scheduler?.jobs?.length ?? "—"}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase text-zinc-500">Latest backup</p>
+            <p className="mt-1 font-mono text-sm">{opsData?.backup?.latest?.backup_id ?? "—"}</p>
+          </div>
+        </div>
+      </Card>
       <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
         <Card>
           <CardHeader title="API" />

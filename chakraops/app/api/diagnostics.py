@@ -120,10 +120,11 @@ def _run_orats_check() -> Dict[str, Any]:
             "recommended_action": act,
         }
     except Exception as e:
+        from app.core.security.redact import redact_secrets
         return {
             "check": "orats",
             "status": "FAIL",
-            "details": {"error": str(e)},
+            "details": {"error": redact_secrets(str(e))},
             "recommended_action": "Check ORATS API key and connectivity.",
         }
 

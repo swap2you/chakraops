@@ -803,6 +803,14 @@ export interface SymbolDiagnosticsExplanation {
 }
 
 export interface SymbolDiagnosticsResponseExtended extends SymbolDiagnosticsResponse {
+  /** R34.0 (H-5 cutover): canonical authoritative decision for this symbol. */
+  canonical_decision?: import("@/api/queries").CanonicalLiveItem | null;
+  /** R34.0: "OK" when canonical_decision is authoritative; else "UNAVAILABLE". */
+  canonical_status?: string | null;
+  /** R34.0: decision source identifier (canonical_decision_engine[...unavailable]). */
+  decision_source?: string | null;
+  /** R34.0: active strategy profile used by the canonical engine. */
+  active_profile?: string | null;
   symbol_eligibility?: SymbolEligibilityDetail;
   liquidity?: SymbolLiquidityDetail;
   /** Phase 7.3: Structured explanation. */
@@ -1129,4 +1137,178 @@ export interface UiPositionsUnifiedIntegrityCheckResult {
     mismatched_count?: number;
     sample_items?: IntegrityCheckSampleItem[];
   }>;
+}
+
+// R32.0: data-reliability (read-only). No secrets; token presence only.
+export interface DataReliabilityProvider {
+  provider: string;
+  sole_provider: boolean;
+  fallback_provider: string | null;
+  auth_mode: string;
+  token_present: boolean;
+  status: string;
+  blocked_reason: string | null;
+  retry_policy: Record<string, unknown>;
+  rate_limit_policy: Record<string, unknown>;
+  cache_policy: Record<string, unknown>;
+  failure_categories: string[];
+  read_only_contract: {
+    ok: boolean;
+    allowed_endpoints: string[];
+    violations: string[];
+    method: string;
+    mutating_endpoints: boolean;
+  };
+}
+
+export interface CalendarStatusResponse {
+  kind: string;
+  state: "AVAILABLE" | "UNAVAILABLE";
+  available: boolean;
+  reason: string;
+  as_of_utc: string;
+  events: unknown[];
+}
+
+export interface DataReliabilityHealthResponse {
+  as_of_utc: string;
+  provider: DataReliabilityProvider;
+  event_calendar: CalendarStatusResponse;
+  earnings_calendar: CalendarStatusResponse;
+}
+
+export interface WeeklyUniverseResponse {
+  week_id: string;
+  as_of: string;
+  symbols: string[];
+  added: string[];
+  removed: string[];
+  reason_codes: string[];
+  count: number;
+  refresh_due: boolean;
+  last_refresh_at_utc: string | null;
+}
+
+export interface RefreshHistoryRecord {
+  run_at_utc: string;
+  week_id: string;
+  source: string;
+  symbols: string[];
+  count: number;
+  added: string[];
+  removed: string[];
+  reason_codes: string[];
+}
+
+export interface RefreshHistoryResponse {
+  as_of_utc: string;
+  records: RefreshHistoryRecord[];
+}
+
+// R33.0: canonical decision-engine read-only contract. Advisory, manual-only.
+export interface StrategyProfileConfig {
+  name: string;
+  acceptable_regimes: string[];
+  csp_delta_range: [number, number];
+  cc_delta_range: [number, number];
+  dte_range: [number, number];
+  min_return_pct: number;
+  earnings_blackout_days: number;
+  liquidity: {
+    min_open_interest: number;
+    min_volume: number;
+    max_bid_ask_spread_pct: number;
+  };
+  max_position_allocation_pct: number;
+  max_symbol_exposure_pct: number;
+  max_sector_exposure_pct: number;
+  cash_buffer_pct: number;
+  actionable_min_score: number;
+  max_recommendations: number;
+  profit_management: Record<string, number>;
+}
+
+export interface DecisionProfilesResponse {
+  profiles: Record<string, StrategyProfileConfig>;
+  manual_only: boolean;
+}
+
+export interface DecisionRecommendation {
+  symbol: string;
+  strategy: string;
+  profile: string;
+  market_regime: string;
+  decision_status: "ACTIONABLE" | "WATCH" | "BLOCKED" | "STAY_IN_CASH";
+  eligibility: boolean;
+  data_quality: "OK" | "DEGRADED" | "BLOCKED";
+  data_freshness: Record<string, unknown>;
+  event_risk: Record<string, unknown>;
+  selected_contract: Record<string, unknown> | null;
+  sizing: { contracts?: number; shares?: number; explanation?: string[] };
+  capital_required: number;
+  expected_return_pct: number | null;
+  expected_return_dollars: number | null;
+  risk_flags: string[];
+  score: number;
+  rank: number | null;
+  reason_codes: string[];
+  manual_only: boolean;
+}
+
+export interface DecisionEvaluateResponse {
+  profile: StrategyProfileConfig;
+  as_of_utc: string;
+  manual_only: boolean;
+  actionable: DecisionRecommendation[];
+  watch: DecisionRecommendation[];
+  blocked: DecisionRecommendation[];
+  stay_in_cash: DecisionRecommendation;
+  counts: {
+    actionable: number;
+    shown: number;
+    watch: number;
+    blocked: number;
+    total_candidates: number;
+  };
+}
+
+export interface DecisionEvaluateRequest {
+  profile?: string;
+  profile_overrides?: Record<string, unknown> | null;
+  portfolio: {
+    total_value: number;
+    available_cash: number;
+    symbol_exposure?: Record<string, number>;
+    sector_exposure?: Record<string, number>;
+  };
+  candidates: Array<Record<string, unknown>>;
+}
+
+// R35.0 Operations API
+export interface OperationsJob {
+  job_id: string;
+  purpose: string;
+  enabled: boolean;
+  schedule: string;
+  timezone: string;
+  notification_policy: string;
+}
+
+export interface OperationsStatusResponse {
+  application_version: string;
+  commit: string | null;
+  manual_only: boolean;
+  trade_execution: boolean;
+  orats_token_present: boolean;
+  scheduler: {
+    master_enabled: boolean;
+    legacy_schedulers_enabled?: boolean;
+    running: boolean;
+    jobs: OperationsJob[];
+    recent_runs: Array<Record<string, unknown>>;
+  };
+  backup: {
+    latest: { backup_id: string; created_at?: string } | null;
+    count: number;
+  };
 }

@@ -88,7 +88,7 @@ _scheduler_run_count_date: Optional[str] = None  # YYYY-MM-DD UTC
 # Nightly evaluation time: default 19:00 ET. Set NIGHTLY_EVAL_TIME (HH:MM).
 NIGHTLY_EVAL_TIME = os.getenv("NIGHTLY_EVAL_TIME", "19:00")
 NIGHTLY_EVAL_TZ = os.getenv("NIGHTLY_EVAL_TZ", "America/New_York")
-NIGHTLY_EVAL_ENABLED = os.getenv("NIGHTLY_EVAL_ENABLED", "true").lower() in ("true", "1", "yes")
+NIGHTLY_EVAL_ENABLED = os.getenv("NIGHTLY_EVAL_ENABLED", "false").lower() in ("true", "1", "yes")
 _nightly_stop_event: Optional[threading.Event] = None
 _nightly_thread: Optional[threading.Thread] = None
 _last_nightly_eval_at: Optional[str] = None
@@ -106,7 +106,7 @@ _last_eod_freeze_snapshot_dir: Optional[str] = None
 # EOD chain snapshot: 16:05 ET on trading days (Phase 3.1.3)
 EOD_CHAIN_TIME = os.getenv("EOD_CHAIN_TIME", "16:05")
 EOD_CHAIN_TZ = os.getenv("EOD_CHAIN_TZ", "America/New_York")
-EOD_CHAIN_ENABLED = os.getenv("EOD_CHAIN_ENABLED", "true").lower() in ("true", "1", "yes")
+EOD_CHAIN_ENABLED = os.getenv("EOD_CHAIN_ENABLED", "false").lower() in ("true", "1", "yes")
 _eod_chain_stop_event: Optional[threading.Event] = None
 _eod_chain_thread: Optional[threading.Thread] = None
 _last_eod_chain_run_date: Optional[str] = None  # YYYY-MM-DD to avoid double-run same day
@@ -816,25 +816,33 @@ def _collect_api_routes(app: FastAPI) -> list:
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-    """Startup: ORATS token (hardcoded), boot probe, route count, scheduler. No token validation."""
+    """Startup: ORATS token (env-only), boot probe, route count, scheduler. No token validation."""
     global _APP_START_TIME_UTC
     _APP_START_TIME_UTC = time.time()
-    logger.info("[CONFIG] ORATS API token loaded (hardcoded, private mode)")
-    print("[CONFIG] ORATS API token loaded (hardcoded, private mode)")
+    from app.core.config.orats_secrets import get_orats_token
+    _orats_token_present = bool(get_orats_token())
+    if _orats_token_present:
+        logger.info("[CONFIG] ORATS API token loaded from environment (redacted)")
+        print("[CONFIG] ORATS API token loaded from environment (redacted)")
+    else:
+        logger.warning("[CONFIG] ORATS_API_TOKEN is not set; ORATS requests will fail until configured (see .env.example)")
+        print("[CONFIG] WARNING: ORATS_API_TOKEN is not set; ORATS requests will fail until configured (see .env.example)")
     base_url = "https://api.orats.io/datav2"
-    probe_status = "DOWN"
-    try:
-        from app.core.data.orats_client import probe_orats_live
-        probe_orats_live("SPY")
-        probe_status = "OK"
-    except Exception as e:
-        logger.warning("ORATS boot probe failed: %s", e)
+    probe_status = "DOWN" if _orats_token_present else "UNAVAILABLE"
+    if _orats_token_present:
+        try:
+            from app.core.data.orats_client import probe_orats_live
+            probe_orats_live("SPY")
+            probe_status = "OK"
+        except Exception as e:
+            from app.core.security.redact import redact_secrets
+            logger.warning("ORATS boot probe failed: %s", redact_secrets(e))
     api_routes = _collect_api_routes(app)
     count = len(api_routes)
     logger.info("[ROUTES] registered=%s", count)
     print(f"[ROUTES] registered={count}")
     print("===== ORATS BOOT CHECK =====")
-    print("Token present: True")
+    print("Token present:", _orats_token_present)
     print("Base URL:", base_url)
     print("Probe status:", probe_status)
     print("===========================")
@@ -879,42 +887,55 @@ async def _lifespan(app: FastAPI):
     except Exception:
         pass
 
-    # Start background scheduler for universe evaluation
-    print("===== SCHEDULER STARTUP =====")
-    print(f"Interval: {UNIVERSE_EVAL_MINUTES} minutes")
-    print(f"Market open: {is_market_open()}")
-    print(f"Market phase: {get_market_phase()}")
-    start_evaluation_scheduler()
-    print("Scheduler: STARTED")
-    print("=============================")
-    
-    # Start nightly scheduler
-    print("===== NIGHTLY SCHEDULER STARTUP =====")
-    print(f"Enabled: {NIGHTLY_EVAL_ENABLED}")
-    print(f"Time: {NIGHTLY_EVAL_TIME} {NIGHTLY_EVAL_TZ}")
-    start_nightly_scheduler()
-    nightly_status = get_nightly_scheduler_status()
-    print(f"Running: {nightly_status['running']}")
-    print(f"Next scheduled: {nightly_status.get('next_scheduled_at', 'N/A')}")
-    print("=====================================")
+    # R35.0: Unified operations scheduler (disabled-by-default) + optional legacy schedulers
+    print("===== OPERATIONS SCHEDULER STARTUP =====")
+    from app.core.operations.scheduler_service import (
+        is_master_enabled,
+        legacy_schedulers_enabled,
+        scheduler_status,
+        start_scheduler_service,
+    )
 
-    # EOD chain snapshot: 16:05 ET on trading days
-    print("===== EOD CHAIN SCHEDULER STARTUP =====")
-    print(f"Enabled: {EOD_CHAIN_ENABLED}")
-    print(f"Time: {EOD_CHAIN_TIME} {EOD_CHAIN_TZ}")
-    start_eod_chain_scheduler()
-    print("=======================================")
+    start_scheduler_service()
+    ops_status = scheduler_status()
+    print(f"Master enabled: {is_master_enabled()}")
+    print(f"Legacy schedulers: {legacy_schedulers_enabled()}")
+    print(f"Registered jobs: {len(ops_status.get('jobs') or [])}")
+    print("========================================")
+
+    if legacy_schedulers_enabled():
+        print("===== LEGACY SCHEDULER STARTUP =====")
+        print(f"Interval: {UNIVERSE_EVAL_MINUTES} minutes")
+        print(f"Market open: {is_market_open()}")
+        print(f"Market phase: {get_market_phase()}")
+        start_evaluation_scheduler()
+        print("Universe eval scheduler: STARTED")
+        print(f"Nightly enabled: {NIGHTLY_EVAL_ENABLED}")
+        print(f"Time: {NIGHTLY_EVAL_TIME} {NIGHTLY_EVAL_TZ}")
+        start_nightly_scheduler()
+        nightly_status = get_nightly_scheduler_status()
+        print(f"Nightly running: {nightly_status['running']}")
+        print(f"EOD chain enabled: {EOD_CHAIN_ENABLED}")
+        print(f"Time: {EOD_CHAIN_TIME} {EOD_CHAIN_TZ}")
+        start_eod_chain_scheduler()
+        print("====================================")
+    else:
+        print("===== LEGACY SCHEDULERS DISABLED =====")
+        print("Set CHAKRAOPS_LEGACY_SCHEDULERS_ENABLED=true to restore in-process schedulers.")
+        print("Use R35 operations jobs via /api/operations instead.")
+        print("======================================")
     
     yield
     
-    # Shutdown: stop the schedulers
+    # Shutdown: stop schedulers
     print("===== SCHEDULER SHUTDOWN =====")
-    stop_evaluation_scheduler()
-    print("Scheduler: STOPPED")
-    stop_nightly_scheduler()
-    print("Nightly: STOPPED")
-    stop_eod_chain_scheduler()
-    print("EOD chain: STOPPED")
+    from app.core.operations.scheduler_service import stop_scheduler_service
+
+    stop_scheduler_service()
+    if legacy_schedulers_enabled():
+        stop_evaluation_scheduler()
+        stop_nightly_scheduler()
+        stop_eod_chain_scheduler()
     print("===============================")
 
 
@@ -946,10 +967,16 @@ async def api_key_middleware(request: Request, call_next):
 _UI_CORS_ORIGINS = (os.getenv("UI_CORS_ORIGINS") or "http://localhost:5173").strip().split(",")
 _CORS_ORIGINS = [o.strip() for o in _UI_CORS_ORIGINS if o.strip()] or ["http://localhost:5173"]
 
+from app.api.operations_routes import router as operations_router
 from app.api.ui_routes import router as ui_router
 from app.api.copilot import router as copilot_router
+from app.api.data_reliability_routes import router as data_reliability_router
+from app.api.decision_engine_routes import router as decision_engine_router
+app.include_router(operations_router)
 app.include_router(ui_router)
 app.include_router(copilot_router, prefix="/api/ui")
+app.include_router(data_reliability_router, prefix="/api/ui")
+app.include_router(decision_engine_router, prefix="/api/ui")
 
 app.add_middleware(
     CORSMiddleware,
@@ -1524,12 +1551,14 @@ def api_ops_refresh_live_data() -> Dict[str, Any]:
         result = probe_orats_live("SPY")
         return result
     except OratsUnavailableError as e:
+        from app.core.security.redact import redact_secrets
         raise HTTPException(
             status_code=503,
-            detail={"provider": "ORATS", "reason": str(e), "http_status": getattr(e, "http_status", 0)},
+            detail={"provider": "ORATS", "reason": redact_secrets(e), "http_status": getattr(e, "http_status", 0)},
         )
     except Exception as e:
-        raise HTTPException(status_code=503, detail={"provider": "ORATS", "reason": str(e)})
+        from app.core.security.redact import redact_secrets
+        raise HTTPException(status_code=503, detail={"provider": "ORATS", "reason": redact_secrets(e)})
 
 
 @app.post("/api/ops/reset-local-state")
@@ -1599,6 +1628,15 @@ def api_view_daily_overview() -> Dict[str, Any]:
     from datetime import datetime, timezone
     fetched_at = datetime.now(timezone.utc).isoformat()
     artifact = load_decision_artifact()
+    # R34.0: normalize the decision source. The authoritative primary
+    # recommendation is produced by the canonical decision engine and exposed via
+    # GET /api/ui/action-needed#authoritative_recommendations; the daily overview
+    # is a non-authoritative summary view.
+    decision_source_markers = {
+        "decision_source": "canonical_decision_engine",
+        "authoritative_recommendations_source": "/api/ui/action-needed#authoritative_recommendations",
+        "view_role": "summary_non_authoritative",
+    }
     if not artifact:
         out = build_daily_overview_from_artifact({
             "daily_trust_report": {},
@@ -1606,9 +1644,11 @@ def api_view_daily_overview() -> Dict[str, Any]:
             "decision_snapshot": {},
         })
         out["fetched_at"] = fetched_at
+        out.update(decision_source_markers)
         return JSONResponse(status_code=200, content=out)
     out = build_daily_overview_from_artifact(artifact)
     out["fetched_at"] = fetched_at
+    out.update(decision_source_markers)
     return out
 
 
@@ -1902,6 +1942,88 @@ def _diagnostics_liquidity_from_gates(result: Dict[str, Any], full_result: Any) 
     liquidity["reason"] = "; ".join(parts) if parts else "Liquidity not assessed"
 
 
+def _canonical_decision_for_symbol(sym: str, profile: str = "balanced") -> Dict[str, Any]:
+    """R34.0 (H-5 cutover): produce the AUTHORITATIVE per-symbol decision from the
+    canonical engine for Symbol Diagnostics.
+
+    Returns a dict with ``canonical_status`` ("OK" when the engine produced a
+    decision for this symbol, else "UNAVAILABLE"), ``canonical_decision`` (the
+    matching engine item or ``None``), ``decision_source`` and ``active_profile``.
+    Fail-closed: any error yields UNAVAILABLE with no decision (never a guess).
+    """
+    out: Dict[str, Any] = {
+        "canonical_status": "UNAVAILABLE",
+        "canonical_decision": None,
+        "decision_source": "canonical_decision_engine_unavailable",
+        "active_profile": profile,
+    }
+    try:
+        from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2, get_eval_snapshot
+        from app.core.decision_engine.live_service import compute_live_recommendations
+
+        store = get_evaluation_store_v2()
+        store.reload_from_disk()
+        artifact = store.get_latest()
+        if artifact is None:
+            return out
+
+        guardrails_metrics: Dict[str, Any] = {}
+        guardrails_snapshot: Dict[str, Any] = {}
+        try:
+            from app.core.portfolio.guardrails_r259 import (
+                build_guardrails_snapshot,
+                compute_portfolio_metrics,
+            )
+            _guard_snap = build_guardrails_snapshot()
+            guardrails_snapshot = dict(_guard_snap)
+            _snap_for_prices = get_eval_snapshot()
+            _prices: Dict[str, float] = {}
+            if _snap_for_prices and isinstance(_snap_for_prices, dict):
+                for _s, _v in (_snap_for_prices.get("symbols") or {}).items():
+                    if isinstance(_v, dict) and _v.get("price") is not None:
+                        _prices[_s] = float(_v["price"])
+            guardrails_metrics = compute_portfolio_metrics(_guard_snap, symbol_prices=_prices)
+        except Exception:
+            guardrails_metrics = {}
+            guardrails_snapshot = {}
+
+        shares_by_symbol: Dict[str, int] = {}
+        try:
+            from app.core.accounts.holdings_db import get_share_position, _DEFAULT_ACCOUNT_ID
+            _pos = get_share_position(_DEFAULT_ACCOUNT_ID, sym)
+            _qty = getattr(_pos, "quantity", None) if _pos is not None else None
+            if _qty:
+                shares_by_symbol[sym] = int(_qty)
+        except Exception:
+            shares_by_symbol = {}
+
+        canonical = compute_live_recommendations(
+            artifact,
+            profile_name=profile,
+            guardrails_metrics=guardrails_metrics,
+            guardrails_snapshot=guardrails_snapshot,
+            shares_by_symbol=shares_by_symbol,
+        )
+        recs = canonical.get("recommendations") or {}
+        match = None
+        for bucket in ("actionable", "watch", "blocked"):
+            for item in (recs.get(bucket) or []):
+                if (item.get("symbol") or "").strip().upper() == sym:
+                    match = item
+                    break
+            if match is not None:
+                break
+        if match is not None:
+            out["canonical_status"] = "OK"
+            out["canonical_decision"] = match
+            out["decision_source"] = canonical.get("decision_source") or "canonical_decision_engine"
+            prof = canonical.get("profile") or {}
+            out["active_profile"] = (prof.get("name") if isinstance(prof, dict) else None) or profile
+    except Exception as e:
+        logger.debug("[DIAGNOSTICS] canonical decision unavailable for %s: %s", sym, e)
+    return out
+
+
 @app.get("/api/view/symbol-diagnostics")
 def api_view_symbol_diagnostics(
     symbol: str = Query(..., min_length=1, max_length=12),
@@ -1922,11 +2044,12 @@ def api_view_symbol_diagnostics(
     try:
         snap = get_snapshot(sym, derive_avg_stock_volume_20d=True, use_cache=True)
     except Exception as e:
+        from app.core.security.redact import redact_secrets
         raise HTTPException(
             status_code=503,
             detail={
                 "provider": "ORATS",
-                "reason": str(e),
+                "reason": redact_secrets(str(e)),
                 "symbol": sym,
             },
         )
@@ -2179,6 +2302,15 @@ def api_view_symbol_diagnostics(
         logger.debug("[DIAGNOSTICS] %s: expirations_count == 0", sym)
     if contracts_count is None and full_result.stage2 is not None:
         logger.error("[DIAGNOSTICS] %s: contracts_count is null after stage-2", sym)
+
+    # R34.0 (H-5 cutover): attach the AUTHORITATIVE canonical decision as primary.
+    # Legacy diagnostics above remain explanatory / non-authoritative.
+    try:
+        result.update(_canonical_decision_for_symbol(sym))
+    except Exception as e:
+        logger.debug("[DIAGNOSTICS] canonical attach failed for %s: %s", sym, e)
+        result.setdefault("canonical_status", "UNAVAILABLE")
+        result.setdefault("canonical_decision", None)
 
     result["live_evaluation"] = True
     return result

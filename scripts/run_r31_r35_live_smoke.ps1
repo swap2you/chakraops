@@ -64,7 +64,16 @@ try {
         Write-SmokeLog "Starting ChakraOps"
         Invoke-ChakraOpsStart
         $started = $true
-        Start-Sleep -Seconds 8
+        $healthy = $false
+        for ($i = 0; $i -lt 12; $i++) {
+            Start-Sleep -Seconds 5
+            & powershell -NoProfile -ExecutionPolicy Bypass -File "$script:ChakraOpsScriptsRoot\health_check_chakraops.ps1" | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                $healthy = $true
+                break
+            }
+        }
+        if (-not $healthy) { throw "backend did not become healthy after startup" }
     }
 
     Write-SmokeLog "Health check"

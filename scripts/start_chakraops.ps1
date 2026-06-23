@@ -35,8 +35,11 @@ Write-Host "Scheduler: DISABLED by default"
 $backendProc = Start-Process python -ArgumentList "-m", "uvicorn", "app.api.server:app", "--host", "127.0.0.1", "--port", "8000" -WorkingDirectory $script:ChakraOpsBackendRoot -PassThru -WindowStyle Normal
 Start-Sleep -Seconds 2
 $frontendProc = Start-Process npm -ArgumentList "run", "dev", "--", "--host", "127.0.0.1", "--port", "5173" -WorkingDirectory $script:ChakraOpsFrontendRoot -PassThru -WindowStyle Normal
+Start-Sleep -Seconds 3
+$frontendListener = Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+$frontendPid = if ($frontendListener) { [int]$frontendListener.OwningProcess } else { [int]$frontendProc.Id }
 
-python -c "from app.core.operations.process_ownership import write_record; write_record(backend_pid=$($backendProc.Id), frontend_pid=$($frontendProc.Id), repo_root=r'$($script:ChakraOpsRepoRoot)', backend_cmd='uvicorn app.api.server:app', frontend_cmd='npm run dev')" | Out-Null
+python -c "from app.core.operations.process_ownership import write_record; write_record(backend_pid=$($backendProc.Id), frontend_pid=$frontendPid, repo_root=r'$($script:ChakraOpsRepoRoot)', backend_cmd='uvicorn app.api.server:app', frontend_cmd='npm run dev')" | Out-Null
 
-Write-Host "Backend PID: $($backendProc.Id)  Frontend PID: $($frontendProc.Id)"
+Write-Host "Backend PID: $($backendProc.Id)  Frontend PID: $frontendPid"
 Write-Host "URLs: http://127.0.0.1:8000  http://127.0.0.1:5173"

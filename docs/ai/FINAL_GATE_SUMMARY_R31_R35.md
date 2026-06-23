@@ -23,10 +23,14 @@ R35 targeted suite (`pytest -k r350`): **76 passed, 1 skipped** (parsed from `ou
 | Evidence consistency | PASS |
 | Final repository integrity | PASS |
 
-## UAT distinction
-- **Cursor Windows operational smoke:** PASS (`scripts/run_r31_r35_live_smoke.ps1`)
-- **Automated backend/frontend/build:** PASS
-- **Internal adversarial reviews:** PASS (`out/verification/R35.0/self_review/`)
-- **Cowork browser UAT:** PENDING — not claimed passed
+## UAT (2026-06-23, commit `6804490`)
+| Gate | Result |
+|------|--------|
+| Cursor Windows operational smoke | PASS |
+| Automated backend/frontend/build | PASS |
+| Internal adversarial reviews | PASS |
+| Cowork browser UAT | **PASS WITH NOTES** |
+
+**Data health:** ORATS Degraded/WARN and Decision Store CRITICAL are current states; product fails closed. Not claimed green.
 
 Evidence: `out/verification/R35.0/`

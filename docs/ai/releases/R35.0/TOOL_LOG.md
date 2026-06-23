@@ -62,15 +62,16 @@
 
 ## Claude Cowork
 - Static audit: passed core safety invariants
-- Browser UAT: **PENDING** (handoff: `docs/ai/validation/R31_R35_COWORK_UAT_HANDOFF.md`)
+- Browser UAT: **PASS WITH NOTES** (2026-06-23, commit `6804490`)
+- No safety blockers; ORATS/data-health degraded states fail closed (accepted non-blocking note)
 
 ## Cursor — release acceptance factory PASS (2026-06-23)
-- Auth: `40e7528`; implementation base `9d5fe66`; final HEAD `9b7563c`
+- Auth: `40e7528`; implementation base `9d5fe66`; closure HEAD `6804490`
 - Harness: `scripts/validate_r31_r35_release.ps1` — all 9 stages PASS
 - Gates (parsed): backend **1300/4 skip**; R35 targeted **76/1 skip**; frontend **335/18 skip**; build PASS
-- Windows live smoke: PASS (`scripts/run_r31_r35_live_smoke.ps1`)
-- Adversarial self-reviews A/B/C: PASS (`out/verification/R35.0/self_review/`)
-- Cowork browser UAT: **not run** — sole pending gate
+- Windows live smoke: PASS
+- Adversarial self-reviews A/B/C: PASS
+- Final PR: **created** (not merged)
 
 ## Operator
-- R35.0 START authorized. Schedules disabled by default until Cowork browser UAT and operator approve enablement.
+- R35.0 program complete. Schedules remain disabled. Merge, tag, deployment, and schedule enablement are separate decisions.

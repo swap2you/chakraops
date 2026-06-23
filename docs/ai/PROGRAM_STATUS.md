@@ -1,7 +1,7 @@
 # ChakraOps Program Status
 
 Last initialized: 2026-06-21
-Last updated: 2026-06-23 (R35.0 **ACTIVE** — operational readiness; R34 closed and approved)
+Last updated: 2026-06-23 (R35.0 **COMPLETE** — Cowork browser UAT PASS WITH NOTES; final PR created; schedules disabled)
 
 ## Program branch and workflow
 
@@ -17,7 +17,7 @@ Last updated: 2026-06-23 (R35.0 **ACTIVE** — operational readiness; R34 closed
 | R32.0 | COMPLETE — C-1 + Claude notes + full data-reliability scope delivered and gate-verified; Claude APPROVED-WITH-NOTES (notes closed in 049cb2f); Codex review PENDING (quota) | Cursor / Claude / Codex | Deferred Codex R32 review |
 | R33.0 | IMPLEMENTED + TESTED, Claude **BLOCKED** on live cutover — canonical engine is correct/tested but not yet the authoritative live recommendation path; H-5 OPEN, reassigned to R34 | Cursor / Claude / Codex | Closed by R34 live cutover; deferred Codex review |
 | R34.0 | COMPLETE — implementation and technical validation complete (backend 1224/3; frontend 334/18; build PASS; secret scan 0 hits): transaction-safe refresh, OS-native lock, complete ORATS provider redaction, live sector enforcement, rendered canonical cutover, frontend correctness. **H-5 CLOSED**. Claude closure **APPROVED WITH NON-BLOCKING NOTES**; Codex closure **BLOCKED only on authorization ordering** (operator waiver `2c41ba2` recorded) | Cursor / Claude / Codex | Final Codex governance closure, then R35.0 |
-| R35.0 | **ACCEPTANCE FACTORY PASS** — automated gates + Windows live smoke PASS; Cowork browser UAT **PENDING** | Cursor / Cowork | Cowork browser-only UAT; then final PR (operator) |
+| R35.0 | **COMPLETE** — acceptance factory PASS; Cowork browser UAT **PASS WITH NOTES** (2026-06-23, `6804490`); final PR created; schedules disabled | Operator | PR review; merge/tag/deploy/schedule enablement (separate decisions) |
 
 ## Current program rule
 

@@ -1,9 +1,16 @@
 # STATUS — R35.0
 
 ## Current status
-**RELEASE ACCEPTANCE FACTORY PASS** (automated + Windows operational smoke)
+**PROGRAM COMPLETE — PR READY**
 
-Cowork browser-only UAT: **PENDING** (sole remaining gate before final PR)
+R31–R35 implementation and validation complete at commit `6804490`. Final PR created; merge, tag, deployment, and schedule enablement remain separate operator decisions.
+
+## Cowork browser UAT
+**PASS WITH NOTES** — 2026-06-23, tested commit `6804490`
+
+- No safety blockers
+- Accepted non-blocking notes: ORATS Degraded/WARN and Decision Store CRITICAL fail closed (data health not green); some blank Cowork screenshots (DOM/API/console/network passed)
+- Evidence (local, not committed): `out/verification/R35.0/cowork_browser_uat.md`
 
 ## Key commits
 | Role | SHA | Message |
@@ -11,10 +18,10 @@ Cowork browser-only UAT: **PENDING** (sole remaining gate before final PR)
 | Starting HEAD (program) | `26bd27e` | Windows tooling docs |
 | Acceptance factory auth | `40e7528` | Authorize release acceptance factory + retention waiver |
 | Implementation base | `9d5fe66` | Finalize executable release acceptance and Windows operations |
-| Startup/shutdown auth | `307d1f1` | Authorize stale-path remediation |
-| Final HEAD | `9b7563c` | Startup script test aligned to common.ps1 |
+| Doc sync / acceptance evidence | `6804490` | Synchronize program status from acceptance harness |
+| UAT closure | _(this commit)_ | Record final browser UAT acceptance |
 
-## Gates (parsed from `out/verification/R35.0/*.log` — 2026-06-23 harness run)
+## Gates (parsed from `out/verification/R35.0/*.log` — 2026-06-23)
 | Gate | Result |
 |------|--------|
 | Backend full | **1300 passed, 4 skipped** |
@@ -26,10 +33,10 @@ Cowork browser-only UAT: **PENDING** (sole remaining gate before final PR)
 | Windows live smoke | **PASS** |
 | Security scan | **PASS** |
 | Internal adversarial reviews (A/B/C) | **PASS** |
-| Cowork browser UAT | **PENDING** |
+| Cowork browser UAT | **PASS WITH NOTES** |
 
 ## Schedules
-Recurring schedules and job env defaults remain **disabled**. No final PR. No deployment.
+Recurring schedules and job env defaults remain **disabled**. No deployment. No schedule enablement.
 
 ## Evidence
-`out/verification/R35.0/{backend,r350_suite,frontend,build,windows_live_smoke,powershell_validation,authorization_validation,security_scan,release_acceptance}.{log,json,md}` and `self_review/`.
+`out/verification/R35.0/` (local; not committed)

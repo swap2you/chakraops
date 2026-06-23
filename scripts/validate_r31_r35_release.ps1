@@ -31,8 +31,8 @@ function Run-Cmd {
     param([string]$Cwd, [string]$Cmd, [string]$LogFile)
     Push-Location (Join-Path $RepoRoot $Cwd)
     try {
-        cmd /c $Cmd 2>&1 | Tee-Object -FilePath $LogFile
-        return $LASTEXITCODE
+        cmd /c $Cmd > $LogFile 2>&1
+        return [int]$LASTEXITCODE
     } finally {
         Pop-Location
     }

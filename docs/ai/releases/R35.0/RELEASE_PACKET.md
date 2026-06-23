@@ -167,3 +167,94 @@ Evidence: `out/verification/R35.0/`
 ## Stop point
 
 Stop after approved scope, gates, evidence, reviewer verdicts, and PR preparation. Do not merge, tag, deploy, or enable schedules by default without operator approval.
+
+---
+
+## Phase 0 — remediation authorization (2026-06-23)
+
+Starting commit: `57b3939`. Docs-only authorization precedes all remediation source edits.
+
+### Review findings recorded
+
+- **Claude:** APPROVED WITH NON-BLOCKING NOTES — scheduler dedup, timeout, retry classification, notification recovery, EOD skipped-result, SQLite backup, script-safety weaknesses identified.
+- **Codex:** BLOCKED — operational hardening required before final approval.
+- **Cowork:** STOPPED — observed dirty working tree; operational UAT not performed.
+
+### Operator waiver — historical R35 authorization deviations (commit `57b3939`)
+
+The following paths were modified in milestone commit `57b3939` before they appeared in authorization commit `e20ccee`:
+
+- `chakraops/tests/test_r340_refresh_lock_ownership.py`
+- `frontend/src/pages/SystemDiagnosticsPage.test.tsx`
+
+This waiver:
+
+- records the exact paths and commit `57b3939`
+- states the paths were **not** authorized in `e20ccee` before modification
+- is **not** retroactive authorization
+- keeps the deviation visible in program history
+- does **not** permit repetition of authorization-order violations
+- requires future paths to be committed in the release packet **before** source edits
+
+### Allowed tracked paths — remediation (exact)
+
+#### Fix 1 — scheduler lifecycle and occurrence dedup
+
+- MODIFIED `chakraops/app/core/operations/scheduler_service.py`
+- NEW `chakraops/app/core/operations/occurrence_store.py`
+- MODIFIED `chakraops/app/api/operations_routes.py`
+- MODIFIED `chakraops/tests/test_r350_scheduler_safety.py`
+- NEW `chakraops/tests/test_r350_scheduler_lifecycle.py`
+- NEW `chakraops/tests/test_r350_occurrence_dedup.py`
+
+#### Fix 2 — bounded timeout via subprocess isolation
+
+- MODIFIED `chakraops/app/core/operations/job_executor.py`
+- NEW `chakraops/app/core/operations/job_subprocess_runner.py`
+- MODIFIED `chakraops/tests/test_r350_job_executor.py`
+- NEW `chakraops/tests/test_r350_timeout_isolation.py`
+
+#### Fix 3 — cross-process JobRunStore
+
+- MODIFIED `chakraops/app/core/operations/job_run_store.py`
+- MODIFIED `chakraops/tests/test_r350_job_run_store.py`
+- NEW `chakraops/tests/test_r350_job_run_store_concurrency.py`
+
+#### Fix 4 — EOD skipped semantics
+
+- MODIFIED `chakraops/app/core/eval/eod_chain_snapshot.py`
+- MODIFIED `chakraops/app/core/operations/jobs/eod_data_refresh_job.py`
+- MODIFIED `chakraops/app/core/operations/job_executor.py` (SKIPPED classification)
+- NEW `chakraops/tests/test_r350_eod_skipped_semantics.py`
+
+#### Fix 5 — notification incident correlation
+
+- MODIFIED `chakraops/app/core/operations/notification_service.py`
+- NEW `chakraops/app/core/operations/incident_store.py`
+- MODIFIED `chakraops/tests/test_r350_notification_dedupe.py`
+- NEW `chakraops/tests/test_r350_notification_incidents.py`
+
+#### Fix 6 — consistent backup snapshots
+
+- MODIFIED `chakraops/app/core/operations/backup_service.py`
+- MODIFIED `chakraops/tests/test_r350_backup_service.py`
+- NEW `chakraops/tests/test_r350_backup_consistency.py`
+
+#### Fix 7 — Windows process ownership
+
+- MODIFIED `scripts/start_chakraops.ps1`
+- MODIFIED `scripts/stop_chakraops.ps1`
+- NEW `chakraops/app/core/operations/process_ownership.py`
+- MODIFIED `chakraops/tests/test_r350_startup_scripts.py`
+- NEW `chakraops/tests/test_r350_process_ownership.py`
+
+#### Fix 8 — evidence and handoff accuracy
+
+- MODIFIED `docs/ai/releases/R35.0/{STATUS,TOOL_LOG,RELEASE_PACKET}.md`
+- MODIFIED `docs/ai/PROGRAM_STATUS.md`
+- MODIFIED `docs/master/CURRENT_STATE.md`
+- MODIFIED `docs/ai/FINAL_*_R31_R35.md` (all seven files)
+- MODIFIED `chakraops/docs/RUNBOOK_STARTUP_SHUTDOWN.md`
+- `out/verification/R35.0/*` (local evidence; not committed)
+
+Any additional tracked path requires operator approval and packet update committed before edit.

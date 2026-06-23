@@ -13,43 +13,36 @@ Make ChakraOps reliable for daily personal use with observable jobs, clear alert
 Level 3 — operational reliability and release readiness
 
 ## Current status
-**IMPLEMENTED** — milestone commit pushed; awaiting Claude review, Codex review, Cowork operational UAT, and operator approval before single final PR.
+**IMPLEMENTED / REMEDIATION ACTIVE** — milestone `57b3939` pushed; Claude APPROVED WITH NON-BLOCKING NOTES; Codex BLOCKED; Cowork STOPPED (dirty tree). Operational blockers under remediation.
 
 ## Dependencies
-R34.0 closed (Claude APPROVED WITH NON-BLOCKING NOTES; Codex APPROVED; Cowork PASS WITH NOTES).
+R34.0 closed and approved.
 
 ## Cursor implementation
-Phases 0–12 complete. Authorization `e20ccee`. Gates green.
+Initial implementation `57b3939`. Remediation in progress per review findings.
 
 ## Claude review
-Pending
+APPROVED WITH NON-BLOCKING NOTES (remediation items identified)
 
 ## Codex review
-Pending
+BLOCKED — scheduler, timeout, persistence, backup, script safety
 
 ## Cowork UAT
-Required (operational UAT)
+STOPPED — dirty working tree precondition; UAT not performed
 
 ## Gates
-- Backend: 1248 passed, 3 skipped
-- Frontend tests: 335 passed, 18 skipped
-- Frontend build: PASS
-- R35 release-specific validation: PASS
+- Backend: pending remediation re-run
+- Frontend tests: pending remediation re-run
+- Frontend build: pending remediation re-run
 
 ## PR
-Pending (single final PR after reviews — do not open until operator approves)
-
-## Merge
-Pending
-
-## Tag
-Pending
+Pending (single final PR after remediation + reviews)
 
 ## Open blockers
-None recorded
+Codex BLOCKED findings; Cowork UAT not run
 
 ## Next action
-Claude review, Codex review, Cowork operational UAT, operator approval, then open final PR.
+Complete remediation Phases 1–8; re-run gates; await consolidated review and Cowork UAT.
 
 ## Stop point
-R35.0 complete and pushed. Schedules remain disabled by default.
+Do not claim R35 complete until remediation and external review pass.

@@ -14,7 +14,16 @@
 - Phases 1–12: job registry, scheduler (disabled-by-default), job run store, executor, 8 job handlers, notifications dedupe, backup/restore, operations API, System Diagnostics ops panel, Windows scripts, runbooks, 12 test modules, final handoff pack.
 - Legacy schedulers default disabled; master scheduler default disabled.
 - Gates: backend 1248/3 skip; frontend 335/18 skip; build PASS.
-- Milestone commit: `R35.0: operational readiness, scheduling, recovery, and final handoff`.
+- Milestone commit: `57b3939`.
+
+## Reviews (post-57b3939)
+- Claude: APPROVED WITH NON-BLOCKING NOTES (scheduler dedup, timeout, retry, notifications, EOD skip, SQLite backup, script safety).
+- Codex: BLOCKED.
+- Cowork: STOPPED (dirty working tree); operational UAT not performed.
+
+## Cursor — remediation authorization (2026-06-23)
+- Packet updated with exact remediation paths; operator waiver recorded for `test_r340_refresh_lock_ownership.py` and `SystemDiagnosticsPage.test.tsx` (57b3939 deviation).
+- Docs-only commit precedes remediation source edits.
 
 ## Claude Code
 - Pending.

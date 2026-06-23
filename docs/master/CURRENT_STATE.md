@@ -1,6 +1,6 @@
 # Current State — ChakraOps
 
-_Last updated: R35.0 IMPLEMENTED — operational readiness (scheduling, recovery, backup, runbooks, handoff); gates green (backend 1248/3; frontend 335/18; build PASS); schedules disabled by default; awaiting reviews and Cowork UAT before final PR_
+_Last updated: R35.0 IMPLEMENTED / REMEDIATION ACTIVE — milestone `57b3939`; Claude APPROVED WITH NON-BLOCKING NOTES; Codex BLOCKED; Cowork STOPPED (dirty tree, no UAT); operational hardening in progress_
 
 ## Release Status
 
@@ -10,7 +10,7 @@ _Last updated: R35.0 IMPLEMENTED — operational readiness (scheduling, recovery
 | Tag | `chakraops-r30.7.0` |
 | Current branch | `release/R31-R35-program` |
 | Current mode | Program R31–R35 (single branch, five milestone commits, one final PR) |
-| Active milestone | R35.0 — **IMPLEMENTED** (operations, scheduling, recovery, handoff). Awaiting reviews/UAT before final PR. R34 complete |
+| Active milestone | R35.0 — **IMPLEMENTED / REMEDIATION ACTIVE** (`57b3939`). Codex BLOCKED; Cowork UAT pending clean tree |
 | Prior milestone | R33.0 — canonical decision engine implemented + tested |
 
 ## R31.0 Validation Gates (audit milestone)

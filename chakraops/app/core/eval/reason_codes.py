@@ -151,3 +151,32 @@ def explain_reasons(
             "metrics": {},
         })
     return out[:10]
+
+
+def explain_reasons_via_registry(codes: List[str] | None) -> List[Dict[str, Any]]:
+    """R36.1 additive helper: map canonical decision-engine reason codes to the
+    canonical registry entries (stable code, human title/explanation, severity,
+    temporary-vs-safety-critical class, unit). Never leaks raw FAIL_/WARN_ text.
+
+    This is additive and does not alter ``explain_reasons`` above; it exists so
+    callers can render explanations from the single canonical registry.
+    """
+    from app.core.decision_engine.reason_registry import resolve
+
+    out: List[Dict[str, Any]] = []
+    seen: set = set()
+    for c in codes or []:
+        rc = resolve(c)
+        if rc.code in seen:
+            continue
+        seen.add(rc.code)
+        out.append({
+            "code": rc.code,
+            "severity": rc.severity,
+            "klass": rc.klass,
+            "title": rc.title,
+            "message": rc.explanation,
+            "unit": rc.unit,
+            "category": rc.category,
+        })
+    return out

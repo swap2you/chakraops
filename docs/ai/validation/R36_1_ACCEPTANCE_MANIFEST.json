@@ -3,7 +3,7 @@
   "release_name": "canonical-explainability",
   "release_branch": "release/R36.1-canonical-explainability",
   "base_sha": "2b4fe82d644956567d9bc5926f605f63a70f3fea",
-  "authorization_commit_sha": "PENDING",
+  "authorization_commit_sha": "b59706c5bb68a1db06fce71808742ab8c4828d11",
   "canonical_checkout": "C:\\Development\\Workspace\\ChakraOps-dev\\chakraops",
   "authorized_new_paths": [
     "chakraops/app/core/decision_engine/reason_registry.py",

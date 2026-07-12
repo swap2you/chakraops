@@ -17,6 +17,7 @@ import type {
 } from "@/api/queries";
 import { reasonLabels } from "@/utils/reasonLabels";
 import { formatTimestampEt } from "@/utils/formatTimestamp";
+import { ExplanationPanel } from "@/components/ExplanationPanel";
 
 interface Props {
   data?: ActionNeededResponse;
@@ -91,6 +92,7 @@ function RecRow({ item, actions }: { item: CanonicalLiveItem; actions?: ReactNod
           ))}
         </div>
       )}
+      <ExplanationPanel explanation={item.explanation} />
       {actions && <div className="mt-2">{actions}</div>}
     </div>
   );

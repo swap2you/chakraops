@@ -758,6 +758,89 @@ export interface ReasonExplained {
   metrics?: Record<string, unknown>;
 }
 
+/** R36.1: one canonical registry-resolved reason. */
+export interface ResolvedReason {
+  code: string;
+  category: string;
+  severity: string; // HARD | SOFT | INFO
+  klass: string; // SAFETY_CRITICAL | TEMPORARY | INFORMATIONAL
+  title: string;
+  explanation: string;
+  strategies?: string[];
+  measured_field?: string | null;
+  threshold_field?: string | null;
+  unit?: string | null;
+  remediation?: string | null;
+  data_source?: string | null;
+}
+
+/** R36.1: a measured value vs. its threshold, with unit. */
+export interface MeasuredValue {
+  code: string;
+  name: string;
+  measured: number | null;
+  threshold: number | number[] | null;
+  unit?: string | null;
+  comparator: string;
+  within: boolean | null;
+}
+
+/** R36.1: deterministic near-miss descriptor (never bypasses safety-critical). */
+export interface NearMiss {
+  is_near_miss: boolean;
+  blocked_by_safety_critical?: boolean;
+  gate?: string;
+  measured?: number;
+  threshold?: number | number[];
+  unit?: string;
+  distance?: number;
+  epsilon?: number;
+  note?: string;
+}
+
+/** R36.1: one calculation-trace row (input→output, no secrets). */
+export interface CalcTraceRow {
+  input: string;
+  value: number | null;
+  unit?: string | null;
+  source?: string | null;
+  timestamp?: string | null;
+  formula?: string | null;
+  threshold?: number | number[] | null;
+  comparator?: string;
+  output?: boolean | null;
+  rounding?: string;
+}
+
+/** R36.1: per-recommendation explainability contract (additive, advisory-only). */
+export interface RecommendationExplanation {
+  symbol: string | null;
+  strategy: string | null;
+  profile?: string | null;
+  decision_status: string | null;
+  manual_only: boolean;
+  trade_execution: boolean;
+  primary_reason: ResolvedReason | null;
+  supporting_reasons: ResolvedReason[];
+  passed_gates: string[];
+  failed_gates: string[];
+  measured_values: MeasuredValue[];
+  near_miss: NearMiss;
+  calculation_trace: CalcTraceRow[];
+  data_sources: Array<{ name: string; as_of_utc: string | null; status: string | null }>;
+  timestamps: { price_as_of: string | null; chain_as_of: string | null };
+  event_risk: { earnings_days: number | null; blackout_days: number | null };
+  portfolio_impact: {
+    capital_required: number | null;
+    contracts: number | null;
+    shares: number | null;
+    expected_return_pct: number | null;
+    expected_return_dollars: number | null;
+  };
+  temporary_reasons: string[];
+  safety_critical_reasons: string[];
+}
+
 /** Candidate trade (strike, expiry, delta, credit_estimate, max_loss). */
 export interface SymbolDiagnosticsCandidate {
   strategy?: string;

@@ -1047,6 +1047,8 @@ export interface CanonicalLiveItem {
   manual_only: boolean;
   authoritative: boolean;
   recommended_by: string;
+  /** R36.1: additive, optional per-recommendation explainability contract. */
+  explanation?: import("@/api/types").RecommendationExplanation | null;
 }
 export interface CapitalSetSafety {
   per_suggestion_not_additive: boolean;

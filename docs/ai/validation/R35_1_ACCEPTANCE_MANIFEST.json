@@ -1,0 +1,163 @@
+{
+  "release_id": "R35.1",
+  "release_name": "dedicated-ports-stabilization",
+  "release_branch": "release/R35.1-dedicated-ports-stabilization",
+  "base_sha": "2c1393ff31bf579708d8388e3a48d2092305a497",
+  "authorization_commit_sha": "PLACEHOLDER_AUTHORIZATION_COMMIT_SHA",
+  "canonical_checkout": "C:\\Development\\Workspace\\ChakraOps-dev\\chakraops",
+  "obsolete_checkout_forbidden": "C:\\Development\\Workspace\\ChakraOps",
+  "inventory": {
+    "modified_tracked_count": 28,
+    "untracked_impl_test_count": 3,
+    "local_only_count": 1,
+    "unrelated_excluded_count": 1
+  },
+  "authorized_tracked_paths": [
+    ".gitignore",
+    "chakraops/app/api/server.py",
+    "chakraops/app/core/operations/process_ownership.py",
+    "chakraops/docs/RUNBOOK_EXECUTION.md",
+    "chakraops/docs/RUNBOOK_MARKET_LIVE.md",
+    "chakraops/docs/RUNBOOK_PROMPT.md",
+    "chakraops/docs/RUNBOOK_SCHEDULER_OPERATIONS.md",
+    "chakraops/docs/RUNBOOK_STARTUP_SHUTDOWN.md",
+    "chakraops/docs/RUNBOOK_TROUBLESHOOTING.md",
+    "chakraops/docs/VALIDATION_PLAYBOOK.md",
+    "chakraops/docs/debug_data_completeness.md",
+    "chakraops/scripts/market_live_validation.py",
+    "chakraops/scripts/run_api.py",
+    "chakraops/scripts/sanity_one_pipeline.py",
+    "chakraops/scripts/validate_hd_delta_and_reasons.py",
+    "chakraops/scripts/validate_one_symbol.py",
+    "docker-compose.yml",
+    "docs/master/RUNBOOK_DEV_EXECUTION.md",
+    "frontend/.env.example",
+    "frontend/README.md",
+    "frontend/src/pages/AnalyticsPage.tsx",
+    "frontend/src/pages/StrategyPage.tsx",
+    "frontend/vite.config.js",
+    "frontend/vite.config.ts",
+    "scripts/chakraops_common.ps1",
+    "scripts/health_check_chakraops.ps1",
+    "scripts/run_r31_r35_live_smoke.ps1",
+    "scripts/start_chakraops.ps1",
+    "scripts/chakraops_ports.ps1",
+    "chakraops/app/core/chakraops_ports.py",
+    "chakraops/tests/test_chakraops_ports.py",
+    "frontend/src/test/liveEndpoints.e2e.test.ts"
+  ],
+  "authorized_path_notes": {
+    ".gitignore": "Only to restore the ignore rule for frontend/.env.development (remove any '!frontend/.env.development' un-ignore).",
+    "frontend/src/test/liveEndpoints.e2e.test.ts": "Conditional: only to update the stale localhost:8000 instructional comment in Phase 2.",
+    "frontend/.env.example": "Committed template only; not a secret file."
+  },
+  "governance_docs": [
+    "docs/ai/releases/R35.1/R35_1_SCOPE.md",
+    "docs/ai/releases/R35.1/R35_1_DESIGN.md",
+    "docs/ai/releases/R35.1/R35_1_RISK_REGISTER.md",
+    "docs/ai/releases/R35.1/R35_1_ACCEPTANCE_CRITERIA.md",
+    "docs/ai/releases/R35.1/R35_1_AUTHORIZED_PATHS.md",
+    "docs/ai/releases/R35.1/R35_1_NON_RETROACTIVE_WAIVER.md",
+    "docs/ai/validation/R35_1_ACCEPTANCE_MANIFEST.json",
+    "docs/ai/validation/R35_1_SELF_REVIEW_CHECKLIST.md"
+  ],
+  "pre_existing_uncommitted_paths_covered_by_waiver": [
+    ".gitignore",
+    "chakraops/app/api/server.py",
+    "chakraops/app/core/operations/process_ownership.py",
+    "chakraops/docs/RUNBOOK_EXECUTION.md",
+    "chakraops/docs/RUNBOOK_MARKET_LIVE.md",
+    "chakraops/docs/RUNBOOK_PROMPT.md",
+    "chakraops/docs/RUNBOOK_SCHEDULER_OPERATIONS.md",
+    "chakraops/docs/RUNBOOK_STARTUP_SHUTDOWN.md",
+    "chakraops/docs/RUNBOOK_TROUBLESHOOTING.md",
+    "chakraops/docs/VALIDATION_PLAYBOOK.md",
+    "chakraops/docs/debug_data_completeness.md",
+    "chakraops/scripts/market_live_validation.py",
+    "chakraops/scripts/run_api.py",
+    "chakraops/scripts/sanity_one_pipeline.py",
+    "chakraops/scripts/validate_hd_delta_and_reasons.py",
+    "chakraops/scripts/validate_one_symbol.py",
+    "docker-compose.yml",
+    "docs/master/RUNBOOK_DEV_EXECUTION.md",
+    "frontend/.env.example",
+    "frontend/README.md",
+    "frontend/src/pages/AnalyticsPage.tsx",
+    "frontend/src/pages/StrategyPage.tsx",
+    "frontend/vite.config.js",
+    "frontend/vite.config.ts",
+    "scripts/chakraops_common.ps1",
+    "scripts/health_check_chakraops.ps1",
+    "scripts/run_r31_r35_live_smoke.ps1",
+    "scripts/start_chakraops.ps1",
+    "scripts/chakraops_ports.ps1",
+    "chakraops/app/core/chakraops_ports.py",
+    "chakraops/tests/test_chakraops_ports.py"
+  ],
+  "local_only_excluded_files": [
+    "frontend/.env.development"
+  ],
+  "unrelated_excluded_files": [
+    "ChakraOps_Post_R35_R36_Prompt_Library.md"
+  ],
+  "forbidden_paths": [
+    "frontend/.env.development",
+    "ChakraOps_Post_R35_R36_Prompt_Library.md",
+    ".env"
+  ],
+  "forbidden_path_patterns": {
+    ".env.*": "Never commit except the explicitly named tracked template frontend/.env.example"
+  },
+  "forbidden_actions": [
+    "strategy_threshold_changes",
+    "recommendation_rules_unrelated_to_ports",
+    "scheduler_activation",
+    "recurring_job_activation",
+    "robinhood_integration",
+    "broker_or_order_endpoints",
+    "broad_ruff_cleanup",
+    "unrelated_ui_redesign",
+    "r36_universe_or_strategy_implementation"
+  ],
+  "required_validation_commands": [
+    "cd chakraops && python -m pytest tests -q --tb=short",
+    "cd chakraops && python -m pytest tests/test_chakraops_ports.py -q",
+    "cd frontend && npm run test -- --run",
+    "cd frontend && npm run build",
+    "docker compose config",
+    "powershell -NoProfile -Command \"$ErrorActionPreference='Stop'; . ./scripts/chakraops_ports.ps1\""
+  ],
+  "required_evidence_locations": [
+    "out/verification/R35.1/notes.md"
+  ],
+  "assertions": {
+    "backend_default_port": 18800,
+    "frontend_default_port": 18873,
+    "env_override_backend": "CHAKRAOPS_BACKEND_PORT",
+    "env_override_frontend": "CHAKRAOPS_FRONTEND_PORT",
+    "env_override_honored_by": ["python", "vite", "powershell_after_phase2"],
+    "env_override_invalid_behavior": "fail_clearly_or_documented_safe_fallback",
+    "vite_strict_port": true,
+    "vite_host": "127.0.0.1",
+    "vite_proxy_target": "http://127.0.0.1:18800",
+    "cors_default_origin": "http://127.0.0.1:18873",
+    "cors_override_env": "UI_CORS_ORIGINS",
+    "docker_backend_mapping": "18800:8000",
+    "docker_frontend_mapping": "18873:80",
+    "docker_backend_container_port": 8000,
+    "docker_frontend_container_port": 80,
+    "active_old_port_detection": {
+      "active_defect_allowed": false,
+      "intentional_container_ports": ["8000", "80"],
+      "known_stale_comment": "frontend/src/test/liveEndpoints.e2e.test.ts",
+      "disabled_legacy": ["chakraops/scripts/legacy_disabled/"]
+    },
+    "scheduler_disabled": true,
+    "recurring_jobs_disabled": true,
+    "manual_only": true,
+    "trade_execution": false,
+    "no_broker_write": true,
+    "secret_redaction": true,
+    "env_not_committed": true
+  }
+}

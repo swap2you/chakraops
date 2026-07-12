@@ -31,7 +31,39 @@ cd C:\Development\Workspace\ChakraOps-dev\chakraops
 .\scripts\stop_chakraops.ps1
 ```
 
-Stops only processes recorded for this repo (refuses foreign PIDs).
+Stops only processes recorded for this repo in `out/process_ownership.json`.
+
+**R35.2 hardened stop behavior:**
+
+- Works for both launch forms, including module-form `python -m uvicorn` (which does not carry the repo path in its command line).
+- A process is only stopped when it presents **two independent ownership signals** — the recorded PID (or a child of it) **or** a listener on the recorded role port, **and** a matching command identity (`uvicorn`/`python` for backend, `vite`/`npm`/`node` for frontend), plus a PID-reuse age guard.
+- **Idempotent:** a second run reports "already stopped" / "nothing to stop" and exits 0. Partial starts stop only the running role.
+- **Fail-safe:** ambiguous ownership is refused (never force-killed). A record whose `repo_root` is not this checkout is refused.
+- **Never targets port 8000** — Docker (`com.docker.backend` on `:8000`) and unrelated Python/Node processes are left running.
+
+> Note: only stacks started via `start_chakraops.ps1` write an ownership record. A stack started manually (separate backend/frontend terminals) has **no record**, so `stop_chakraops.ps1` reports "nothing to stop" — stop those windows manually (Ctrl+C) or use `start_chakraops.ps1` for a managed lifecycle.
+
+Self-test (local, Windows): `powershell -File scripts\stop_ownership_selftest.ps1` (spawns benign processes on 18811–18813; refuses to run while an ownership record exists).
+
+---
+
+## Pre-UAT "stack up" checklist
+
+Before browser UAT, confirm the stack is actually serving (Cowork R35.1 Note 6):
+
+```powershell
+# 1. Start (managed) or confirm manual terminals are up
+.\scripts\start_chakraops.ps1
+
+# 2. Confirm listeners on the dedicated ports
+Get-NetTCPConnection -LocalPort 18800,18873 -State Listen | Select-Object LocalPort,OwningProcess
+
+# 3. Confirm health before opening the browser
+Invoke-WebRequest -Uri "http://127.0.0.1:18800/api/healthz" -UseBasicParsing | Select-Object StatusCode
+Invoke-WebRequest -Uri "http://127.0.0.1:18873/" -UseBasicParsing | Select-Object StatusCode
+```
+
+If either port shows connection-refused, the stack is down — start it before UAT rather than reporting a UI defect.
 
 ---
 

@@ -130,6 +130,22 @@ Get-NetTCPConnection -LocalPort 18800 -State Listen -ErrorAction SilentlyContinu
 
 ---
 
+## `stop_chakraops.ps1` did not stop the stack
+
+The stop script (R35.2 hardened) only acts on stacks started via `start_chakraops.ps1`, which records PIDs and role ports in `out/process_ownership.json`.
+
+| Message | Meaning | Action |
+|---------|---------|--------|
+| `No ownership record found - nothing to stop.` | Stack was started manually (no record) or already stopped. | Stop backend/frontend terminals manually (Ctrl+C), or relaunch via `start_chakraops.ps1` for managed stop. |
+| `... repo_root mismatch - refusing to stop` | The record belongs to a different checkout. | Confirm you are in `ChakraOps-dev`; do not force. |
+| `REFUSING PID <n> - ambiguous ownership` | The candidate did not present two matching signals (record/port + command identity) or failed the PID-reuse age guard. | Verify the process is really ChakraOps (`Get-NetTCPConnection`/`Win32_Process`) before stopping it manually. |
+
+The script **never** targets port `8000` (Docker) and **never** kills unrelated Python/Node processes. It is idempotent (safe to run twice) and stops module-form launches (`python -m uvicorn`) correctly.
+
+Verify behavior locally: `powershell -File scripts\stop_ownership_selftest.ps1`.
+
+---
+
 ## Stale checkout / wrong server
 
 1. Confirm path: `C:\Development\Workspace\ChakraOps-dev\chakraops`

@@ -3,7 +3,7 @@
   "release_name": "operational-hardening",
   "release_branch": "release/R35.2-operational-hardening",
   "base_sha": "7a0df588756931353aa4bc7135187ef060c8919e",
-  "authorization_commit_sha": "PENDING",
+  "authorization_commit_sha": "dfe965a09a92bc83387e2351514c2b3ac5910aea",
   "canonical_checkout": "C:\\Development\\Workspace\\ChakraOps-dev\\chakraops",
   "obsolete_checkout_forbidden": "C:\\Development\\Workspace\\ChakraOps",
   "authorized_tracked_paths": [

@@ -160,25 +160,31 @@ def test_no_raw_fail_warn_leak(with_snapshot):
         assert "WARN_" not in body
 
 
-def _all_route_paths(routes) -> set:
+def _all_route_paths(routes, prefix: str = "") -> set:
     # Collect registered paths WITHOUT executing any endpoint. Across FastAPI/Starlette
-    # versions ``include_router`` may keep APIRoutes flat on ``app.routes`` or nest them under
-    # an included-router/mount wrapper (e.g. ``_IncludedRouter``). FastAPI bakes the full
-    # prefixed path into each ``APIRoute.path`` at decoration time, so walking any nested
-    # ``.routes`` yields full paths and is version-agnostic.
+    # versions ``include_router`` may keep APIRoutes flat on ``app.routes`` (older: full path
+    # baked into each ``APIRoute.path``) or nest them under an included-router/mount wrapper
+    # (newer: wrapper carries the prefix via ``.prefix`` or ``.path`` and children hold
+    # relative paths). Accumulate the wrapper prefix while recursing so the reconstructed
+    # full path is version-agnostic.
     paths: set = set()
     for route in routes:
-        p = getattr(route, "path", None)
-        if p:
-            paths.add(p)
         nested = getattr(route, "routes", None)
         if nested:
-            paths |= _all_route_paths(nested)
+            seg = getattr(route, "prefix", None)
+            if seg is None:
+                seg = getattr(route, "path", "") or ""
+            paths |= _all_route_paths(nested, prefix + seg)
+        else:
+            p = getattr(route, "path", None)
+            if p is not None:
+                paths.add(prefix + p)
     return paths
 
 
 def test_legacy_universe_routes_still_registered():
-    paths = _all_route_paths(app.routes)
+    # Union route-walk with the OpenAPI path set for maximum version robustness.
+    paths = _all_route_paths(app.routes) | set(app.openapi().get("paths", {}).keys())
     assert "/api/ui/universe" in paths
     assert "/api/view/universe" in paths
     assert "/api/ui/universe-v2/summary" in paths

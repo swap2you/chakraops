@@ -964,8 +964,10 @@ async def api_key_middleware(request: Request, call_next):
     return await call_next(request)
 
 
-_UI_CORS_ORIGINS = (os.getenv("UI_CORS_ORIGINS") or "http://localhost:5173").strip().split(",")
-_CORS_ORIGINS = [o.strip() for o in _UI_CORS_ORIGINS if o.strip()] or ["http://localhost:5173"]
+from app.core.chakraops_ports import frontend_origin_default
+
+_UI_CORS_ORIGINS = (os.getenv("UI_CORS_ORIGINS") or frontend_origin_default()).strip().split(",")
+_CORS_ORIGINS = [o.strip() for o in _UI_CORS_ORIGINS if o.strip()] or [frontend_origin_default()]
 
 from app.api.operations_routes import router as operations_router
 from app.api.ui_routes import router as ui_router

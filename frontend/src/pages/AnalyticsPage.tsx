@@ -323,7 +323,7 @@ export function AnalyticsPage() {
         severity: "error",
         title: is404 ? "Universe endpoint missing" : "Universe load failed",
         message: is404 
-          ? "Backend endpoint not found. Verify backend is running on port 8000." 
+          ? "Backend endpoint not found. Verify backend is running on port 18800." 
           : is503 
             ? "ORATS data provider is unavailable." 
             : `${ENDPOINTS.universe} returned HTTP ${status || "error"}.`,

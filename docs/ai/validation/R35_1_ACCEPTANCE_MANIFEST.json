@@ -3,7 +3,7 @@
   "release_name": "dedicated-ports-stabilization",
   "release_branch": "release/R35.1-dedicated-ports-stabilization",
   "base_sha": "2c1393ff31bf579708d8388e3a48d2092305a497",
-  "authorization_commit_sha": "PLACEHOLDER_AUTHORIZATION_COMMIT_SHA",
+  "authorization_commit_sha": "956117085ff8bcb159a1716427a5f836d335d86b",
   "canonical_checkout": "C:\\Development\\Workspace\\ChakraOps-dev\\chakraops",
   "obsolete_checkout_forbidden": "C:\\Development\\Workspace\\ChakraOps",
   "inventory": {

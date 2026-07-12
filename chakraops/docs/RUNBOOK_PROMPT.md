@@ -31,14 +31,15 @@ Run a full ChakraOps preflight validation. Execute the following in order:
    - `cd frontend && npm install && npm run build`
 
 8. **Provide exact commands for backend and frontend**
-   - Backend: `python -m uvicorn app.api.server:app --reload --port 8000`
-   - Frontend: `cd frontend && npm run dev`
+   - Preferred: `cd C:\Development\Workspace\ChakraOps-dev\chakraops && .\scripts\start_chakraops.ps1`
+   - Manual backend: `python -m uvicorn app.api.server:app --reload --host 127.0.0.1 --port 18800`
+   - Manual frontend: `cd frontend && npm run dev` (UI at http://127.0.0.1:18873)
 
 9. **Smoke checks** (if backend is running)
-   - `Invoke-WebRequest -Uri "http://localhost:8000/api/ui/decision/latest?mode=LIVE" -UseBasicParsing`
-   - `Invoke-WebRequest -Uri "http://localhost:8000/api/ui/universe" -UseBasicParsing`
-   - `Invoke-WebRequest -Uri "http://localhost:8000/api/ui/symbol-diagnostics?symbol=SPY" -UseBasicParsing`
-   - Expected: StatusCode 200 for each.
+   - `Invoke-WebRequest -Uri "http://127.0.0.1:18800/api/ui/decision/latest?mode=LIVE" -UseBasicParsing`
+   - `Invoke-WebRequest -Uri "http://127.0.0.1:18800/api/ui/universe" -UseBasicParsing -TimeoutSec 120`
+   - `Invoke-WebRequest -Uri "http://127.0.0.1:18800/api/ui/symbol-diagnostics?symbol=SPY" -UseBasicParsing`
+   - Expected: StatusCode 200 for each. See RUNBOOK_TROUBLESHOOTING.md if UI fails.
 
 10. **Summary**
     - List files changed (if any).

@@ -1128,7 +1128,7 @@ export function StrategyPage() {
         if (detail) throw new Error(detail);
         if (res.status === 502) {
           throw new Error(
-            "TTS failed. Start the backend (e.g. cd chakraops && python -m uvicorn app.api.server:app --port 8000) and set OPENAI_API_KEY in chakraops/.env."
+            "TTS failed. Start the backend (e.g. cd chakraops && python -m uvicorn app.api.server:app --host 127.0.0.1 --port 18800) and set OPENAI_API_KEY in chakraops/.env."
           );
         }
         throw new Error(res.statusText || "TTS failed");

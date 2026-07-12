@@ -1,13 +1,16 @@
 # ChakraOps Execution Runbook
 
-Human runbook for clean-room startup and troubleshooting. Reflects current ChakraOps (R24.8–R25.1): Docker, Caddy prod, /api routing, healthz, backup, offline proof harness.
+Human runbook for clean-room startup, debugging, and troubleshooting. Reflects current ChakraOps (R24.8–R35.0): dedicated dev ports, Docker, Caddy prod, /api routing, healthz, backup, offline proof harness.
+
+**Related runbooks:** [RUNBOOK_STARTUP_SHUTDOWN.md](RUNBOOK_STARTUP_SHUTDOWN.md) · [RUNBOOK_TROUBLESHOOTING.md](RUNBOOK_TROUBLESHOOTING.md) · [VALIDATION_PLAYBOOK.md](VALIDATION_PLAYBOOK.md)
 
 ---
 
 ## Two-workspace workflow (stable vs dev)
 
 - **ChakraOps-stable** — Runs daily from `main` or a release tag; use for production-like validation and EOD workflows.
-- **ChakraOps-dev** — Used for release branches and feature work; run eval and API from this clone.
+- **ChakraOps-dev** — **Canonical dev checkout:** `C:\Development\Workspace\ChakraOps-dev\chakraops`. Used for release branches and feature work.
+- **Do not use** `C:\Development\Workspace\ChakraOps` (stale); scripts and port config live in `ChakraOps-dev`.
 - **Guidance:** Don’t open both workspaces in Cursor at once to reduce RAM; switch as needed.
 
 ---
@@ -18,59 +21,90 @@ Human runbook for clean-room startup and troubleshooting. Reflects current Chakr
 ```
 <REPO_ROOT>/out/decision_latest.json
 ```
-- **REPO_ROOT** = parent of `chakraops/` (e.g. `C:\Development\Workspace\ChakraOps`)
+- **REPO_ROOT** = parent of inner `chakraops/` package (e.g. `C:\Development\Workspace\ChakraOps-dev\chakraops`)
 - All UI pages (Universe, Dashboard, Symbol) read from this store via v2 artifact only
 - `scripts/run_and_save.py` and uvicorn both use this path regardless of current working directory
 
 ---
 
+## Dedicated local ports
+
+ChakraOps uses **non-default ports** so Docker and other dev tools on 8000/5173 do not conflict:
+
+| Service | Port | URL |
+|---------|------|-----|
+| Backend API | **18800** | http://127.0.0.1:18800 |
+| Frontend UI | **18873** | http://127.0.0.1:18873 |
+
+Source of truth: `scripts/chakraops_ports.ps1`, `chakraops/app/core/chakraops_ports.py`, `frontend/.env.development`.
+
+Preferred startup: `.\scripts\start_chakraops.ps1` from `ChakraOps-dev\chakraops`.
+
+**Important:** Use **`127.0.0.1`**, not `localhost`, in URLs and proxy config. On Windows, `localhost` often resolves to IPv6 (`::1`) where Docker or other apps may already own port 8000.
+
+---
+
 ## Golden Path (copy-paste)
 
-**From repo root** (for path-independent commands):
+### One-command startup (recommended)
+
 ```powershell
-cd C:\Development\Workspace\ChakraOps
+cd C:\Development\Workspace\ChakraOps-dev\chakraops
+.\scripts\start_chakraops.ps1
 ```
 
-**From chakraops package** (backend commands require PYTHONPATH):
+Open **http://127.0.0.1:18873/dashboard**. Shutdown: `.\scripts\stop_chakraops.ps1`.
+
+### Full manual path (eval + backend + frontend)
+
+**Repo root** (parent of `chakraops/` and `frontend/`):
+
 ```powershell
-cd C:\Development\Workspace\ChakraOps\chakraops
+cd C:\Development\Workspace\ChakraOps-dev\chakraops
+```
+
+**Backend package** (Python commands require `PYTHONPATH`):
+
+```powershell
+cd C:\Development\Workspace\ChakraOps-dev\chakraops\chakraops
 ```
 
 ```powershell
 # Terminal 0: Activate venv, install deps
-cd C:\Development\Workspace\ChakraOps\chakraops
+cd C:\Development\Workspace\ChakraOps-dev\chakraops\chakraops
 .\.venv\Scripts\Activate.ps1
 $env:PYTHONPATH = (Get-Location).Path
 pip install -r requirements.txt
 
 # Terminal 1: Generate decision artifacts (LIVE)
-cd C:\Development\Workspace\ChakraOps\chakraops
+cd C:\Development\Workspace\ChakraOps-dev\chakraops\chakraops
 .\.venv\Scripts\Activate.ps1
 $env:PYTHONPATH = (Get-Location).Path
 python scripts/run_and_save.py --symbols SPY,AAPL --output-dir out
 
-#Run full universe evaluation:
+# Full universe evaluation:
 python scripts/run_and_save.py --all --output-dir out
 
-# Terminal 2: Start backend
-cd C:\Development\Workspace\ChakraOps\chakraops
+# Terminal 2: Start backend (dedicated port 18800)
+cd C:\Development\Workspace\ChakraOps-dev\chakraops\chakraops
 .\.venv\Scripts\Activate.ps1
 $env:PYTHONPATH = (Get-Location).Path
-python -m uvicorn app.api.server:app --reload --port 8000
+python -m uvicorn app.api.server:app --reload --host 127.0.0.1 --port 18800
 
-# Terminal 3: Start React frontend
-cd C:\Development\Workspace\ChakraOps\frontend
+# Terminal 3: Start React frontend (dedicated port 18873; reads frontend/.env.development)
+cd C:\Development\Workspace\ChakraOps-dev\chakraops\frontend
 npm install
-npm run build
-npm run test
 npm run dev
 
 # Terminal 4: Smoke checks (after backend is up)
-Invoke-WebRequest -Uri "http://localhost:8000/api/healthz" -UseBasicParsing | Select-Object StatusCode
-Invoke-WebRequest -Uri "http://localhost:8000/api/ui/system-health" -UseBasicParsing | Select-Object StatusCode
-Invoke-WebRequest -Uri "http://localhost:8000/api/ui/decision/latest?mode=LIVE" -UseBasicParsing | Select-Object StatusCode
-Invoke-WebRequest -Uri "http://localhost:8000/api/ui/universe" -UseBasicParsing | Select-Object StatusCode
-Invoke-WebRequest -Uri "http://localhost:8000/api/ui/symbol-diagnostics?symbol=SPY" -UseBasicParsing | Select-Object StatusCode
+Invoke-WebRequest -Uri "http://127.0.0.1:18800/api/healthz" -UseBasicParsing | Select-Object StatusCode
+Invoke-WebRequest -Uri "http://127.0.0.1:18800/api/ui/system-health" -UseBasicParsing | Select-Object StatusCode
+Invoke-WebRequest -Uri "http://127.0.0.1:18800/api/ui/decision/latest?mode=LIVE" -UseBasicParsing | Select-Object StatusCode
+Invoke-WebRequest -Uri "http://127.0.0.1:18800/api/ui/universe" -UseBasicParsing -TimeoutSec 120 | Select-Object StatusCode
+Invoke-WebRequest -Uri "http://127.0.0.1:18800/api/ui/symbol-diagnostics?symbol=SPY" -UseBasicParsing | Select-Object StatusCode
+
+# Terminal 4b: Confirm Vite proxy (optional)
+Invoke-WebRequest -Uri "http://127.0.0.1:18873/api/healthz" -UseBasicParsing | Select-Object StatusCode
 ```
 Expected: StatusCode 200 for each smoke. **GET /api/healthz** is lightweight (no ORATS); **GET /api/ui/system-health** reports store path and frozen state.
 
@@ -84,8 +118,8 @@ From repo root:
 docker compose up --build
 ```
 
-- Frontend: **localhost:3000** (or 80 if frontend port mapped)
-- Backend: **localhost:8000**
+- Frontend: **http://127.0.0.1:18873** (host maps to container :80)
+- Backend: **http://127.0.0.1:18800** (host maps to container :8000)
 - `out/` is bind-mounted so artifacts persist. No auth in dev.
 
 ---
@@ -130,6 +164,8 @@ python chakraops/scripts/offline_eval_proof.py --fixture chakraops/tests/fixture
 
 | Purpose | Location |
 |--------|----------|
+| Startup / shutdown | [RUNBOOK_STARTUP_SHUTDOWN.md](RUNBOOK_STARTUP_SHUTDOWN.md) |
+| Debugging / UI failures | [RUNBOOK_TROUBLESHOOTING.md](RUNBOOK_TROUBLESHOOTING.md) |
 | PRD, roadmap, playbook, backlog, cleanup, architecture | `docs/master/` (e.g. ROADMAP_2026, RELEASE_PLAYBOOK, BACKLOG, CLEANUP_POLICY, REPO_ARCHITECTURE_MAP) |
 | Per-release requirements, notes, checklist | `chakraops/docs/releases/` (e.g. R25.1_requirements.md, R25.1_release_notes.md, RELEASE_CHECKLIST.md) |
 | Verification evidence (gate tails, UAT) | `out/verification/<Release>/notes.md` (e.g. out/verification/R25.1/notes.md) |
@@ -187,7 +223,7 @@ git push origin v25.1-baseline
 
 After running evaluation and starting the backend:
 ```powershell
-cd C:\Development\Workspace\ChakraOps\chakraops
+cd C:\Development\Workspace\ChakraOps-dev\chakraops\chakraops
 $env:PYTHONPATH = (Get-Location).Path
 python scripts/sanity_one_pipeline.py
 ```
@@ -208,10 +244,10 @@ PASS: All sanity checks passed.
 
 ## Clean-Room Startup
 
-1. **Kill ports (optional)** – if 8000/5173 are in use:
+1. **Kill ports (optional)** – if 18800/18873 are in use:
    ```powershell
-   netstat -ano | findstr ":8000"
-   netstat -ano | findstr ":5173"
+   netstat -ano | findstr ":18800"
+   netstat -ano | findstr ":18873"
    taskkill /PID <PID> /F
    ```
 
@@ -222,7 +258,46 @@ PASS: All sanity checks passed.
 
 3. **Generate artifacts** – only `scripts/run_and_save.py` produces decision snapshots.
 
-4. **Start backend** then **frontend** (see Golden Path).
+4. **Start backend** then **frontend** (see Golden Path) — or use `.\scripts\start_chakraops.ps1`.
+
+---
+
+## Debug and troubleshooting
+
+Full guide: **[RUNBOOK_TROUBLESHOOTING.md](RUNBOOK_TROUBLESHOOTING.md)**. Summary for common local-dev failures:
+
+### Quick checks
+
+```powershell
+cd C:\Development\Workspace\ChakraOps-dev\chakraops
+.\scripts\health_check_chakraops.ps1
+Invoke-WebRequest -Uri "http://127.0.0.1:18800/api/ui/universe" -UseBasicParsing -TimeoutSec 120 | Select-Object StatusCode
+Invoke-WebRequest -Uri "http://127.0.0.1:18873/api/healthz" -UseBasicParsing | Select-Object StatusCode
+```
+
+### "Failed to load universe" (UI red error)
+
+| Check | Command / action |
+|-------|------------------|
+| Backend up? | `http://127.0.0.1:18800/api/healthz` → 200 |
+| Proxy up? | `http://127.0.0.1:18873/api/healthz` → 200 |
+| Wrong server? | Do **not** use `localhost:8000` or `localhost:5173`; Docker often owns IPv6 :8000 |
+| Vite config | Both `frontend/vite.config.ts` and `frontend/vite.config.js` must proxy to `127.0.0.1:18800` |
+| Artifact exists? | Run `python scripts/run_and_save.py --symbols SPY,AAPL --output-dir out` |
+| Slow load? | First `/api/ui/universe` with 171 symbols may take ~60–90s — wait for completion |
+
+### Browser DevTools
+
+1. **Network** → `/api/ui/universe` — note status (404 = wrong backend; 401 = UI key mismatch; 500 = server error)
+2. **Console** — CORS errors → ensure backend allows `http://127.0.0.1:18873`
+
+### Reset and restart
+
+```powershell
+cd C:\Development\Workspace\ChakraOps-dev\chakraops
+.\scripts\stop_chakraops.ps1
+.\scripts\start_chakraops.ps1
+```
 
 ---
 
@@ -230,10 +305,14 @@ PASS: All sanity checks passed.
 
 | Issue | Cause | Fix |
 |-------|-------|-----|
-| Port 8000 or 5173 in use | Another process bound | `netstat -ano \| findstr ":8000"` or `":5173"` → `taskkill /PID <PID> /F` |
+| **Failed to load universe** / UI API errors | Vite proxy hit wrong server (`localhost` → Docker on :8000) or backend down | Use `127.0.0.1:18873` UI and `127.0.0.1:18800` API; restart via `start_chakraops.ps1`; see [RUNBOOK_TROUBLESHOOTING.md](RUNBOOK_TROUBLESHOOTING.md) |
+| Port 18800 or 18873 in use | Another process bound | `netstat -ano \| findstr ":18800"` or `":18873"` → stop ChakraOps with `stop_chakraops.ps1` or free port |
+| `/api/ui/universe` slow but eventually 200 | Full artifact rebuild per symbol | Normal for 171 symbols; wait up to ~90s |
+| 401 on `/api/ui/*` | `UI_API_KEY` set without matching `VITE_UI_KEY` | Align keys in `chakraops/.env` and `frontend/.env`, or unset both for local dev |
 | Missing decision files | Artifacts not generated | Run `python scripts/run_and_save.py --symbols SPY,AAPL --output-dir out` |
-| `ModuleNotFoundError: No module named 'app'` | Wrong PYTHONPATH | From chakraops/: `$env:PYTHONPATH = (Get-Location).Path` |
+| `ModuleNotFoundError: No module named 'app'` | Wrong PYTHONPATH | From inner `chakraops/`: `$env:PYTHONPATH = (Get-Location).Path` |
 | No module named uvicorn | Venv not activated | `.\.venv\Scripts\Activate.ps1` before running uvicorn |
+| Stale checkout / wrong code | Using `ChakraOps` instead of `ChakraOps-dev` | Switch to `C:\Development\Workspace\ChakraOps-dev\chakraops` |
 | UI shows MOCK in LIVE mode | MOCK data leaking | **STOP**. LIVE must only use `out/`; reject mock/scenario content. |
 
 ---
@@ -253,7 +332,7 @@ The decision artifact has a **single canonical path** used by scripts, API, and 
 <REPO_ROOT>/out/decision_latest.json
 ```
 
-- **REPO_ROOT** = parent of `chakraops/` (e.g. `C:\Development\Workspace\ChakraOps`).
+- **REPO_ROOT** = parent of inner `chakraops/` package (e.g. `C:\Development\Workspace\ChakraOps-dev\chakraops`).
 - **Latest** is written **only** by `EvaluationStoreV2` when `evaluate_universe` or `evaluate_single_symbol_and_merge` runs.
 - `scripts/run_and_save.py` writes timestamped copies to `--output-dir` but **never** writes `decision_latest.json` directly; the store does that.
 - Server startup logs the resolved path: `[STORE] Canonical decision store path: ...`
@@ -265,7 +344,7 @@ The decision artifact has a **single canonical path** used by scripts, API, and 
 Verifies ONE pipeline / ONE store invariants. Run after the backend is started.
 
 ```powershell
-cd C:\Development\Workspace\ChakraOps\chakraops
+cd C:\Development\Workspace\ChakraOps-dev\chakraops\chakraops
 $env:PYTHONPATH = (Get-Location).Path
 python scripts/sanity_one_pipeline.py
 ```
@@ -290,7 +369,7 @@ The script:
 | `decision/latest metadata.pipeline_timestamp != store` | API serving stale or different artifact | Restart server so it loads the store; or API read from wrong path |
 | `Universe SPY score/band == decision symbols SPY` fail | Universe and decision response disagree | Single store should be source; check ui_routes universe vs decision path |
 | `symbol-diagnostics SPY vs store SPY` fail | Symbol-diagnostics not store-first | Check `_build_symbol_diagnostics_from_v2_store` uses store only |
-| `API: Connection refused` / `Cannot reach API` | Server not running | Start backend on port 8000 before running sanity |
+| `API: Connection refused` / `Cannot reach API` | Server not running | Start backend on port 18800 before running sanity |
 
 ---
 

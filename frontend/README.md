@@ -32,7 +32,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173). Default route is `/dashboard`.
+Open [http://127.0.0.1:18873](http://127.0.0.1:18873). Default route is `/dashboard`.
 
 ### Build
 

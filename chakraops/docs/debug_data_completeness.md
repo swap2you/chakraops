@@ -113,7 +113,7 @@ Fill the table from a single run with DEBUG_ORATS=1 and the API responses above.
 
 ## Verify recompute updates Universe
 
-1. Start API: `python -m uvicorn app.api.server:app --reload --port 8000`
-2. Open Universe page; note current `pipeline_timestamp` and one symbol’s score/band.
+1. Start API: `python -m uvicorn app.api.server:app --reload --host 127.0.0.1 --port 18800`
+2. Open Universe at **http://127.0.0.1:18873/universe**; note current `pipeline_timestamp` and one symbol’s score/band.
 3. Open Symbol diagnostics for that symbol; click **Recompute now** (POST `/api/ui/symbols/{symbol}/recompute`).
 4. After success: Universe and Dashboard should refetch; `pipeline_timestamp` should update and the symbol’s row should reflect the new eval (score/band/verdict) from the same canonical store.

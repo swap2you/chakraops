@@ -19,7 +19,7 @@ cd C:\Development\Workspace\ChakraOps-dev\chakraops\chakraops
 python -c "from app.core.operations.scheduler_service import scheduler_status; import json; print(json.dumps(scheduler_status(), indent=2))"
 ```
 
-Or open **System Diagnostics → Operations** in the UI (`http://127.0.0.1:5173/system-diagnostics`).
+Or open **System Diagnostics → Operations** in the UI (`http://127.0.0.1:18873/system-diagnostics`).
 
 Inspect `out/job_runs.jsonl` for recent runs (read-only).
 

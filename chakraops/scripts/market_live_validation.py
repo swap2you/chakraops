@@ -31,7 +31,9 @@ try:
 except ImportError:
     pass
 
-API_BASE = os.getenv("VALIDATION_API_BASE", "http://127.0.0.1:8000")
+from app.core.chakraops_ports import backend_base_url
+
+API_BASE = os.getenv("VALIDATION_API_BASE", backend_base_url())
 UI_KEY = (os.getenv("UI_API_KEY") or "").strip()
 
 # Valid bands

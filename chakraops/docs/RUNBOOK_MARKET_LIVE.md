@@ -13,16 +13,16 @@ End-to-end validation for **ONE PIPELINE / ONE ARTIFACT / ONE STORE (v2-only)** 
 
 - Python env with project deps installed (`pip install -e .` or equivalent).
 - Optional: ORATS token and universe configured for full `--all` run.
-- For API checks: server running on port 8000 (or set `VALIDATION_API_BASE`).
+- For API checks: server running on port **18800** (or set `VALIDATION_API_BASE`, default `http://127.0.0.1:18800`).
 
 ## Commands
 
 ### Start server (optional, for API validation)
 
-```bash
-cd chakraops
+```powershell
+cd C:\Development\Workspace\ChakraOps-dev\chakraops\chakraops
 $env:PYTHONPATH = (Get-Location).Path
-python -m uvicorn app.api.server:app --reload --port 8000
+python -m uvicorn app.api.server:app --reload --host 127.0.0.1 --port 18800
 ```
 
 ### Run market validation

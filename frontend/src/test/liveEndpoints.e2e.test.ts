@@ -1,7 +1,7 @@
 /**
  * LIVE endpoint e2e tests — real HTTP against LIVE API.
  * Skip unless LIVE_API_BASE_URL (or VITE_API_BASE_URL) is set.
- * Run: LIVE_API_BASE_URL=http://localhost:8000 npm test -- liveEndpoints
+ * Run: LIVE_API_BASE_URL=http://127.0.0.1:18800 npm test -- liveEndpoints
  * On failure, prints URL + status + body snippet for debugging.
  */
 import { describe, it, expect } from "vitest";

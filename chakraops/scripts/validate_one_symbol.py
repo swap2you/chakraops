@@ -5,9 +5,9 @@ the same snapshot through all endpoints. Calls API (server must already be runni
 Writes JSON artifacts and a human-readable markdown analysis. No cached DB reads.
 
 Usage:
-  python scripts/validate_one_symbol.py [--symbol SPY] [--base http://127.0.0.1:8000]
+  python scripts/validate_one_symbol.py [--symbol SPY] [--base http://127.0.0.1:18800]
 
-Requires: Server running (e.g. uvicorn app.api.server:app --port 8000). Does NOT auto-start.
+Requires: Server running (e.g. uvicorn app.api.server:app --port 18800). Does NOT auto-start.
 
 Exit codes:
   0 - All required fields present, Stage-1 would PASS (not stale); eligibility/contract checks OK; mode integrity PASS.
@@ -40,7 +40,9 @@ except ImportError:
     urllib = None  # type: ignore
 
 
-BASE_DEFAULT = "http://127.0.0.1:8000"
+from app.core.chakraops_ports import backend_base_url
+
+BASE_DEFAULT = backend_base_url()
 SYMBOL_DEFAULT = "SPY"
 
 # Required Stage-1 fields (must match data_requirements.REQUIRED_STAGE1_FIELDS)

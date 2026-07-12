@@ -1,5 +1,5 @@
 # R24.8/R24.9: Docker packaging and internet-safe deployment.
-# Dev (default): docker compose up --build  → frontend :3000, backend :8000
+# Dev (default): docker compose up --build  → frontend :18873, backend :18800 (host)
 # Prod:          docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod up -d --build
 #               → only Caddy :80/:443; backend and frontend internal. Same-origin /api via Caddy.
 
@@ -10,7 +10,7 @@ services:
       dockerfile: chakraops/Dockerfile
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "18800:8000"
     volumes:
       - ./out:/workspace/out
       # R26.6: persist data/ (journal, checklists, monthly reports)
@@ -29,10 +29,10 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        VITE_API_BASE_URL: "http://localhost:8000"
+        VITE_API_BASE_URL: "http://127.0.0.1:18800"
     restart: unless-stopped
     ports:
-      - "3000:80"
+      - "18873:80"
     depends_on:
       - backend
     logging:

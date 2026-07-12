@@ -79,25 +79,25 @@
 **Backend**
 
 - `cd chakraops` (inner backend root)
-- Activate venv, then: `python -m uvicorn app.api.server:app --reload --port 8000`
-- API base: http://localhost:8000
+- Activate venv, then: `python -m uvicorn app.api.server:app --reload --host 127.0.0.1 --port 18800`
+- API base: http://127.0.0.1:18800 (see `scripts/chakraops_ports.ps1`)
 
 **Frontend**
 
 - `cd frontend`
 - `npm run dev`
-- UI: http://localhost:5173 (Vite proxies `/api` to backend)
+- UI: http://127.0.0.1:18873 (Vite proxies `/api` to backend on 18800)
 
 **Health checks**
 
-- `GET http://localhost:8000/api/healthz` → 200
-- `GET http://localhost:8000/api/ui/system-health` → 200
+- `GET http://127.0.0.1:18800/api/healthz` → 200
+- `GET http://127.0.0.1:18800/api/ui/system-health` → 200
 
 ---
 
 ## Docker: dev vs prod (reference R24.8 / R24.9)
 
-- **Dev compose:** Ports exposed (e.g. 8000 backend, 3000 frontend). Use for local debugging. See README Docker Quickstart.
+- **Dev compose:** Host ports 18800 (backend) and 18873 (frontend). Use for local debugging. See README Docker Quickstart.
 - **Prod compose:** Caddy reverse proxy; same-origin `/api`; basic auth; only 80/443 exposed. See README Production Quickstart and `docker-compose.prod.yml`.
 
 ---

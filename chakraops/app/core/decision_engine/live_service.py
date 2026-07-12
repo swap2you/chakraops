@@ -34,6 +34,7 @@ from app.core.decision_engine.contract import (
     SHARE_BUY,
 )
 from app.core.decision_engine.engine import evaluate
+from app.core.decision_engine.explanation import build_explanation
 from app.core.decision_engine.legacy_adapter import DECISION_SOURCE, to_live_recommendations
 from app.core.decision_engine.profiles import ProfileValidationError, get_profile
 
@@ -375,6 +376,15 @@ def compute_live_recommendations(
             if extra:
                 merged = list(dict.fromkeys(list(item.get("reason_codes") or []) + extra))
                 item["reason_codes"] = merged
+
+    # R36.1: attach the additive, behavior-preserving explainability contract.
+    profile_dict = profile_obj.to_dict()
+    for bucket in ("actionable", "watch", "blocked"):
+        for item in recommendations.get(bucket, []):
+            item["explanation"] = build_explanation(item, profile_dict)
+    sic = recommendations.get("stay_in_cash")
+    if isinstance(sic, dict):
+        sic["explanation"] = build_explanation(sic, profile_dict)
 
     capital_safety = compute_capital_set_safety(
         recommendations.get("actionable", []),

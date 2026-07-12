@@ -44,3 +44,14 @@ Internal codes are kept for debugging. The UI shows **reasons_explained** (title
 
 - **Server**: `app/core/eval/reason_codes.py` — `explain_reasons(...)`.
 - **Consumers**: Evaluation service v2 sets `reasons_explained` on `SymbolDiagnosticsDetails`; UI routes expose it on symbol diagnostics and universe symbols. Raw `primary_reason` remains for debug.
+
+---
+
+## R36.1 — Canonical decision-engine reason registry
+
+The legacy mapping above covers the evaluation-service (`reasons_explained`) surface. R36.1 adds a **canonical, additive registry** for the decision-engine reason codes surfaced through `/api/ui/action-needed` (the `explanation` contract). It does not change any decision behavior or emission site.
+
+- **Registry**: `app/core/decision_engine/reason_registry.py` — `resolve(code)` returns a `ReasonCode` with `category`, `severity` (`HARD`/`SOFT`/`INFO`), `klass` (`SAFETY_CRITICAL`/`TEMPORARY`/`INFORMATIONAL`), `title`, `explanation`, and unit metadata for numeric codes.
+- **Resolution**: interpolated families (e.g. `REGIME_EXCLUDED_*`, `EARNINGS_BLACKOUT_*D`, `UNKNOWN_STRATEGY_*`) resolve by prefix; unknown codes map to a safe generic entry; legacy `FAIL_`/`WARN_` prefixes are stripped and never leaked to UI text.
+- **Contract builder**: `app/core/decision_engine/explanation.py` — `build_explanation(item, profile)` returns primary/supporting reasons, measured-vs-threshold values (with units), deterministic near-miss, calculation trace, data sources, timestamps, and temporary/safety-critical grouping. Advisory-only: `manual_only=true`, `trade_execution=false`, no order/broker fields.
+- **Frontend**: `ExplanationPanel.tsx` renders humanized titles only (never raw codes).

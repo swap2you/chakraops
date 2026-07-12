@@ -1,0 +1,79 @@
+{
+  "release_id": "R36.1",
+  "release_name": "canonical-explainability",
+  "release_branch": "release/R36.1-canonical-explainability",
+  "base_sha": "2b4fe82d644956567d9bc5926f605f63a70f3fea",
+  "authorization_commit_sha": "PENDING",
+  "canonical_checkout": "C:\\Development\\Workspace\\ChakraOps-dev\\chakraops",
+  "authorized_new_paths": [
+    "chakraops/app/core/decision_engine/reason_registry.py",
+    "chakraops/app/core/decision_engine/explanation.py",
+    "chakraops/tests/test_r361_reason_registry.py",
+    "chakraops/tests/test_r361_explanation_contract.py",
+    "chakraops/tests/test_r361_near_miss.py",
+    "chakraops/tests/test_r361_api_explanation.py",
+    "frontend/src/components/ExplanationPanel.tsx",
+    "frontend/src/components/ExplanationPanel.test.tsx"
+  ],
+  "authorized_modified_paths": [
+    "chakraops/app/core/decision_engine/live_service.py",
+    "chakraops/app/core/eval/reason_codes.py",
+    "chakraops/docs/REASON_CODES.md",
+    "frontend/src/api/queries.ts",
+    "frontend/src/api/types.ts",
+    "frontend/src/components/AuthoritativeRecommendations.tsx"
+  ],
+  "governance_docs": [
+    "docs/ai/releases/R36.1/R36_1_SCOPE.md",
+    "docs/ai/releases/R36.1/R36_1_DESIGN.md",
+    "docs/ai/releases/R36.1/R36_1_AUTHORIZED_PATHS.md",
+    "docs/ai/releases/R36.1/R36_1_RISK_REGISTER.md",
+    "docs/ai/releases/R36.1/R36_1_ACCEPTANCE_CRITERIA.md",
+    "docs/ai/releases/R36.1/R36_1_SELF_REVIEW_CHECKLIST.md",
+    "docs/ai/validation/R36_1_ACCEPTANCE_MANIFEST.json"
+  ],
+  "forbidden_paths": [
+    "chakraops/app/core/decision_engine/gates.py",
+    "chakraops/app/core/decision_engine/strategies.py",
+    "chakraops/app/core/decision_engine/engine.py",
+    "chakraops/app/core/decision_engine/sizing.py",
+    "chakraops/app/core/decision_engine/contract.py",
+    "chakraops/config/strategy_profiles.yaml",
+    ".env",
+    "frontend/.env.development",
+    "ChakraOps_Post_R35_R36_Prompt_Library.md"
+  ],
+  "forbidden_actions": [
+    "threshold_changes",
+    "eligibility_ranking_sizing_allocation_changes",
+    "universe_v2_persistence_or_lifecycle",
+    "robinhood_or_broker_integration",
+    "auto_trading_or_broker_writes",
+    "slack_redesign",
+    "broad_ux_redesign",
+    "new_option_strategies",
+    "scheduler_activation",
+    "threshold_consolidation",
+    "trust_ranking_or_sizing"
+  ],
+  "required_validation_commands": [
+    "cd chakraops && python -m pytest tests -q --tb=short",
+    "cd chakraops && python -m pytest tests/test_r361_reason_registry.py tests/test_r361_explanation_contract.py tests/test_r361_near_miss.py tests/test_r361_api_explanation.py -q",
+    "cd frontend && npm run test -- --run",
+    "cd frontend && npm run build"
+  ],
+  "required_evidence_locations": ["out/verification/R36.1/notes.md"],
+  "assertions": {
+    "explanation_is_additive_optional": true,
+    "gate_emission_unchanged": true,
+    "near_miss_never_bypasses_safety_critical": true,
+    "no_raw_fail_warn_in_ui_text": true,
+    "no_threshold_or_eligibility_change": true,
+    "manual_only": true,
+    "trade_execution": false,
+    "scheduler_disabled": true,
+    "no_broker_write": true,
+    "orats_only": true,
+    "env_not_committed": true
+  }
+}

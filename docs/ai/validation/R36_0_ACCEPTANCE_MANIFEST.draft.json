@@ -1,0 +1,60 @@
+{
+  "release_id": "R36.0",
+  "release_name": "trust-universe-v2-explainability",
+  "status": "DESIGN_DRAFT",
+  "authorization": "NOT_AUTHORIZED_FOR_IMPLEMENTATION",
+  "base_sha": "7a0df588756931353aa4bc7135187ef060c8919e",
+  "design_branch": "release/R36.0-trust-universe-v2-explainability",
+  "canonical_checkout": "C:\\Development\\Workspace\\ChakraOps-dev\\chakraops",
+  "obsolete_checkout_forbidden": "C:\\Development\\Workspace\\ChakraOps",
+  "design_documents": [
+    "docs/ai/releases/R36.0/R36_0_DISCOVERY.md",
+    "docs/ai/releases/R36.0/R36_0_OBSERVATION_MODEL.md",
+    "docs/ai/releases/R36.0/R36_0_DESIGN_PACK.md",
+    "docs/ai/releases/R36.0/R36_0_RISK_REGISTER.md",
+    "docs/ai/releases/R36.0/R36_0_DECISION_LOG.md",
+    "docs/ai/releases/R36.0/R36_0_ACCEPTANCE_CRITERIA.md",
+    "docs/ai/releases/R36.0/R36_0_RELEASE_SEQUENCING.md",
+    "docs/ai/releases/R36.0/R36_0_PROPOSED_PATHS.md",
+    "docs/ai/releases/R36.0/R36_0_OWNER_APPROVAL_CHECKLIST.md",
+    "docs/ai/releases/R36.0/R36_0_SELF_REVIEW.md",
+    "docs/ai/validation/R36_0_OBSERVATION_SCHEMA.json",
+    "docs/ai/validation/R36_0_ACCEPTANCE_MANIFEST.draft.json"
+  ],
+  "themes": ["trust", "universe_v2", "explainability"],
+  "confirmed_gaps": ["G1_no_watch_quarantine", "G2_no_admission_policy", "G3_no_pass_fail_history", "G4_no_temp_vs_safety_class", "G5_decentralized_reason_codes", "G6_near_miss_not_canonical", "G7_no_explainability_contract", "G8_no_csp_vs_share_arbitration", "G9_threshold_duplication_4_files", "G10_macro_event_calendar_stub", "G11_no_robinhood_readonly", "G12_three_scoring_stacks", "G13_observability_untested", "G14_three_slack_layers"],
+  "proposed_sequencing": ["R36.1_explainability", "R36.2_universe_v2", "R36.3_trust_surface", "R36.4_csp_vs_share", "R36.5_threshold_consolidation", "R36.6_robinhood_readonly_optional"],
+  "owner_decisions_required": ["D-1", "D-2", "D-3", "D-4", "D-5", "D-6", "D-7", "D-8", "D-9", "D-10", "D-11"],
+  "value_status_legend": ["INHERITED", "HYPOTHESIS", "RESEARCH", "APPROVED", "PENDING-BACKTEST"],
+  "approved_threshold_count": 0,
+  "forbidden_actions": [
+    "auto_trading",
+    "broker_write_or_order_routing",
+    "scheduler_activation",
+    "recurring_job_activation",
+    "strategy_threshold_change_without_backtest",
+    "new_market_data_provider",
+    "unrelated_ui_redesign",
+    "broad_ruff_cleanup",
+    "implementation_before_owner_approval",
+    "commit_env_or_prompt_library"
+  ],
+  "assertions": {
+    "manual_only": true,
+    "trade_execution": false,
+    "scheduler_disabled": true,
+    "recurring_jobs_disabled": true,
+    "no_broker_write": true,
+    "orats_only": true,
+    "robinhood": "read_only_design_only_default_off",
+    "no_production_strategy_code_modified": true,
+    "no_implementation_authorization_commit": true,
+    "aggressive_mode_never_removes_safeguards": true
+  },
+  "required_future_validation_commands": [
+    "cd chakraops && python -m pytest tests -q --tb=short",
+    "cd frontend && npm run test -- --run",
+    "cd frontend && npm run build"
+  ],
+  "required_future_evidence_locations": ["out/verification/R36.x/notes.md"]
+}

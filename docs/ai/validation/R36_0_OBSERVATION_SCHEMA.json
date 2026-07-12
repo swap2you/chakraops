@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "chakraops/R36_0_OBSERVATION_SCHEMA",
+  "title": "R36 Observation-Week Daily Record (DRAFT)",
+  "description": "Draft schema for observation-week evidence capture. DESIGN DRAFT — not an implementation artifact. No thresholds are set from a single week.",
+  "type": "object",
+  "required": ["date", "orats_freshness", "universe_size", "actionable_count", "blocked_count", "stay_in_cash"],
+  "properties": {
+    "date": {"type": "string", "format": "date"},
+    "orats_freshness": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["FRESH", "STALE", "MISSING"]},
+        "age_seconds": {"type": "integer", "minimum": 0}
+      }
+    },
+    "universe_size": {"type": "integer", "minimum": 0},
+    "universe_delta": {"type": "object", "properties": {"added": {"type": "array", "items": {"type": "string"}}, "removed": {"type": "array", "items": {"type": "string"}}}},
+    "candidates_total": {"type": "integer", "minimum": 0},
+    "candidates_by_strategy": {"type": "object", "properties": {"CSP": {"type": "integer"}, "COVERED_CALL": {"type": "integer"}, "SHARE_BUY": {"type": "integer"}}},
+    "actionable_count": {"type": "integer", "minimum": 0},
+    "blocked_count": {"type": "integer", "minimum": 0},
+    "blocked_by_reason": {"type": "object", "additionalProperties": {"type": "integer"}},
+    "stay_in_cash": {"type": "object", "required": ["value"], "properties": {"value": {"type": "boolean"}, "reason": {"type": "string"}}},
+    "rejection_histogram": {"type": "object", "additionalProperties": {"type": "integer"}},
+    "near_miss": {"type": "array", "items": {"type": "object", "required": ["symbol", "failed_rule"], "properties": {"symbol": {"type": "string"}, "failed_rule": {"type": "string"}, "distance": {"type": "number"}}}},
+    "manual_disagreements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["symbol", "strategy", "system_decision", "operator_decision", "reason_category", "testable_claim", "evidence_pointer"],
+        "properties": {
+          "symbol": {"type": "string"},
+          "strategy": {"enum": ["CSP", "COVERED_CALL", "SHARE_BUY", "CASH"]},
+          "system_decision": {"enum": ["ACTIONABLE", "WATCH", "BLOCKED", "STAY_IN_CASH"]},
+          "operator_decision": {"enum": ["TAKE", "SKIP", "WATCH"]},
+          "kind": {"enum": ["MANUAL_FALSE_NEGATIVE", "MANUAL_FALSE_POSITIVE", "PREFERENCE"]},
+          "reason_category": {"enum": ["DEFECT", "DATA_RELIABILITY", "CALCULATION_TRACE", "UNIVERSE_POLICY", "WHEEL_POLICY", "SHARE_POLICY", "PORTFOLIO_ACCURACY", "NOTIFICATION", "UX_INFORMATION_ARCHITECTURE", "OPERATIONAL", "RESEARCH_REQUIRED"]},
+          "testable_claim": {"type": "string", "minLength": 8},
+          "evidence_pointer": {"type": "string", "minLength": 3},
+          "proposed_rule_impact": {"type": "string"}
+        }
+      }
+    },
+    "csp_vs_share_pref": {"type": "array", "items": {"type": "object", "properties": {"symbol": {"type": "string"}, "preference": {"enum": ["CSP", "SHARE", "EITHER"]}, "reason": {"type": "string"}}}},
+    "earnings": {"type": "object", "properties": {"blocked": {"type": "integer"}, "near": {"type": "array", "items": {"type": "string"}}}},
+    "liquidity_rejects": {"type": "integer", "minimum": 0},
+    "assignment_afford": {"enum": ["OK", "TIGHT", "FAIL", "N/A"]},
+    "concentration_flags": {"type": "array", "items": {"type": "string"}},
+    "calc_discrepancies": {"type": "array", "items": {"type": "object", "properties": {"metric": {"type": "string"}, "observed": {"type": "number"}, "expected": {"type": "number"}, "source": {"type": "string"}}}},
+    "slack_useful": {"type": "object", "properties": {"score": {"type": "integer", "minimum": 1, "maximum": 5}, "note": {"type": "string"}}},
+    "ui_redundant": {"type": "array", "items": {"type": "string"}},
+    "trust_gaps": {"type": "array", "items": {"type": "string"}},
+    "ops_defects": {"type": "array", "items": {"type": "string"}}
+  },
+  "x-governance": {
+    "status": "DRAFT",
+    "release": "R36.0",
+    "note": "Design-only. A single observation week surfaces hypotheses; production thresholds require aggregated evidence + backtest per Design Quality Rules."
+  }
+}

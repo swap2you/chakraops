@@ -161,7 +161,9 @@ def test_no_raw_fail_warn_leak(with_snapshot):
 
 
 def test_legacy_universe_routes_still_registered():
-    paths = {route.path for route in app.routes}
+    # Some route objects (mounts / included sub-routers) do not expose ``.path`` across
+    # Starlette versions; read defensively so the assertion is version-agnostic.
+    paths = {getattr(route, "path", None) for route in app.routes}
     assert "/api/ui/universe" in paths
     assert "/api/view/universe" in paths
     assert "/api/ui/universe-v2/summary" in paths

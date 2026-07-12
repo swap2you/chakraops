@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Calendar, ChevronDown, ChevronRight, Database, Droplets, MessageSquare, X } from "lucide-react";
-import { useSymbolDiagnostics, useRecomputeSymbolDiagnostics, useDefaultAccount, useUiSystemHealth, useUpsertSharePosition, useDeleteSharePosition, useCloseSharePosition, useClosedSharePositions, useSetDeltaOverride, useDeleteDeltaOverride, useActionNeeded, useJournalRecordClose } from "@/api/queries";
+import { useSymbolDiagnostics, useRecomputeSymbolDiagnostics, useDefaultAccount, useUiSystemHealth, useUpsertSharePosition, useDeleteSharePosition, useCloseSharePosition, useClosedSharePositions, useSetDeltaOverride, useDeleteDeltaOverride, useActionNeeded, useJournalRecordClose, useUniverseV2Record } from "@/api/queries";
 import type { SymbolDiagnosticsResponseExtended } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { TradeTicketDrawer } from "@/components/TradeTicketDrawer";
@@ -14,6 +14,48 @@ import { constraintToLabel } from "@/utils/sizingConstraints";
 import { reasonLabels } from "@/utils/reasonLabels";
 import { pushSystemNotification } from "@/lib/notifications";
 import { ApiError } from "@/api/client";
+
+// R36.2: Universe V2 lifecycle + strategy-membership badges for the symbol.
+function UniverseV2SymbolBadges({ symbol }: { symbol: string | null }) {
+  const { data } = useUniverseV2Record(symbol);
+  if (!data) return null;
+  const lifecycle = data.lifecycle_state;
+  const lifecycleVariant =
+    lifecycle === "ADMITTED"
+      ? "success"
+      : lifecycle === "WATCH"
+        ? "warning"
+        : lifecycle === "QUARANTINE"
+          ? "danger"
+          : "neutral";
+  const memberships = data.memberships ?? {};
+  const stratLabel: Record<string, string> = {
+    CORE_WHEEL: "Core",
+    BALANCED_WHEEL: "Balanced",
+    AGGRESSIVE_WHEEL: "Aggressive",
+    SHARES: "Shares",
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2" data-testid="universe-v2-symbol-badges">
+      <span className="text-xs font-semibold uppercase text-zinc-500">Universe V2</span>
+      <Badge variant={lifecycleVariant}>{lifecycle}</Badge>
+      {["CORE_WHEEL", "BALANCED_WHEEL", "AGGRESSIVE_WHEEL", "SHARES"].map((s) => {
+        const m = memberships[s];
+        if (!m) return null;
+        const eligible = m.status === "ELIGIBLE";
+        return (
+          <Tooltip key={s} content={m.primary_reason?.title ?? m.status}>
+            <span>
+              <Badge variant={eligible ? "success" : "neutral"}>
+                {stratLabel[s]}: {eligible ? "eligible" : m.status === "NOT_EVALUATED" ? "n/e" : "no"}
+              </Badge>
+            </span>
+          </Tooltip>
+        );
+      })}
+    </div>
+  );
+}
 
 function regimeColor(r: string | null | undefined): string {
   const s = (r ?? "").toUpperCase();
@@ -178,6 +220,8 @@ export function SymbolDiagnosticsPage({ initialTabForTest }: { initialTabForTest
           <p className="text-xs text-red-400">Invalid symbol. Use 1–6 uppercase letters or dots (e.g. SPY, BRK.B).</p>
         )}
       </div>
+
+      {activeSymbol && <UniverseV2SymbolBadges symbol={activeSymbol} />}
 
       {isLoading && <p className="text-xs text-zinc-500">Loading…</p>}
       {isError && (

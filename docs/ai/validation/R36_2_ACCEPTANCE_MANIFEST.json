@@ -1,0 +1,71 @@
+{
+  "release": "R36.2",
+  "title": "Universe V2",
+  "release_branch": "release/R36.2-universe-v2",
+  "base_sha": "c075a4fb84c3f07b1796da88462ff63bd4da4a75",
+  "authorization_commit_sha": "PENDING",
+  "ports": { "backend": 18800, "frontend": 18873 },
+  "authorized_new_paths": [
+    "chakraops/app/core/universe_v2/__init__.py",
+    "chakraops/app/core/universe_v2/model.py",
+    "chakraops/app/core/universe_v2/policy.py",
+    "chakraops/app/core/universe_v2/store.py",
+    "chakraops/app/core/universe_v2/builder.py",
+    "chakraops/app/core/universe_v2/migration.py",
+    "chakraops/app/core/universe_v2/read_model.py",
+    "chakraops/app/api/universe_v2_routes.py",
+    "chakraops/tests/test_r362_universe_v2_model.py",
+    "chakraops/tests/test_r362_universe_v2_policy.py",
+    "chakraops/tests/test_r362_universe_v2_store.py",
+    "chakraops/tests/test_r362_universe_v2_builder.py",
+    "chakraops/tests/test_r362_universe_v2_migration.py",
+    "chakraops/tests/test_r362_universe_v2_api.py",
+    "frontend/src/components/UniverseV2Panel.tsx",
+    "frontend/src/components/UniverseV2Panel.test.tsx"
+  ],
+  "authorized_modified_paths": [
+    "chakraops/app/api/server.py",
+    "frontend/src/api/types.ts",
+    "frontend/src/api/queries.ts",
+    "frontend/src/pages/UniversePage.tsx",
+    "frontend/src/pages/SymbolDiagnosticsPage.tsx"
+  ],
+  "forbidden_paths": [
+    "chakraops/app/core/decision_engine/**",
+    "chakraops/config/strategy_profiles.yaml",
+    "chakraops/app/core/config/universe_gates_config.py",
+    "chakraops/config/universe.csv",
+    "out/universe_overrides.json",
+    ".env",
+    "frontend/.env.development"
+  ],
+  "lifecycle_states": ["ADMITTED", "WATCH", "QUARANTINE", "REMOVED"],
+  "strategies": ["CORE_WHEEL", "BALANCED_WHEEL", "AGGRESSIVE_WHEEL", "SHARES"],
+  "assertions": {
+    "research_pool_is_not_eligibility": true,
+    "safety_critical_quarantines_immediately": true,
+    "soft_failure_maps_to_watch": true,
+    "no_permanent_removal_from_scan_failure": true,
+    "membership_independent_per_strategy": true,
+    "thresholds_inherited_no_tuning": true,
+    "reads_no_provider_calls_or_recompute": true,
+    "publish_transactional_no_mixed_versions": true,
+    "previous_good_snapshot_preserved_on_failure": true,
+    "migration_idempotent_conservative_rollback": true,
+    "override_cannot_bypass_quarantine": true,
+    "no_raw_fail_warn_in_ui": true,
+    "legacy_universe_endpoints_unchanged": true,
+    "decision_engine_unchanged": true,
+    "manual_only": true,
+    "trade_execution": false,
+    "scheduler_enabled_default_false": true,
+    "no_broker_write": true,
+    "warm_read_under_5s": true
+  },
+  "required_gates": [
+    "cd chakraops && python -m pytest tests -q --tb=short",
+    "cd frontend && npm run test -- --run",
+    "cd frontend && npm run build"
+  ],
+  "evidence_root": "out/verification/R36.2/"
+}

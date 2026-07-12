@@ -54,6 +54,8 @@ vi.mock("@/api/queries", () => ({
   useDefaultAccount: () => ({ data: { account: { account_id: "acct_1" } } }),
   useUiTrackedPositions: () => ({ data: { capital_deployed: 0, open_positions_count: 0 } }),
   useManualExecute: () => ({ mutate: vi.fn(), isPending: false }),
+  useUniverseV2Summary: () => ({ data: { status: "NO_SNAPSHOT", version: 0 }, isLoading: false, isError: false }),
+  useUniverseV2Refresh: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 describe("UniversePage", () => {

@@ -12,6 +12,7 @@ import { formatTimestampEt } from "@/utils/formatTimestamp";
 import type { SymbolEvalSummary } from "@/api/types";
 import type { SymbolDiagnosticsCandidate } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
+import { UniverseV2Panel } from "@/components/UniverseV2Panel";
 import { TradeTicketDrawer } from "@/components/TradeTicketDrawer";
 import { Info, FileEdit, Trash2 } from "lucide-react";
 import {
@@ -88,6 +89,54 @@ function formatScoreBreakdown(bd: unknown): string {
   if (Array.isArray(caps) && caps.length > 0) parts.push(`Caps: ${(caps as string[]).join(", ")}`);
   else if (typeof caps === "string") parts.push(`Caps: ${caps}`);
   return parts.length ? parts.join(" · ") : "";
+}
+
+// R36.2: severity rank so safety-critical/hard reasons outrank soft/info reasons.
+// Legacy /api/ui/universe reasons_explained emit "FAIL"/"WARN"; the R36.1 registry emits
+// "HARD"/"SOFT"/"INFO". Both vocabularies must map so hard blockers always sort first.
+const REASON_SEV_RANK: Record<string, number> = {
+  FAIL: 0,
+  HARD: 0,
+  SAFETY_CRITICAL: 0,
+  SOFT: 1,
+  WARN: 1,
+  INFO: 2,
+};
+
+/** R36.2: strip legacy FAIL_/WARN_ prefixes and underscores so raw codes never leak. */
+function stripRawReason(s: string | null | undefined): string {
+  return (s ?? "").replace(/^(FAIL_|WARN_)/i, "").replace(/_/g, " ").trim();
+}
+
+/**
+ * R36.2: Resolve a universe row's displayed reason.
+ * - orders explained reasons by severity (safety-critical/hard first),
+ * - never leaves an empty "Reason" cell,
+ * - never leaks a raw FAIL_/WARN_ code.
+ */
+export function universeRowReason(row: {
+  reasons_explained?: Array<{ code?: string; severity?: string; title?: string; message?: string }> | null;
+  primary_reason?: string | null;
+  verdict?: string | null;
+  final_verdict?: string | null;
+}): { text: string; tooltip: string } {
+  const explained = row.reasons_explained ?? [];
+  if (explained.length > 0) {
+    const sorted = [...explained].sort(
+      (a, b) =>
+        (REASON_SEV_RANK[(a.severity ?? "INFO").toUpperCase()] ?? 2) -
+        (REASON_SEV_RANK[(b.severity ?? "INFO").toUpperCase()] ?? 2),
+    );
+    const top = sorted[0];
+    const text = top.title || top.message || stripRawReason(top.code) || "See diagnostics";
+    const tooltip = sorted.map((r) => r.title || r.message || stripRawReason(r.code)).join("\n");
+    return { text, tooltip };
+  }
+  const verdict = ((row.final_verdict ?? row.verdict) ?? "").toUpperCase();
+  if (verdict === "ELIGIBLE") return { text: "Passed all checks", tooltip: "No blocking reason" };
+  if (!verdict || verdict === "NOT_EVALUATED") return { text: "Not evaluated", tooltip: "Not evaluated yet" };
+  const pr = stripRawReason(row.primary_reason);
+  return { text: pr || "See diagnostics", tooltip: pr || "See diagnostics" };
 }
 
 type VerdictFilter = "all" | "ELIGIBLE" | "HOLD" | "BLOCKED" | "NOT_EVALUATED";
@@ -230,6 +279,8 @@ export function UniversePage() {
   return (
     <div className="space-y-8">
       <PageHeader title="Universe" subtext={`Source: ${source} · Updated ${formatTimestampEt(evalTs)}`} />
+
+      <UniverseV2Panel />
 
       <Card>
         <CardHeader title="Universe Manager (Phase 21.3)" description="Add or remove symbols from the evaluation universe. Base list from CSV; overlay adds/removes." />
@@ -434,18 +485,14 @@ export function UniversePage() {
                     {row.strategy ?? "n/a"}
                   </TableCell>
                   <TableCell className="max-w-xs truncate text-zinc-600 dark:text-zinc-400">
-                    <Tooltip
-                      content={
-                        (row.reasons_explained?.length
-                          ? row.reasons_explained.map((r) => r.message).join("\n") + (row.primary_reason ? "\n\nDebug: " + row.primary_reason : "")
-                          : row.primary_reason) ?? "n/a"
-                      }
-                      className="max-w-sm"
-                    >
-                      <span className="block truncate">
-                        {row.reasons_explained?.[0]?.message ?? row.primary_reason ?? "n/a"}
-                      </span>
-                    </Tooltip>
+                    {(() => {
+                      const reason = universeRowReason(row);
+                      return (
+                        <Tooltip content={reason.tooltip} className="max-w-sm">
+                          <span className="block truncate">{reason.text}</span>
+                        </Tooltip>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell numeric>
                     {row.price != null ? String(row.price) : "n/a"}

@@ -2,6 +2,8 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+. "$PSScriptRoot\chakraops_ports.ps1"
+
 $script:ChakraOpsRepoRoot = "C:\Development\Workspace\ChakraOps-dev\chakraops"
 $script:ChakraOpsStaleRoot = "C:\Development\Workspace\ChakraOps"
 $script:ChakraOpsBackendRoot = Join-Path $script:ChakraOpsRepoRoot "chakraops"

@@ -22,7 +22,8 @@ except ImportError:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run ChakraOps API server")
     parser.add_argument("--host", default="0.0.0.0", help="Bind host")
-    parser.add_argument("--port", type=int, default=8000, help="Port")
+    from app.core.chakraops_ports import BACKEND_PORT
+    parser.add_argument("--port", type=int, default=BACKEND_PORT, help="Port")
     args = parser.parse_args()
     try:
         import uvicorn

@@ -2,6 +2,8 @@
 
 How to verify the system locally before deployment.
 
+**Dev checkout:** `C:\Development\Workspace\ChakraOps-dev\chakraops` · **Ports:** backend **18800**, UI **18873** · **Troubleshooting:** [RUNBOOK_TROUBLESHOOTING.md](RUNBOOK_TROUBLESHOOTING.md)
+
 ---
 
 ## Preflight + Startup (Windows, PowerShell)
@@ -58,7 +60,7 @@ Get-ChildItem out/decision_*.json
 ```powershell
 .\.venv\Scripts\Activate.ps1
 $env:PYTHONPATH = (Get-Location).Path
-python -m uvicorn app.api.server:app --reload --port 8000
+python -m uvicorn app.api.server:app --reload --host 127.0.0.1 --port 18800
 ```
 
 ### 9. Start React UI (Terminal 2)
@@ -70,10 +72,10 @@ npm run dev
 
 ### 10. Quick API smoke (separate terminal)
 ```powershell
-Invoke-WebRequest -Uri "http://localhost:8000/api/healthz" -UseBasicParsing | Select-Object StatusCode
-Invoke-WebRequest -Uri "http://localhost:8000/api/ui/decision/latest?mode=LIVE" -UseBasicParsing | Select-Object StatusCode
-Invoke-WebRequest -Uri "http://localhost:8000/api/ui/universe" -UseBasicParsing | Select-Object StatusCode
-Invoke-WebRequest -Uri "http://localhost:8000/api/ui/symbol-diagnostics?symbol=SPY" -UseBasicParsing | Select-Object StatusCode
+Invoke-WebRequest -Uri "http://127.0.0.1:18800/api/healthz" -UseBasicParsing | Select-Object StatusCode
+Invoke-WebRequest -Uri "http://127.0.0.1:18800/api/ui/decision/latest?mode=LIVE" -UseBasicParsing | Select-Object StatusCode
+Invoke-WebRequest -Uri "http://127.0.0.1:18800/api/ui/universe" -UseBasicParsing -TimeoutSec 120 | Select-Object StatusCode
+Invoke-WebRequest -Uri "http://127.0.0.1:18800/api/ui/symbol-diagnostics?symbol=SPY" -UseBasicParsing | Select-Object StatusCode
 ```
 Expected: StatusCode 200 for each.
 
@@ -162,30 +164,30 @@ python -m chakraops.run_evaluation --mode nightly --dry-run
 
 ```bash
 # Health
-curl http://localhost:8000/api/healthz
+curl http://127.0.0.1:18800/api/healthz
 
 # Latest run
-curl http://localhost:8000/api/eval/latest-run
+curl http://127.0.0.1:18800/api/eval/latest-run
 
 # Runs list
-curl "http://localhost:8000/api/eval/runs?limit=10"
+curl "http://127.0.0.1:18800/api/eval/runs?limit=10"
 
 # Symbol drilldown
-curl http://localhost:8000/api/eval/symbol/AAPL
+curl http://127.0.0.1:18800/api/eval/symbol/AAPL
 
 # System health
-curl http://localhost:8000/api/system/health
+curl http://127.0.0.1:18800/api/system/health
 
 # Exports (download)
-curl -o latest_run.json http://localhost:8000/api/eval/export/latest-run
-curl -o diagnostics.json http://localhost:8000/api/eval/export/diagnostics
+curl -o latest_run.json http://127.0.0.1:18800/api/eval/export/latest-run
+curl -o diagnostics.json http://127.0.0.1:18800/api/eval/export/diagnostics
 ```
 
 ## 7. Start Backend + UI
 
 ```bash
 # Terminal 1: API
-uvicorn app.api.server:app --reload --port 8000
+uvicorn app.api.server:app --reload --host 127.0.0.1 --port 18800
 
 # Terminal 2: React frontend
 cd frontend && npm install && npm run dev
@@ -198,7 +200,7 @@ cd chakraops
 $env:PYTHONPATH=(Get-Location).Path
 
 # Terminal 1: API
-python -m uvicorn app.api.server:app --reload --port 8000
+python -m uvicorn app.api.server:app --reload --host 127.0.0.1 --port 18800
 
 # Terminal 2: React frontend
 cd ..\frontend
@@ -206,7 +208,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. Generate decision artifacts first (see Fresh Start below) so the UI has data.
+Open http://127.0.0.1:18873. Generate decision artifacts first (see Fresh Start below) so the UI has data.
 
 ---
 
@@ -217,8 +219,8 @@ If uvicorn or the React dev server is stuck, stop them:
 - **In terminal**: Press `Ctrl+C` to stop the running process.
 - **Kill by port**:
   ```powershell
-  netstat -ano | findstr :8000
-  netstat -ano | findstr :5173
+  netstat -ano | findstr :18800
+  netstat -ano | findstr :18873
   taskkill /PID <PID> /F
   ```
   Replace `<PID>` with the Process ID from the second column.
@@ -245,7 +247,7 @@ The Live Decision Monitor reads `out/decision_*.json` in LIVE mode. **One script
 
 3. **Start the API** (Terminal 1):
    ```powershell
-   python -m uvicorn app.api.server:app --reload --port 8000
+   python -m uvicorn app.api.server:app --reload --host 127.0.0.1 --port 18800
    ```
 
 4. **Start React frontend** (Terminal 2):
@@ -255,7 +257,7 @@ The Live Decision Monitor reads `out/decision_*.json` in LIVE mode. **One script
    npm run dev
    ```
 
-5. Open http://localhost:5173. Use **LIVE** mode to load the latest decision file.
+5. Open http://127.0.0.1:18873. Use **LIVE** mode to load the latest decision file.
 
 ### MOCK mode (scenario testing)
 

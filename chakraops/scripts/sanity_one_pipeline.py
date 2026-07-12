@@ -27,7 +27,9 @@ try:
 except ImportError:
     pass
 
-API_BASE = "http://127.0.0.1:8000"
+from app.core.chakraops_ports import backend_base_url
+
+API_BASE = backend_base_url()
 
 
 def _get_store_path() -> Path:

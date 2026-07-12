@@ -1,6 +1,12 @@
 # env / secrets
 .env
 *.env
+# Ignore all dotenv variants (e.g. .env.development, .env.local) so local dev
+# env files (like frontend/.env.development) are never committed.
+.env.*
+# Keep committed example/template files tracked.
+!.env.example
+!frontend/.env.example
 
 # Python
 __pycache__/

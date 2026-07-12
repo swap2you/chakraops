@@ -19,8 +19,8 @@ function Test-PortFree([int]$Port) {
     if ($conn) { throw "Port $Port already in use (PID $($conn.OwningProcess))" }
 }
 
-Test-PortFree 8000
-Test-PortFree 5173
+Test-PortFree $script:ChakraOpsBackendPort
+Test-PortFree $script:ChakraOpsFrontendPort
 
 $envFile = Join-Path $script:ChakraOpsBackendRoot ".env"
 if (Test-Path -LiteralPath $envFile) {
@@ -32,14 +32,14 @@ if (Test-Path -LiteralPath $envFile) {
 $env:CHAKRAOPS_SCHEDULER_ENABLED = "false"
 Write-Host "Scheduler: DISABLED by default"
 
-$backendProc = Start-Process python -ArgumentList "-m", "uvicorn", "app.api.server:app", "--host", "127.0.0.1", "--port", "8000" -WorkingDirectory $script:ChakraOpsBackendRoot -PassThru -WindowStyle Normal
+$backendProc = Start-Process python -ArgumentList "-m", "uvicorn", "app.api.server:app", "--host", "127.0.0.1", "--port", "$($script:ChakraOpsBackendPort)" -WorkingDirectory $script:ChakraOpsBackendRoot -PassThru -WindowStyle Normal
 Start-Sleep -Seconds 2
-$frontendProc = Start-Process npm -ArgumentList "run", "dev", "--", "--host", "127.0.0.1", "--port", "5173" -WorkingDirectory $script:ChakraOpsFrontendRoot -PassThru -WindowStyle Normal
+$frontendProc = Start-Process npm -ArgumentList "run", "dev" -WorkingDirectory $script:ChakraOpsFrontendRoot -PassThru -WindowStyle Normal
 Start-Sleep -Seconds 3
-$frontendListener = Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+$frontendListener = Get-NetTCPConnection -LocalPort $script:ChakraOpsFrontendPort -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 $frontendPid = if ($frontendListener) { [int]$frontendListener.OwningProcess } else { [int]$frontendProc.Id }
 
-python -c "from app.core.operations.process_ownership import write_record; write_record(backend_pid=$($backendProc.Id), frontend_pid=$frontendPid, repo_root=r'$($script:ChakraOpsRepoRoot)', backend_cmd='uvicorn app.api.server:app', frontend_cmd='npm run dev')" | Out-Null
+python -c "from app.core.operations.process_ownership import write_record; from app.core.chakraops_ports import BACKEND_PORT, FRONTEND_PORT; write_record(backend_pid=$($backendProc.Id), frontend_pid=$frontendPid, repo_root=r'$($script:ChakraOpsRepoRoot)', backend_cmd='uvicorn app.api.server:app', frontend_cmd='npm run dev', backend_port=BACKEND_PORT, frontend_port=FRONTEND_PORT)" | Out-Null
 
 Write-Host "Backend PID: $($backendProc.Id)  Frontend PID: $frontendPid"
-Write-Host "URLs: http://127.0.0.1:8000  http://127.0.0.1:5173"
+Write-Host "URLs: $($script:ChakraOpsBackendUrl)  $($script:ChakraOpsFrontendUrl)"

@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from app.core.chakraops_ports import BACKEND_PORT, FRONTEND_PORT
+
 REPO_ROOT_EXPECTED = r"C:\Development\Workspace\ChakraOps-dev\chakraops"
 STALE_CHECKOUT_MARKER = r"C:\Development\Workspace\ChakraOps"
 
@@ -31,8 +33,8 @@ def write_record(
     repo_root: str,
     backend_cmd: str,
     frontend_cmd: str,
-    backend_port: int = 8000,
-    frontend_port: int = 5173,
+    backend_port: int = BACKEND_PORT,
+    frontend_port: int = FRONTEND_PORT,
 ) -> Dict[str, Any]:
     record = {
         "repo_root": repo_root,

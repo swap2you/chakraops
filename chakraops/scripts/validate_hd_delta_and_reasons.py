@@ -4,9 +4,9 @@ Integration-ish validation: recompute HD, fetch symbol-diagnostics, print what t
 Useful to verify delta rejection sample wiring and reasons_explained.
 
 Usage:
-  python scripts/validate_hd_delta_and_reasons.py [--symbol HD] [--base http://127.0.0.1:8000]
+  python scripts/validate_hd_delta_and_reasons.py [--symbol HD] [--base http://127.0.0.1:18800]
 
-Requires: Server running (e.g. uvicorn app.api.server:app --port 8000).
+Requires: Server running (e.g. uvicorn app.api.server:app --port 18800).
 Pass x-ui-key if UI_API_KEY is set.
 """
 from __future__ import annotations
@@ -26,7 +26,9 @@ try:
 except ImportError:
     urllib = None  # type: ignore
 
-BASE_DEFAULT = "http://127.0.0.1:8000"
+from app.core.chakraops_ports import backend_base_url
+
+BASE_DEFAULT = backend_base_url()
 SYMBOL_DEFAULT = "HD"
 
 
@@ -104,7 +106,7 @@ def main() -> int:
     if code_rec != 200:
         print(f"Recompute failed: {code_rec} {err_rec}", file=sys.stderr)
         if code_rec == 0:
-            print("  (Server must be running: uvicorn app.api.server:app --port 8000)", file=sys.stderr)
+            print("  (Server must be running: uvicorn app.api.server:app --host 127.0.0.1 --port 18800)", file=sys.stderr)
         elif rec and isinstance(rec, dict) and "detail" in rec:
             print(f"  detail: {rec['detail']}", file=sys.stderr)
         return 1

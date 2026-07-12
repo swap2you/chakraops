@@ -33,7 +33,7 @@ function Invoke-ChakraOpsStart {
 }
 
 function Clear-StaleChakraOpsPorts {
-    foreach ($port in @(8000, 5173)) {
+    foreach ($port in @($script:ChakraOpsBackendPort, $script:ChakraOpsFrontendPort)) {
         $listeners = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
         foreach ($listener in $listeners) {
             $processId = [int]$listener.OwningProcess
@@ -51,7 +51,7 @@ function Clear-StaleChakraOpsPorts {
 function Invoke-Api {
     param([string]$Method, [string]$Path, [int[]]$AllowedStatus = @(200))
     try {
-        $uri = "http://127.0.0.1:8000$Path"
+        $uri = "$($script:ChakraOpsBackendUrl)$Path"
         if ($Method -eq "GET") {
             $r = Invoke-RestMethod -Uri $uri -Method Get -TimeoutSec 30
             return @{ status = 200; body = $r }
@@ -154,7 +154,7 @@ try {
     & "$script:ChakraOpsScriptsRoot\cleanup_expired_backups.ps1"
     if ($LASTEXITCODE -ne 0) { throw "cleanup dry-run failed" }
 
-    $brokerProbe = Invoke-WebRequest -Uri "http://127.0.0.1:8000/openapi.json" -UseBasicParsing -TimeoutSec 30
+    $brokerProbe = Invoke-WebRequest -Uri "$($script:ChakraOpsBackendUrl)/openapi.json" -UseBasicParsing -TimeoutSec 30
     $openapiDoc = $brokerProbe.Content | ConvertFrom-Json
     $apiPaths = @($openapiDoc.paths.PSObject.Properties.Name)
     foreach ($term in @("/broker", "/order", "place_order", "submit_order")) {

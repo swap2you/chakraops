@@ -1395,3 +1395,88 @@ export interface OperationsStatusResponse {
     count: number;
   };
 }
+
+// R36.2 — Universe V2 (additive, read-only). Reasons reuse the R36.1 registry shape.
+export type UniverseV2Lifecycle = "ADMITTED" | "WATCH" | "QUARANTINE" | "REMOVED";
+export type UniverseV2Strategy = "CORE_WHEEL" | "BALANCED_WHEEL" | "AGGRESSIVE_WHEEL" | "SHARES";
+export type UniverseV2MembershipStatus = "ELIGIBLE" | "NOT_ELIGIBLE" | "NOT_EVALUATED";
+
+export interface UniverseV2Reason {
+  code: string;
+  category?: string;
+  severity?: string;
+  klass?: string;
+  title: string;
+  explanation?: string;
+  unit?: string | null;
+}
+
+export interface UniverseV2Membership {
+  strategy: UniverseV2Strategy;
+  status: UniverseV2MembershipStatus;
+  primary_reason?: UniverseV2Reason | null;
+  supporting_reasons?: UniverseV2Reason[];
+  measured?: number | null;
+  threshold?: number | number[] | null;
+  unit?: string | null;
+}
+
+export interface UniverseV2Transition {
+  from_state: UniverseV2Lifecycle | null;
+  to_state: UniverseV2Lifecycle;
+  reason_code: string;
+  at_utc: string;
+  symbol?: string;
+}
+
+export interface UniverseV2Record {
+  symbol: string;
+  in_research_pool: boolean;
+  lifecycle_state: UniverseV2Lifecycle;
+  memberships: Record<string, UniverseV2Membership>;
+  primary_reason?: UniverseV2Reason | null;
+  supporting_reasons?: UniverseV2Reason[];
+  safety_critical: boolean;
+  temporary: boolean;
+  pass_streak: number;
+  fail_streak: number;
+  last_transition?: UniverseV2Transition | null;
+  evaluation_version?: string | null;
+  data_source?: string | null;
+  as_of_utc?: string | null;
+  transition_history?: UniverseV2Transition[];
+}
+
+export interface UniverseV2Summary {
+  status: string;
+  version: number;
+  created_at_utc?: string | null;
+  source_evaluation_version?: string | null;
+  age_seconds?: number | null;
+  stale?: boolean;
+  research_pool_count: number;
+  lifecycle_funnel: Record<string, number>;
+  strategy_eligible: Record<string, number>;
+  strategy_not_eligible?: Record<string, number>;
+  top_rejection_reasons: Array<{ reason: string; count: number }>;
+  total_records?: number;
+}
+
+export interface UniverseV2RecordsResponse {
+  status: string;
+  version: number;
+  created_at_utc?: string | null;
+  page: number;
+  page_size: number;
+  total: number;
+  records: UniverseV2Record[];
+}
+
+export interface UniverseV2MembershipResponse {
+  status: string;
+  version: number;
+  strategy: string;
+  eligible: string[];
+  not_eligible: Array<{ symbol: string; reason?: UniverseV2Reason | null }>;
+  not_evaluated: string[];
+}

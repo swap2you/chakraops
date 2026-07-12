@@ -770,6 +770,53 @@ export function useUniverse() {
   });
 }
 
+// R36.2 — Universe V2 (additive, read-only). Authoritative reads serve the published snapshot.
+export function useUniverseV2Summary() {
+  return useQuery({
+    queryKey: ["ui", "universe-v2", "summary"] as const,
+    queryFn: () => apiGet<import("./types").UniverseV2Summary>("/api/ui/universe-v2/summary"),
+  });
+}
+
+export function useUniverseV2Records(params: { page?: number; page_size?: number; lifecycle?: string } = {}) {
+  const { page = 1, page_size = 200, lifecycle } = params;
+  const qs = new URLSearchParams();
+  qs.set("page", String(page));
+  qs.set("page_size", String(page_size));
+  if (lifecycle) qs.set("lifecycle", lifecycle);
+  return useQuery({
+    queryKey: ["ui", "universe-v2", "records", page, page_size, lifecycle ?? "all"] as const,
+    queryFn: () => apiGet<import("./types").UniverseV2RecordsResponse>(`/api/ui/universe-v2/records?${qs.toString()}`),
+  });
+}
+
+export function useUniverseV2Record(symbol: string | null) {
+  return useQuery({
+    queryKey: ["ui", "universe-v2", "record", symbol] as const,
+    queryFn: () => apiGet<import("./types").UniverseV2Record>(`/api/ui/universe-v2/records/${encodeURIComponent(symbol!)}`),
+    enabled: !!symbol,
+    retry: false,
+  });
+}
+
+export function useUniverseV2Membership(strategy: string | null) {
+  return useQuery({
+    queryKey: ["ui", "universe-v2", "membership", strategy] as const,
+    queryFn: () => apiGet<import("./types").UniverseV2MembershipResponse>(`/api/ui/universe-v2/membership/${encodeURIComponent(strategy!)}`),
+    enabled: !!strategy,
+  });
+}
+
+export function useUniverseV2Refresh() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<{ ok: boolean; version: number; status: string }>("/api/ui/universe-v2/refresh", {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ui", "universe-v2"] });
+    },
+  });
+}
+
 /** Phase 21.3: GET /api/ui/universe/symbols — effective list + overlay counts */
 export function useUniverseSymbols() {
   return useQuery({

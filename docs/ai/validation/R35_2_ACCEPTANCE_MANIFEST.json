@@ -1,0 +1,71 @@
+{
+  "release_id": "R35.2",
+  "release_name": "operational-hardening",
+  "release_branch": "release/R35.2-operational-hardening",
+  "base_sha": "7a0df588756931353aa4bc7135187ef060c8919e",
+  "authorization_commit_sha": "PENDING",
+  "canonical_checkout": "C:\\Development\\Workspace\\ChakraOps-dev\\chakraops",
+  "obsolete_checkout_forbidden": "C:\\Development\\Workspace\\ChakraOps",
+  "authorized_tracked_paths": [
+    "scripts/stop_chakraops.ps1",
+    "scripts/stop_ownership_selftest.ps1",
+    "chakraops/docs/RUNBOOK_STARTUP_SHUTDOWN.md",
+    "chakraops/docs/RUNBOOK_TROUBLESHOOTING.md"
+  ],
+  "governance_docs": [
+    "docs/ai/releases/R35.2/R35_2_SCOPE.md",
+    "docs/ai/releases/R35.2/R35_2_DESIGN.md",
+    "docs/ai/releases/R35.2/R35_2_AUTHORIZED_PATHS.md",
+    "docs/ai/releases/R35.2/R35_2_RISK_REGISTER.md",
+    "docs/ai/releases/R35.2/R35_2_ACCEPTANCE_CRITERIA.md",
+    "docs/ai/releases/R35.2/R35_2_SELF_REVIEW_CHECKLIST.md",
+    "docs/ai/validation/R35_2_ACCEPTANCE_MANIFEST.json"
+  ],
+  "forbidden_paths": [
+    ".env",
+    "frontend/.env.development",
+    "ChakraOps_Post_R35_R36_Prompt_Library.md",
+    "docker-compose.yml",
+    "chakraops/config/strategy_profiles.yaml"
+  ],
+  "forbidden_actions": [
+    "strategy_threshold_changes",
+    "eligibility_ranking_sizing_changes",
+    "scheduler_activation",
+    "recurring_job_activation",
+    "robinhood_or_broker_integration",
+    "auto_trading_or_broker_writes",
+    "broad_ruff_cleanup",
+    "unrelated_ui_redesign",
+    "r36_explainability_or_universe_implementation",
+    "compose_file_edit",
+    "commit_env_or_prompt_library"
+  ],
+  "required_validation_commands": [
+    "powershell -NoProfile -Command \"[System.Management.Automation.Language.Parser]::ParseFile(...)\" (parse all scripts/*.ps1)",
+    "powershell -File scripts/stop_ownership_selftest.ps1",
+    "docker compose config (transient non-secret vars)",
+    "cd chakraops && python -m pytest tests -q --tb=short",
+    "cd frontend && npm run test -- --run",
+    "cd frontend && npm run build"
+  ],
+  "required_evidence_locations": ["out/verification/R35.2/notes.md"],
+  "assertions": {
+    "backend_default_port": 18800,
+    "frontend_default_port": 18873,
+    "docker_backend_mapping": "18800:8000",
+    "docker_frontend_mapping": "18873:80",
+    "stop_requires_two_ownership_signals": true,
+    "stop_never_targets_port_8000": true,
+    "stop_idempotent": true,
+    "stop_failsafe_on_ambiguity": true,
+    "scheduler_disabled": true,
+    "recurring_jobs_disabled": true,
+    "manual_only": true,
+    "trade_execution": false,
+    "no_broker_write": true,
+    "orats_only": true,
+    "env_not_committed": true,
+    "compose_file_unedited": true
+  }
+}

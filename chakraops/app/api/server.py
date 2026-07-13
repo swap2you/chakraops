@@ -669,55 +669,81 @@ def _run_scheduled_evaluation() -> bool:
         logger.exception("[SCHEDULER] Error triggering evaluation: %s", e)
         logger.info("[SCHEDULER] tick failed run_id=skipped skip_reason=%s duration_ms=%.0f", _last_scheduled_skip_reason, _last_scheduled_duration_ms)
         return False
-    # EOD freeze (PR2): on every tick, if in window [15:58, 15:58+window] ET and market OPEN, run eval+archive
-    if EOD_FREEZE_ENABLED and phase == "OPEN":
-        try:
-            from zoneinfo import ZoneInfo
-            _maybe_run_eod_freeze(ZoneInfo)
-        except ImportError:
-            pass
-        except Exception as e:
-            logger.debug("[EOD_FREEZE] Skip: %s", e)
-    return False
+
+
+def _eod_freeze_tick() -> None:
+    """EOD freeze check, evaluated on every scheduler wake (~30s), not only on 30-min
+    ticks. Previously this lived after the return paths of _run_scheduled_evaluation
+    (unreachable) AND would only have been consulted once per 30-min tick — a cadence
+    that can miss the short [EOD_FREEZE_TIME_ET, market close) window entirely.
+    _maybe_run_eod_freeze itself enforces window/phase/once-per-day, so this is cheap."""
+    if not EOD_FREEZE_ENABLED:
+        return
+    try:
+        from zoneinfo import ZoneInfo
+        _maybe_run_eod_freeze(ZoneInfo)
+    except ImportError:
+        pass
+    except Exception as e:
+        logger.debug("[EOD_FREEZE] Skip: %s", e)
 
 
 def _scheduler_loop(stop_event: threading.Event, interval_minutes: int) -> None:
     """
     Background scheduler loop.
-    Runs every interval_minutes and triggers evaluation if market is open.
+
+    Wakes every ~30s and triggers an evaluation when the market is OPEN and
+    interval_minutes have elapsed since the previous attempt. Because the due-check is
+    phase-aware (instead of a blind fixed interval from server boot), the first run of
+    the day fires within ~30s of the 9:30 ET open, then every interval_minutes until
+    close. The EOD freeze window (eval + archive snapshot, default 15:55 ET) is checked
+    on every wake so the short pre-close window cannot be missed.
     """
+    import time as _time
+
     interval_seconds = interval_minutes * 60
+    wait_step = min(30.0, float(interval_seconds))
+    next_run_monotonic = _time.monotonic()  # first OPEN wake runs immediately
     logger.info("[SCHEDULER] Started with interval %d minutes (%d seconds)", interval_minutes, interval_seconds)
     print(f"[SCHEDULER] Started with interval {interval_minutes} minutes")
-    
+
+    next_heartbeat_monotonic = _time.monotonic()
+
     while not stop_event.is_set():
-        # Wait for the interval (or until stop is signaled)
-        # Check more frequently to be responsive to shutdown
-        wait_step = min(30, interval_seconds)  # Check every 30s at most
-        waited = 0
-        while waited < interval_seconds and not stop_event.is_set():
-            stop_event.wait(wait_step)
-            waited += wait_step
-        
-        if stop_event.is_set():
-            break
+        # EOD freeze window check every wake (cheap; self-gated to
+        # [EOD_FREEZE_TIME_ET, +window] ET, market OPEN, once per day).
+        _eod_freeze_tick()
 
-        # Phase 7.3: Watchdog check (non-blocking; SCHEDULER_STALLED if last run too old)
-        try:
-            from app.core.system.watchdog import run_watchdog_checks
-            run_watchdog_checks(
-                _last_scheduled_eval_at,
-                interval_minutes,
-                orats_rolling_avg_ms=None,
-                has_signals_in_24h=True,
-                app_start_time_utc=get_app_start_time_utc(),
-            )
-        except Exception as e:
-            logger.debug("[SCHEDULER] Watchdog check skipped: %s", e)
+        now = _time.monotonic()
+        if get_market_phase() == "OPEN":
+            if now >= next_run_monotonic:
+                # Phase 7.3: Watchdog check (non-blocking; SCHEDULER_STALLED if last run too old)
+                try:
+                    from app.core.system.watchdog import run_watchdog_checks
+                    run_watchdog_checks(
+                        _last_scheduled_eval_at,
+                        interval_minutes,
+                        orats_rolling_avg_ms=None,
+                        has_signals_in_24h=True,
+                        app_start_time_utc=get_app_start_time_utc(),
+                    )
+                except Exception as e:
+                    logger.debug("[SCHEDULER] Watchdog check skipped: %s", e)
 
-        # Attempt scheduled evaluation
-        _run_scheduled_evaluation()
-    
+                _run_scheduled_evaluation()
+                next_run_monotonic = _time.monotonic() + interval_seconds
+                next_heartbeat_monotonic = next_run_monotonic
+        else:
+            # Market closed: keep the once-per-interval heartbeat (records
+            # skip_reason=market_closed exactly as before), but leave next_run due so
+            # the first OPEN wake triggers within ~30s of the 9:30 ET open instead of
+            # waiting out a blind interval.
+            if now >= next_heartbeat_monotonic:
+                _run_scheduled_evaluation()
+                next_heartbeat_monotonic = _time.monotonic() + interval_seconds
+
+        stop_event.wait(wait_step)
+
     logger.info("[SCHEDULER] Stopped")
     print("[SCHEDULER] Stopped")
 

@@ -300,6 +300,8 @@ export interface EvaluationRunDetailResponse {
 export interface EvaluationStatusCurrentResponse {
   is_running: boolean;
   current_run_id: string | null;
+  /** UTC ISO timestamp when the in-flight run started (present while is_running). */
+  started_at?: string | null;
   evaluation_state: string;
   evaluation_state_reason: string;
   last_completed_run_id: string | null;

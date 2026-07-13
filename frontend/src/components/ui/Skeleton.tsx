@@ -4,7 +4,7 @@ export function Skeleton({ className }: { className?: string }) {
   return (
     <div
       className={clsx(
-        "animate-pulse rounded bg-zinc-200 dark:bg-zinc-700/50",
+        "shimmer animate-pulse rounded-md bg-zinc-200/90 dark:bg-zinc-800/80",
         className
       )}
       aria-hidden

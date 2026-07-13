@@ -17,8 +17,14 @@ export function Card({ children, className, ...rest }: CardProps) {
   return (
     <section
       className={clsx(
-        "rounded-lg border border-zinc-200 bg-white p-6 shadow-sm transition-colors duration-150 dark:border-zinc-800 dark:bg-zinc-900/60 dark:shadow-none",
-        "hover:border-zinc-300 dark:hover:border-zinc-700",
+        "animate-fade-up rounded-xl border border-zinc-200/80 bg-white p-6 shadow-soft",
+        "transition-all duration-200 ease-out",
+        "hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-lift",
+        // Dark mode needs a SOLID background-color: gradient utilities only set the
+        // background-image, and a translucent gradient over the light-mode bg-white
+        // washes the card out and kills text contrast.
+        "dark:border-zinc-800/80 dark:bg-zinc-900/60 dark:shadow-none",
+        "dark:hover:border-zinc-700",
         className
       )}
       {...rest}
@@ -30,20 +36,20 @@ export function Card({ children, className, ...rest }: CardProps) {
 
 export function CardHeader({ title, description, actions, children, className }: CardHeaderProps) {
   return (
-    <div className={clsx("mb-3", className)}>
+    <div className={clsx("mb-4", className)}>
       {(title || description || actions) && (
-        <div className="flex items-start justify-between gap-2">
-          <div>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
             {title && (
-              <h3 className="text-xl font-semibold text-zinc-700 dark:text-zinc-300">
+              <h3 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
                 {title}
               </h3>
             )}
             {description && (
-              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{description}</p>
+              <p className="mt-1 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">{description}</p>
             )}
           </div>
-          {actions}
+          {actions && <div className="shrink-0">{actions}</div>}
         </div>
       )}
       {children}

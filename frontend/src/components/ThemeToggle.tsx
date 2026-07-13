@@ -13,7 +13,7 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={cycle}
-      className="flex h-8 w-8 items-center justify-center rounded border border-zinc-200 bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+      className="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 transition-all duration-150 hover:bg-zinc-100 hover:text-zinc-900 active:scale-95 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-zinc-100"
       title={`Theme: ${mode} (click to cycle)`}
       aria-label={`Theme: ${mode}. Click to switch.`}
     >

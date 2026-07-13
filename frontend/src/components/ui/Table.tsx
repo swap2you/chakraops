@@ -3,7 +3,7 @@ import { clsx } from "clsx";
 
 export function Table({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto rounded-lg">
       <table className={clsx("w-full text-sm", className)}>{children}</table>
     </div>
   );
@@ -18,13 +18,13 @@ export function TableHeader({ children, className }: { children: React.ReactNode
     (child) => isValidElement(child) && child.type === TableRow
   );
   return (
-    <thead className="sticky top-0 z-[1] bg-zinc-50 dark:bg-zinc-950">
+    <thead className="glass sticky top-0 z-[1]">
       {alreadyHasRow ? (
         children
       ) : (
         <tr
           className={clsx(
-            "border-b border-zinc-200 text-left text-zinc-600 dark:border-zinc-700 dark:text-zinc-500",
+            "border-b border-zinc-200 text-left text-zinc-600 dark:border-zinc-700/80 dark:text-zinc-500",
             className
           )}
         >
@@ -53,8 +53,9 @@ export function TableRow({
     <tr
       className={clsx(
         "border-b border-zinc-100 last:border-0 transition-colors duration-150 dark:border-zinc-800/50",
-        "hover:bg-zinc-100 dark:hover:bg-zinc-800/40",
-        onClick && "cursor-pointer",
+        "hover:bg-emerald-50/40 dark:hover:bg-zinc-800/50",
+        onClick &&
+          "cursor-pointer hover:shadow-[inset_2px_0_0_0_rgb(16_185_129/0.7)] active:bg-emerald-50/70 dark:active:bg-zinc-800/80",
         className
       )}
       onClick={onClick}
@@ -68,7 +69,12 @@ export function TableRow({
 
 export function TableHead({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <th className={clsx("py-3 pr-2 font-medium text-zinc-600 dark:text-zinc-500", className)}>
+    <th
+      className={clsx(
+        "py-3 pr-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-500",
+        className
+      )}
+    >
       {children}
     </th>
   );

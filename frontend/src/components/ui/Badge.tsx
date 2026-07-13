@@ -10,22 +10,31 @@ interface BadgeProps {
 
 const variantMap: Record<BadgeVariant, string> = {
   default:
-    "border-zinc-300 bg-zinc-100 text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800/50 dark:text-zinc-300",
+    "ring-zinc-300/80 bg-zinc-100 text-zinc-700 dark:ring-zinc-600/60 dark:bg-zinc-800/60 dark:text-zinc-300",
   success:
-    "border-emerald-600/50 bg-emerald-50 text-emerald-700 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-400",
+    "ring-emerald-600/30 bg-emerald-50 text-emerald-700 dark:ring-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-400",
   warning:
-    "border-amber-600/50 bg-amber-50 text-amber-700 dark:border-amber-500/50 dark:bg-amber-500/10 dark:text-amber-400",
+    "ring-amber-600/30 bg-amber-50 text-amber-700 dark:ring-amber-400/30 dark:bg-amber-500/10 dark:text-amber-400",
   danger:
-    "border-red-600/50 bg-red-50 text-red-700 dark:border-red-500/50 dark:bg-red-500/10 dark:text-red-400",
+    "ring-red-600/30 bg-red-50 text-red-700 dark:ring-red-400/30 dark:bg-red-500/10 dark:text-red-400",
   neutral:
-    "border-zinc-400 bg-zinc-100 text-zinc-600 dark:border-zinc-500/50 dark:bg-zinc-500/10 dark:text-zinc-400",
+    "ring-zinc-400/50 bg-zinc-100 text-zinc-600 dark:ring-zinc-500/40 dark:bg-zinc-500/10 dark:text-zinc-400",
+};
+
+const dotMap: Record<BadgeVariant, string> = {
+  default: "bg-zinc-400 dark:bg-zinc-500",
+  success: "bg-emerald-500 dark:bg-emerald-400",
+  warning: "bg-amber-500 dark:bg-amber-400",
+  danger: "bg-red-500 dark:bg-red-400",
+  neutral: "bg-zinc-400 dark:bg-zinc-500",
 };
 
 export function Badge({ children, variant = "default", className }: BadgeProps) {
   return (
     <span
       className={clsx(
-        "inline-flex rounded border px-2 py-0.5 text-xs font-medium",
+        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset",
+        "transition-colors duration-150",
         variantMap[variant],
         className
       )}
@@ -48,5 +57,10 @@ export function StatusBadge({ status }: { status: string }) {
     if (s === "WARN") return "Degraded";
     return status;
   })();
-  return <Badge variant={v}>{label}</Badge>;
+  return (
+    <Badge variant={v}>
+      <span className={clsx("h-1.5 w-1.5 shrink-0 rounded-full", dotMap[v])} aria-hidden />
+      {label}
+    </Badge>
+  );
 }

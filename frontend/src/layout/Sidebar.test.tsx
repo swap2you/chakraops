@@ -22,7 +22,7 @@ describe("Sidebar", () => {
     mockGetShowAdvanced.mockReturnValue(false);
   });
 
-  it("renders R39 nav groups and primary destinations", () => {
+  it("renders R39/R56 nav groups and primary destinations", () => {
     render(<Sidebar />);
     expect(screen.getByRole("link", { name: /^command center$/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /^opportunities$/i })).toBeInTheDocument();
@@ -66,7 +66,7 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: /wheel/i })).toBeInTheDocument();
   });
 
-  it("R39: renders Command Center IA groups", () => {
+  it("R56: compact IA — no Positions primary; Journal under Portfolio; Advanced recovery/admin", () => {
     render(<Sidebar />);
     expect(screen.getByTestId("nav-group-command-center")).toBeInTheDocument();
     expect(screen.getByTestId("nav-group-opportunities")).toBeInTheDocument();
@@ -75,10 +75,13 @@ describe("Sidebar", () => {
     expect(screen.getByTestId("nav-group-strategy-lab")).toBeInTheDocument();
     expect(screen.getByTestId("nav-group-operations")).toBeInTheDocument();
     expect(screen.getByTestId("nav-group-advanced-legacy")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-legacy-note")).toHaveTextContent(/non-primary/i);
-    expect(screen.getByRole("link", { name: /^Positions$/i })).toBeInTheDocument();
+    expect(screen.getByTestId("nav-legacy-note")).toHaveTextContent(/recovery \/ admin/i);
+    expect(screen.queryByRole("link", { name: /^Positions$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^Journal$/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /strategy lab/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /today checklist/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /^Journal$/i })).toBeInTheDocument();
+    // Wheel stays Advanced, not Opportunities primary
+    const advanced = screen.getByTestId("nav-group-advanced-legacy");
+    expect(advanced).toContainElement(screen.getByRole("link", { name: /wheel/i }));
   });
 });

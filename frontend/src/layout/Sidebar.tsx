@@ -17,13 +17,12 @@ import {
   CalendarCheck,
   LineChart,
   GraduationCap,
-  Layers,
   Ticket,
   Target,
 } from "lucide-react";
 import { getWheelPageMode, isWheelLinkVisible, getShowAdvanced, setShowAdvanced } from "@/config/features";
 
-/** R39: Command Center IA — map existing routes into product groups. */
+/** R39/R56: Command Center IA — compact product groups (strategy workspaces live under Opportunities). */
 const GROUP_ORDER = [
   "Command Center",
   "Opportunities",
@@ -49,7 +48,6 @@ const navBase: Array<{
   { path: "/ticket", label: "Trade Ticket", icon: Ticket, group: "Command Center" },
   { path: "/opportunities", label: "Opportunities", icon: Target, group: "Opportunities" },
   { path: "/portfolio", label: "Portfolio", icon: PieChart, group: "Portfolio" },
-  { path: "/positions", label: "Positions", icon: Layers, group: "Portfolio" },
   { path: "/journal", label: "Journal", icon: BookOpen, group: "Portfolio" },
   { path: "/universe", label: "Universe", icon: Globe, group: "Research" },
   { path: "/symbol-diagnostics", label: "Symbol Diagnostics", icon: Search, group: "Research" },
@@ -111,11 +109,11 @@ export function Sidebar() {
           return (
             <div key={group} className="space-y-0.5" data-testid={groupTestId(group)}>
               <div className="px-2.5 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-600">
-                {group}
+                {isLegacy ? "Advanced" : group}
               </div>
               {isLegacy && (
                 <p className="px-2.5 pb-1 text-[10px] leading-snug text-zinc-400 dark:text-zinc-600" data-testid="nav-legacy-note">
-                  Non-primary — not daily decision surfaces
+                  Recovery / admin only — not daily decision surfaces
                 </p>
               )}
               {items.map(({ path, label, icon: Icon }) => (

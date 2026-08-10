@@ -230,6 +230,26 @@ describe("PortfolioPage", () => {
     expect(screen.getByText(/Add holding/)).toBeInTheDocument();
   });
 
+  it("R44: distinguishes cash vs total capital vs buying power", () => {
+    useDefaultAccount.mockReturnValue({
+      data: { account: { account_id: "default", total_capital: 100000, max_capital_per_trade_pct: 5 } },
+    });
+    useAccounts.mockReturnValue({
+      data: { accounts: [{ account_id: "default", total_capital: 100000 }] },
+    });
+    useAccountSummary.mockReturnValue({
+      data: { account_id: "default", name: "Default", cash: 0, buying_power: 25000, holdings_count: 0, base_currency: "USD" },
+    });
+    render(<PortfolioPage />);
+    expect(screen.getByTestId("portfolio-cash")).toHaveTextContent(/Cash \(available\)/i);
+    expect(screen.getByTestId("portfolio-cash")).toHaveTextContent(/\$0\.00/);
+    expect(screen.getByTestId("portfolio-total-capital")).toHaveTextContent(/Total capital/i);
+    expect(screen.getByTestId("portfolio-total-capital")).toHaveTextContent(/\$100,000\.00/);
+    expect(screen.getByTestId("portfolio-buying-power")).toHaveTextContent(/Buying power/i);
+    expect(screen.getByTestId("portfolio-buying-power")).toHaveTextContent(/\$25,000\.00/);
+    expect(screen.getByTestId("portfolio-balance-labels").textContent || "").toMatch(/≠ cash|Not total capital/i);
+  });
+
   it("R37: shows manual portfolio snapshot provenance (not broker-synced)", () => {
     render(<PortfolioPage />);
     expect(screen.getByTestId("portfolio-provenance")).toHaveTextContent(/Manual portfolio snapshot/i);

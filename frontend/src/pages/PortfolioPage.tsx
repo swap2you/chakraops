@@ -168,7 +168,7 @@ export function PortfolioPage() {
       <Card>
         <CardHeader
           title="Balances (manual)"
-          description="Manual portfolio snapshot — cash and buying power are user-entered, not broker-synced. Used for CC eligibility and display."
+          description="Manual portfolio snapshot — cash, total capital, and buying power are distinct. Cash and buying power are user-entered, not broker-synced. Total capital is the account sizing base and is not the same as cash."
         />
         <p className="mb-3 text-xs text-zinc-500 dark:text-zinc-400" data-testid="portfolio-provenance">
           Provenance: Manual portfolio snapshot · not broker-synced
@@ -177,7 +177,7 @@ export function PortfolioPage() {
           balancesEdit ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 max-w-md">
               <div>
-                <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Cash</label>
+                <label className="block text-xs text-zinc-500 dark:text-zinc-400 mb-1">Cash (available)</label>
                 <input
                   type="number"
                   step="0.01"
@@ -217,14 +217,21 @@ export function PortfolioPage() {
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
-              <div>
-                <span className="block text-xs text-zinc-500 dark:text-zinc-400">Cash</span>
+            <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4" data-testid="portfolio-balance-labels">
+              <div data-testid="portfolio-cash">
+                <span className="block text-xs text-zinc-500 dark:text-zinc-400">Cash (available)</span>
                 <span className="font-mono text-zinc-700 dark:text-zinc-300">{fmtCurrency(summary.cash)}</span>
+                <span className="mt-0.5 block text-[11px] text-zinc-400 dark:text-zinc-500">Not total capital</span>
               </div>
-              <div>
+              <div data-testid="portfolio-total-capital">
+                <span className="block text-xs text-zinc-500 dark:text-zinc-400">Total capital</span>
+                <span className="font-mono text-zinc-700 dark:text-zinc-300">{fmtCurrency(totalCapital)}</span>
+                <span className="mt-0.5 block text-[11px] text-zinc-400 dark:text-zinc-500">Sizing base · ≠ cash</span>
+              </div>
+              <div data-testid="portfolio-buying-power">
                 <span className="block text-xs text-zinc-500 dark:text-zinc-400">Buying power</span>
                 <span className="font-mono text-zinc-700 dark:text-zinc-300">{fmtCurrency(summary.buying_power)}</span>
+                <span className="mt-0.5 block text-[11px] text-zinc-400 dark:text-zinc-500">Not CSP collateral</span>
               </div>
               <div>
                 <Button size="sm" variant="secondary" onClick={() => setBalancesEdit({ cash: String(summary.cash), buying_power: String(summary.buying_power) })}>
@@ -536,12 +543,21 @@ export function PortfolioPage() {
               <span className="text-zinc-700 dark:text-zinc-300">Manual portfolio snapshot</span>
             </div>
             <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-400">Cash (available)</span>
+              <span className="font-mono text-zinc-700 dark:text-zinc-300">{fmtCurrency(summary?.cash)}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-400">Total capital</span>
+              <span className="font-mono text-zinc-700 dark:text-zinc-300">{fmtCurrency(totalCapital)}</span>
+            </div>
+            <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-400">Buying power</span>
               <span className="font-mono text-zinc-700 dark:text-zinc-300">{fmtCurrency(buyingPower)}</span>
             </div>
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-400">Risk per trade</span>
               <span className="font-mono text-zinc-700 dark:text-zinc-300">{fmtCurrency(riskPerTrade)}</span>
+              <span className="mt-0.5 block text-[11px] text-zinc-400 dark:text-zinc-500">From total capital × max %</span>
             </div>
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-400">Open positions</span>

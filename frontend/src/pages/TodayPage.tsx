@@ -18,34 +18,29 @@ import {
   useOpsEodSummary,
   useOpsChecklistMarkDone,
   useExecutionLogPost,
+  useTicketQueue,
+  useTicketQueueMutations,
 } from "@/api/queries";
-import type { ActionNeededItem } from "@/api/queries";
+import type { ActionNeededItem, TicketQueueItem } from "@/api/queries";
 import { PageHeader } from "@/components/PageHeader";
 import { AuthoritativeRecommendations } from "@/components/AuthoritativeRecommendations";
 import { Card, CardHeader, Button, Badge } from "@/components/ui";
 import { constraintToLabel } from "@/utils/sizingConstraints";
 
-const TICKET_QUEUE_KEY = "chakraops_r263_ticket_queue";
-const DONE_TODAY_KEY = "chakraops_r263_done_today";
+const LEGACY_TICKET_QUEUE_KEY = "chakraops_r263_ticket_queue";
+const LEGACY_DONE_TODAY_KEY = "chakraops_r263_done_today";
+const MIGRATION_FLAG_KEY = "chakraops_r42_ticket_queue_migrated";
 
-interface QueueItem {
-  id: string;
-  ticket_id?: string;
-  symbol: string;
-  strategy: string;
-  action: string;
-  created_ts: string;
-  journal_saved?: boolean;
-}
+type QueueItem = TicketQueueItem;
 
 function todayDate(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function loadQueue(): QueueItem[] {
+function readLegacyQueue(): QueueItem[] {
   try {
-    const raw = localStorage.getItem(TICKET_QUEUE_KEY);
+    const raw = localStorage.getItem(LEGACY_TICKET_QUEUE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     const arr = Array.isArray(parsed) ? parsed : [];
@@ -59,23 +54,15 @@ function loadQueue(): QueueItem[] {
   }
 }
 
-function saveQueue(items: QueueItem[]) {
-  localStorage.setItem(TICKET_QUEUE_KEY, JSON.stringify(items));
-}
-
-function loadDoneToday(): { symbol: string; date: string }[] {
+function readLegacyDoneToday(): { symbol: string; date: string }[] {
   try {
-    const raw = localStorage.getItem(DONE_TODAY_KEY);
+    const raw = localStorage.getItem(LEGACY_DONE_TODAY_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
-}
-
-function saveDoneToday(items: { symbol: string; date: string }[]) {
-  localStorage.setItem(DONE_TODAY_KEY, JSON.stringify(items));
 }
 
 function actionLabel(code: string): string {
@@ -105,8 +92,21 @@ function ticketHref(item: ActionNeededItem, isOptions: boolean): string {
 
 export function TodayPage() {
   const today = useMemo(() => todayDate(), []);
-  const [queue, setQueue] = useState<QueueItem[]>(() => loadQueue());
-  const [doneToday, setDoneToday] = useState<{ symbol: string; date: string }[]>(() => loadDoneToday());
+  const { data: queueData, isLoading: queueLoading } = useTicketQueue(today);
+  const queueMutations = useTicketQueueMutations(today);
+  const [optimisticQueue, setOptimisticQueue] = useState<QueueItem[] | null>(null);
+  const [optimisticDone, setOptimisticDone] = useState<Array<{ symbol: string; date: string }> | null>(null);
+  const queue = optimisticQueue ?? queueData?.queue ?? [];
+  const doneToday = optimisticDone ?? queueData?.done_today ?? [];
+  const [migrated, setMigrated] = useState(() => localStorage.getItem(MIGRATION_FLAG_KEY) === "1");
+
+  // Prefer server snapshot once it arrives / refreshes
+  useEffect(() => {
+    if (queueData?.queue) setOptimisticQueue(null);
+  }, [queueData?.queue]);
+  useEffect(() => {
+    if (queueData?.done_today) setOptimisticDone(null);
+  }, [queueData?.done_today]);
 
   const { data: summary, isLoading: summaryLoading } = useTodaySummary();
   const { data: actionNeeded, isLoading: actionNeededLoading, isError: actionNeededError } = useActionNeeded();
@@ -134,32 +134,64 @@ export function TodayPage() {
   const ackBulkMutation = useAckBulkNotifications();
   const archiveBulkMutation = useArchiveBulkNotifications();
 
+  // One-shot migrate device-local queue → canonical backend
   useEffect(() => {
-    saveQueue(queue);
-  }, [queue]);
-  useEffect(() => {
-    saveDoneToday(doneToday);
-  }, [doneToday]);
+    if (migrated || queueLoading || queueMutations.migrate.isPending) return;
+    const legacyQ = readLegacyQueue();
+    const legacyD = readLegacyDoneToday();
+    if (legacyQ.length === 0 && legacyD.length === 0) {
+      localStorage.setItem(MIGRATION_FLAG_KEY, "1");
+      setMigrated(true);
+      return;
+    }
+    if ((queueData?.queue?.length ?? 0) > 0) {
+      localStorage.removeItem(LEGACY_TICKET_QUEUE_KEY);
+      localStorage.removeItem(LEGACY_DONE_TODAY_KEY);
+      localStorage.setItem(MIGRATION_FLAG_KEY, "1");
+      setMigrated(true);
+      return;
+    }
+    queueMutations.migrate.mutate(
+      { queue: legacyQ, done_today: legacyD, day: today },
+      {
+        onSuccess: () => {
+          localStorage.removeItem(LEGACY_TICKET_QUEUE_KEY);
+          localStorage.removeItem(LEGACY_DONE_TODAY_KEY);
+          localStorage.setItem(MIGRATION_FLAG_KEY, "1");
+          setMigrated(true);
+        },
+      }
+    );
+  }, [migrated, queueLoading, queueData, queueMutations.migrate, today]);
 
   useEffect(() => {
     const handler = (e: Event) => {
       const ev = e as CustomEvent<{ ticket_id: string }>;
       const tid = ev.detail?.ticket_id;
       if (!tid) return;
-      setQueue((prev) => prev.map((q) => (q.ticket_id === tid || q.id === tid ? { ...q, journal_saved: true } : q)));
+      const next = queue.map((q) => (q.ticket_id === tid || q.id === tid ? { ...q, journal_saved: true } : q));
+      setOptimisticQueue(next);
+      queueMutations.replace.mutate(next);
     };
     window.addEventListener("chakraops-journal-saved", handler);
     return () => window.removeEventListener("chakraops-journal-saved", handler);
-  }, []);
+  }, [queue, queueMutations.replace]);
 
-  const addToQueue = useCallback((item: ActionNeededItem, isOptions: boolean) => {
-    const strategy = (item.strategy || (isOptions ? "CSP" : "SHARES")).toUpperCase();
-    const action =
-      item.next_action_code === "ENTRY" ? (isOptions ? "OPEN" : "BUY") : item.next_action_code === "CLOSE" ? (isOptions ? "CLOSE" : "SELL") : "OPEN";
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    setQueue((prev) => [
-      ...prev,
-      {
+  const addToQueue = useCallback(
+    (item: ActionNeededItem, isOptions: boolean) => {
+      const strategy = (item.strategy || (isOptions ? "CSP" : "SHARES")).toUpperCase();
+      const action =
+        item.next_action_code === "ENTRY"
+          ? isOptions
+            ? "OPEN"
+            : "BUY"
+          : item.next_action_code === "CLOSE"
+            ? isOptions
+              ? "CLOSE"
+              : "SELL"
+            : "OPEN";
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const row: QueueItem = {
         id,
         ticket_id: id,
         symbol: item.symbol,
@@ -167,13 +199,20 @@ export function TodayPage() {
         action,
         created_ts: new Date().toISOString(),
         journal_saved: false,
-      },
-    ]);
-  }, []);
+      };
+      setOptimisticQueue((prev) => [...(prev ?? queue), row]);
+      queueMutations.add.mutate(row);
+    },
+    [queue, queueMutations.add]
+  );
 
-  const removeFromQueue = useCallback((id: string) => {
-    setQueue((prev) => prev.filter((q) => q.id !== id));
-  }, []);
+  const removeFromQueue = useCallback(
+    (id: string) => {
+      setOptimisticQueue((prev) => (prev ?? queue).filter((q) => q.id !== id));
+      queueMutations.remove.mutate(id);
+    },
+    [queue, queueMutations.remove]
+  );
 
   const hasJournalForItem = useCallback(
     (item: QueueItem) => journalSymbolStrategySet.has(`${item.symbol.toUpperCase()}|${item.strategy.toUpperCase()}`),
@@ -182,10 +221,12 @@ export function TodayPage() {
 
   const performMarkDone = useCallback(
     (item: QueueItem) => {
-      setDoneToday((prev) => [...prev, { symbol: item.symbol, date: today }]);
-      setQueue((prev) => prev.filter((q) => q.id !== item.id));
+      setOptimisticDone((prev) => [...(prev ?? doneToday), { symbol: item.symbol, date: today }]);
+      setOptimisticQueue((prev) => (prev ?? queue).filter((q) => q.id !== item.id));
+      queueMutations.markDone.mutate({ symbol: item.symbol, day: today });
+      queueMutations.remove.mutate(item.id);
     },
-    [today]
+    [today, doneToday, queue, queueMutations.markDone, queueMutations.remove]
   );
 
   const markDone = useCallback(
@@ -244,8 +285,8 @@ export function TodayPage() {
   const eodPending = (eodChecklist?.row?.status ?? "OPEN").toUpperCase() !== "DONE";
 
   return (
-    <div className="space-y-4">
-      <PageHeader title="Today" subtext="Daily workflow: run, action needed, tickets, journal, notifications" />
+    <div className="space-y-4" data-testid="page-today">
+      <PageHeader title="Today" subtext="Daily workflow: run, action needed, tickets, journal, notifications — manual execution only" />
       {eodPending && (
         <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200" data-testid="today-eod-pending-banner">
           EOD checklist pending. Complete before tomorrow.
@@ -360,7 +401,7 @@ export function TodayPage() {
 
       {/* C) Trade Ticket queue */}
       <Card data-testid="today-queue-card">
-        <CardHeader title="Trade Ticket queue" description="Local queue (saved in browser)." />
+        <CardHeader title="Trade Ticket queue" description="Canonical queue (persisted server-side; survives reload)." />
         <div className="space-y-1.5">
           {queue.length === 0 ? (
             <p className="text-xs text-zinc-500">Queue is empty. Add from Action Needed.</p>

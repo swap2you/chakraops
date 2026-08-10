@@ -115,6 +115,22 @@ export function DashboardPage() {
       ? (auth?.stay_in_cash as { reason_codes?: string[] }).reason_codes
       : undefined
   );
+  const manageNeeded = useMemo(() => {
+    const items = [...(actionNeeded?.top_options ?? []), ...(actionNeeded?.top_shares ?? [])];
+    return items.filter((i) => {
+      const code = (i.next_action_code || "").toUpperCase();
+      return code === "CLOSE" || code === "ROLL" || code === "MANAGE";
+    }).length;
+  }, [actionNeeded]);
+  const portfolioAsOf =
+    (portfolioData as { as_of?: string; updated_at?: string } | undefined)?.as_of ||
+    (portfolioData as { updated_at?: string } | undefined)?.updated_at ||
+    (mtmData as { as_of?: string } | undefined)?.as_of ||
+    null;
+  const portfolioSourceLabel =
+    (defaultAccount as { source?: string } | undefined)?.source ||
+    (portfolioData as { source?: string } | undefined)?.source ||
+    "manual trusted snapshot";
 
   const { universeSymbols, selectedSignals } = useMemo(() => {
     const artifact = decision?.artifact;
@@ -237,6 +253,21 @@ export function DashboardPage() {
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">ORATS</span>
               <StatusBadge status={oratsStatus} />
             </div>
+            {health?.orats?.orats_freshness_state_label && (
+              <div data-testid="command-center-orats-freshness">
+                <span className="block text-xs text-zinc-500 dark:text-zinc-500">ORATS freshness</span>
+                <span className="font-mono text-zinc-700 dark:text-zinc-300">
+                  {health.orats.orats_freshness_state_label}
+                  {health.orats.orats_as_of ? ` · as-of ${formatTimestampEt(health.orats.orats_as_of)}` : ""}
+                </span>
+              </div>
+            )}
+            <div data-testid="command-center-calc-timestamp">
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">Decision / calc as-of</span>
+              <span className={`font-mono text-base font-medium ${evalFreshnessColor(lastEvalTs)}`}>
+                {formatTimestampEt(lastEvalTs)}
+              </span>
+            </div>
             {health?.api?.latency_ms != null && (
               <div>
                 <span className="block text-xs text-zinc-500 dark:text-zinc-500">API latency</span>
@@ -268,6 +299,13 @@ export function DashboardPage() {
                 Manage positions →
               </Link>
             </div>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400" data-testid="command-center-manage-needed">
+              Positions needing management: {manageNeeded}
+            </p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400" data-testid="command-center-portfolio-freshness">
+              Portfolio: {portfolioSourceLabel}
+              {portfolioAsOf ? ` · ${formatTimestampEt(portfolioAsOf)}` : " · as-of unknown"}
+            </p>
           </div>
         </Card>
         <Card data-testid="command-center-opportunities-summary">

@@ -2465,6 +2465,130 @@ async def ui_ops_checklist_mark_done(
 
 
 # ---------------------------------------------------------------------------
+# R42: Today ticket queue + done-today (canonical persistence)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/ops/ticket-queue")
+def ui_ops_ticket_queue_get(
+    day: str | None = Query(None, description="YYYY-MM-DD for done-today slice"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R42: List ticket queue + done-today for day (default UTC today). Manual-only; no broker writes."""
+    _require_ui_key(x_ui_key)
+    from datetime import datetime, timezone
+    from app.core.ops.ticket_queue_store_r42 import list_queue, list_done_today, init_ticket_queue_db
+
+    init_ticket_queue_db()
+    day_val = (day or "").strip() or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return {
+        "status": "OK",
+        "manual_only": True,
+        "trade_execution": False,
+        "day": day_val,
+        "queue": list_queue(),
+        "done_today": list_done_today(day_val),
+        "persistence": "canonical_sqlite",
+    }
+
+
+@router.put("/ops/ticket-queue")
+async def ui_ops_ticket_queue_put(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R42: Replace active ticket queue. Body: { items: [...] }."""
+    _require_ui_key(x_ui_key)
+    from app.core.ops.ticket_queue_store_r42 import replace_queue, init_ticket_queue_db
+
+    init_ticket_queue_db()
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    items = body.get("items") if isinstance(body, dict) else None
+    if not isinstance(items, list):
+        raise HTTPException(status_code=400, detail="items array required")
+    queue = replace_queue(items)
+    return {"status": "OK", "queue": queue, "manual_only": True}
+
+
+@router.post("/ops/ticket-queue")
+async def ui_ops_ticket_queue_post(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R42: Add one queue item or migrate from localStorage. Body: item{} or {migrate:true, queue, done_today, day}."""
+    _require_ui_key(x_ui_key)
+    from app.core.ops.ticket_queue_store_r42 import (
+        add_queue_item,
+        migrate_from_payload,
+        list_done_today,
+        init_ticket_queue_db,
+    )
+
+    init_ticket_queue_db()
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="JSON object required")
+    if body.get("migrate"):
+        day = str(body.get("day") or "").strip()
+        result = migrate_from_payload(
+            list(body.get("queue") or []),
+            list(body.get("done_today") or []),
+            day,
+        )
+        return {"status": "OK", **result, "manual_only": True}
+    item = body.get("item") if "item" in body else body
+    if not isinstance(item, dict) or not (item.get("symbol") or "").strip():
+        raise HTTPException(status_code=400, detail="item.symbol required")
+    row = add_queue_item(item)
+    return {"status": "OK", "item": row, "manual_only": True}
+
+
+@router.delete("/ops/ticket-queue/{item_id}")
+def ui_ops_ticket_queue_delete(
+    item_id: str,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R42: Archive/remove queue item."""
+    _require_ui_key(x_ui_key)
+    from app.core.ops.ticket_queue_store_r42 import remove_queue_item, init_ticket_queue_db
+
+    init_ticket_queue_db()
+    ok = remove_queue_item((item_id or "").strip())
+    if not ok:
+        raise HTTPException(status_code=404, detail="queue item not found")
+    return {"status": "OK", "removed": True, "manual_only": True}
+
+
+@router.post("/ops/ticket-queue/mark-done")
+async def ui_ops_ticket_queue_mark_done(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R42: Mark symbol done for day. Body: {symbol, day?}."""
+    _require_ui_key(x_ui_key)
+    from datetime import datetime, timezone
+    from app.core.ops.ticket_queue_store_r42 import mark_done_today, list_done_today, init_ticket_queue_db
+
+    init_ticket_queue_db()
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    symbol = str((body or {}).get("symbol") or "").strip().upper()
+    day = str((body or {}).get("day") or "").strip() or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if not symbol:
+        raise HTTPException(status_code=400, detail="symbol required")
+    row = mark_done_today(symbol, day)
+    return {"status": "OK", "row": row, "done_today": list_done_today(day), "manual_only": True}
+
+
+# ---------------------------------------------------------------------------
 # R26.9: Ops execution log (overrides and done transitions)
 # ---------------------------------------------------------------------------
 

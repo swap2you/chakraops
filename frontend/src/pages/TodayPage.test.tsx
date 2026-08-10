@@ -35,6 +35,57 @@ const mockEodSummary = { date: "2026-02-27", eval_as_of: "2026-02-27T17:00:00Z",
 const mockMarkEodDone = vi.fn(() => ({ mutate: vi.fn(), isPending: false }));
 const mockExecutionLogPost = vi.fn(() => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }));
 
+let mockQueue: Array<{
+  id: string;
+  ticket_id?: string;
+  symbol: string;
+  strategy: string;
+  action: string;
+  created_ts: string;
+  journal_saved?: boolean;
+}> = [];
+let mockDoneToday: Array<{ symbol: string; date: string }> = [];
+const mockTicketQueueQuery = vi.fn(() => ({
+  data: {
+    status: "OK",
+    day: "2026-02-27",
+    queue: mockQueue,
+    done_today: mockDoneToday,
+    persistence: "canonical_sqlite",
+  },
+  isLoading: false,
+}));
+
+function mockTicketQueueMutations() {
+  return {
+    replace: {
+      mutate: vi.fn((items: typeof mockQueue) => {
+        mockQueue = [...items];
+      }),
+      isPending: false,
+    },
+    add: {
+      mutate: vi.fn((item: (typeof mockQueue)[0]) => {
+        mockQueue = [...mockQueue, item];
+      }),
+      isPending: false,
+    },
+    remove: {
+      mutate: vi.fn((id: string) => {
+        mockQueue = mockQueue.filter((q) => q.id !== id);
+      }),
+      isPending: false,
+    },
+    markDone: {
+      mutate: vi.fn((payload: { symbol: string; day?: string }) => {
+        mockDoneToday = [...mockDoneToday, { symbol: payload.symbol, date: payload.day ?? "2026-02-27" }];
+      }),
+      isPending: false,
+    },
+    migrate: { mutate: vi.fn(), isPending: false },
+  };
+}
+
 vi.mock("@/api/queries", () => ({
   useTodaySummary: vi.fn(() => ({ data: mockSummary, isLoading: false, refetch: vi.fn() })),
   useActionNeeded: vi.fn(() => ({ data: mockActionNeeded, refetch: vi.fn() })),
@@ -49,12 +100,17 @@ vi.mock("@/api/queries", () => ({
   useOpsEodSummary: vi.fn(() => ({ data: mockEodSummary })),
   useOpsChecklistMarkDone: () => mockMarkEodDone(),
   useExecutionLogPost: () => mockExecutionLogPost(),
+  useTicketQueue: () => mockTicketQueueQuery(),
+  useTicketQueueMutations: () => mockTicketQueueMutations(),
 }));
 
 describe("TodayPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    mockQueue = [];
+    mockDoneToday = [];
+    localStorage.setItem("chakraops_r42_ticket_queue_migrated", "1");
   });
   afterEach(() => {
     localStorage.clear();

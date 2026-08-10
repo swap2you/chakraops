@@ -52,6 +52,17 @@ vi.mock("@/api/queries", () => ({
   useOpsEodSummary: vi.fn(() => ({ data: { date: "2026-02-27" } })),
   useOpsChecklistMarkDone: () => ({ mutate: vi.fn(), isPending: false }),
   useExecutionLogPost: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useTicketQueue: vi.fn(() => ({
+    data: { status: "OK", day: "2026-02-27", queue: [], done_today: [], persistence: "canonical_sqlite" },
+    isLoading: false,
+  })),
+  useTicketQueueMutations: () => ({
+    replace: { mutate: vi.fn(), isPending: false },
+    add: { mutate: vi.fn(), isPending: false },
+    remove: { mutate: vi.fn(), isPending: false },
+    markDone: { mutate: vi.fn(), isPending: false },
+    migrate: { mutate: vi.fn(), isPending: false },
+  }),
 }));
 
 describe("TodayPage canonical cutover", () => {

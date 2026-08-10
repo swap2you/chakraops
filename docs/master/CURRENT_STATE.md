@@ -29,4 +29,3 @@ Manual execution only. No auto-trading. No broker order routing. Robinhood sync 
 
 - ORATS `/hist/options` entitlement (external)
 - Independent Codex + Cowork acceptance deferred to end of R50
-- R42: Today/ticket device-local persistence migration

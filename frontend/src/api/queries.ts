@@ -4,7 +4,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiDelete, apiGet, apiGetBlob, apiPatch, apiPost, apiPostNoBody, apiPostText } from "./client";
+import { apiDelete, apiGet, apiGetBlob, apiPatch, apiPost, apiPostNoBody, apiPostText, apiPut } from "./client";
 import type {
   ArtifactListResponse,
   DecisionArtifactV2,
@@ -184,6 +184,17 @@ function opsChecklistPath(kind: string, key: string): string {
 }
 function opsChecklistMarkDonePath(): string {
   return `/api/ui/ops/checklist/mark-done`;
+}
+/** R42: Canonical Today ticket queue. */
+function opsTicketQueuePath(day?: string): string {
+  const q = day ? `?day=${encodeURIComponent(day)}` : "";
+  return `/api/ui/ops/ticket-queue${q}`;
+}
+function opsTicketQueueItemPath(id: string): string {
+  return `/api/ui/ops/ticket-queue/${encodeURIComponent(id)}`;
+}
+function opsTicketQueueMarkDonePath(): string {
+  return `/api/ui/ops/ticket-queue/mark-done`;
 }
 /** R26.9: Ops execution log (write event). */
 function opsExecutionLogPath(): string {
@@ -702,6 +713,7 @@ export const queryKeys = {
   actionNeeded: () => ["ui", "actionNeeded"] as const,
   todaySummary: () => ["ui", "todaySummary"] as const,
   opsChecklist: (kind: string, key: string) => ["ui", "opsChecklist", kind, key] as const,
+  opsTicketQueue: (day: string) => ["ui", "opsTicketQueue", day] as const,
   opsEodSummary: (date: string) => ["ui", "opsEodSummary", date] as const,
   opsWeeklySummary: (week: string) => ["ui", "opsWeeklySummary", week] as const,
   paperPositions: (params: Record<string, unknown>) => ["ui", "paper", "positions", params] as const,
@@ -1229,6 +1241,67 @@ export function useOpsChecklistMarkDone() {
       qc.invalidateQueries({ queryKey: queryKeys.opsWeeklySummary(variables.key) });
     },
   });
+}
+
+/** R42: Canonical ticket queue + done-today (survives reload/restart). */
+export interface TicketQueueItem {
+  id: string;
+  ticket_id?: string;
+  symbol: string;
+  strategy: string;
+  action: string;
+  created_ts: string;
+  journal_saved?: boolean;
+  archived?: boolean;
+}
+export interface TicketQueueResponse {
+  status: string;
+  day: string;
+  queue: TicketQueueItem[];
+  done_today: Array<{ symbol: string; date: string }>;
+  persistence?: string;
+  manual_only?: boolean;
+}
+export function useTicketQueue(day: string) {
+  return useQuery({
+    queryKey: queryKeys.opsTicketQueue(day),
+    queryFn: () => apiGet<TicketQueueResponse>(opsTicketQueuePath(day)),
+    enabled: !!day,
+  });
+}
+export function useTicketQueueMutations(day: string) {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: queryKeys.opsTicketQueue(day) });
+  return {
+    replace: useMutation({
+      mutationFn: (items: TicketQueueItem[]) =>
+        apiPut<{ status: string; queue: TicketQueueItem[] }>(opsTicketQueuePath(), { items }),
+      onSuccess: invalidate,
+    }),
+    add: useMutation({
+      mutationFn: (item: Partial<TicketQueueItem> & { symbol: string }) =>
+        apiPost<{ status: string; item: TicketQueueItem }>(opsTicketQueuePath(), { item }),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => apiDelete<{ status: string }>(opsTicketQueueItemPath(id)),
+      onSuccess: invalidate,
+    }),
+    markDone: useMutation({
+      mutationFn: (payload: { symbol: string; day?: string }) =>
+        apiPost<{ status: string }>(opsTicketQueueMarkDonePath(), { ...payload, day: payload.day ?? day }),
+      onSuccess: invalidate,
+    }),
+    migrate: useMutation({
+      mutationFn: (payload: {
+        queue: TicketQueueItem[];
+        done_today: Array<{ symbol: string; date: string }>;
+        day: string;
+      }) =>
+        apiPost<TicketQueueResponse>(opsTicketQueuePath(), { migrate: true, ...payload }),
+      onSuccess: invalidate,
+    }),
+  };
 }
 
 /** R26.9: Post one execution log event (MARK_DONE, SKIP_JOURNAL, EOD_OVERRIDE). */

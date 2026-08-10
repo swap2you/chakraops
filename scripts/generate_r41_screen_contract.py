@@ -119,8 +119,8 @@ def main() -> None:
         "route_count": len(ROUTES),
         "routes": ROUTES,
         "orphans": [
-            {"module": "components/CommandPalette.tsx", "status": "UNMOUNTED", "action": "DEFER_OR_WIRE_R49"},
-            {"module": "components/CommandBar.tsx", "status": "UNMOUNTED", "action": "REMOVE_OR_MERGE_R49"},
+            {"module": "components/CommandPalette.tsx", "status": "REMOVED_R51", "action": "deleted orphan"},
+            {"module": "components/CommandBar.tsx", "status": "REMOVED_R51", "action": "deleted orphan"},
             {"module": "pages/_quarantine/*", "status": "NOT_ROUTED", "action": "KEEP_QUARANTINED"},
         ],
         "redirects": [

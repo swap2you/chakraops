@@ -30,7 +30,8 @@ async function collectFailedRequests(page: Page) {
     failed.push({ url: req.url(), failure: req.failure()?.errorText });
   });
   page.on("response", (res) => {
-    if (res.status() >= 500) {
+    // Capture 4xx/5xx so C-1 style console 404s are attributable by URL
+    if (res.status() >= 400) {
       failed.push({ url: res.url(), status: res.status() });
     }
   });

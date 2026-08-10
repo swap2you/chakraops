@@ -1,10 +1,11 @@
-# ChakraOps — Operator Daily Runbook (R40)
+# ChakraOps — Operator Daily Runbook (R51)
 
 **Audience:** Single operator, manual-only Wheel + Shares workflow.  
 **Ports:** Backend **18800**, Frontend **18873**. Do not use 8000/5173 for ChakraOps.  
 **Safety:** No auto trading. No broker order routing. Scheduler stays **off**. Stay in Cash is valid.
 
-Related: [RUNBOOK_STARTUP_SHUTDOWN.md](RUNBOOK_STARTUP_SHUTDOWN.md), [RUNBOOK_TROUBLESHOOTING.md](RUNBOOK_TROUBLESHOOTING.md).
+Related: [RUNBOOK_STARTUP_SHUTDOWN.md](RUNBOOK_STARTUP_SHUTDOWN.md), [RUNBOOK_TROUBLESHOOTING.md](RUNBOOK_TROUBLESHOOTING.md).  
+Master pointers: `docs/master/OPERATOR_RUNBOOK.md`, `docs/master/CURRENT_STATE.md`.
 
 ---
 
@@ -61,13 +62,22 @@ Stay in Cash / no action is a first-class outcome. Prefer cash when:
 
 ---
 
-## 5. Broker status NO_GO
+## 5. Broker status (read-only)
 
-If Robinhood / broker integration is **NO_GO** or read-only unavailable:
+**Historical note:** R37 documented a permanent **NO_GO** when no safe read path existed (`docs/ai/releases/R37/R37_NO_GO.md`). That document is retained as history only — it is **not** the current runtime target.
+
+**Current target:**
+
+| Condition | Status |
+|-----------|--------|
+| `ROBINHOOD_MCP_ACCESS_TOKEN` or `ROBINHOOD_MCP_TOKEN_PATH` configured | `ROBINHOOD_MCP_READ_ONLY_AVAILABLE` |
+| Token missing | `UNAUTHENTICATED` / `ROBINHOOD_RUNTIME_AUTH_EXTERNAL_BLOCKER` |
+
+When read-only is unavailable (unauthenticated):
 
 - Continue with **manual portfolio** entry and trusted snapshot discipline
 - Do **not** invent live balances
-- Do **not** enable broker writes
+- Do **not** enable broker writes (writes remain denied in all cases)
 
 ---
 

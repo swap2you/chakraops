@@ -32,9 +32,10 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: /^Portfolio$/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /^Paper$/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /^Learn$/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /backtest/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /strategy lab/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /notifications/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /system diagnostics/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^Journal$/i })).toBeInTheDocument();
   });
 
   it("R22.3 admin mode: shows Wheel (Admin) label", () => {
@@ -76,7 +77,8 @@ describe("Sidebar", () => {
     expect(screen.getByTestId("nav-group-advanced-legacy")).toBeInTheDocument();
     expect(screen.getByTestId("nav-legacy-note")).toHaveTextContent(/non-primary/i);
     expect(screen.getByRole("link", { name: /^Positions$/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /backtest/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /strategy lab/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /today checklist/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^Journal$/i })).toBeInTheDocument();
   });
 });

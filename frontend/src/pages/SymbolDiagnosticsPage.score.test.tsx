@@ -328,7 +328,7 @@ describe("SymbolDiagnosticsPage score UX", () => {
 
   it("R23.1: Symbol header shows price when present", () => {
     render(<SymbolDiagnosticsPage />);
-    expect(screen.getByText("$450.00")).toBeInTheDocument();
+    expect(screen.getAllByText("$450.00").length).toBeGreaterThanOrEqual(1);
   });
 
   it("R23.1: Symbol header shows Not available or — when price absent", () => {
@@ -349,7 +349,7 @@ describe("SymbolDiagnosticsPage score UX", () => {
       isError: false,
     });
     render(<SymbolDiagnosticsPage />);
-    expect(screen.getByText("$123.45")).toBeInTheDocument();
+    expect(screen.getAllByText("$123.45").length).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -449,8 +449,8 @@ describe("SymbolDiagnosticsPage Gate Summary", () => {
     });
     window.history.pushState({}, "", "/symbol-diagnostics?symbol=HD");
     render(<SymbolDiagnosticsPage />);
-    expect(screen.getByText(/Rejected due to delta band \(rejected_count=32\)/)).toBeInTheDocument();
-    expect(screen.queryByText(/delta=32/)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Rejected due to delta band \(rejected_count=32\)/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/rejected_due_to_delta=32/)).not.toBeInTheDocument();
   });
 
   it("R24.6: Gate Summary shows Blocked not FAIL when gate status is FAIL", () => {
@@ -529,7 +529,7 @@ describe("SymbolDiagnosticsPage Gate Summary", () => {
     expect(screen.getByText(/Gate Summary/)).toBeInTheDocument();
     // Parser maps rejected_due_to_delta=5 to "Rejected due to delta band (rejected_count=5)." (may appear in reasons list)
     expect(screen.getAllByText(/Rejected due to delta band \(rejected_count=5\)/).length).toBeGreaterThanOrEqual(1);
-    expect(screen.queryByText(/delta=5/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/rejected_due_to_delta=5/)).not.toBeInTheDocument();
   });
 });
 

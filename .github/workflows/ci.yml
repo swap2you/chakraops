@@ -1,4 +1,4 @@
-# Phase 4: Lint + unit tests on PR; full tests (including integration) on main.
+# Phase 4 / R50: Blocking quality gates on main and PRs.
 # CI does not require ORATS token; tests use fixtures and mocks.
 name: CI
 
@@ -9,12 +9,11 @@ on:
     branches: [main]
 
 jobs:
-  lint-and-test:
+  backend:
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: chakraops
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,12 +27,42 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
-      - name: Lint (ruff)
-        run: |
           pip install ruff
-          ruff check app tests --output-format=default || true
-        continue-on-error: true
+
+      - name: Lint (ruff) — blocking
+        run: ruff check app tests --output-format=default
 
       - name: Pytest (unit + integration with mocks; no ORATS token)
-        run: python -m pytest tests/ -v --tb=short
+        run: python -m pytest tests/ -q --tb=short
+
+      - name: R40.1 / R41–R50 critical regressions
+        run: |
+          python -m pytest tests/test_r401_scheduler_defaults.py tests/test_r401_eval_concurrency.py tests/test_r401_wheel_cash.py tests/test_r41_r401_regressions.py tests/test_r42_ticket_queue.py tests/test_r48_read_no_eval.py -q --tb=short
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test -- --run
+
+      - name: Build
+        run: npm run build

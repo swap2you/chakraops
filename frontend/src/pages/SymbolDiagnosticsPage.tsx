@@ -169,7 +169,14 @@ export function deriveWhyNoTrade(data: SymbolDiagnosticsResponseExtended): {
 
   const explained = data.reasons_explained?.[0]?.message;
   if (explained) return { summary: explained, source: "primary" };
-  if (data.primary_reason) return { summary: data.primary_reason, source: "primary" };
+  const fromPrimary = buildReasonsFromPrimary(data.primary_reason);
+  if (fromPrimary.length > 0 && fromPrimary[0]?.message) {
+    return { summary: fromPrimary[0].message, source: "primary" };
+  }
+  if (data.primary_reason) {
+    // Last resort: still surface something, but prefer sanitized gate formatter
+    return { summary: formatGateReason(data.primary_reason) || data.primary_reason, source: "primary" };
+  }
 
   if (actionable) return { summary: "No hard blocker — setup may proceed (manual only).", source: "eligible" };
   return { summary: "No trade — criteria not met or not yet evaluated.", source: "primary" };
@@ -900,8 +907,8 @@ function ExecutionConsole({
               );
             })()}
             {data.primary_reason ? (
-              <Tooltip content={data.primary_reason} className="max-w-sm">
-                <span className="mt-1 block text-xs text-zinc-400 dark:text-zinc-500 cursor-help">Debug: raw reason (see Details)</span>
+              <Tooltip content={formatGateReason(data.primary_reason) || "See diagnostics"} className="max-w-sm">
+                <span className="mt-1 block text-xs text-zinc-400 dark:text-zinc-500 cursor-help">Debug: reason detail (sanitized)</span>
               </Tooltip>
             ) : null}
           </div>
@@ -1391,7 +1398,7 @@ function ExecutionConsole({
               </div>
             )}
             {data.primary_reason && (
-              <Tooltip content={data.primary_reason} className="max-w-sm"><span className="block text-xs text-zinc-400 dark:text-zinc-500 cursor-help">Debug: raw reason</span></Tooltip>
+              <Tooltip content={formatGateReason(data.primary_reason) || "See diagnostics"} className="max-w-sm"><span className="block text-xs text-zinc-400 dark:text-zinc-500 cursor-help">Debug: reason detail</span></Tooltip>
             )}
             {data.earnings && (
               <div className="text-xs text-zinc-500 dark:text-zinc-400">

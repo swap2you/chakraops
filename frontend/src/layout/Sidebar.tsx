@@ -50,19 +50,19 @@ const navBase: Array<{
   { path: "/opportunities", label: "Opportunities", icon: Target, group: "Opportunities" },
   { path: "/portfolio", label: "Portfolio", icon: PieChart, group: "Portfolio" },
   { path: "/positions", label: "Positions", icon: Layers, group: "Portfolio" },
+  { path: "/journal", label: "Journal", icon: BookOpen, group: "Portfolio" },
   { path: "/universe", label: "Universe", icon: Globe, group: "Research" },
   { path: "/symbol-diagnostics", label: "Symbol Diagnostics", icon: Search, group: "Research" },
-  { path: "/backtest", label: "Backtest", icon: LineChart, group: "Strategy Lab" },
+  { path: "/backtest", label: "Strategy Lab", icon: LineChart, group: "Strategy Lab" },
   { path: "/learn", label: "Learn", icon: GraduationCap, group: "Strategy Lab" },
   { path: "/system", label: "System Diagnostics", icon: Activity, group: "Operations" },
+  { path: "/notifications", label: "Notifications", icon: Bell, group: "Operations" },
   { path: "/universe-admin", label: "Universe Admin", icon: Settings, group: "Operations" },
   { path: "/universe-health", label: "Universe Health", icon: Heart, group: "Operations" },
   { path: "/wheel", label: "Wheel", icon: RotateCcw, wheel: true, group: "Advanced/Legacy", legacyNote: true },
   { path: "/paper", label: "Paper", icon: FileText, group: "Advanced/Legacy", legacyNote: true },
   { path: "/reports", label: "Reports", icon: BarChart3, group: "Advanced/Legacy", legacyNote: true },
   { path: "/weekly", label: "Weekly Review", icon: CalendarCheck, group: "Advanced/Legacy", legacyNote: true },
-  { path: "/journal", label: "Journal", icon: BookOpen, group: "Advanced/Legacy", legacyNote: true },
-  { path: "/notifications", label: "Notifications", icon: Bell, group: "Advanced/Legacy", legacyNote: true },
 ];
 
 function groupTestId(group: string): string {

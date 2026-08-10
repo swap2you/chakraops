@@ -131,6 +131,50 @@ function holdTimeBasisLabel(basisKey: string | null | undefined): string {
   return k || "—";
 }
 
+/** R43: Derive why-no-trade / first hard blocker for Symbol Diagnostics visibility. */
+export function deriveWhyNoTrade(data: SymbolDiagnosticsResponseExtended): {
+  summary: string;
+  source: "gate" | "blocker" | "canonical" | "primary" | "eligible";
+} | null {
+  const action = (data.canonical_decision?.next_action_code ?? data.next_action_code ?? "").toUpperCase();
+  const actionable = action === "ENTRY" || (data.verdict ?? "").toUpperCase() === "ELIGIBLE";
+
+  const failedGate = (data.gates ?? []).find(
+    (g) => g.pass === false || (g.status ?? "").toUpperCase() === "FAIL" || (g.status ?? "").toUpperCase() === "BLOCKED"
+  );
+  if (failedGate) {
+    const msg = formatGateReason(failedGate.reason) || failedGate.reason || failedGate.name;
+    return { summary: msg, source: "gate" };
+  }
+
+  const hardBlocker = (data.blockers ?? []).find(
+    (b) =>
+      (b.severity ?? "").toUpperCase() === "HARD" ||
+      (b.severity ?? "").toUpperCase() === "SAFETY_CRITICAL" ||
+      (b.severity ?? "").toUpperCase() === "BLOCK"
+  ) ?? (data.blockers ?? [])[0];
+  if (hardBlocker?.message) {
+    return { summary: hardBlocker.message, source: "blocker" };
+  }
+
+  if (data.canonical_decision && action && action !== "ENTRY" && action !== "NONE") {
+    const labels = reasonLabels([
+      ...(data.canonical_decision.risk_flags ?? []),
+      ...(data.canonical_decision.reason_codes ?? []),
+    ]);
+    if (labels.length > 0) {
+      return { summary: labels[0], source: "canonical" };
+    }
+  }
+
+  const explained = data.reasons_explained?.[0]?.message;
+  if (explained) return { summary: explained, source: "primary" };
+  if (data.primary_reason) return { summary: data.primary_reason, source: "primary" };
+
+  if (actionable) return { summary: "No hard blocker — setup may proceed (manual only).", source: "eligible" };
+  return { summary: "No trade — criteria not met or not yet evaluated.", source: "primary" };
+}
+
 /** Optional prop for tests: force initial tab without relying on URL (e.g. ?tab=Shares). */
 export function SymbolDiagnosticsPage({ initialTabForTest }: { initialTabForTest?: "Options" | "Shares" } = {}) {
   const [searchParams] = useSearchParams();
@@ -322,6 +366,25 @@ export function SymbolDiagnosticsPage({ initialTabForTest }: { initialTabForTest
               />
             </Card>
           )}
+          {/* R43: Why no trade / first hard blocker */}
+          {(() => {
+            const why = deriveWhyNoTrade(data);
+            if (!why) return null;
+            const isHard = why.source !== "eligible";
+            return (
+              <Card data-testid="why-no-trade-card">
+                <CardHeader
+                  title={isHard ? "Why no trade" : "Trade readiness"}
+                  description="First hard blocker when present; advisory only — manual execution."
+                />
+                <div className="flex flex-wrap items-start gap-2 text-sm">
+                  {isHard && <Badge variant="danger"><span data-testid="first-hard-blocker-badge">First hard blocker</span></Badge>}
+                  {!isHard && <Badge variant="success">No hard blocker</Badge>}
+                  <p className="text-zinc-700 dark:text-zinc-300" data-testid="why-no-trade-summary">{why.summary}</p>
+                </div>
+              </Card>
+            );
+          })()}
           {/* R26.0: Suggested size when this symbol has ENTRY with r260 sizing */}
           {entrySizingItem && (
             <Card data-testid="suggested-size-card">
@@ -516,7 +579,7 @@ function ExecutionConsole({
   const liq = data.liquidity;
   const sel = data.symbol_eligibility;
   const expl = data.explanation;
-  const stockObj = data.stock && typeof data.stock === "object" ? data.stock as { price?: number | null; spot?: number | null; underlying_price?: number | null; quote_as_of?: string | null } : null;
+  const stockObj = data.stock && typeof data.stock === "object" ? data.stock as { price?: number | null; spot?: number | null; underlying_price?: number | null; quote_as_of?: string | null; field_sources?: Record<string, string> | null } : null;
   const price = stockObj != null
     ? (stockObj.spot ?? stockObj.price ?? stockObj.underlying_price ?? null)
     : null;
@@ -624,6 +687,47 @@ function ExecutionConsole({
       </Card>
       {activeTab === "Options" ? (
       <div className="w-full space-y-2">
+      {/* R43: Stock vs Options source/freshness strip */}
+      <Card className="w-full" data-testid="options-data-freshness">
+        <CardHeader title="Stock & options data" description="Source and freshness where available." />
+        <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+          <div data-testid="stock-data-section">
+            <span className="block text-xs font-semibold uppercase text-zinc-500">Stock</span>
+            <p className="mt-0.5 font-mono text-zinc-700 dark:text-zinc-300">
+              {price != null ? `$${price.toFixed(2)}` : "—"}
+              {stockObj?.quote_as_of != null ? ` · as of ${stockObj.quote_as_of}` : ""}
+            </p>
+            {stockObj && "field_sources" in stockObj && stockObj.field_sources && Object.keys(stockObj.field_sources).length > 0 && (
+              <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                Source: {Object.entries(stockObj.field_sources).slice(0, 3).map(([k, v]) => `${k}=${v}`).join(", ")}
+              </p>
+            )}
+            {!stockObj?.quote_as_of && data.as_of_inputs?.quote_as_of && (
+              <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">Quote as of {data.as_of_inputs.quote_as_of}</p>
+            )}
+          </div>
+          <div data-testid="options-data-section">
+            <span className="block text-xs font-semibold uppercase text-zinc-500">Options</span>
+            {data.options_lifecycle?.mark_value != null ? (
+              <p className="mt-0.5 font-mono text-zinc-700 dark:text-zinc-300">
+                Mark ${data.options_lifecycle.mark_value.toFixed(2)}
+                {(data.options_lifecycle.mark_source || data.options_lifecycle.mark_age_sec != null) && (
+                  <span className="text-zinc-500 dark:text-zinc-400">
+                    {" "}({[data.options_lifecycle.mark_source, data.options_lifecycle.mark_age_sec != null ? `${data.options_lifecycle.mark_age_sec}s ago` : null].filter(Boolean).join(", ")})
+                  </span>
+                )}
+              </p>
+            ) : (
+              <p className="mt-0.5 text-zinc-600 dark:text-zinc-400">
+                {candidates.length > 0 ? `${candidates.length} candidate(s)` : "No mark / candidates"}
+              </p>
+            )}
+            {data.as_of_inputs?.orats_as_of && (
+              <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">ORATS as of {data.as_of_inputs.orats_as_of}</p>
+            )}
+          </div>
+        </div>
+      </Card>
       {/* R25.3: Options lifecycle strip (tracked position) — concise; safe labels only */}
       {data.options_lifecycle && (
         <Card className="w-full" data-testid="options-lifecycle-strip">
@@ -1502,6 +1606,21 @@ function SharesTabContent({
 
   return (
     <div className="space-y-4 lg:col-span-2" data-testid="shares-tab-content">
+      {/* R43: Stock source/freshness on Shares tab */}
+      <Card data-testid="shares-stock-data-section">
+        <CardHeader title="Stock data" description="Underlying price source and freshness where available." />
+        <div className="text-sm">
+          <p className="font-mono text-zinc-700 dark:text-zinc-300">
+            {price != null ? `$${Number(price).toFixed(2)}` : "—"}
+            {data.stock?.quote_as_of != null ? ` · as of ${data.stock.quote_as_of}` : data.as_of_inputs?.quote_as_of ? ` · as of ${data.as_of_inputs.quote_as_of}` : ""}
+          </p>
+          {data.stock?.field_sources && Object.keys(data.stock.field_sources).length > 0 && (
+            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+              Source: {Object.entries(data.stock.field_sources).slice(0, 3).map(([k, v]) => `${k}=${v}`).join(", ")}
+            </p>
+          )}
+        </div>
+      </Card>
       {/* Accordion 1: Trade Plan — R24.1 deep-link id: trade-plan */}
       <details open={tradePlanOpen} onToggle={(e) => setTradePlanOpen((e.target as HTMLDetailsElement).open)} className="group rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900/60" data-testid="shares-accordion-trade-plan">
         <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50">

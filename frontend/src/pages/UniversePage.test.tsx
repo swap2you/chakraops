@@ -54,13 +54,38 @@ vi.mock("@/api/queries", () => ({
   useDefaultAccount: () => ({ data: { account: { account_id: "acct_1" } } }),
   useUiTrackedPositions: () => ({ data: { capital_deployed: 0, open_positions_count: 0 } }),
   useManualExecute: () => ({ mutate: vi.fn(), isPending: false }),
-  useUniverseV2Summary: () => ({ data: { status: "NO_SNAPSHOT", version: 0 }, isLoading: false, isError: false }),
+  useUniverseV2Summary: () => ({
+    data: {
+      status: "COMPLETE",
+      version: 12,
+      created_at_utc: "2026-08-10T00:00:00+00:00",
+      stale: false,
+      research_pool_count: 166,
+      lifecycle_funnel: { ADMITTED: 40, WATCH: 100, QUARANTINE: 20, REMOVED: 6 },
+      strategy_eligible: { CORE_WHEEL: 15, BALANCED_WHEEL: 25, AGGRESSIVE_WHEEL: 35, SHARES: 50 },
+      top_rejection_reasons: [],
+    },
+    isLoading: false,
+    isError: false,
+  }),
   useUniverseV2Refresh: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 describe("UniversePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("R43: mounts Universe V2 panel with size, lifecycle, version, freshness", () => {
+    render(<UniversePage />);
+    expect(screen.getByTestId("universe-v2-panel")).toBeInTheDocument();
+    const fresh = screen.getByTestId("universe-v2-freshness");
+    expect(fresh).toHaveTextContent("Research pool: 166");
+    expect(fresh).toHaveTextContent("v12");
+    expect(fresh).toHaveTextContent("Fresh");
+    const lifecycle = screen.getByTestId("universe-v2-lifecycle");
+    expect(lifecycle).toHaveTextContent("ADMITTED: 40");
+    expect(lifecycle).toHaveTextContent("WATCH: 100");
   });
 
   it("renders Add symbol form (Phase 21.3)", async () => {

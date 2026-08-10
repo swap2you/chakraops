@@ -1,35 +1,29 @@
 # Current State — ChakraOps
 
-_Last updated: R35.0 program complete (2026-06-23) — commit `6804490`; backend 1300/4 skip; R35 targeted 76/1 skip; frontend 335/18 skip; build PASS; Windows smoke PASS; Cowork browser UAT PASS WITH NOTES; final PR created; schedules disabled; no deployment_
+_Last updated: 2026-08-10 — master program R36.3–R40 start; baseline `63d83d00e3ceb9ac15a080a54178adf0d7e78267`_
 
 ## Release Status
 
 | Field | Value |
 |-------|-------|
-| Latest stable merged release | R30.7 |
-| Tag | `chakraops-r30.7.0` |
-| Current branch | `release/R31-R35-program` |
-| Current mode | Program R31–R35 complete; final PR open for review |
-| Active milestone | R35.0 — **COMPLETE**. Cowork browser UAT PASS WITH NOTES. Final PR created. Schedules disabled. |
-| Program commit | `6804490` |
+| Latest merged on main | R36.2 (Universe V2) + post-merge scheduler/UI polish |
+| Baseline SHA | `63d83d00e3ceb9ac15a080a54178adf0d7e78267` |
+| Current branch | `main` |
+| Current mode | `SINGLE_OPERATOR_MAINLINE_LOOP_MODE` |
+| Active milestone | R36.3 — Whole-Application Trust & Wiring Stabilization |
+| Requirements | `docs/ai/MASTER_PROGRAM_R36_3_R40_REQUIREMENTS.md` |
 
-## R35.0 Validation Gates
+## Ports
 
-| Gate | Result |
-|------|--------|
-| Backend pytest | 1300 passed, 4 skipped |
-| R35 targeted | 76 passed, 1 skipped |
-| Frontend tests | 335 passed, 18 skipped |
-| Frontend build | PASS |
-| Windows operational smoke | PASS |
-| Cowork browser UAT | PASS WITH NOTES |
-
-**Data health:** ORATS Degraded/WARN and Decision Store CRITICAL present; fails closed. Not green.
+| Service | Port |
+|---------|------|
+| Backend | http://127.0.0.1:18800 |
+| Frontend | http://127.0.0.1:18873 |
 
 ## Trading Safety
 
 Manual execution only. No auto-trading. No broker order routing. ORATS is the sole active market-data provider. No silent provider fallback. Stay in cash is a valid outcome. Schedules remain disabled.
 
-## Future Releases
+## Program
 
-See `docs/ai/RELEASE_TRAVELER.md` for the full directional roadmap.
+R36.3 → R37 → R38 → R39 → R40 (closes master program). See `docs/ai/PROGRAM_STATUS.md`.

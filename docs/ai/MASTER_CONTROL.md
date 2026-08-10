@@ -15,6 +15,14 @@ Before acting, every tool must read:
 
 `AGENTS.md` is authoritative. This library may add controls, but it may not weaken root safety, gate, evidence, or release requirements.
 
+## Workflow mode
+
+Default: **SINGLE_OPERATOR_MAINLINE_LOOP_MODE** (see `AGENTS.md`).
+
+- Work on synchronized `main`; push only after acceptance green.
+- PR transport only if branch protection blocks direct push.
+- Master program requirements: `docs/ai/MASTER_PROGRAM_R36_3_R40_REQUIREMENTS.md`.
+
 ## Universal launch keywords
 
 The operator may use these short commands:
@@ -26,9 +34,10 @@ The operator may use these short commands:
 - `CLAUDE REVIEW <Release>`
 - `CODEX REVIEW <Release>`
 - `COWORK UAT <Release>`
-- `READY FOR PR <Release>`
+- `READY FOR PR <Release>` (fallback when mainline push blocked)
 - `RECORD MERGE <Release>`
 - `NEXT RELEASE`
+- `MASTER PROGRAM R36.3-R40` (continuous acceptance loop through R40)
 
 ## Tool behavior
 

@@ -1,5 +1,5 @@
 ---
-description: ChakraOps Cursor agent rules — R30.6 governance baseline
+description: ChakraOps Cursor agent rules — mainline loop + safety baseline
 ---
 
 # ChakraOps Cursor Rules
@@ -8,21 +8,27 @@ description: ChakraOps Cursor agent rules — R30.6 governance baseline
 
 - Implement approved scope only.
 - Stop if scope expands beyond what the operator explicitly authorized.
+- Master program R36.3–R40 authorizes continuous acceptance-loop work on `main`.
 
 ## Git
 
-- Do not run Git commands unless the operator explicitly instructs in that message.
+- Default: `SINGLE_OPERATOR_MAINLINE_LOOP_MODE` per `AGENTS.md`.
+- Commit/push on `main` only after the current release acceptance contract is green, when the operator (or master program) authorized it.
+- Never force-push or rewrite history.
+- Keep `chakraOpsDropbox/` untracked (local exclude).
 
 ## Protected Paths
 
-- Do not modify files under `out/` or `data/`.
-- Do not modify past release notes (any release prior to the current branch).
+- Do not modify files under `out/` or `data/` except authorized verification evidence under `out/verification/<Release>/`.
+- Do not modify past release notes (any release prior to the current release).
 
 ## Trading Safety
 
 - Preserve manual-only execution. Do not add or imply automated order routing.
 - Preserve ORATS-only provider rule. Do not add silent provider fallbacks.
 - Preserve safe UI labels. Do not expose raw `FAIL_`, `WARN_`, or `PASS` tokens in UI-facing output.
+- Scheduler remains disabled unless the operator explicitly enables it.
+- Robinhood integration, if any, is hard read-only with write denylist.
 
 ## Required Gates Before DONE
 
@@ -30,13 +36,17 @@ description: ChakraOps Cursor agent rules — R30.6 governance baseline
 2. Frontend tests: `cd frontend && npm run test -- --run`
 3. Frontend build: `cd frontend && npm run build`
 
+## Continuous Acceptance
+
+inspect → implement → targeted test → runtime/browser validate → compare to requirements → fix → repeat
+
 ## STEP Report Format
 
-Every completed task must end with a STEP report containing:
+At major release boundaries only, provide a concise progress summary:
 
 - **Files changed** — list every file created or modified
 - **Tests run** — exact command and summary line
 - **Exact summaries** — paste the final summary lines from each gate
 - **Skipped items** — what was deferred and why
 - **Open risks** — anything that may require follow-up
-- **Stop point** — the explicit statement of where the agent stopped
+- **Stop point** — only when a genuine blocker remains; otherwise continue to the next release

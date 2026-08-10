@@ -191,9 +191,15 @@ export function SystemDiagnosticsPage() {
       <Card data-testid="operations-panel-r35">
         <CardHeader title="Operations (R35)" description="Scheduler, jobs, backup — manual only; no trade execution" />
         <div className="grid gap-4 p-4 md:grid-cols-2">
-          <div>
+          <div data-testid="scheduler-master-status">
             <p className="text-xs uppercase text-zinc-500">Scheduler master</p>
-            <p className="mt-1 font-mono">{opsData?.scheduler?.master_enabled ? "Enabled" : "Disabled"}</p>
+            <p className="mt-1 font-mono">{opsData?.scheduler?.master_enabled ? "Enabled" : "Disabled (false)"}</p>
+          </div>
+          <div data-testid="scheduler-legacy-status">
+            <p className="text-xs uppercase text-zinc-500">Legacy schedulers</p>
+            <p className="mt-1 font-mono">
+              {opsData?.scheduler?.legacy_schedulers_enabled ? "Enabled" : "Disabled (false)"}
+            </p>
           </div>
           <div>
             <p className="text-xs uppercase text-zinc-500">ORATS token</p>
@@ -459,17 +465,19 @@ export function SystemDiagnosticsPage() {
             </p>
           )}
         </Card>
-        {/* Phase 21.5 / R21.5.1: Slack per-channel status + 4 test buttons */}
-        <Card>
+        {/* Phase 21.5 / R21.5.1 / R46: Slack per-channel status + honesty labels */}
+        <Card data-testid="slack-status-card">
           <CardHeader title="Slack" />
           <div className="mb-3 grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">implementation</span>
-              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{slack?.implementation_status ?? "CODE_READY"}</p>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200" data-testid="slack-implementation-status">
+                {slack?.implementation_status ?? "CODE_READY"}
+              </p>
             </div>
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">config</span>
-              <p className="mt-1">
+              <p className="mt-1" data-testid="slack-config-status">
                 <StatusBadge status={slack?.configured === true || slack?.config_status === "CONFIGURED" ? "OK" : "WARN"} />
                 <span className="ml-2 text-xs text-zinc-600 dark:text-zinc-400">{slack?.config_status ?? (slack?.configured ? "CONFIGURED" : "UNCONFIGURED")}</span>
               </p>
@@ -534,6 +542,31 @@ export function SystemDiagnosticsPage() {
           {adminSlackTest.data && (
             <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
               {adminSlackTest.data.ok ? `Test sent to ${adminSlackTest.data.channel ?? "channel"}.` : adminSlackTest.data.message ?? "—"}
+            </p>
+          )}
+        </Card>
+        {/* R46: Copilot key honesty on System Diagnostics */}
+        <Card data-testid="copilot-status-card">
+          <CardHeader title="Copilot" description="Advisory assistant status — no secrets shown." />
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">key</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200" data-testid="copilot-config-status">
+                {data?.copilot?.key_present ? "CONFIGURED" : "UNCONFIGURED"}
+              </p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">key_source</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data?.copilot?.key_source ?? "NONE"}</p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">model</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{data?.copilot?.model ?? "—"}</p>
+            </div>
+          </div>
+          {!data?.copilot?.key_present && (
+            <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+              Copilot is unconfigured until an API key is set (COPILOT_OPENAI_API_KEY or OPENAI_API_KEY).
             </p>
           )}
         </Card>

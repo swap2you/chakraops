@@ -32,7 +32,11 @@ describe("SystemDiagnosticsPage operations panel", () => {
     });
     mockUseOperationsStatus.mockReturnValue({
       data: {
-        scheduler: { master_enabled: false, jobs: [{ job_id: "backup", enabled: false, schedule: "Daily" }] },
+        scheduler: {
+          master_enabled: false,
+          legacy_schedulers_enabled: false,
+          jobs: [{ job_id: "backup", enabled: false, schedule: "Daily" }],
+        },
         orats_token_present: true,
         backup: { latest: { backup_id: "backup_test" }, count: 1 },
       },
@@ -43,6 +47,25 @@ describe("SystemDiagnosticsPage operations panel", () => {
     render(<SystemDiagnosticsPage />);
     expect(screen.getByTestId("operations-panel-r35")).toBeInTheDocument();
     expect(screen.getByText(/Scheduler master/i)).toBeInTheDocument();
-    expect(screen.getByText(/Disabled/i)).toBeInTheDocument();
+    expect(screen.getByTestId("scheduler-master-status")).toHaveTextContent(/Disabled \(false\)/i);
+  });
+
+  it("R46: shows legacy schedulers false, Slack CODE_READY/UNCONFIGURED, Copilot unconfigured", () => {
+    mockUseUiSystemHealth.mockReturnValue({
+      data: {
+        api: { status: "OK" },
+        scheduler: {},
+        market: {},
+        slack: { implementation_status: "CODE_READY", config_status: "UNCONFIGURED", configured: false },
+        copilot: { key_present: false, key_source: "NONE" },
+      },
+      isLoading: false,
+      isError: false,
+    });
+    render(<SystemDiagnosticsPage />);
+    expect(screen.getByTestId("scheduler-legacy-status")).toHaveTextContent(/Disabled \(false\)/i);
+    expect(screen.getByTestId("slack-implementation-status")).toHaveTextContent("CODE_READY");
+    expect(screen.getByTestId("slack-config-status")).toHaveTextContent("UNCONFIGURED");
+    expect(screen.getByTestId("copilot-config-status")).toHaveTextContent("UNCONFIGURED");
   });
 });

@@ -100,6 +100,20 @@ export function BacktestPage() {
         >
           SIMULATION — NOT A LIVE RECOMMENDATION
         </div>
+        <div
+          role="status"
+          data-testid="r40-external-gap-banner"
+          className="mb-3 rounded-md border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 dark:border-zinc-600 dark:bg-zinc-900/50 dark:text-zinc-200"
+        >
+          <p className="font-semibold" data-testid="r40-external-gap-label">
+            EXTERNAL_GAP — ORATS /hist/options not entitled
+          </p>
+          <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+            Status: TECHNICALLY_READY_WITH_EXTERNAL_BACKTEST_ENTITLEMENT_GAP. Strategy Lab uses fixtures only;
+            this is not a generic backtest failure and does not claim live historical options coverage.
+            No production threshold retune from fixture runs.
+          </p>
+        </div>
         {r40Present && r40Oos ? (
           <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4" data-testid="r40-last-run">
             <div>

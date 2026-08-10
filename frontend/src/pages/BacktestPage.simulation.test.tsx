@@ -47,4 +47,14 @@ describe("BacktestPage simulation label", () => {
     expect(label).toBeInTheDocument();
     expect(label).toHaveTextContent(/SIMULATION — NOT A LIVE RECOMMENDATION/i);
   });
+
+  it("R47: shows EXTERNAL_GAP for hist/options entitlement (not generic failure)", () => {
+    render(<BacktestPage />);
+    expect(screen.getByTestId("r40-simulation-banner")).toHaveTextContent(/SIMULATION/i);
+    expect(screen.getByTestId("r40-external-gap-banner")).toBeInTheDocument();
+    expect(screen.getByTestId("r40-external-gap-label")).toHaveTextContent(/EXTERNAL_GAP/i);
+    expect(screen.getByTestId("r40-external-gap-banner")).toHaveTextContent(/hist\/options not entitled/i);
+    expect(screen.getByTestId("r40-external-gap-banner").textContent || "").not.toMatch(/failed to load|request failed/i);
+    expect(screen.getByTestId("r40-external-gap-banner")).toHaveTextContent(/TECHNICALLY_READY_WITH_EXTERNAL_BACKTEST_ENTITLEMENT_GAP/);
+  });
 });

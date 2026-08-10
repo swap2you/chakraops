@@ -361,6 +361,15 @@ function uiWheelOverviewPath(accountId?: string | null): string {
   return accountId ? `${base}?account_id=${encodeURIComponent(accountId)}` : base;
 }
 
+/** R38: Wheel V2 decision */
+function uiWheelV2DecisionPath(symbol: string, profile?: string | null, accountId?: string | null): string {
+  const params = new URLSearchParams();
+  params.set("symbol", symbol);
+  if (profile) params.set("profile", profile);
+  if (accountId) params.set("account_id", accountId);
+  return `/api/ui/wheel/v2/decision?${params.toString()}`;
+}
+
 /** Phase 20.0: Manual wheel actions */
 function uiWheelAssignPath(symbol: string): string {
   return `/api/ui/wheel/${encodeURIComponent(symbol)}/assign`;
@@ -724,6 +733,8 @@ export const queryKeys = {
   uiNotifications: (limit?: number, state?: string | null) =>
     (["ui", "notifications", limit ?? 100, state ?? ""] as const),
   uiWheelOverview: (accountId?: string | null) => ["ui", "wheel", "overview", accountId ?? ""] as const,
+  uiWheelV2Decision: (symbol: string, profile?: string | null) =>
+    ["ui", "wheel", "v2", "decision", symbol, profile ?? "balanced"] as const,
   uiMarketStatus: () => ["ui", "marketStatus"] as const,
   uiSnapshotsLatest: () => ["ui", "snapshots", "latest"] as const,
   /** R23.2 */
@@ -1958,6 +1969,50 @@ export function useWheelOverview(accountId?: string | null, enabled = true) {
     queryKey: queryKeys.uiWheelOverview(accountId),
     queryFn: () => apiGet<WheelOverviewResponse>(uiWheelOverviewPath(accountId)),
     enabled,
+  });
+}
+
+/** R38: Wheel V2 advisory decision (request-time; safe labels) */
+export interface WheelV2ManualPlan {
+  strike?: number | null;
+  expiry?: string | null;
+  dte?: number | null;
+  delta?: number | null;
+  premium?: number | null;
+  breakeven?: number | null;
+  collateral?: number | null;
+  profit_target_pct?: number | null;
+  roll_dte?: number | null;
+  summary_label?: string | null;
+  strategy?: string | null;
+  action?: string | null;
+}
+
+export interface WheelV2Decision {
+  symbol: string;
+  phase: string;
+  phase_label?: string | null;
+  action: string;
+  action_label?: string | null;
+  strategy?: string | null;
+  manual_plan?: WheelV2ManualPlan | null;
+  arbitration?: { winner?: string; winner_label?: string; reason_labels?: string[] } | null;
+  manual_only?: boolean;
+  trade_execution?: boolean;
+  error?: string;
+}
+
+export function useWheelV2Decision(
+  symbol?: string | null,
+  profile: string = "balanced",
+  accountId?: string | null,
+  enabled = true,
+) {
+  const sym = (symbol ?? "").trim().toUpperCase();
+  return useQuery({
+    queryKey: queryKeys.uiWheelV2Decision(sym, profile),
+    queryFn: () => apiGet<WheelV2Decision>(uiWheelV2DecisionPath(sym, profile, accountId)),
+    enabled: enabled && !!sym,
   });
 }
 

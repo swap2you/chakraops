@@ -1,0 +1,33 @@
+{
+  "release": "R38",
+  "verdict": "IMPLEMENTED",
+  "title": "Wheel & Share Decision Engine V2",
+  "acceptance": {
+    "R38-W1": "PASS",
+    "R38-W2": "PASS",
+    "R38-S1": "PASS",
+    "R38-A1": "PASS",
+    "R38-P1": "PASS",
+    "R38-K1": "PASS"
+  },
+  "safety": {
+    "manual_only": true,
+    "trade_execution": false,
+    "scheduler_enabled": false,
+    "broker_writes": false,
+    "decision_latest_prose": false,
+    "threshold_retune": false
+  },
+  "artifacts": [
+    "docs/ai/releases/R38/R38_SCOPE.md",
+    "docs/ai/releases/R38/R38_DESIGN.md",
+    "chakraops/app/core/decision_engine/wheel_v2/",
+    "chakraops/app/api/wheel_v2_routes.py",
+    "chakraops/tests/test_r380_*.py"
+  ],
+  "tests": {
+    "backend": "tests/test_r380_*.py tests/_core/test_wheel_phase18.py",
+    "frontend": "src/pages/WheelPage.test.tsx"
+  },
+  "next": "R39"
+}

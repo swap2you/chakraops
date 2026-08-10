@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ExternalLink, Ticket, Wrench } from "lucide-react";
 import {
   useWheelOverview,
+  useWheelV2Decision,
   useDefaultAccount,
   useAccounts,
   useWheelAssign,
@@ -59,6 +60,67 @@ function suggestedToCandidate(sc: WheelOverviewSuggestedCandidate | null | undef
   };
 }
 
+/** R38: V2 advisory panel for selected symbol */
+function WheelV2Panel({
+  symbol,
+  accountId,
+}: {
+  symbol: string;
+  accountId?: string | null;
+}) {
+  const { data, isLoading, isError } = useWheelV2Decision(symbol, "balanced", accountId, !!symbol);
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader title="Wheel V2 advisory" description={symbol} />
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading advisory…</p>
+      </Card>
+    );
+  }
+  if (isError || !data) {
+    return null;
+  }
+  const plan = data.manual_plan;
+  return (
+    <Card>
+      <CardHeader
+        title="Wheel V2 advisory"
+        description="Request-time manual plan · advisory only"
+      />
+      <div className="space-y-2 text-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-mono font-medium">{data.symbol}</span>
+          <Badge variant="neutral">{data.phase_label || data.phase}</Badge>
+          <Badge variant="success">{data.action_label || data.action}</Badge>
+          {data.strategy && <Badge variant="neutral">{data.strategy}</Badge>}
+        </div>
+        {plan?.summary_label && (
+          <p className="text-zinc-700 dark:text-zinc-300">{plan.summary_label}</p>
+        )}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+          {plan?.strike != null && <div>Strike {fmt(plan.strike)}</div>}
+          {plan?.expiry && <div>Expiry {plan.expiry}</div>}
+          {plan?.dte != null && <div>DTE {plan.dte}</div>}
+          {plan?.premium != null && <div>Premium {fmt(plan.premium)}</div>}
+          {plan?.breakeven != null && <div>Breakeven {fmt(plan.breakeven)}</div>}
+          {plan?.collateral != null && <div>Collateral {fmt(plan.collateral)}</div>}
+          {plan?.profit_target_pct != null && <div>Profit target {fmt(plan.profit_target_pct)}%</div>}
+          {plan?.roll_dte != null && <div>Roll DTE {plan.roll_dte}</div>}
+        </div>
+        {data.arbitration?.winner_label && (
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            Arbitration: {data.arbitration.winner_label}
+            {data.arbitration.reason_labels?.length
+              ? ` · ${data.arbitration.reason_labels[0]}`
+              : ""}
+          </p>
+        )}
+        <p className="text-xs text-zinc-400">Manual only · no broker execution</p>
+      </div>
+    </Card>
+  );
+}
+
 export function WheelPage() {
   const { data: accountsData } = useAccounts();
   const { data: defaultAccountData } = useDefaultAccount();
@@ -70,6 +132,7 @@ export function WheelPage() {
   const { data, isLoading, isError } = useWheelOverview(accountId, !!selectedAccount);
   const [openTicket, setOpenTicket] = useState<{ symbol: string; row: WheelOverviewRow } | null>(null);
   const [repairConfirmed, setRepairConfirmed] = useState(false);
+  const [v2Symbol, setV2Symbol] = useState<string | null>(null);
   const wheelAssign = useWheelAssign();
   const wheelUnassign = useWheelUnassign();
   const wheelReset = useWheelReset();
@@ -82,6 +145,7 @@ export function WheelPage() {
   const wheelIntegrity = data?.wheel_integrity;
   const integrityFail = wheelIntegrity?.status === "FAIL";
   const repairEnabled = integrityFail || repairConfirmed;
+  const advisorySymbol = v2Symbol ?? (rows.length > 0 ? rows[0].symbol : null);
 
   if (isLoading) {
     return (
@@ -166,6 +230,8 @@ export function WheelPage() {
           )}
         </div>
       </Card>
+
+      {advisorySymbol && <WheelV2Panel symbol={advisorySymbol} accountId={accountId} />}
 
       {rows.length === 0 ? (
         <Card>
@@ -323,6 +389,14 @@ export function WheelPage() {
                               Open ticket
                             </Button>
                           )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setV2Symbol(row.symbol)}
+                            className="text-zinc-500"
+                          >
+                            V2
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>

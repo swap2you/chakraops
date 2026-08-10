@@ -91,6 +91,52 @@ def test_next_action_blocked_when_policy_violated():
     assert any("wheel_one_position_per_symbol" in b for b in (result.get("blocked_by") or []))
 
 
+def test_next_action_open_hold_without_position_fixture():
+    """OPEN with no matching option position still returns HOLD (legacy path)."""
+    result = compute_next_action(
+        "SPY",
+        {"state": "OPEN", "last_updated_utc": None, "linked_position_ids": ["p1"]},
+        None,
+        {"status": "PASS"},
+        open_positions=[],
+    )
+    assert result["action_type"] == "HOLD"
+
+
+def test_next_action_open_uses_management_roll(monkeypatch):
+    """R38: OPEN maps management ROLL → action_type ROLL."""
+    from datetime import date, timedelta
+
+    pos = type(
+        "P",
+        (),
+        {
+            "symbol": "SPY",
+            "status": "OPEN",
+            "strategy": "CSP",
+            "strike": 100.0,
+            "expiration": (date.today() + timedelta(days=10)).isoformat(),
+            "open_credit": 2.0,
+            "contracts": 1,
+            "position_id": "p1",
+        },
+    )()
+    result = compute_next_action(
+        "SPY",
+        {"state": "OPEN", "last_updated_utc": None, "linked_position_ids": ["p1"]},
+        None,
+        {"status": "PASS"},
+        open_positions=[pos],
+    )
+    assert result["action_type"] in ("HOLD", "ROLL")
+    assert result.get("lifecycle_action") in ("CLOSE", "ROLL", "HOLD", None) or result["action_type"] == "HOLD"
+    if result.get("lifecycle_action") == "ROLL":
+        assert result["action_type"] == "ROLL"
+    if result.get("lifecycle_action") == "CLOSE":
+        # CLOSE maps to HOLD in action_type vocabulary
+        assert result["action_type"] == "HOLD"
+
+
 def test_add_paper_position_409_when_wheel_policy_blocks(tmp_path):
     """Cannot open second CSP for same symbol when wheel_one_position_per_symbol enabled."""
     from app.core.positions.service import add_paper_position

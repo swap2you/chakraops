@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from "@/test/test-utils";
 import { WheelPage } from "./WheelPage";
 
 const useWheelOverview = vi.fn();
+const useWheelV2Decision = vi.fn();
 const useDefaultAccount = vi.fn();
 const useAccounts = vi.fn();
 const useWheelAssign = vi.fn();
@@ -15,6 +16,7 @@ vi.mock("@/api/queries", async (importOriginal) => {
   return {
     ...actual,
     useWheelOverview: (...args: unknown[]) => useWheelOverview(...args),
+    useWheelV2Decision: (...args: unknown[]) => useWheelV2Decision(...args),
     useDefaultAccount: (...args: unknown[]) => useDefaultAccount(...args),
     useAccounts: (...args: unknown[]) => useAccounts(...args),
     useWheelAssign: (...args: unknown[]) => useWheelAssign(...args),
@@ -59,11 +61,42 @@ const mockWheelOverview = {
   wheel_integrity: { status: "PASS" },
 };
 
+const mockWheelV2 = {
+  symbol: "SPY",
+  phase: "CSP_ENTRY",
+  phase_label: "Cash-secured put entry",
+  action: "OPEN_CSP",
+  action_label: "Open cash-secured put",
+  strategy: "CSP",
+  manual_plan: {
+    summary_label: "Open CSP · SPY",
+    strike: 100,
+    expiry: "2026-12-20",
+    premium: 1.5,
+    breakeven: 98.5,
+    collateral: 10000,
+    profit_target_pct: 50,
+    roll_dte: 21,
+  },
+  arbitration: {
+    winner: "CSP",
+    winner_label: "Cash-secured put",
+    reason_labels: ["Cash-secured put preferred"],
+  },
+  manual_only: true,
+  trade_execution: false,
+};
+
 describe("WheelPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useWheelOverview.mockReturnValue({
       data: mockWheelOverview,
+      isLoading: false,
+      isError: false,
+    });
+    useWheelV2Decision.mockReturnValue({
+      data: mockWheelV2,
       isLoading: false,
       isError: false,
     });
@@ -77,11 +110,23 @@ describe("WheelPage", () => {
 
   it("renders wheel table with symbol rows", () => {
     render(<WheelPage />);
-    expect(screen.getByText("SPY")).toBeInTheDocument();
+    expect(screen.getAllByText("SPY").length).toBeGreaterThan(0);
     expect(screen.getByText("EMPTY")).toBeInTheDocument();
     expect(screen.getByText("OPEN_TICKET")).toBeInTheDocument();
     expect(screen.getByText("Passed")).toBeInTheDocument();
     expect(screen.getByText("75")).toBeInTheDocument();
+  });
+
+  it("R38: shows Wheel V2 phase and manual plan summary", () => {
+    render(<WheelPage />);
+    expect(screen.getByText("Wheel V2 advisory")).toBeInTheDocument();
+    expect(screen.getByText("Cash-secured put entry")).toBeInTheDocument();
+    expect(screen.getByText("Open cash-secured put")).toBeInTheDocument();
+    expect(screen.getByText("Open CSP · SPY")).toBeInTheDocument();
+    expect(screen.getByText(/Manual only/)).toBeInTheDocument();
+    const body = document.body.innerHTML;
+    expect(body).not.toMatch(/FAIL_[A-Z_0-9]+/);
+    expect(body).not.toMatch(/WARN_[A-Z_0-9]+/);
   });
 
   it("shows blocked_by list when next_action has blocked_by", () => {
@@ -173,7 +218,6 @@ describe("WheelPage", () => {
     expect(screen.getByText("Admin / Recovery")).toBeInTheDocument();
     expect(screen.getByText(/Use Repair only when/)).toBeInTheDocument();
     const body = document.body.innerHTML;
-    const adminSection = body;
-    expect(adminSection).not.toMatch(/FAIL_[A-Z_0-9]+/);
+    expect(body).not.toMatch(/FAIL_[A-Z_0-9]+/);
   });
 });

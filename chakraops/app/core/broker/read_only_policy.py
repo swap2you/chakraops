@@ -1,22 +1,21 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""R37 broker read-only policy — hard write denylist; Robinhood NO-GO.
+"""Broker write-denylist policy (R37) + R52 status delegation.
 
-Official Robinhood public docs (https://docs.robinhood.com/) cover Crypto Trading
-API only. There is no official public brokerage API for stocks/options Wheel
-portfolio sync. Unofficial private APIs, robin_stocks / api.robinhood.com clients,
-and browser-login automation are forbidden by the master program (NO-GO).
+R37 established hard write denylist verbs. R52 supersedes permanent Robinhood
+NO-GO for the *official* MCP read path — see ``status.robinhood_mcp_read_only_status``.
 
-This module encodes the safety surface only. It does not connect to any broker.
+Unofficial private APIs / robin_stocks / browser-login automation remain forbidden.
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, FrozenSet
 
-# Conceptual future read surface for a *supported* broker (balances, positions,
-# order history, transactions). Empty/disabled for Robinhood — no official
-# equity/options portfolio API and no unofficial client may be added.
+from app.core.broker.status import robinhood_mcp_read_only_status
+
+# Conceptual ChakraOps-level read surface labels (not MCP tool names).
+# MCP tool allowlist lives in allowlist.ROBINHOOD_READ_TOOL_ALLOWLIST (R52).
 READ_ALLOWLIST: FrozenSet[str] = frozenset()
 
 READ_ALLOWLIST_CONCEPTUAL: FrozenSet[str] = frozenset(
@@ -45,13 +44,6 @@ WRITE_DENYLIST: FrozenSet[str] = frozenset(
     }
 )
 
-_RH_NO_GO_REASON = (
-    "No official public Robinhood brokerage API for stocks/options portfolio "
-    "sync (docs.robinhood.com is Crypto Trading API only). Unofficial private "
-    "API / robin-stocks / browser-login automation are forbidden. Continue with "
-    "manual portfolio trusted snapshot."
-)
-
 
 def is_broker_write_forbidden(op: str) -> bool:
     """Return True when ``op`` matches a hard write-deny verb (case-insensitive)."""
@@ -68,15 +60,5 @@ def is_broker_write_forbidden(op: str) -> bool:
 
 
 def robinhood_integration_status() -> Dict[str, Any]:
-    """Stable NO-GO status for Robinhood (no credentials, no sync)."""
-    return {
-        "status": "NO_GO",
-        "reason": _RH_NO_GO_REASON,
-        "manual_portfolio": True,
-        "manual_only": True,
-        "trade_execution": False,
-        "broker": "robinhood",
-        "read_allowlist_enabled": False,
-        "read_allowlist": sorted(READ_ALLOWLIST),
-        "write_denylist": sorted(WRITE_DENYLIST),
-    }
+    """R52: MCP read-only status (READ_ONLY_AVAILABLE or UNAUTHENTICATED)."""
+    return robinhood_mcp_read_only_status()

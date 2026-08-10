@@ -17,18 +17,41 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 # Load .env first so OPENAI_API_KEY, Slack webhooks (Phase 7.2), etc. are available (for uvicorn and run_api)
+# R40.1: shell/start-script wins over .env for protected scheduler keys; fail-closed unless opt-in allow flag.
+_PROTECTED_ENV_KEYS = (
+    "CHAKRAOPS_SCHEDULER_ENABLED",
+    "CHAKRAOPS_LEGACY_SCHEDULERS_ENABLED",
+    "NIGHTLY_EVAL_ENABLED",
+    "EOD_CHAIN_ENABLED",
+)
+
+
 def _load_env() -> None:
     try:
         from dotenv import load_dotenv
     except ImportError:
         return
-    # 1) Repo root .env (chakraops/.env) — primary; override so file wins over empty shell vars
+    # 1) Snapshot process env for protected keys BEFORE dotenv (shell / start script)
+    pre_existing = {k: os.environ[k] for k in _PROTECTED_ENV_KEYS if k in os.environ}
+    # 2) Repo root .env then cwd .env
     _repo_root = Path(__file__).resolve().parent.parent.parent
     _env_file = _repo_root / ".env"
     if _env_file.exists():
-        load_dotenv(_env_file, override=True)
-    # 2) Current working directory .env (e.g. if started from workspace root)
+        load_dotenv(_env_file)
     load_dotenv()
+    # 3) Restore any pre-existing process env values (shell/start-script wins)
+    for key, value in pre_existing.items():
+        os.environ[key] = value
+    # 4) Fail-closed: unless explicit allow flag, force master + legacy schedulers off
+    #    (ignore .env truthy for these two keys without CHAKRAOPS_ALLOW_ENV_SCHEDULER_OPT_IN)
+    allow_opt_in = (os.getenv("CHAKRAOPS_ALLOW_ENV_SCHEDULER_OPT_IN") or "").strip().lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+    if not allow_opt_in:
+        os.environ["CHAKRAOPS_SCHEDULER_ENABLED"] = "false"
+        os.environ["CHAKRAOPS_LEGACY_SCHEDULERS_ENABLED"] = "false"
 
 
 _load_env()
@@ -94,7 +117,8 @@ _nightly_thread: Optional[threading.Thread] = None
 _last_nightly_eval_at: Optional[str] = None
 
 # EOD freeze: run eval + freeze snapshot archive at ~3:58 PM ET on market-open days (PR2)
-EOD_FREEZE_ENABLED = os.getenv("EOD_FREEZE_ENABLED", "true").lower() in ("true", "1", "yes")
+# R40.1: fail-closed default (unset => disabled)
+EOD_FREEZE_ENABLED = os.getenv("EOD_FREEZE_ENABLED", "false").lower() in ("true", "1", "yes")
 EOD_FREEZE_TIME_ET = os.getenv("EOD_FREEZE_TIME_ET", "15:58")  # 3:58 PM ET
 EOD_FREEZE_WINDOW_MINUTES = int(os.getenv("EOD_FREEZE_WINDOW_MINUTES", "10"))
 EOD_FREEZE_TZ = os.getenv("EOD_FREEZE_TZ", "America/New_York")
@@ -482,9 +506,9 @@ def _maybe_run_eod_freeze(ZoneInfo: Any) -> None:
         state = _load_eod_freeze_state()
         if state.get("last_run_date") == today:
             return
-        # Run eval then archive
+        # Run eval then archive (R40.1: exclusive coordinator → v2)
         from app.api.data_health import get_universe_symbols
-        from app.core.eval.evaluation_service_v2 import evaluate_universe
+        from app.core.eval.eval_coordinator import run_universe_evaluation_exclusive
         from app.core.eval.evaluation_store_v2 import get_decision_store_path
         from app.core.snapshots.freeze import run_freeze_snapshot
         symbols = list(get_universe_symbols())
@@ -493,7 +517,10 @@ def _maybe_run_eod_freeze(ZoneInfo: Any) -> None:
             return
         logger.info("[EOD_FREEZE] Running eval + archive for %s", today)
         print(f"[EOD_FREEZE] Running eval + archive for {today}")
-        evaluate_universe(symbols, mode="LIVE")
+        eval_out = run_universe_evaluation_exclusive(symbols, mode="LIVE", trigger="eod_freeze")
+        if not eval_out.get("started"):
+            logger.warning("[EOD_FREEZE] Eval not started: %s", eval_out.get("reason"))
+            return
         out_dir = get_decision_store_path().parent
         result = run_freeze_snapshot(
             out_dir=out_dir,
@@ -607,18 +634,10 @@ def _run_scheduled_evaluation() -> bool:
         logger.info("[SCHEDULER] tick skipped run_id=skipped skip_reason=%s duration_ms=%.0f", _last_scheduled_skip_reason, _last_scheduled_duration_ms)
         return False
 
-    # Try to trigger evaluation
+    # Try to trigger evaluation (R40.1: exclusive coordinator → evaluate_universe v2)
     try:
         from app.api.data_health import UNIVERSE_SYMBOLS
-        from app.core.eval.universe_evaluator import trigger_evaluation, get_evaluation_state
-
-        # Check if already running
-        state = get_evaluation_state()
-        if state.get("evaluation_state") == "RUNNING":
-            _last_scheduled_skip_reason = "evaluation_running"
-            _last_scheduled_duration_ms = round((_time.perf_counter() - t0) * 1000, 1)
-            logger.info("[SCHEDULER] tick skipped run_id=skipped skip_reason=%s duration_ms=%.0f", _last_scheduled_skip_reason, _last_scheduled_duration_ms)
-            return False
+        from app.core.eval.eval_coordinator import run_universe_evaluation_exclusive
 
         if not UNIVERSE_SYMBOLS:
             _last_scheduled_skip_reason = "no_symbols"
@@ -627,7 +646,9 @@ def _run_scheduled_evaluation() -> bool:
             logger.info("[SCHEDULER] tick skipped run_id=skipped skip_reason=%s duration_ms=%.0f", _last_scheduled_skip_reason, _last_scheduled_duration_ms)
             return False
 
-        result = trigger_evaluation(list(UNIVERSE_SYMBOLS))
+        result = run_universe_evaluation_exclusive(
+            list(UNIVERSE_SYMBOLS), mode="LIVE", trigger="scheduler"
+        )
         _last_scheduled_duration_ms = round((_time.perf_counter() - t0) * 1000, 1)
         if result.get("started"):
             run_id = result.get("run_id") or "unknown"
@@ -650,7 +671,10 @@ def _run_scheduled_evaluation() -> bool:
             print(f"[SCHEDULER] Triggered scheduled evaluation at {_last_scheduled_eval_at} run_id={run_id}")
             return True
         else:
-            _last_scheduled_skip_reason = result.get("reason") or "unknown"
+            reason = result.get("reason") or "unknown"
+            _last_scheduled_skip_reason = (
+                "evaluation_running" if reason == "already_running" else reason
+            )
             logger.info("[SCHEDULER] tick skipped run_id=skipped skip_reason=%s duration_ms=%.0f", _last_scheduled_skip_reason, _last_scheduled_duration_ms)
             return False
     except ImportError as e:
@@ -947,7 +971,7 @@ async def _lifespan(app: FastAPI):
         print("====================================")
     else:
         print("===== LEGACY SCHEDULERS DISABLED =====")
-        print("Set CHAKRAOPS_LEGACY_SCHEDULERS_ENABLED=true to restore in-process schedulers.")
+        print("Set CHAKRAOPS_ALLOW_ENV_SCHEDULER_OPT_IN=true and CHAKRAOPS_LEGACY_SCHEDULERS_ENABLED=true to restore in-process schedulers.")
         print("Use R35 operations jobs via /api/operations instead.")
         print("======================================")
     

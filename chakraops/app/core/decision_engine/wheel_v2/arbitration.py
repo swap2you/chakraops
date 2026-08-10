@@ -80,12 +80,15 @@ def _capital_required(eval_obj: Any) -> float:
 
 
 def _cash(portfolio: Optional[Union[PortfolioState, Mapping[str, Any]]]) -> float:
+    """CSP/shares collateral from trusted cash only — never total_capital or buying_power."""
     if portfolio is None:
         return 0.0
     if isinstance(portfolio, PortfolioState):
         return float(portfolio.available_cash or 0.0)
     if isinstance(portfolio, Mapping):
-        for key in ("available_cash", "cash", "buying_power"):
+        if portfolio.get("balance_trusted") is False:
+            return 0.0
+        for key in ("available_cash", "cash"):
             v = portfolio.get(key)
             if v is not None:
                 try:

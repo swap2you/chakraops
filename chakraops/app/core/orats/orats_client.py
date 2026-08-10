@@ -80,18 +80,22 @@ def _orats_get_live(endpoint_path: str, ticker: str, timeout_sec: float = TIMEOU
         rows_list = raw["data"]
         rows_count = len(rows_list)
     quote_date: str | None = None
-    field_presence: Dict[str, bool] = {}
+    field_presence: Dict[str, Any] = {}
     if rows_list and isinstance(rows_list[0], dict):
         first = rows_list[0]
         quote_date = first.get("quoteDate") or first.get("quote_date")
-        field_presence = {
-            "price": (first.get("stockPrice") is not None or first.get("stock_price") is not None),
-            "volume": first.get("volume") is not None,
-            "iv_rank": (first.get("ivRank1m") is not None or first.get("ivPct1m") is not None),
-            "bid": first.get("bid") is not None,
-            "ask": first.get("ask") is not None,
-            "open_interest": first.get("openInterest") is not None,
-        }
+        # R40.1: /live/strikes uses side-specific keys (not generic bid/ask/volume/ivRank)
+        if "live/strikes" in str(endpoint_path).replace("\\", "/"):
+            field_presence = _live_strikes_field_presence(first)
+        else:
+            field_presence = {
+                "price": (first.get("stockPrice") is not None or first.get("stock_price") is not None),
+                "volume": first.get("volume") is not None,
+                "iv_rank": (first.get("ivRank1m") is not None or first.get("ivPct1m") is not None),
+                "bid": first.get("bid") is not None,
+                "ask": first.get("ask") is not None,
+                "open_interest": first.get("openInterest") is not None,
+            }
     logger.info(
         "[ORATS_CALL] endpoint=%s symbol=%s http_status=%s quote_date=%s fields=%s",
         endpoint_path, ticker.upper(), r.status_code, quote_date or "", field_presence,
@@ -111,9 +115,28 @@ def _orats_get_live(endpoint_path: str, ticker: str, timeout_sec: float = TIMEOU
     return raw, r.status_code, latency_ms
 
 
+def _live_strikes_field_presence(first: Dict[str, Any]) -> Dict[str, Any]:
+    """R40.1: side-specific field presence for /live/strikes rows."""
+    vol_call = first.get("callVolume")
+    vol_put = first.get("putVolume")
+    has_side_volume = vol_call is not None or vol_put is not None
+    return {
+        "price": (first.get("stockPrice") is not None or first.get("stock_price") is not None),
+        "quote_date": (first.get("quoteDate") is not None or first.get("quote_date") is not None),
+        "bid": (first.get("callBidPrice") is not None or first.get("putBidPrice") is not None),
+        "ask": (first.get("callAskPrice") is not None or first.get("putAskPrice") is not None),
+        "volume": True if has_side_volume else "n/a",
+        "open_interest": (
+            first.get("callOpenInterest") is not None or first.get("putOpenInterest") is not None
+        ),
+        "iv_rank": "n/a_separate_endpoint",
+    }
+
+
 def probe_orats_live(ticker: str = "SPY") -> dict:
     """
-    Probe ORATS live strikes. Returns {"ok": True, "http_status": int, "row_count": int, "sample_keys": list}.
+    Probe ORATS live strikes. Returns {"ok": True, "http_status": int, "row_count": int,
+    "sample_keys": list, "field_presence": dict}.
     Raises OratsUnavailableError on non-200, empty, or invalid response.
     """
     raw, status, _ = _orats_get_live(ORATS_LIVE_STRIKES, ticker)
@@ -134,7 +157,14 @@ def probe_orats_live(ticker: str = "SPY") -> dict:
         raise OratsUnavailableError("ORATS response empty list", http_status=200, response_snippet="[]", endpoint=ORATS_LIVE_STRIKES, symbol=ticker.upper())
     first = rows[0]
     sample_keys = list(first.keys()) if isinstance(first, dict) else []
-    return {"ok": True, "http_status": status, "row_count": len(rows), "sample_keys": sample_keys}
+    field_presence = _live_strikes_field_presence(first) if isinstance(first, dict) else {}
+    return {
+        "ok": True,
+        "http_status": status,
+        "row_count": len(rows),
+        "sample_keys": sample_keys,
+        "field_presence": field_presence,
+    }
 
 
 def get_orats_live_strikes(ticker: str, timeout_sec: float = TIMEOUT_SEC) -> List[Dict[str, Any]]:

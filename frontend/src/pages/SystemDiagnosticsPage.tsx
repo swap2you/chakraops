@@ -462,6 +462,19 @@ export function SystemDiagnosticsPage() {
         {/* Phase 21.5 / R21.5.1: Slack per-channel status + 4 test buttons */}
         <Card>
           <CardHeader title="Slack" />
+          <div className="mb-3 grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">implementation</span>
+              <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{slack?.implementation_status ?? "CODE_READY"}</p>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-500">config</span>
+              <p className="mt-1">
+                <StatusBadge status={slack?.configured === true || slack?.config_status === "CONFIGURED" ? "OK" : "WARN"} />
+                <span className="ml-2 text-xs text-zinc-600 dark:text-zinc-400">{slack?.config_status ?? (slack?.configured ? "CONFIGURED" : "UNCONFIGURED")}</span>
+              </p>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">last_any_send_at (ET)</span>

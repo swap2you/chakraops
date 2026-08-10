@@ -220,17 +220,45 @@ def trigger_evaluation(
     use_staged: bool = True,
 ) -> Dict[str, Any]:
     """
-    Trigger evaluation in background with persistence.
-    Staged evaluation is the single source of truth; legacy must not be used during ops run.
-    
-    Args:
-        universe_symbols: List of symbols to evaluate
-        market_phase: Current market phase for context
-        use_staged: If True, use 2-stage pipeline (default). If False, raises - no legacy during ops.
-    
+    R40.1: Demoted wrapper — exclusive coordinator → evaluate_universe (v2).
+
+    Scheduler/API should prefer ``run_universe_evaluation_exclusive`` directly.
+    Kept for backwards-compatible callers; same lock + same engine.
+
     Returns:
         {started: bool, reason: str, run_id: str}
     """
+    # Fail-fast: prevent non-staged evaluation during ops run (no silent legacy)
+    if not use_staged:
+        raise RuntimeError("Non-staged evaluation attempted during ops run")
+
+    _ = market_phase  # retained for API compatibility; v2 reads market phase internally
+    from app.core.eval.eval_coordinator import run_universe_evaluation_exclusive
+
+    result = run_universe_evaluation_exclusive(
+        list(universe_symbols),
+        mode="LIVE",
+        trigger="trigger_evaluation",
+    )
+    if not result.get("started"):
+        return {
+            "started": False,
+            "reason": result.get("reason") or "already_running",
+            "run_id": result.get("run_id"),
+        }
+    return {
+        "started": True,
+        "reason": "ok",
+        "run_id": result.get("run_id"),
+    }
+
+
+def _trigger_evaluation_legacy_background(
+    universe_symbols: List[str],
+    market_phase: Optional[str] = None,
+    use_staged: bool = True,
+) -> Dict[str, Any]:
+    """Legacy background trigger (retained unused; coordinator is canonical)."""
     # Fail-fast: prevent non-staged evaluation during ops run (no silent legacy)
     if not use_staged:
         raise RuntimeError("Non-staged evaluation attempted during ops run")

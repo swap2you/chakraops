@@ -64,13 +64,12 @@ def test_r40_last_when_missing() -> None:
 
     with patch("app.api.ui_routes._require_ui_key"):
         with patch("app.api.ui_routes._repo_root") as root:
-            # Point at a temp path with no last-run file
             import tempfile
 
             with tempfile.TemporaryDirectory() as tmp:
                 root.return_value = Path(tmp) / "chakraops"
                 client = TestClient(app)
                 r = client.get("/api/ui/backtest/r40/last")
-    assert r.status_code == 200
-    assert r.json()["present"] is False
-    assert r.json()["simulation"] is True
+                assert r.status_code == 200
+                assert r.json()["present"] is False
+                assert r.json()["simulation"] is True

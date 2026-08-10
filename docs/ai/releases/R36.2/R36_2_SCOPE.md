@@ -7,7 +7,7 @@
 
 ## Purpose
 Introduce **Universe V2**: a versioned, additive universe read-model that separates the
-~167-symbol **research pool** from **strategy-specific eligible universes**, with a
+~166-symbol **research pool** from **strategy-specific eligible universes**, with a
 symbol **lifecycle** (`ADMITTED/WATCH/QUARANTINE/REMOVED`), independent strategy
 **memberships** (`CORE_WHEEL/BALANCED_WHEEL/AGGRESSIVE_WHEEL/SHARES`), pass/fail
 **streaks**, **transition history**, and manual **overrides** — all explained through

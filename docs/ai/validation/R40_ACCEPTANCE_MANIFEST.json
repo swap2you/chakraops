@@ -1,29 +1,38 @@
 {
-  "release": "R40",
-  "verdict": "ACCEPT",
-  "program_verdict": "COMPLETE_VALIDATED_FOR_MANUAL_OPERATOR_USE",
+  "release": "R40.1",
+  "verdict": "FINAL_ACCEPTANCE_HOLD",
+  "program_verdict": "TECHNICALLY_READY_WITH_EXTERNAL_BACKTEST_ENTITLEMENT_GAP",
+  "baseline_sha": "99eb213",
   "gates": {
-    "backend": "1521 passed, 2 skipped",
-    "frontend": "349 passed, 18 skipped",
-    "build": "PASS"
+    "focused_tests": "PASS (17 focused r400/r401)",
+    "backend_full_pytest": "PASS (542 passed, 1 skipped)",
+    "frontend_vitest": "PASS (349 passed, 18 skipped)",
+    "frontend_build": "PASS",
+    "runtime_scheduler_off": "PASS",
+    "safety_smoke": "PASS",
+    "independent_codex": "pending",
+    "independent_cowork_uat": "pending"
   },
-  "open_blocker_high": 0,
+  "open_blocker_high": "pending Codex/Cowork; external ORATS /hist/options entitlement gap",
   "reviews": {
-    "cursor_adversarial": "GO",
-    "cursor_uat": "PASS_WITH_NOTES",
+    "cursor_stabilization": "TECHNICALLY_COMPLETE",
     "codex_handoff": "PREPARED",
     "cowork_handoff": "PREPARED"
   },
+  "evidence_local": "out/verification/R40.1/",
   "deferred_non_blocking": [
+    "ORATS /hist/options entitlement (403 on probe)",
     "Universe V2 snapshot stale until market-hours ORATS refresh",
-    "Full ORATS historical options client future",
     "Today ticket queue device-local"
   ],
   "safety": {
     "manual_only": true,
     "trade_execution": false,
     "scheduler_enabled": false,
+    "legacy_schedulers_enabled": false,
     "broker_write": false,
-    "robinhood": "NO_GO"
-  }
+    "robinhood": "NO_GO",
+    "r40_lane": "SIMULATION"
+  },
+  "universe_csv_unique_count": 166
 }

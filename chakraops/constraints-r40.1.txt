@@ -1,0 +1,16 @@
+# R40.1 validated major packages (pip freeze excerpt)
+# Captured from chakraops/.venv — no secrets. Full freeze may include more transitive deps.
+# Use as a lock note for acceptance; not a complete pinned requirements replacement.
+
+anyio==4.12.1
+fastapi==0.133.1
+httpx==0.28.1
+numpy==2.4.2
+pandas==3.0.1
+pydantic==2.12.5
+pytest==9.0.2
+python-dotenv==1.0.0
+requests==2.32.5
+starlette==0.52.1
+typing_extensions==4.15.0
+uvicorn==0.41.0

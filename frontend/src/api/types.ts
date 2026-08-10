@@ -317,6 +317,12 @@ export interface UiSystemHealthSlack {
   last_any_send_at?: string | null;
   last_any_send_ok?: boolean | null;
   last_any_send_error?: string | null;
+  /** R40.1: code present vs webhooks configured */
+  code_ready?: boolean;
+  configured?: boolean;
+  config_status?: "CONFIGURED" | "UNCONFIGURED" | string;
+  implementation_status?: "CODE_READY" | string;
+  webhooks?: Record<string, "CONFIGURED" | "UNCONFIGURED" | string>;
 }
 
 /** PR2: EOD freeze snapshot scheduler status. Phase 11.3: last_error, next_scheduled_et. */

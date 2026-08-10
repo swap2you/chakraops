@@ -30,7 +30,7 @@
 - [ ] Component tests pass; frontend build + tsc green.
 
 ## Performance
-- [ ] Warm authoritative Universe V2 read < 5s on the 167-symbol reference dataset (benchmarked; no stale-as-fresh).
+- [ ] Warm authoritative Universe V2 read < 5s on the 166-symbol reference dataset (benchmarked; no stale-as-fresh).
 
 ## Gates & safety
 - [ ] Full backend pytest green; new R36.2 tests green.

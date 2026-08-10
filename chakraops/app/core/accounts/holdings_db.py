@@ -130,28 +130,39 @@ def init_db() -> None:
 # ---------------------------------------------------------------------------
 
 
-def get_account_summary() -> Dict[str, Any]:
-    """Return summary for default account: profile, balances, holdings count, updated_at."""
+def get_account_summary(account_id: str | None = None) -> Dict[str, Any]:
+    """Return summary for account: profile, balances, holdings count, updated_at.
+
+    ``account_id`` defaults to the default account when omitted/empty.
+    """
     init_db()
+    aid = (account_id or "").strip() or _DEFAULT_ACCOUNT_ID
     with _LOCK:
         conn = _get_conn()
         try:
             row = conn.execute(
                 "SELECT p.id, p.name, p.broker, p.base_currency, p.updated_at AS profile_updated, b.cash, b.buying_power, b.updated_at AS balances_updated FROM account_profile p LEFT JOIN account_balances b ON p.id = b.account_id WHERE p.id = ?",
-                (_DEFAULT_ACCOUNT_ID,),
+                (aid,),
             ).fetchone()
             if not row:
-                return _empty_summary()
+                empty = _empty_summary()
+                empty["account_id"] = aid
+                return empty
             count = conn.execute(
-                "SELECT COUNT(*) FROM holdings WHERE account_id = ?", (_DEFAULT_ACCOUNT_ID,)
+                "SELECT COUNT(*) FROM holdings WHERE account_id = ?", (aid,)
             ).fetchone()[0]
+            # Preserve explicit zero cash; do not coerce missing LEFT JOIN balances to pretend present.
+            cash_raw = row["cash"]
+            bp_raw = row["buying_power"]
+            has_balance_row = row["balances_updated"] is not None or cash_raw is not None or bp_raw is not None
             return {
                 "account_id": row["id"],
                 "name": row["name"],
                 "broker": row["broker"],
                 "base_currency": row["base_currency"],
-                "cash": float(row["cash"] or 0),
-                "buying_power": float(row["buying_power"] or 0),
+                "cash": float(cash_raw) if cash_raw is not None else (0.0 if has_balance_row else None),
+                "buying_power": float(bp_raw) if bp_raw is not None else (0.0 if has_balance_row else None),
+                "balances_present": bool(has_balance_row),
                 "holdings_count": count,
                 "profile_updated_at": row["profile_updated"],
                 "balances_updated_at": row["balances_updated"],
@@ -170,6 +181,7 @@ def _empty_summary() -> Dict[str, Any]:
         "base_currency": "USD",
         "cash": 0.0,
         "buying_power": 0.0,
+        "balances_present": False,
         "holdings_count": 0,
         "profile_updated_at": now,
         "balances_updated_at": now,
@@ -181,22 +193,23 @@ def _empty_summary() -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def set_balances(cash: float, buying_power: float) -> Dict[str, Any]:
-    """Set cash and buying_power for default account. Returns updated summary."""
+def set_balances(cash: float, buying_power: float, account_id: str | None = None) -> Dict[str, Any]:
+    """Set cash and buying_power for account (default account when omitted). Returns updated summary."""
     init_db()
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
+    aid = (account_id or "").strip() or _DEFAULT_ACCOUNT_ID
     with _LOCK:
         conn = _get_conn()
         try:
             conn.execute(
                 "INSERT INTO account_balances (account_id, cash, buying_power, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(account_id) DO UPDATE SET cash = ?, buying_power = ?, updated_at = ?",
-                (_DEFAULT_ACCOUNT_ID, cash, buying_power, now, cash, buying_power, now),
+                (aid, cash, buying_power, now, cash, buying_power, now),
             )
             conn.commit()
         finally:
             conn.close()
-    return get_account_summary()
+    return get_account_summary(aid)
 
 
 # ---------------------------------------------------------------------------

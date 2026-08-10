@@ -26,7 +26,7 @@
   call ORATS. It derives + publishes.
 - **Read** (cheap, authoritative): API endpoints call `read_model` over
   `snapshot_latest.json` only. No provider calls, no full recompute → warm reads are
-  effectively O(file read + serialize), well under 5s for 167 symbols.
+  effectively O(file read + serialize), well under 5s for 166 symbols.
 
 ## API (`chakraops/app/api/universe_v2_routes.py`, mounted in `server.py`)
 Read-only, all under `/api/ui/universe-v2`:

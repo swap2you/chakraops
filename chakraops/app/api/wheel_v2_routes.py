@@ -21,25 +21,44 @@ def _require_ui_key(x_ui_key: str | None = Header(None, alias="x-ui-key")) -> No
 
 
 def _portfolio_from_account(account: Any) -> Dict[str, Any]:
+    """Build portfolio cash fields from account + holdings balances.
+
+    R40.1: never substitute total_capital for cash. Zero cash is valid.
+    ``available_cash`` is cash when balances are trusted; None when missing/untrusted.
+    Buying power is reported separately and is not used as CSP collateral fallback.
+    """
     total = float(getattr(account, "total_capital", None) or 0.0)
-    cash = total
+    account_id = getattr(account, "account_id", None) or getattr(account, "id", None)
+    cash: float | None = None
+    buying_power: float | None = None
+    balance_trusted = False
     try:
         from app.core.accounts.holdings_db import get_account_summary
 
-        summary = get_account_summary()
-        if isinstance(summary, dict):
-            cash = float(summary.get("cash") or summary.get("buying_power") or cash)
-            if summary.get("buying_power") is not None and float(summary.get("buying_power") or 0) > 0:
-                # Prefer buying power when present for collateral checks
-                cash = max(cash, float(summary.get("buying_power") or 0))
+        summary = get_account_summary(str(account_id) if account_id else None)
+        if isinstance(summary, dict) and summary.get("balances_present"):
+            # Explicit zero is valid — do not use ``or total`` / buying_power fallbacks.
+            if summary.get("cash") is not None:
+                cash = float(summary["cash"])
+                balance_trusted = True
+            if summary.get("buying_power") is not None:
+                buying_power = float(summary["buying_power"])
     except Exception:
         pass
+
+    available_cash: float | None
+    if balance_trusted and cash is not None:
+        available_cash = cash  # including 0.0 → no CSP collateral
+    else:
+        available_cash = None  # missing / untrusted balance summary
+
     return {
         "total_value": total,
-        "available_cash": cash,
-        "cash": cash,
         "total_capital": total,
-        "buying_power": cash,
+        "cash": cash if cash is not None else 0.0,
+        "buying_power": buying_power,
+        "available_cash": available_cash,
+        "balance_trusted": balance_trusted,
     }
 
 

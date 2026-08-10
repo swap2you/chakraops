@@ -104,10 +104,21 @@ def _get_eod_freeze_health() -> Dict[str, Any]:
 
 
 def _get_slack_status_health() -> Dict[str, Any]:
-    """Phase 21.5: Slack sender status for system health. R22.2: Always return channels (signals, daily, data_health, critical) for consistent API."""
+    """Phase 21.5: Slack sender status for system health.
+    R22.2: Always return channels. R40.1: CODE_READY vs CONFIGURED honesty.
+    """
     try:
+        from app.core.alerts.slack_dispatcher import get_slack_config_status, is_slack_configured
         from app.core.alerts.slack_status import get_slack_status
-        return get_slack_status()
+        status = dict(get_slack_status())
+        configured = is_slack_configured()
+        per_webhook = get_slack_config_status()
+        status["code_ready"] = True
+        status["configured"] = configured
+        status["config_status"] = "CONFIGURED" if configured else "UNCONFIGURED"
+        status["implementation_status"] = "CODE_READY"
+        status["webhooks"] = {k: ("CONFIGURED" if v else "UNCONFIGURED") for k, v in (per_webhook or {}).items()}
+        return status
     except Exception:
         from app.core.alerts.slack_status import SLACK_CHANNELS
         empty = {"last_send_at": None, "last_send_ok": None, "last_error": None, "last_payload_type": None}
@@ -118,6 +129,11 @@ def _get_slack_status_health() -> Dict[str, Any]:
             "last_channel": None,
             "last_payload_type": None,
             "channels": {ch: dict(empty) for ch in SLACK_CHANNELS},
+            "code_ready": True,
+            "configured": False,
+            "config_status": "UNCONFIGURED",
+            "implementation_status": "CODE_READY",
+            "webhooks": {},
         }
 
 
@@ -1043,25 +1059,24 @@ def ui_eval_run(
         raise
     try:
         from app.api.data_health import get_universe_symbols
-        from app.core.eval.evaluation_service_v2 import evaluate_universe
+        from app.core.eval.eval_coordinator import run_universe_evaluation_exclusive
         symbols = list(get_universe_symbols())
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     if not symbols:
         return {"status": "FAILED", "reason": "Universe is empty", "pipeline_timestamp": None, "counts": {}}
     try:
-        artifact = evaluate_universe(symbols, mode="LIVE")
-        meta = artifact.metadata or {}
+        result = run_universe_evaluation_exclusive(symbols, mode="LIVE", trigger="ui_eval_run")
+        if not result.get("started"):
+            raise HTTPException(status_code=409, detail=result.get("reason") or "already_running")
         return {
             "status": "OK",
-            "pipeline_timestamp": meta.get("pipeline_timestamp"),
-            "counts": {
-                "universe_size": meta.get("universe_size", 0),
-                "evaluated_count_stage1": meta.get("evaluated_count_stage1", 0),
-                "evaluated_count_stage2": meta.get("evaluated_count_stage2", 0),
-                "eligible_count": meta.get("eligible_count", 0),
-            },
+            "pipeline_timestamp": result.get("pipeline_timestamp"),
+            "counts": result.get("counts") or {},
+            "run_id": result.get("run_id"),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1145,7 +1160,7 @@ def ui_admin_evaluation_force(
     log = logging.getLogger(__name__)
     try:
         from app.api.data_health import get_universe_symbols
-        from app.core.eval.universe_evaluator import trigger_evaluation
+        from app.core.eval.eval_coordinator import run_universe_evaluation_exclusive
         from app.market.market_hours import get_market_phase
         symbols = list(get_universe_symbols())
         if not symbols:
@@ -1158,8 +1173,10 @@ def ui_admin_evaluation_force(
             }
         phase = get_market_phase() or "UNKNOWN"
         log.info("[ADMIN] Force evaluation requested (market_phase=%s)", phase)
-        result = trigger_evaluation(symbols, market_phase=phase)
+        result = run_universe_evaluation_exclusive(symbols, mode="LIVE", trigger="admin_force")
         started = result.get("started", False)
+        if not started and result.get("reason") == "already_running":
+            raise HTTPException(status_code=409, detail="already_running")
         return {
             "status": "OK",
             "started": started,
@@ -1167,6 +1184,8 @@ def ui_admin_evaluation_force(
             "reason": result.get("reason"),
             "forced": True,
         }
+    except HTTPException:
+        raise
     except Exception as e:
         log.exception("Force evaluation failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -1547,22 +1566,25 @@ def ui_snapshots_freeze(
         mode_used = "eval_then_archive"
         try:
             from app.api.data_health import get_universe_symbols
-            from app.core.eval.evaluation_service_v2 import evaluate_universe
+            from app.core.eval.eval_coordinator import run_universe_evaluation_exclusive
             symbols = list(get_universe_symbols())
             if symbols:
-                artifact = evaluate_universe(symbols, mode="LIVE")
-                ran_eval = True
-                meta = artifact.metadata or {}
-                eval_result = {
-                    "pipeline_timestamp": meta.get("pipeline_timestamp"),
-                    "counts": {
-                        "universe_size": meta.get("universe_size", 0),
-                        "evaluated_count_stage1": meta.get("evaluated_count_stage1", 0),
-                        "evaluated_count_stage2": meta.get("evaluated_count_stage2", 0),
-                        "eligible_count": meta.get("eligible_count", 0),
-                    },
-                }
-                log.info("[FREEZE] Ran evaluation as part of freeze: %s symbols", len(symbols))
+                result = run_universe_evaluation_exclusive(symbols, mode="LIVE", trigger="freeze")
+                if not result.get("started"):
+                    if result.get("reason") == "already_running":
+                        raise HTTPException(status_code=409, detail="already_running")
+                    log.warning("[FREEZE] Eval not started: %s", result.get("reason"))
+                    mode_used = "archive_only"
+                else:
+                    ran_eval = True
+                    eval_result = {
+                        "pipeline_timestamp": result.get("pipeline_timestamp"),
+                        "counts": result.get("counts") or {},
+                        "run_id": result.get("run_id"),
+                    }
+                    log.info("[FREEZE] Ran evaluation as part of freeze: %s symbols", len(symbols))
+        except HTTPException:
+            raise
         except Exception as e:
             log.warning("[FREEZE] Eval failed, proceeding with archive_only: %s", e)
             mode_used = "archive_only"
@@ -1570,14 +1592,24 @@ def ui_snapshots_freeze(
         mode_used = "eval_then_archive"
         try:
             from app.api.data_health import get_universe_symbols
-            from app.core.eval.evaluation_service_v2 import evaluate_universe
+            from app.core.eval.eval_coordinator import run_universe_evaluation_exclusive
             symbols = list(get_universe_symbols())
             if symbols:
-                artifact = evaluate_universe(symbols, mode="LIVE")
+                result = run_universe_evaluation_exclusive(symbols, mode="LIVE", trigger="freeze_force")
+                if not result.get("started"):
+                    raise HTTPException(
+                        status_code=409 if result.get("reason") == "already_running" else 500,
+                        detail=result.get("reason") or "already_running",
+                    )
                 ran_eval = True
-                meta = artifact.metadata or {}
-                eval_result = {"pipeline_timestamp": meta.get("pipeline_timestamp"), "counts": meta}
+                eval_result = {
+                    "pipeline_timestamp": result.get("pipeline_timestamp"),
+                    "counts": result.get("counts") or {},
+                    "run_id": result.get("run_id"),
+                }
                 log.info("[FREEZE] Ran evaluation (force_eval) as part of freeze")
+        except HTTPException:
+            raise
         except Exception as e:
             log.warning("[FREEZE] Eval (force_eval) failed: %s", e)
             raise HTTPException(status_code=500, detail=f"Force eval failed: {e}")
@@ -3476,11 +3508,8 @@ def ui_backtest_r40_last(
 ) -> Dict[str, Any]:
     """R40: Read last Strategy Lab simulation summary if present (read-only)."""
     _require_ui_key(x_ui_key)
-    path = _output_dir().parent / "out" / "r40" / "r40_last_run.json"
-    if not path.is_file():
-        # also check repo-level out/
-        alt = _repo_root().parent / "out" / "r40" / "r40_last_run.json"
-        path = alt if alt.is_file() else path
+    # Canonical path: repo-level out/r40 (same as POST /backtest/r40/run writer)
+    path = _repo_root().parent / "out" / "r40" / "r40_last_run.json"
     if not path.is_file():
         return {"status": "OK", "simulation": True, "manual_only": True, "present": False}
     try:

@@ -1,7 +1,10 @@
 # R40 Final Handoff
 
 ## Status
-**IMPLEMENTED** on `main` (baseline start `386d7aa` + R40 changes). Awaiting Codex adversarial review + Cowork UAT before program-complete string.
+**TECHNICALLY_READY_WITH_EXTERNAL_BACKTEST_ENTITLEMENT_GAP** on `main`.
+
+R40.1 holds final acceptance (`FINAL_ACCEPTANCE_HOLD`) until Codex + Cowork complete.
+Fixture / Strategy Lab lane remains **SIMULATION**. `/hist/options` not entitled (see `../R40.1/ORATS_BACKTEST_ENTITLEMENT.md`).
 
 ## What shipped
 - Parallel Strategy Lab research lane (`app/core/backtest/r40/*`)
@@ -18,16 +21,16 @@ Manual only · no broker writes · scheduler off · no evidence-free threshold r
 
 ## Validation commands
 ```
-cd chakraops && .\.venv\Scripts\python.exe -m pytest tests/test_r400_*.py -q --tb=short
+cd chakraops && .\.venv\Scripts\python.exe -m pytest tests/test_r400_*.py tests/test_r401_*.py -q --tb=short
 cd frontend && npm run build
 ```
 
 ## Next
-1. Codex: `docs/ai/releases/R40/CODEX_FINAL_REVIEW_HANDOFF.md`
-2. Cowork: `docs/ai/releases/R40/COWORK_FINAL_UAT_HANDOFF.md`
+1. Codex: `docs/ai/releases/R40.1/CODEX_FINAL_REVIEW_HANDOFF.md`
+2. Cowork: `docs/ai/releases/R40.1/COWORK_FINAL_UAT_HANDOFF.md`
 3. Remediate BLOCKER/HIGH only; then consider program completion string from master requirements.
 
 ## Known gaps
-- ORATS historical options client for full multi-year chains — future
+- ORATS `/hist/options` entitlement — external gap (403)
 - Dividends / corporate actions / early assignment realism — limited
 - No calibrated production thresholds yet (registry marks inherited)

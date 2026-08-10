@@ -30,7 +30,8 @@ if (Test-Path -LiteralPath $envFile) {
 }
 
 $env:CHAKRAOPS_SCHEDULER_ENABLED = "false"
-Write-Host "Scheduler: DISABLED by default"
+$env:CHAKRAOPS_LEGACY_SCHEDULERS_ENABLED = "false"
+Write-Host "Scheduler: DISABLED by default (master + legacy)"
 
 $backendProc = Start-Process python -ArgumentList "-m", "uvicorn", "app.api.server:app", "--host", "127.0.0.1", "--port", "$($script:ChakraOpsBackendPort)" -WorkingDirectory $script:ChakraOpsBackendRoot -PassThru -WindowStyle Normal
 Start-Sleep -Seconds 2

@@ -1,0 +1,32 @@
+{
+  "release": "R37",
+  "verdict": "NO_GO_CONTINUE_R38",
+  "title": "Robinhood Read-Only Portfolio Synchronization",
+  "decision": "NO_GO",
+  "reason": "No official public Robinhood brokerage API for stocks/options portfolio sync; docs.robinhood.com is Crypto Trading API only; unofficial clients forbidden.",
+  "acceptance": {
+    "R37-F1": "PASS",
+    "R37-A1": "PASS",
+    "R37-A2": "NO_GO",
+    "R37-A3": "NO_GO",
+    "R37-A4": "NO_GO",
+    "R37-N1": "PASS"
+  },
+  "safety": {
+    "manual_portfolio": true,
+    "manual_only": true,
+    "trade_execution": false,
+    "scheduler_enabled": false,
+    "unofficial_clients": false,
+    "broker_write_endpoints": false
+  },
+  "artifacts": [
+    "docs/ai/releases/R37/R37_SCOPE.md",
+    "docs/ai/releases/R37/R37_NO_GO.md",
+    "docs/ai/releases/R37/R37_ACCEPTANCE.md",
+    "chakraops/app/core/broker/read_only_policy.py",
+    "chakraops/app/api/broker_routes.py",
+    "chakraops/tests/test_r37_broker_read_only_nogo.py"
+  ],
+  "next": "R38"
+}

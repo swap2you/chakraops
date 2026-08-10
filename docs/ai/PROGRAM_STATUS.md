@@ -1,6 +1,6 @@
 # ChakraOps Program Status
 
-Last updated: 2026-08-10 (master program R36.3–R40 started; SINGLE_OPERATOR_MAINLINE_LOOP_MODE authorized)
+Last updated: 2026-08-10 (R37 Robinhood RO closed NO-GO; R38 ACTIVE; SINGLE_OPERATOR_MAINLINE_LOOP_MODE)
 
 ## Workflow
 
@@ -17,9 +17,9 @@ Last updated: 2026-08-10 (master program R36.3–R40 started; SINGLE_OPERATOR_MA
 | R35.2 | MERGED | — |
 | R36.1 | MERGED | — |
 | R36.2 | MERGED | — |
-| R36.3 | VALIDATED | Continue R37 |
-| R37 | READY_TO_START | After R36.3 |
-| R38 | READY_TO_START | After R37 (or R37 NO-GO) |
+| R36.3 | VALIDATED | — |
+| R37 | NO_GO | Manual portfolio preserved; continue R38 |
+| R38 | ACTIVE | Wheel & Share Decision Engine V2 |
 | R39 | READY_TO_START | After R38 |
 | R40 | READY_TO_START | After R39; closes master program |
 

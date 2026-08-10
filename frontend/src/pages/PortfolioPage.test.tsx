@@ -230,6 +230,13 @@ describe("PortfolioPage", () => {
     expect(screen.getByText(/Add holding/)).toBeInTheDocument();
   });
 
+  it("R37: shows manual portfolio snapshot provenance (not broker-synced)", () => {
+    render(<PortfolioPage />);
+    expect(screen.getByTestId("portfolio-provenance")).toHaveTextContent(/Manual portfolio snapshot/i);
+    expect(screen.getByTestId("portfolio-provenance")).toHaveTextContent(/not broker-synced/i);
+    expect(screen.getByText(/user-entered, not broker-synced/i)).toBeInTheDocument();
+  });
+
   it("shows Decision (latest) with no run badge when position has no run_id", () => {
     usePortfolio.mockReturnValue({
       data: mockPortfolioOpen,

@@ -166,7 +166,13 @@ export function PortfolioPage() {
       )}
 
       <Card>
-        <CardHeader title="Balances (manual)" description="Cash and buying power used for CC eligibility and display." />
+        <CardHeader
+          title="Balances (manual)"
+          description="Manual portfolio snapshot — cash and buying power are user-entered, not broker-synced. Used for CC eligibility and display."
+        />
+        <p className="mb-3 text-xs text-zinc-500 dark:text-zinc-400" data-testid="portfolio-provenance">
+          Provenance: Manual portfolio snapshot · not broker-synced
+        </p>
         {summary ? (
           balancesEdit ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 max-w-md">
@@ -516,11 +522,18 @@ export function PortfolioPage() {
 
       {accounts.length > 0 && (
         <Card>
-          <CardHeader title="Account" />
+          <CardHeader
+            title="Account"
+            description="Manual portfolio snapshot — balances are user-entered; Robinhood sync is NO-GO (not broker-synced)."
+          />
           <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-400">Account</span>
               <span className="font-mono font-medium text-zinc-900 dark:text-zinc-200">{selectedAccount ? (selectedAccount as { account_id?: string }).account_id : "—"}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-400">Source</span>
+              <span className="text-zinc-700 dark:text-zinc-300">Manual portfolio snapshot</span>
             </div>
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-400">Buying power</span>

@@ -1001,12 +1001,14 @@ from app.api.copilot import router as copilot_router
 from app.api.data_reliability_routes import router as data_reliability_router
 from app.api.decision_engine_routes import router as decision_engine_router
 from app.api.universe_v2_routes import router as universe_v2_router
+from app.api.broker_routes import router as broker_router
 app.include_router(operations_router)
 app.include_router(ui_router)
 app.include_router(copilot_router, prefix="/api/ui")
 app.include_router(data_reliability_router, prefix="/api/ui")
 app.include_router(decision_engine_router, prefix="/api/ui")
 app.include_router(universe_v2_router)
+app.include_router(broker_router)
 
 app.add_middleware(
     CORSMiddleware,

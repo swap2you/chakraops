@@ -1007,11 +1007,11 @@ export function useEvaluateDecisions() {
 }
 
 /** R25.8: Earnings debug for probe symbol (diagnostics only; safe fields). */
-export function useEarningsDebug(symbol: string) {
+export function useEarningsDebug(symbol: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.uiEarningsDebug(symbol),
     queryFn: () => apiGet<UiEarningsDebugResponse>(uiEarningsDebugPath(symbol)),
-    enabled: !!symbol?.trim(),
+    enabled: enabled && !!symbol?.trim(),
   });
 }
 
@@ -2195,10 +2195,11 @@ export interface DiagnosticsHistoryResponse {
   runs: DiagnosticsRunResponse[];
 }
 
-export function useDiagnosticsHistory(limit = 10) {
+export function useDiagnosticsHistory(limit = 10, enabled = true) {
   return useQuery({
     queryKey: queryKeys.uiDiagnosticsHistory(limit),
     queryFn: () => apiGet<DiagnosticsHistoryResponse>(uiDiagnosticsHistoryPath(limit)),
+    enabled,
   });
 }
 
@@ -2229,10 +2230,11 @@ export interface StoresIntegrityResponse {
   >;
 }
 
-export function useStoresIntegrity() {
+export function useStoresIntegrity(enabled = true) {
   return useQuery({
     queryKey: queryKeys.uiStoresIntegrity(),
     queryFn: () => apiGet<StoresIntegrityResponse>(uiStoresIntegrityPath()),
+    enabled,
   });
 }
 

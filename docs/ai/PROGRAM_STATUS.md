@@ -17,7 +17,7 @@ Last updated: 2026-08-10 (master program R36.3–R40 started; SINGLE_OPERATOR_MA
 | R35.2 | MERGED | — |
 | R36.1 | MERGED | — |
 | R36.2 | MERGED | — |
-| R36.3 | ACTIVE | Whole-app trust & wiring stabilization |
+| R36.3 | VALIDATED | Continue R37 |
 | R37 | READY_TO_START | After R36.3 |
 | R38 | READY_TO_START | After R37 (or R37 NO-GO) |
 | R39 | READY_TO_START | After R38 |

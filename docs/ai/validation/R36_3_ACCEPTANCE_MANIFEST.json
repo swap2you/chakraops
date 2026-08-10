@@ -1,0 +1,25 @@
+{
+  "release": "R36.3",
+  "verdict": "ACCEPT",
+  "gates": {
+    "backend": "1465 passed, 2 skipped",
+    "frontend": "355 passed, 18 skipped",
+    "build": "PASS"
+  },
+  "open_blocker_high": 0,
+  "acceptance": {
+    "R363-A1": "PASS",
+    "R363-A2": "PASS",
+    "R363-A3": "PASS",
+    "R363-A4": "PASS",
+    "R363-A5": "PASS",
+    "R363-A6": "PASS",
+    "R363-A7": "PASS_WITH_BLOCK_REASON_STALE_UNIVERSE_SNAPSHOT",
+    "R363-A8": "PASS",
+    "R363-A9": "DEFER_NON_BLOCKING",
+    "R363-A10": "PASS",
+    "R363-A11": "PASS",
+    "R363-S1": "PASS"
+  },
+  "next": "R37"
+}

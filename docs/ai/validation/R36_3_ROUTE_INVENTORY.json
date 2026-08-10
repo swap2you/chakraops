@@ -1,0 +1,36 @@
+{
+  "release": "R36.3",
+  "generated_at_utc": "2026-08-10T17:50:00Z",
+  "baseline_sha": "d21143fd34034b0f790512294058a6901efe84ff",
+  "routes": [
+    {"path": "/", "page": "DashboardPage.tsx", "nav": true, "recommendation": "KEEP", "notes": "Canonical AuthoritativeRecommendations primary; legacy under details"},
+    {"path": "/today", "page": "TodayPage.tsx", "nav": true, "recommendation": "KEEP"},
+    {"path": "/ticket", "page": "TradeTicketPage.tsx", "nav": true, "recommendation": "KEEP", "notes": "Added to Sidebar Daily in R36.3"},
+    {"path": "/weekly", "page": "WeeklyReviewPage.tsx", "nav": true, "recommendation": "KEEP"},
+    {"path": "/universe", "page": "UniversePage.tsx", "nav": true, "recommendation": "KEEP", "notes": "V2 primary; legacy eval rows under details"},
+    {"path": "/symbol-diagnostics", "page": "SymbolDiagnosticsPage.tsx", "nav": true, "recommendation": "KEEP"},
+    {"path": "/wheel", "page": "WheelPage.tsx", "nav": "conditional", "recommendation": "KEEP"},
+    {"path": "/portfolio", "page": "PortfolioPage.tsx", "nav": true, "recommendation": "KEEP"},
+    {"path": "/positions", "page": "PositionsPage.tsx", "nav": true, "recommendation": "KEEP"},
+    {"path": "/journal", "page": "JournalPage.tsx", "nav": true, "recommendation": "KEEP"},
+    {"path": "/paper", "page": "PaperPage.tsx", "nav": true, "recommendation": "KEEP"},
+    {"path": "/notifications", "page": "NotificationsPage.tsx", "nav": true, "recommendation": "KEEP"},
+    {"path": "/reports", "page": "ReportsPage.tsx", "nav": true, "recommendation": "KEEP"},
+    {"path": "/backtest", "page": "BacktestPage.tsx", "nav": true, "recommendation": "KEEP"},
+    {"path": "/learn", "page": "LearnPage.tsx", "nav": true, "recommendation": "KEEP"},
+    {"path": "/universe-admin", "page": "UniverseAdminPage.tsx", "nav": true, "recommendation": "KEEP"},
+    {"path": "/universe-health", "page": "UniverseHealthPage.tsx", "nav": true, "recommendation": "KEEP"},
+    {"path": "/system", "page": "SystemDiagnosticsPage.tsx", "nav": true, "recommendation": "KEEP"}
+  ],
+  "orphan_pages": [
+    {"page": "AnalyticsPage.tsx", "recommendation": "DEFER_DELETE_R39"},
+    {"page": "HistoryPage.tsx", "recommendation": "DEFER_DELETE_R39"},
+    {"page": "DiagnosticsPage.tsx", "recommendation": "DEFER_DELETE_R39"},
+    {"page": "AnalysisPage.tsx", "recommendation": "DEFER_DELETE_R39"},
+    {"page": "AccountsPage.tsx", "recommendation": "DEFER_DELETE_R39"},
+    {"page": "TrackedPositionsPage.tsx", "recommendation": "DEFER_DELETE_R39"},
+    {"page": "StrategyPage.tsx", "recommendation": "DEFER_R39"},
+    {"page": "PipelinePage.tsx", "recommendation": "DEFER_R39"},
+    {"page": "DecisionPage.tsx", "recommendation": "DEFER_DELETE_R39"}
+  ]
+}

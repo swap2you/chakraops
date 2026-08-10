@@ -88,7 +88,8 @@ export function PortfolioPage() {
   const totalCapital = (selectedAccount as { total_capital?: number })?.total_capital ?? 0;
   const maxCapitalPct = (selectedAccount as { max_capital_per_trade_pct?: number })?.max_capital_per_trade_pct ?? 5;
   const riskPerTrade = totalCapital > 0 ? (totalCapital * maxCapitalPct) / 100 : 0;
-  const buyingPower = totalCapital > 0 ? totalCapital - capitalDeployed : 0;
+  // R36.3: display stored account buying_power; never invent from totalCapital - deployed.
+  const buyingPower = accountSummary?.buying_power ?? null;
 
   const isOpen = (p: PortfolioPosition) => {
     const s = (p.status ?? "").toUpperCase();

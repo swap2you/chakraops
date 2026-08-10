@@ -18,6 +18,6 @@ describe("CommandPalette", () => {
     render(<CommandPalette open onClose={() => {}} />);
     const btn = screen.getByRole("button", { name: /dashboard/i });
     fireEvent.click(btn);
-    expect(window.location.pathname).toBe("/dashboard");
+    expect(window.location.pathname).toBe("/");
   });
 });

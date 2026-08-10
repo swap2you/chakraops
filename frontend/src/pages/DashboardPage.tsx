@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { formatTimestampEt } from "@/utils/formatTimestamp";
 import { Link } from "react-router-dom";
 import { ExternalLink, Activity, Droplets, Zap, Info, Settings } from "lucide-react";
-import { useArtifactList, useDecision, useUniverse, useUiSystemHealth, useUiTrackedPositions, usePortfolioMtm, useDefaultAccount, useRunEval, useSharesCandidates, useActionNeeded } from "@/api/queries";
+import { useArtifactList, useDecision, useUniverse, useUiSystemHealth, useUnifiedPositionsFromDb, usePortfolio, usePortfolioMtm, useDefaultAccount, useRunEval, useSharesCandidates, useActionNeeded } from "@/api/queries";
 import type { DecisionMode, SymbolEvalSummary, UniverseSymbol } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { AuthoritativeRecommendations } from "@/components/AuthoritativeRecommendations";
@@ -91,7 +91,8 @@ export function DashboardPage() {
   const { data: decision } = useDecision(mode, filename);
   const { data: universe } = useUniverse();
   const { data: health } = useUiSystemHealth();
-  const { data: positionsRes } = useUiTrackedPositions();
+  const { data: unifiedDb } = useUnifiedPositionsFromDb({ state: "open" });
+  const { data: portfolioData } = usePortfolio();
   const { data: defaultAccount } = useDefaultAccount();
   const accountId = (defaultAccount?.account as { account_id?: string })?.account_id ?? null;
   const { data: mtmData } = usePortfolioMtm(accountId);
@@ -135,9 +136,9 @@ export function DashboardPage() {
     (s) => (s.band ?? "").toUpperCase() === "B" && ((s.final_verdict ?? s.verdict ?? "").toUpperCase() === "ELIGIBLE")
   );
   const eligibleFromDecision = selectedSignals.length > 0 && aTier.length === 0 && bTier.length === 0;
-  const positions = positionsRes?.positions ?? [];
-  const openPositions = positions.filter((p) => (p.status ?? "").toUpperCase() === "OPEN" || (p.status ?? "").toUpperCase() === "PARTIAL_EXIT");
-  const capitalDeployed = positionsRes?.capital_deployed ?? openPositions.reduce((sum, p) => sum + (p.collateral ?? p.notional ?? 0), 0);
+  const positions = unifiedDb?.items ?? [];
+  const openPositions = positions; // already open-state query
+  const capitalDeployed = portfolioData?.capital_deployed ?? 0;
 
   const isReady = !!decision;
   const metadata = decision?.artifact?.metadata;
@@ -224,25 +225,236 @@ export function DashboardPage() {
         </Card>
       </section>
 
+      {mode === "MOCK" && (
+        <div data-testid="mock-artifact-banner" className="rounded border border-amber-500/50 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-900/30 dark:text-amber-100">
+          Artifact browser (non-live). MOCK mode is forensics only — not a live recommendation.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         <section role="region" aria-label="Decision" className="space-y-8 lg:col-span-2">
-          {aTier.length === 0 && bTier.length === 0 && selectedSignals.length === 0 ? (
-            <Card>
-              <EmptyState title="No eligible opportunities" message="No eligible opportunities in current run." />
-            </Card>
-          ) : (
-            <>
-              <CandidatePanel title="A-tier candidates" rows={aTier} selectedBySymbol={selectedBySymbol} />
-              <CandidatePanel title="B-tier candidates" rows={bTier} selectedBySymbol={selectedBySymbol} />
-              {eligibleFromDecision && (
-                <CandidatePanel
-                  title="Eligible candidates"
-                  rows={selectedSignals.map((s) => ({ symbol: s.symbol, verdict: s.verdict, final_verdict: s.verdict } as UniverseSymbol))}
-                  selectedBySymbol={selectedBySymbol}
-                />
+          {/* R34.0 / R36.3: canonical authoritative recommendation is PRIMARY (left column). */}
+          <AuthoritativeRecommendations
+            data={actionNeeded}
+            isLoading={actionNeededLoading}
+            isError={actionNeededError}
+            providerHealth={{ label: health?.orats?.status, ok: health?.orats?.status === "OK" }}
+          />
+          {/* R34.0 / R36.3: legacy options/shares lists and tier panels are NON-authoritative diagnostics only. */}
+          <details data-testid="legacy-diagnostics">
+            <summary className="cursor-pointer text-sm font-medium text-zinc-500 dark:text-zinc-400">
+              Diagnostics — non-authoritative legacy output
+            </summary>
+            <div className="mt-2 space-y-4">
+              {aTier.length === 0 && bTier.length === 0 && selectedSignals.length === 0 ? (
+                <Card>
+                  <EmptyState title="No eligible opportunities" message="No eligible opportunities in current run." />
+                </Card>
+              ) : (
+                <>
+                  <CandidatePanel title="A-tier candidates" rows={aTier} selectedBySymbol={selectedBySymbol} />
+                  <CandidatePanel title="B-tier candidates" rows={bTier} selectedBySymbol={selectedBySymbol} />
+                  {eligibleFromDecision && (
+                    <CandidatePanel
+                      title="Eligible candidates"
+                      rows={selectedSignals.map((s) => ({ symbol: s.symbol, verdict: s.verdict, final_verdict: s.verdict } as UniverseSymbol))}
+                      selectedBySymbol={selectedBySymbol}
+                    />
+                  )}
+                </>
               )}
-            </>
-          )}
+              {/* R24.1/R24.2: Action Needed — GET /api/ui/action-needed; sorted by severity; safe labels only */}
+              <Card data-testid="action-needed-card">
+                <CardHeader title="Action Needed (legacy diagnostics)" description="Non-authoritative. Superseded by the canonical recommendations above." />
+                <div className="space-y-4">
+                  <div>
+                    <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-500 mb-2">Options</span>
+                    {(!actionNeeded?.top_options?.length) ? (
+                      <p className="text-xs text-zinc-500 dark:text-zinc-500">No options actions.</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {(actionNeeded.top_options.slice(0, 5)).map((item) => {
+                          const href = `/symbol-diagnostics?symbol=${encodeURIComponent(item.symbol)}&tab=Options${item.accordion_id ? `&accordion=${encodeURIComponent(item.accordion_id)}` : ""}`;
+                          const actionLabel = item.next_action_code === "ENTRY" ? "Entry" : item.next_action_code === "CLOSE" ? "Close" : item.next_action_code === "ROLL" ? "Roll" : item.next_action_code === "HOLD" ? "Hold" : item.next_action_code;
+                          const recommendLabel = item.recommended_action_code === "CLOSE" ? "Close" : item.recommended_action_code === "ROLL" ? "Roll" : item.recommended_action_code === "HOLD" ? "Hold" : item.recommended_action_code;
+                          const rollReasonLabel = (item.roll_reason_codes?.includes("DTE_WINDOW") && item.recommended_action_code === "ROLL") ? "DTE window" : null;
+                          const ticketHref = `/ticket?symbol=${encodeURIComponent(item.symbol)}&strategy=${encodeURIComponent((item.strategy || "CSP").toUpperCase())}&action=${encodeURIComponent(item.next_action_code === "ENTRY" ? "OPEN" : item.next_action_code === "CLOSE" ? "CLOSE" : "OPEN")}`;
+                          return (
+                            <div key={`opt-${item.symbol}`} className="rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50 flex items-center justify-between gap-2">
+                            <Link to={href} className="flex-1 min-w-0" data-testid={`action-needed-options-row-${item.symbol}`}>
+                              <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{item.symbol}</span>
+                              <Badge variant={item.next_action_code === "ENTRY" ? "success" : item.next_action_code === "CLOSE" ? "danger" : "neutral"} className="ml-2">
+                                {actionLabel}
+                              </Badge>
+                              {item.severity && item.severity !== "low" && (
+                                <span className="ml-1.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-severity-${item.symbol}`}>
+                                  ({item.severity})
+                                </span>
+                              )}
+                              {(item.dte != null || item.strike != null) && (
+                                <span className="ml-1.5 text-zinc-500 dark:text-zinc-500">
+                                  {item.dte != null && `DTE ${item.dte}`}
+                                  {item.dte != null && item.strike != null && " · "}
+                                  {item.strike != null && `$${item.strike}`}
+                                </span>
+                              )}
+                              {(item.rationale_lines?.[0]) && (
+                                <p className="mt-1 text-zinc-600 dark:text-zinc-400 truncate">{item.rationale_lines[0]}</p>
+                              )}
+                              {/* R26.0: ENTRY sizing — size, notional, constraints (safe labels only) */}
+                              {item.next_action_code === "ENTRY" && item.sizing_recommended_by === "r260" && (
+                                <p className="mt-0.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-sizing-${item.symbol}`}>
+                                  {item.recommended_contracts != null && item.recommended_contracts > 0 && (
+                                    <>Size: {item.recommended_contracts} contracts</>
+                                  )}
+                                  {item.recommended_qty != null && item.recommended_qty > 0 && (
+                                    <>Size: {item.recommended_qty} shares</>
+                                  )}
+                                  {item.recommended_notional_usd != null && item.recommended_notional_usd > 0 && (
+                                    <> · Notional: ${item.recommended_notional_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</>
+                                  )}
+                                  {(item.sizing_constraints_hit?.length ?? 0) > 0 && (
+                                    <> · Constraints: {item.sizing_constraints_hit!.map((c) => constraintToLabel(c)).join(", ")}</>
+                                  )}
+                                </p>
+                              )}
+                              {/* R26.1: CSP advisory — cash-secured, risk proxy (safe labels only) */}
+                              {item.next_action_code === "ENTRY" && (item.cash_secured_available_usd != null || item.csp_risk_proxy_move_pct != null) && (
+                                <div className="mt-0.5 text-zinc-500 dark:text-zinc-500 text-xs" data-testid={`action-needed-csp-advisory-${item.symbol}`}>
+                                  {item.cash_secured_available_usd != null && (
+                                    <p>Cash-secured available: ${item.cash_secured_available_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                                  )}
+                                  {item.csp_risk_proxy_move_pct != null && (
+                                    <p>Risk proxy move: {item.csp_risk_proxy_move_pct}%</p>
+                                  )}
+                                  {item.csp_risk_proxy_loss_per_contract_usd != null && (
+                                    <p>Risk proxy loss (per contract): ${item.csp_risk_proxy_loss_per_contract_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                                  )}
+                                  {item.csp_risk_proxy_cap_contracts != null && (
+                                    <p>Risk proxy cap: {item.csp_risk_proxy_cap_contracts} contracts{item.csp_risk_proxy_enforced ? " (enforced)" : ""}</p>
+                                  )}
+                                </div>
+                              )}
+                              {item.key_number != null && (
+                                <p className="mt-0.5 text-zinc-500 dark:text-zinc-500">Key: {item.key_number}</p>
+                              )}
+                              {item.mark_value != null && (
+                                <p className="mt-0.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-mark-${item.symbol}`}>
+                                  Mark: {item.mark_value}
+                                  {item.mark_source && ` (${item.mark_source}${item.mark_age_sec != null ? `, ${item.mark_age_sec}s old` : ""})`}
+                                </p>
+                              )}
+                              {item.pct_max_profit != null && (
+                                <p className="mt-0.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-pct-profit-${item.symbol}`}>
+                                  Max profit: {item.pct_max_profit}%
+                                </p>
+                              )}
+                              {recommendLabel && (
+                                <p className="mt-0.5 text-zinc-500 dark:text-zinc-500">Recommend: {recommendLabel}</p>
+                              )}
+                              {rollReasonLabel && (
+                                <p className="mt-0.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-roll-reason-${item.symbol}`}>Reason: {rollReasonLabel}</p>
+                              )}
+                            </Link>
+                            <Link to={ticketHref} className="shrink-0 text-emerald-600 hover:underline dark:text-emerald-400" data-testid={`action-needed-ticket-${item.symbol}`}>Ticket</Link>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-500 mb-2">Shares</span>
+                    {(!actionNeeded?.top_shares?.length) ? (
+                      <p className="text-xs text-zinc-500 dark:text-zinc-500">No shares actions.</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {(actionNeeded.top_shares.slice(0, 5)).map((item) => {
+                          const href = `/symbol-diagnostics?symbol=${encodeURIComponent(item.symbol)}&tab=Shares${item.accordion_id ? `&accordion=${encodeURIComponent(item.accordion_id)}` : ""}`;
+                          const actionLabel = item.next_action_code === "ENTRY" ? "Entry" : item.next_action_code === "CLOSE" ? "Close" : item.next_action_code;
+                          const ticketHrefShares = `/ticket?symbol=${encodeURIComponent(item.symbol)}&strategy=SHARES&action=${item.next_action_code === "ENTRY" ? "BUY" : item.next_action_code === "CLOSE" ? "SELL" : "BUY"}`;
+                          return (
+                            <div key={`shr-${item.symbol}`} className="rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50 flex items-center justify-between gap-2">
+                            <Link to={href} className="flex-1 min-w-0" data-testid={`action-needed-shares-row-${item.symbol}`}>
+                              <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{item.symbol}</span>
+                              <Badge variant={item.next_action_code === "ENTRY" ? "success" : item.next_action_code === "CLOSE" ? "danger" : "neutral"} className="ml-2">
+                                {actionLabel}
+                              </Badge>
+                              {item.severity && item.severity !== "low" && (
+                                <span className="ml-1.5 text-zinc-500 dark:text-zinc-500">({item.severity})</span>
+                              )}
+                              {(item.rationale_lines?.[0]) && (
+                                <p className="mt-1 text-zinc-600 dark:text-zinc-400 truncate">{item.rationale_lines[0]}</p>
+                              )}
+                              {/* R26.0: ENTRY sizing for shares */}
+                              {item.next_action_code === "ENTRY" && item.sizing_recommended_by === "r260" && (
+                                <p className="mt-0.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-sizing-${item.symbol}`}>
+                                  {item.recommended_qty != null && item.recommended_qty > 0 && (
+                                    <>Size: {item.recommended_qty} shares</>
+                                  )}
+                                  {item.recommended_notional_usd != null && item.recommended_notional_usd > 0 && (
+                                    <> · Notional: ${item.recommended_notional_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</>
+                                  )}
+                                  {(item.sizing_constraints_hit?.length ?? 0) > 0 && (
+                                    <> · Constraints: {item.sizing_constraints_hit!.map((c) => constraintToLabel(c)).join(", ")}</>
+                                  )}
+                                </p>
+                              )}
+                              {item.key_number != null && (
+                                <p className="mt-0.5 text-zinc-500 dark:text-zinc-500">Key: {item.key_number}</p>
+                              )}
+                            </Link>
+                            <Link to={ticketHrefShares} className="shrink-0 text-emerald-600 hover:underline dark:text-emerald-400" data-testid={`action-needed-ticket-${item.symbol}`}>Ticket</Link>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Card>
+              {/* R22.5 / R36.3: Shares candidates demoted into legacy diagnostics */}
+              <Card>
+                <CardHeader title="Shares candidates" description="Non-authoritative diagnostic — superseded by canonical recommendations." />
+                {sharesCandidates.length === 0 ? (
+                  <EmptyState title="No shares candidates" message="Symbols with support + regime UP may appear here." />
+                ) : (
+                  <div className="space-y-2">
+                    {sharesCandidates.slice(0, 3).map((plan) => {
+                      const codes = plan.reason_codes ?? plan.eligibility_codes ?? [];
+                      const primaryReason = codes[0]?.replace(/_/g, " ").toLowerCase() ?? plan.why_recommended ?? "—";
+                      const entryStr =
+                        plan.entry_zone?.low != null && plan.entry_zone?.high != null
+                          ? `${plan.entry_zone.low}–${plan.entry_zone.high}`
+                          : "—";
+                      return (
+                        <Link
+                          key={plan.symbol ?? ""}
+                          to={`/symbol-diagnostics?symbol=${encodeURIComponent(plan.symbol ?? "")}&tab=Shares`}
+                          className="block rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{plan.symbol}</span>
+                            <StatusBadge status={plan.eligible ? "ELIGIBLE" : "NOT_ELIGIBLE"} />
+                          </div>
+                          <div className="mt-1 text-zinc-600 dark:text-zinc-400 truncate" title={primaryReason}>
+                            {primaryReason}
+                          </div>
+                          <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0 text-zinc-500 dark:text-zinc-500">
+                            {plan.spot != null && <span>Spot {plan.spot}</span>}
+                            {entryStr !== "—" && <span>Entry {entryStr}</span>}
+                          </div>
+                        </Link>
+                      );
+                    })}
+                    {sharesCandidates.length > 3 && (
+                      <p className="text-xs text-zinc-500 dark:text-zinc-500">+{sharesCandidates.length - 3} more</p>
+                    )}
+                  </div>
+                )}
+              </Card>
+            </div>
+          </details>
         </section>
         <section role="region" aria-label="Trade plan" className="space-y-6">
           <StatCard
@@ -349,7 +561,7 @@ export function DashboardPage() {
             <CardHeader
               title="Positions"
               actions={
-                <Link to="/portfolio">
+                <Link to="/positions">
                   <Button size="sm" variant="secondary">
                     Manage positions
                     <ExternalLink className="ml-1 h-3 w-3" />
@@ -358,11 +570,11 @@ export function DashboardPage() {
               }
             />
             {positions.length === 0 ? (
-              <EmptyState title="No positions" message="Tracked positions will appear here." />
+              <EmptyState title="No positions" message="Unified open positions will appear here." />
             ) : (
               <div className="space-y-1.5">
                 {positions.slice(0, 5).map((p, i) => (
-                  <div key={i} className="flex items-center justify-between text-xs">
+                  <div key={p.id ?? i} className="flex items-center justify-between text-xs">
                     <Link
                       to={`/symbol-diagnostics?symbol=${encodeURIComponent(p.symbol)}`}
                       className="font-mono text-zinc-700 hover:underline dark:text-zinc-300 dark:hover:text-zinc-100"
@@ -370,8 +582,8 @@ export function DashboardPage() {
                       {p.symbol}
                     </Link>
                     <span className="font-mono text-zinc-500 dark:text-zinc-500">
-                      {p.contracts != null ? `${p.contracts}×` : p.qty != null ? `${p.qty}` : ""}{" "}
-                      {p.collateral != null ? `$${p.collateral.toLocaleString()}` : p.notional != null ? `$${p.notional.toLocaleString()}` : ""}
+                      {p.qty != null ? `${p.qty}` : ""}{" "}
+                      {p.avg_price != null ? `$${p.avg_price.toLocaleString()}` : ""}
                     </span>
                   </div>
                 ))}
@@ -381,212 +593,9 @@ export function DashboardPage() {
               </div>
             )}
             {positions.length === 0 && (
-              <Link to="/portfolio" className="mt-2 block text-sm text-emerald-600 hover:underline dark:text-emerald-400">
+              <Link to="/positions" className="mt-2 block text-sm text-emerald-600 hover:underline dark:text-emerald-400">
                 Manage positions →
               </Link>
-            )}
-          </Card>
-          {/* R34.0 (H-5 cutover): canonical authoritative recommendation is PRIMARY. */}
-          <AuthoritativeRecommendations
-            data={actionNeeded}
-            isLoading={actionNeededLoading}
-            isError={actionNeededError}
-            providerHealth={{ label: health?.orats?.status, ok: health?.orats?.status === "OK" }}
-          />
-          {/* R34.0: legacy options/shares lists are NON-authoritative diagnostics only. */}
-          <details data-testid="legacy-diagnostics">
-            <summary className="cursor-pointer text-sm font-medium text-zinc-500 dark:text-zinc-400">
-              Diagnostics — non-authoritative legacy output
-            </summary>
-          {/* R24.1/R24.2: Action Needed — GET /api/ui/action-needed; sorted by severity; safe labels only */}
-          <Card data-testid="action-needed-card" className="mt-2">
-            <CardHeader title="Action Needed (legacy diagnostics)" description="Non-authoritative. Superseded by the canonical recommendations above." />
-            <div className="space-y-4">
-              <div>
-                <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-500 mb-2">Options</span>
-                {(!actionNeeded?.top_options?.length) ? (
-                  <p className="text-xs text-zinc-500 dark:text-zinc-500">No options actions.</p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {(actionNeeded.top_options.slice(0, 5)).map((item) => {
-                      const href = `/symbol-diagnostics?symbol=${encodeURIComponent(item.symbol)}&tab=Options${item.accordion_id ? `&accordion=${encodeURIComponent(item.accordion_id)}` : ""}`;
-                      const actionLabel = item.next_action_code === "ENTRY" ? "Entry" : item.next_action_code === "CLOSE" ? "Close" : item.next_action_code === "ROLL" ? "Roll" : item.next_action_code === "HOLD" ? "Hold" : item.next_action_code;
-                      const recommendLabel = item.recommended_action_code === "CLOSE" ? "Close" : item.recommended_action_code === "ROLL" ? "Roll" : item.recommended_action_code === "HOLD" ? "Hold" : item.recommended_action_code;
-                      const rollReasonLabel = (item.roll_reason_codes?.includes("DTE_WINDOW") && item.recommended_action_code === "ROLL") ? "DTE window" : null;
-                      const ticketHref = `/ticket?symbol=${encodeURIComponent(item.symbol)}&strategy=${encodeURIComponent((item.strategy || "CSP").toUpperCase())}&action=${encodeURIComponent(item.next_action_code === "ENTRY" ? "OPEN" : item.next_action_code === "CLOSE" ? "CLOSE" : "OPEN")}`;
-                      return (
-                        <div key={`opt-${item.symbol}`} className="rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50 flex items-center justify-between gap-2">
-                        <Link to={href} className="flex-1 min-w-0" data-testid={`action-needed-options-row-${item.symbol}`}>
-                          <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{item.symbol}</span>
-                          <Badge variant={item.next_action_code === "ENTRY" ? "success" : item.next_action_code === "CLOSE" ? "danger" : "neutral"} className="ml-2">
-                            {actionLabel}
-                          </Badge>
-                          {item.severity && item.severity !== "low" && (
-                            <span className="ml-1.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-severity-${item.symbol}`}>
-                              ({item.severity})
-                            </span>
-                          )}
-                          {(item.dte != null || item.strike != null) && (
-                            <span className="ml-1.5 text-zinc-500 dark:text-zinc-500">
-                              {item.dte != null && `DTE ${item.dte}`}
-                              {item.dte != null && item.strike != null && " · "}
-                              {item.strike != null && `$${item.strike}`}
-                            </span>
-                          )}
-                          {(item.rationale_lines?.[0]) && (
-                            <p className="mt-1 text-zinc-600 dark:text-zinc-400 truncate">{item.rationale_lines[0]}</p>
-                          )}
-                          {/* R26.0: ENTRY sizing — size, notional, constraints (safe labels only) */}
-                          {item.next_action_code === "ENTRY" && item.sizing_recommended_by === "r260" && (
-                            <p className="mt-0.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-sizing-${item.symbol}`}>
-                              {item.recommended_contracts != null && item.recommended_contracts > 0 && (
-                                <>Size: {item.recommended_contracts} contracts</>
-                              )}
-                              {item.recommended_qty != null && item.recommended_qty > 0 && (
-                                <>Size: {item.recommended_qty} shares</>
-                              )}
-                              {item.recommended_notional_usd != null && item.recommended_notional_usd > 0 && (
-                                <> · Notional: ${item.recommended_notional_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</>
-                              )}
-                              {(item.sizing_constraints_hit?.length ?? 0) > 0 && (
-                                <> · Constraints: {item.sizing_constraints_hit!.map((c) => constraintToLabel(c)).join(", ")}</>
-                              )}
-                            </p>
-                          )}
-                          {/* R26.1: CSP advisory — cash-secured, risk proxy (safe labels only) */}
-                          {item.next_action_code === "ENTRY" && (item.cash_secured_available_usd != null || item.csp_risk_proxy_move_pct != null) && (
-                            <div className="mt-0.5 text-zinc-500 dark:text-zinc-500 text-xs" data-testid={`action-needed-csp-advisory-${item.symbol}`}>
-                              {item.cash_secured_available_usd != null && (
-                                <p>Cash-secured available: ${item.cash_secured_available_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                              )}
-                              {item.csp_risk_proxy_move_pct != null && (
-                                <p>Risk proxy move: {item.csp_risk_proxy_move_pct}%</p>
-                              )}
-                              {item.csp_risk_proxy_loss_per_contract_usd != null && (
-                                <p>Risk proxy loss (per contract): ${item.csp_risk_proxy_loss_per_contract_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                              )}
-                              {item.csp_risk_proxy_cap_contracts != null && (
-                                <p>Risk proxy cap: {item.csp_risk_proxy_cap_contracts} contracts{item.csp_risk_proxy_enforced ? " (enforced)" : ""}</p>
-                              )}
-                            </div>
-                          )}
-                          {item.key_number != null && (
-                            <p className="mt-0.5 text-zinc-500 dark:text-zinc-500">Key: {item.key_number}</p>
-                          )}
-                          {item.mark_value != null && (
-                            <p className="mt-0.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-mark-${item.symbol}`}>
-                              Mark: {item.mark_value}
-                              {item.mark_source && ` (${item.mark_source}${item.mark_age_sec != null ? `, ${item.mark_age_sec}s old` : ""})`}
-                            </p>
-                          )}
-                          {item.pct_max_profit != null && (
-                            <p className="mt-0.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-pct-profit-${item.symbol}`}>
-                              Max profit: {item.pct_max_profit}%
-                            </p>
-                          )}
-                          {recommendLabel && (
-                            <p className="mt-0.5 text-zinc-500 dark:text-zinc-500">Recommend: {recommendLabel}</p>
-                          )}
-                          {rollReasonLabel && (
-                            <p className="mt-0.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-roll-reason-${item.symbol}`}>Reason: {rollReasonLabel}</p>
-                          )}
-                        </Link>
-                        <Link to={ticketHref} className="shrink-0 text-emerald-600 hover:underline dark:text-emerald-400" data-testid={`action-needed-ticket-${item.symbol}`}>Ticket</Link>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-              <div>
-                <span className="block text-xs font-medium text-zinc-500 dark:text-zinc-500 mb-2">Shares</span>
-                {(!actionNeeded?.top_shares?.length) ? (
-                  <p className="text-xs text-zinc-500 dark:text-zinc-500">No shares actions.</p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {(actionNeeded.top_shares.slice(0, 5)).map((item) => {
-                      const href = `/symbol-diagnostics?symbol=${encodeURIComponent(item.symbol)}&tab=Shares${item.accordion_id ? `&accordion=${encodeURIComponent(item.accordion_id)}` : ""}`;
-                      const actionLabel = item.next_action_code === "ENTRY" ? "Entry" : item.next_action_code === "CLOSE" ? "Close" : item.next_action_code;
-                      const ticketHrefShares = `/ticket?symbol=${encodeURIComponent(item.symbol)}&strategy=SHARES&action=${item.next_action_code === "ENTRY" ? "BUY" : item.next_action_code === "CLOSE" ? "SELL" : "BUY"}`;
-                      return (
-                        <div key={`shr-${item.symbol}`} className="rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50 flex items-center justify-between gap-2">
-                        <Link to={href} className="flex-1 min-w-0" data-testid={`action-needed-shares-row-${item.symbol}`}>
-                          <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{item.symbol}</span>
-                          <Badge variant={item.next_action_code === "ENTRY" ? "success" : item.next_action_code === "CLOSE" ? "danger" : "neutral"} className="ml-2">
-                            {actionLabel}
-                          </Badge>
-                          {item.severity && item.severity !== "low" && (
-                            <span className="ml-1.5 text-zinc-500 dark:text-zinc-500">({item.severity})</span>
-                          )}
-                          {(item.rationale_lines?.[0]) && (
-                            <p className="mt-1 text-zinc-600 dark:text-zinc-400 truncate">{item.rationale_lines[0]}</p>
-                          )}
-                          {/* R26.0: ENTRY sizing for shares */}
-                          {item.next_action_code === "ENTRY" && item.sizing_recommended_by === "r260" && (
-                            <p className="mt-0.5 text-zinc-500 dark:text-zinc-500" data-testid={`action-needed-sizing-${item.symbol}`}>
-                              {item.recommended_qty != null && item.recommended_qty > 0 && (
-                                <>Size: {item.recommended_qty} shares</>
-                              )}
-                              {item.recommended_notional_usd != null && item.recommended_notional_usd > 0 && (
-                                <> · Notional: ${item.recommended_notional_usd.toLocaleString(undefined, { maximumFractionDigits: 0 })}</>
-                              )}
-                              {(item.sizing_constraints_hit?.length ?? 0) > 0 && (
-                                <> · Constraints: {item.sizing_constraints_hit!.map((c) => constraintToLabel(c)).join(", ")}</>
-                              )}
-                            </p>
-                          )}
-                          {item.key_number != null && (
-                            <p className="mt-0.5 text-zinc-500 dark:text-zinc-500">Key: {item.key_number}</p>
-                          )}
-                        </Link>
-                        <Link to={ticketHrefShares} className="shrink-0 text-emerald-600 hover:underline dark:text-emerald-400" data-testid={`action-needed-ticket-${item.symbol}`}>Ticket</Link>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          </Card>
-          </details>
-          {/* R22.5: Shares candidates — top 3 with symbol, eligible, reason, spot, entry zone; link to Symbol Diagnostics Shares tab */}
-          <Card>
-            <CardHeader title="Shares candidates" description="BUY SHARES recommendation only; no order placement. Top 3." />
-            {sharesCandidates.length === 0 ? (
-              <EmptyState title="No shares candidates" message="Symbols with support + regime UP may appear here." />
-            ) : (
-              <div className="space-y-2">
-                {sharesCandidates.slice(0, 3).map((plan) => {
-                  const codes = plan.reason_codes ?? plan.eligibility_codes ?? [];
-                  const primaryReason = codes[0]?.replace(/_/g, " ").toLowerCase() ?? plan.why_recommended ?? "—";
-                  const entryStr =
-                    plan.entry_zone?.low != null && plan.entry_zone?.high != null
-                      ? `${plan.entry_zone.low}–${plan.entry_zone.high}`
-                      : "—";
-                  return (
-                    <Link
-                      key={plan.symbol ?? ""}
-                      to={`/symbol-diagnostics?symbol=${encodeURIComponent(plan.symbol ?? "")}&tab=Shares`}
-                      className="block rounded border border-zinc-200 dark:border-zinc-700 p-2 text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">{plan.symbol}</span>
-                        <StatusBadge status={plan.eligible ? "ELIGIBLE" : "NOT_ELIGIBLE"} />
-                      </div>
-                      <div className="mt-1 text-zinc-600 dark:text-zinc-400 truncate" title={primaryReason}>
-                        {primaryReason}
-                      </div>
-                      <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0 text-zinc-500 dark:text-zinc-500">
-                        {plan.spot != null && <span>Spot {plan.spot}</span>}
-                        {entryStr !== "—" && <span>Entry {entryStr}</span>}
-                      </div>
-                    </Link>
-                  );
-                })}
-                {sharesCandidates.length > 3 && (
-                  <p className="text-xs text-zinc-500 dark:text-zinc-500">+{sharesCandidates.length - 3} more</p>
-                )}
-              </div>
             )}
           </Card>
         </section>

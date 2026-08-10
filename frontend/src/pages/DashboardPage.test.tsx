@@ -16,7 +16,6 @@ const mockDecision = {
 const mockUniverse = { symbols: [], updated_at: "2026-01-01T12:00:00Z", evaluation_timestamp_utc: "2026-01-01T12:00:00Z", source: "ARTIFACT_V2" };
 const mockHealth = { api: { status: "OK" }, market: { phase: "OPEN" }, orats: { status: "OK" } };
 const mockFiles = { files: [{ name: "decision_latest.json" }] };
-const mockPositions = { positions: [] };
 
 const mockUseUiSystemHealth = vi.fn(() => ({ data: mockHealth }));
 const mockUsePortfolioMtm = vi.fn(() => ({ data: null }));
@@ -26,7 +25,8 @@ vi.mock("@/api/queries", () => ({
   useDecision: () => ({ data: mockDecision }),
   useUniverse: () => ({ data: mockUniverse }),
   useUiSystemHealth: (...args: unknown[]) => mockUseUiSystemHealth(...args),
-  useUiTrackedPositions: () => ({ data: mockPositions }),
+  useUnifiedPositionsFromDb: () => ({ data: { count: 0, items: [] } }),
+  usePortfolio: () => ({ data: { capital_deployed: 0, positions: [] } }),
   useDefaultAccount: () => ({ data: { account: { account_id: "acct_1" } } }),
   usePortfolioMtm: (...args: unknown[]) => mockUsePortfolioMtm(...args),
   useSharesCandidates: () => ({ data: null }),
@@ -68,11 +68,11 @@ describe("DashboardPage", () => {
     expect(region).toBeInTheDocument();
   });
 
-  it("shows Manage positions CTA linking to Portfolio", async () => {
+  it("shows Manage positions CTA linking to Positions", async () => {
     render(<DashboardPage />);
     const links = screen.getAllByRole("link", { name: /Manage positions/i });
     expect(links.length).toBeGreaterThanOrEqual(1);
-    expect(links[0]).toHaveAttribute("href", "/portfolio");
+    expect(links[0]).toHaveAttribute("href", "/positions");
   });
 
   it("shows Net PnL card when MTM data available (Phase 15.0)", async () => {

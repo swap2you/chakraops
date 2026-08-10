@@ -7,9 +7,9 @@ import decisionHistoryJson from "@/mock/decisionHistory.json";
 import { apiGet } from "@/data/apiClient";
 import { ENDPOINTS } from "@/data/endpoints";
 
+/** R36.3: fail closed — only explicit MOCK uses fixtures; unset env is LIVE. */
 const isMock = (): boolean =>
-  (import.meta as unknown as { env?: { VITE_DATA_MODE?: string } }).env?.VITE_DATA_MODE === "MOCK" ||
-  (import.meta as unknown as { env?: { VITE_DATA_MODE?: string } }).env?.VITE_DATA_MODE === undefined;
+  (import.meta as unknown as { env?: { VITE_DATA_MODE?: string } }).env?.VITE_DATA_MODE === "MOCK";
 
 export async function getDailyOverview(mode: "MOCK" | "LIVE"): Promise<DailyOverviewView | null> {
   if (mode === "MOCK" || isMock()) {

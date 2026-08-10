@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Zap, LayoutDashboard, Briefcase, BookOpen, Bell, BarChart3, Globe, History, Sun, Moon, User, ChevronDown, Stethoscope, AlertTriangle, RefreshCw, Search as SearchIcon, Activity, FileText, DollarSign, Target, PieChart } from "lucide-react";
+import { Zap, LayoutDashboard, Briefcase, BookOpen, Bell, Globe, Sun, Moon, User, ChevronDown, Stethoscope, AlertTriangle, RefreshCw, Search as SearchIcon, Activity, FileText, PieChart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDataMode } from "@/context/DataModeContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -15,22 +15,16 @@ import { SCENARIO_LABELS, type ScenarioKey } from "@/mock/scenarios";
 import { DiagnosticsDrawer } from "@/components/DiagnosticsDrawer";
 
 const VIEWS = [
-  { path: "/decision", label: "Decision", icon: FileText },
+  { path: "/", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/today", label: "Today", icon: FileText },
+  { path: "/ticket", label: "Trade Ticket", icon: FileText },
   { path: "/universe", label: "Universe", icon: Globe },
   { path: "/symbol-diagnostics", label: "Symbol", icon: SearchIcon },
-  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/portfolio", label: "Portfolio", icon: PieChart },
   { path: "/positions", label: "Positions", icon: Briefcase },
   { path: "/journal", label: "Journal", icon: BookOpen },
   { path: "/notifications", label: "Notifications", icon: Bell },
-  { path: "/analytics", label: "Universe", icon: BarChart3 },
-  { path: "/history", label: "History", icon: History },
-  { path: "/analysis", label: "Ticker", icon: SearchIcon },
-  { path: "/accounts", label: "Accounts", icon: DollarSign },
-  { path: "/tracked-positions", label: "Tracked", icon: Target },
-  { path: "/portfolio", label: "Portfolio", icon: PieChart },
-  { path: "/strategy", label: "Strategy", icon: FileText },
-  { path: "/pipeline", label: "Pipeline", icon: FileText },
-  { path: "/diagnostics", label: "Diagnostics", icon: Activity },
+  { path: "/system", label: "System", icon: Activity },
 ] as const;
 
 function evalRangeFromHistory(decisionHistory: { evaluated_at: string }[]): { min: string; max: string } | null {

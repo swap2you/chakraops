@@ -10,28 +10,30 @@ import {
   BookOpen,
   Bell,
   BarChart3,
-  History,
   Search,
   Zap,
   ChevronRight,
   Activity,
+  Calendar,
+  Ticket,
 } from "lucide-react";
 import { useDataMode } from "@/context/DataModeContext";
 import { useScenario } from "@/context/ScenarioContext";
 import { SCENARIO_LABELS, type ScenarioKey } from "@/mock/scenarios";
 import { cn } from "@/lib/utils";
 
+/** R36.3: paths must match App.tsx / Sidebar live inventory. */
 const NAV_ITEMS = [
-  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard, shortcut: "g d" },
+  { path: "/", label: "Dashboard", icon: LayoutDashboard, shortcut: "g d" },
+  { path: "/today", label: "Today", icon: Calendar, shortcut: "g t" },
+  { path: "/ticket", label: "Trade Ticket", icon: Ticket, shortcut: "g k" },
+  { path: "/universe", label: "Universe", icon: BarChart3, shortcut: "g u" },
+  { path: "/symbol-diagnostics", label: "Symbol", icon: Search, shortcut: "g y" },
+  { path: "/portfolio", label: "Portfolio", icon: Briefcase, shortcut: "g a" },
   { path: "/positions", label: "Positions", icon: Briefcase, shortcut: "g p" },
   { path: "/journal", label: "Journal", icon: BookOpen, shortcut: "g j" },
   { path: "/notifications", label: "Notifications", icon: Bell, shortcut: "g n" },
-  { path: "/history", label: "History", icon: History, shortcut: "g h" },
-  { path: "/analytics", label: "Universe", icon: BarChart3, shortcut: "g a" },
-  { path: "/analysis", label: "Ticker", icon: Search, shortcut: "g y" },
-  { path: "/strategy", label: "Strategy", icon: BookOpen, shortcut: "g s" },
-  { path: "/pipeline", label: "Pipeline", icon: BookOpen, shortcut: "g i" },
-  { path: "/diagnostics", label: "Diagnostics", icon: Activity, shortcut: "g x" },
+  { path: "/system", label: "System", icon: Activity, shortcut: "g x" },
 ] as const;
 
 export interface CommandPaletteProps {
@@ -82,7 +84,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     ? NAV_ITEMS.filter((item) => item.label.toLowerCase().includes(query.trim().toLowerCase()))
     : NAV_ITEMS;
 
-  const latestDecisionPath = "/history";
+  const latestDecisionPath = "/journal";
   const hasPositions = (scenario?.bundle?.positions?.length ?? 0) > 0;
   const firstSymbol = hasPositions ? scenario?.bundle?.positions?.[0]?.symbol : null;
 
@@ -202,7 +204,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
               </ul>
 
               <p className="mt-4 px-2 py-1 text-xs text-muted-foreground">
-                Shortcuts: g d dashboard, g p positions, g j journal, g n notifications, g h history, g a universe, g s strategy, g x diagnostics
+                Shortcuts: g d dashboard, g t today, g k ticket, g u universe, g p positions, g j journal, g n notifications, g x system
               </p>
             </div>
           </motion.div>

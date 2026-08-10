@@ -77,13 +77,15 @@ export function SystemDiagnosticsPage() {
   const { data, isLoading, isError } = useUiSystemHealth();
   const { data: opsData } = useOperationsStatus();
   const probeSymbol = data?.earnings_probe_symbol ?? "SPY";
-  const { data: earningsDebug } = useEarningsDebug(probeSymbol);
-  const { data: historyData } = useDiagnosticsHistory(10);
+  const [earningsExpanded, setEarningsExpanded] = useState(false);
+  const [integrityExpanded, setIntegrityExpanded] = useState(false);
+  const { data: earningsDebug } = useEarningsDebug(probeSymbol, earningsExpanded);
+  const { data: historyData } = useDiagnosticsHistory(10, true);
   const { data: latestSnapshot, isError: snapshotError } = useLatestSnapshot();
   const runDiagnostics = useRunDiagnostics();
   const runEval = useRunEval();
   const runFreeze = useRunFreezeSnapshot();
-  const { data: integrityData } = useStoresIntegrity();
+  const { data: integrityData } = useStoresIntegrity(integrityExpanded);
   const repairStore = useRepairStore();
   const adminSlackTest = useAdminSlackTest();
   const adminForceEval = useAdminEvaluationForce();
@@ -324,7 +326,20 @@ export function SystemDiagnosticsPage() {
           </div>
         </Card>
         <Card data-testid="earnings-probe-card">
-          <CardHeader title="Earnings probe" description={`R25.8: Probe symbol ${probeSymbol} (advisory only)`} />
+          <CardHeader
+            title="Earnings probe"
+            description={`R25.8: Probe symbol ${probeSymbol} (advisory only)`}
+            actions={
+              !earningsExpanded ? (
+                <Button size="sm" variant="secondary" onClick={() => setEarningsExpanded(true)} data-testid="load-earnings-probe">
+                  Load probe
+                </Button>
+              ) : undefined
+            }
+          />
+          {!earningsExpanded ? (
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">Expand to load earnings debug (deferred to reduce API storm).</p>
+          ) : (
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">status</span>
@@ -347,6 +362,7 @@ export function SystemDiagnosticsPage() {
               <p className="mt-1 font-mono text-zinc-700 dark:text-zinc-200">{earningsDebug?.as_of ? formatTimestampEt(earningsDebug.as_of) : "—"}</p>
             </div>
           </div>
+          )}
         </Card>
         <Card>
           <CardHeader title="Scheduler" />
@@ -1031,9 +1047,21 @@ export function SystemDiagnosticsPage() {
         )}
       </div>
 
-      {/* Store Integrity (Phase 17.0) */}
+      {/* Store Integrity (Phase 17.0) — R36.3 deferred until Load */}
       <Card>
-        <CardHeader title="Store Integrity" />
+        <CardHeader
+          title="Store Integrity"
+          actions={
+            !integrityExpanded ? (
+              <Button size="sm" variant="secondary" onClick={() => setIntegrityExpanded(true)} data-testid="load-store-integrity">
+                Load integrity
+              </Button>
+            ) : undefined
+          }
+        />
+        {!integrityExpanded ? (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">Expand to load store integrity (deferred to reduce API storm).</p>
+        ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -1077,6 +1105,7 @@ export function SystemDiagnosticsPage() {
             </tbody>
           </table>
         </div>
+        )}
       </Card>
 
       {/* Sanity Checks (Phase 8.2) */}

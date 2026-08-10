@@ -211,7 +211,6 @@ export function UniversePage() {
   const mergedRows: SymbolEvalSummary[] = effectiveSymbols.length > 0
     ? effectiveSymbols.map((sym) => symbolBySym[sym] ?? ({ symbol: sym, verdict: "NOT_EVALUATED", final_verdict: "NOT_EVALUATED", band: "D", stage_status: "n/a", provider_status: "n/a", data_freshness: null } as SymbolEvalSummary))
     : symbols;
-  const source = universeData?.source ?? "n/a";
   const evalTs = (universeData as { evaluation_timestamp_utc?: string } | undefined)?.evaluation_timestamp_utc ?? universeData?.updated_at ?? "n/a";
   const runId = (universeData as { run_id?: string } | undefined)?.run_id ?? undefined;
 
@@ -278,12 +277,20 @@ export function UniversePage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Universe" subtext={`Source: ${source} · Updated ${formatTimestampEt(evalTs)}`} />
+      <PageHeader
+        title="Universe"
+        subtext={`Universe V2 = research membership source of truth · Eval rows updated ${formatTimestampEt(evalTs)}`}
+      />
 
       <UniverseV2Panel />
 
+      <details data-testid="universe-legacy-eval-rows" className="rounded-lg border border-zinc-200 dark:border-zinc-700">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-zinc-600 dark:text-zinc-400">
+          Last evaluation rows (diagnostic) — non-authoritative for membership
+        </summary>
+        <div className="space-y-8 border-t border-zinc-200 p-4 dark:border-zinc-700">
       <Card>
-        <CardHeader title="Universe Manager (Phase 21.3)" description="Add or remove symbols from the evaluation universe. Base list from CSV; overlay adds/removes." />
+        <CardHeader title="Universe Manager (Phase 21.3)" description="Add or remove symbols from the evaluation universe. Base list from CSV; overlay adds/removes. Prefer Universe Admin for proposals." />
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
             <span>Base: {baseCount}</span>
@@ -573,6 +580,8 @@ export function UniversePage() {
           }
         />
       )}
+        </div>
+      </details>
     </div>
   );
 }

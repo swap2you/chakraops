@@ -1,0 +1,20 @@
+{
+  "release": "R36.3",
+  "open_blocker_high": [],
+  "closed": [
+    {"id": "D1", "severity": "BLOCKER", "summary": "Dashboard A/B-tier artifact panels demoted under legacy-diagnostics; AuthoritativeRecommendations is primary", "status": "FIXED"},
+    {"id": "D2", "severity": "BLOCKER", "summary": "Shares candidates moved under legacy-diagnostics with non-authoritative labeling", "status": "FIXED"},
+    {"id": "N1", "severity": "HIGH", "summary": "Trade Ticket added to Sidebar Daily nav", "status": "FIXED"},
+    {"id": "W1", "severity": "HIGH", "summary": "Dashboard positions from unified DB; capital from portfolio", "status": "FIXED"},
+    {"id": "W2", "severity": "HIGH", "summary": "Portfolio buying power uses accountSummary.buying_power", "status": "FIXED"},
+    {"id": "W3", "severity": "HIGH", "summary": "Symbol Diagnostics suppresses diagnostic next-action badge when canonical OK", "status": "FIXED"},
+    {"id": "U1", "severity": "HIGH", "summary": "Universe V2 primary; legacy eval table under details", "status": "FIXED"},
+    {"id": "M1", "severity": "HIGH", "summary": "source.ts isMock only when VITE_DATA_MODE===MOCK", "status": "FIXED"},
+    {"id": "C1", "severity": "HIGH", "summary": "CommandPalette/CommandBar paths rewritten to live inventory", "status": "FIXED"},
+    {"id": "S1", "severity": "HIGH", "summary": "System earnings probe + store integrity deferred until Load", "status": "FIXED"}
+  ],
+  "deferred_medium": [
+    {"id": "P1", "severity": "MEDIUM", "summary": "Today ticket queue remains device-local localStorage", "status": "DEFERRED", "reason": "Documented; server migration owned by R39 Command Center"},
+    {"id": "O1", "severity": "MEDIUM", "summary": "Orphan page modules not deleted", "status": "DEFERRED", "reason": "Safe defer to R39 UX consolidation; paths unreachable via App.tsx"}
+  ]
+}

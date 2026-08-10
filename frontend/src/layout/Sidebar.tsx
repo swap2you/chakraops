@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, Globe, Search, Activity, PieChart, Bell, RotateCcw, BookOpen, BarChart3, FileText, Settings, Heart, Calendar, CalendarCheck, LineChart, GraduationCap, Layers } from "lucide-react";
+import { LayoutDashboard, Globe, Search, Activity, PieChart, Bell, RotateCcw, BookOpen, BarChart3, FileText, Settings, Heart, Calendar, CalendarCheck, LineChart, GraduationCap, Layers, Ticket } from "lucide-react";
 import { getWheelPageMode, isWheelLinkVisible, getShowAdvanced, setShowAdvanced } from "@/config/features";
 
 // R34.0: logical navigation grouping (no cosmetic redesign). Every existing
@@ -11,6 +11,7 @@ const GROUP_ORDER = ["Daily", "Research", "Account", "Insights", "Admin"] as con
 const navBase = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard, group: "Daily" },
   { path: "/today", label: "Today", icon: Calendar, group: "Daily" },
+  { path: "/ticket", label: "Trade Ticket", icon: Ticket, group: "Daily" },
   { path: "/weekly", label: "Weekly Review", icon: CalendarCheck, group: "Daily" },
   { path: "/universe", label: "Universe", icon: Globe, group: "Research" },
   { path: "/symbol-diagnostics", label: "Symbol", icon: Search, group: "Research" },

@@ -157,12 +157,37 @@ export function SymbolDiagnosticsPage({ initialTabForTest }: { initialTabForTest
   const { data: actionNeeded } = useActionNeeded();
   const marketClosed = health?.market?.phase ? health.market.phase !== "OPEN" && health.market.phase !== "UNKNOWN" : false;
 
-  /** R26.0: ENTRY sizing for current symbol from action-needed (if any). */
-  const entrySizingItem = activeSymbol
-    ? [...(actionNeeded?.top_options ?? []), ...(actionNeeded?.top_shares ?? [])].find(
-        (item) => item.symbol === activeSymbol && item.next_action_code === "ENTRY" && item.sizing_recommended_by === "r260"
-      )
-    : null;
+  /** R36.3: prefer canonical authoritative sizing; fall back to legacy r260 ENTRY item. */
+  const entrySizingItem = (() => {
+    if (!activeSymbol) return null;
+    const auth = actionNeeded?.authoritative_recommendations;
+    const canonicalEntry = [...(auth?.actionable ?? []), ...(auth?.watch ?? [])].find(
+      (item) =>
+        item.symbol === activeSymbol &&
+        (item.next_action_code === "ENTRY" || item.decision_status === "ACTIONABLE") &&
+        (item.capital_required != null || (item as { recommended_contracts?: number }).recommended_contracts != null)
+    );
+    if (canonicalEntry) {
+      return {
+        symbol: canonicalEntry.symbol,
+        strategy: canonicalEntry.strategy,
+        next_action_code: "ENTRY" as const,
+        sizing_recommended_by: "canonical" as const,
+        recommended_notional_usd: canonicalEntry.capital_required ?? undefined,
+        recommended_contracts: (canonicalEntry as { recommended_contracts?: number }).recommended_contracts,
+        recommended_qty: (canonicalEntry as { recommended_qty?: number }).recommended_qty,
+        sizing_constraints_hit: [] as string[],
+        cash_secured_available_usd: undefined as number | undefined,
+        csp_risk_proxy_move_pct: undefined as number | undefined,
+        csp_risk_proxy_loss_per_contract_usd: undefined as number | undefined,
+        csp_risk_proxy_cap_contracts: undefined as number | undefined,
+        csp_risk_proxy_enforced: undefined as boolean | undefined,
+      };
+    }
+    return [...(actionNeeded?.top_options ?? []), ...(actionNeeded?.top_shares ?? [])].find(
+      (item) => item.symbol === activeSymbol && item.next_action_code === "ENTRY" && item.sizing_recommended_by === "r260"
+    ) ?? null;
+  })();
 
   const handleLookup = useCallback(() => {
     const s = symbol.trim().toUpperCase();
@@ -533,7 +558,7 @@ function ExecutionConsole({
               <Badge variant="default" className={regimeColor(data.regime)}>
                 Regime {data.regime ?? "—"}
               </Badge>
-              {data.next_action_code && data.next_action_code !== "NONE" && (
+              {!(data.canonical_status === "OK" && data.canonical_decision) && data.next_action_code && data.next_action_code !== "NONE" && (
                 <Badge variant={data.next_action_code === "ENTRY" ? "success" : data.next_action_code === "CLOSE" ? "danger" : "neutral"} data-testid="next-action-badge">
                   {data.next_action_code === "ENTRY" ? "Entry" : data.next_action_code === "CLOSE" ? "Close" : data.next_action_code}
                 </Badge>

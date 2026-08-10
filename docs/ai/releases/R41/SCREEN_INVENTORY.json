@@ -1,0 +1,176 @@
+{
+  "release": "R41",
+  "route_count": 19,
+  "routes": [
+    {
+      "path": "/",
+      "component": "DashboardPage.tsx",
+      "label": "Command Center",
+      "nav_group": "Command Center"
+    },
+    {
+      "path": "/today",
+      "component": "TodayPage.tsx",
+      "label": "Today checklist",
+      "nav_group": "Command Center"
+    },
+    {
+      "path": "/ticket",
+      "component": "TradeTicketPage.tsx",
+      "label": "Trade Ticket",
+      "nav_group": "Command Center"
+    },
+    {
+      "path": "/opportunities",
+      "component": "OpportunitiesPage.tsx",
+      "label": "Opportunities",
+      "nav_group": "Opportunities"
+    },
+    {
+      "path": "/portfolio",
+      "component": "PortfolioPage.tsx",
+      "label": "Portfolio",
+      "nav_group": "Portfolio"
+    },
+    {
+      "path": "/positions",
+      "component": "PositionsPage.tsx",
+      "label": "Positions",
+      "nav_group": "Portfolio"
+    },
+    {
+      "path": "/universe",
+      "component": "UniversePage.tsx",
+      "label": "Universe",
+      "nav_group": "Research"
+    },
+    {
+      "path": "/symbol-diagnostics",
+      "component": "SymbolDiagnosticsPage.tsx",
+      "label": "Symbol Diagnostics",
+      "nav_group": "Research"
+    },
+    {
+      "path": "/backtest",
+      "component": "BacktestPage.tsx",
+      "label": "Backtest",
+      "nav_group": "Strategy Lab"
+    },
+    {
+      "path": "/learn",
+      "component": "LearnPage.tsx",
+      "label": "Learn",
+      "nav_group": "Strategy Lab"
+    },
+    {
+      "path": "/system",
+      "component": "SystemDiagnosticsPage.tsx",
+      "label": "System Diagnostics",
+      "nav_group": "Operations"
+    },
+    {
+      "path": "/universe-admin",
+      "component": "UniverseAdminPage.tsx",
+      "label": "Universe Admin",
+      "nav_group": "Operations"
+    },
+    {
+      "path": "/universe-health",
+      "component": "UniverseHealthPage.tsx",
+      "label": "Universe Health",
+      "nav_group": "Operations"
+    },
+    {
+      "path": "/wheel",
+      "component": "WheelPage.tsx",
+      "label": "Wheel",
+      "nav_group": "Advanced/Legacy",
+      "conditional": "VITE_WHEEL_PAGE_MODE"
+    },
+    {
+      "path": "/paper",
+      "component": "PaperPage.tsx",
+      "label": "Paper",
+      "nav_group": "Advanced/Legacy"
+    },
+    {
+      "path": "/reports",
+      "component": "ReportsPage.tsx",
+      "label": "Reports",
+      "nav_group": "Advanced/Legacy"
+    },
+    {
+      "path": "/weekly",
+      "component": "WeeklyReviewPage.tsx",
+      "label": "Weekly Review",
+      "nav_group": "Advanced/Legacy"
+    },
+    {
+      "path": "/journal",
+      "component": "JournalPage.tsx",
+      "label": "Journal",
+      "nav_group": "Advanced/Legacy"
+    },
+    {
+      "path": "/notifications",
+      "component": "NotificationsPage.tsx",
+      "label": "Notifications",
+      "nav_group": "Advanced/Legacy"
+    }
+  ],
+  "orphans": [
+    {
+      "module": "components/CommandPalette.tsx",
+      "status": "UNMOUNTED",
+      "action": "DEFER_OR_WIRE_R49"
+    },
+    {
+      "module": "components/CommandBar.tsx",
+      "status": "UNMOUNTED",
+      "action": "REMOVE_OR_MERGE_R49"
+    },
+    {
+      "module": "pages/_quarantine/*",
+      "status": "NOT_ROUTED",
+      "action": "KEEP_QUARANTINED"
+    }
+  ],
+  "redirects": [
+    {
+      "from": "*",
+      "to": "/"
+    },
+    {
+      "from": "/wheel",
+      "to": "/",
+      "when": "VITE_WHEEL_PAGE_MODE=hidden"
+    }
+  ],
+  "live_financial_surfaces": [
+    {
+      "surface": "Command Center / Opportunities",
+      "mode": "LIVE API",
+      "mock": "Dashboard MOCK artifact browser labeled forensics-only"
+    },
+    {
+      "surface": "Portfolio cash/buying power",
+      "mode": "manual trusted snapshot",
+      "mock": false
+    },
+    {
+      "surface": "Paper",
+      "mode": "SIMULATION isolated",
+      "mock": false
+    },
+    {
+      "surface": "Backtest / R40 Strategy Lab",
+      "mode": "SIMULATION",
+      "mock": false
+    },
+    {
+      "surface": "frontend/src/mock/scenarios",
+      "mode": "test-only / unmounted providers",
+      "mock": true
+    }
+  ]
+}

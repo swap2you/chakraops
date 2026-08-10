@@ -165,7 +165,7 @@ export function DashboardPage() {
     ?? health?.market?.timestamp;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" data-testid="page-command-center">
       <PageHeader
         title="Command Center"
         subtext={

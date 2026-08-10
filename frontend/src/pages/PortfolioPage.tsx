@@ -122,7 +122,7 @@ export function PortfolioPage() {
   const summary = accountSummary;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" data-testid="page-portfolio">
       <PageHeader title="Account & Portfolio" subtext={`${positions.length} position(s) · ${fmtCurrency(capitalDeployed)} deployed`} />
 
       {metrics && (

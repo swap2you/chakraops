@@ -52,7 +52,7 @@ export function UniverseAdminPage() {
   };
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-6" data-testid="page-universe-admin">
       <PageHeader
         title="Universe Admin"
         subtext="Propose add/remove symbols and apply changes. History is logged."

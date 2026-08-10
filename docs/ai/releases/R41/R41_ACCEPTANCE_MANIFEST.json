@@ -1,0 +1,32 @@
+{
+  "release": "R41",
+  "verdict": "TECHNICALLY_COMPLETE",
+  "program_status": "R41_R50_ACTIVE",
+  "baseline_sha": "e0813a889c0a93179f10e119bf03286e2b1cdb2e",
+  "acceptance": {
+    "R41-A1": "PASS",
+    "R41-A2": "PASS",
+    "R41-A3": "PASS",
+    "R41-A4": "PASS",
+    "R41-A5": "PASS",
+    "R41-A6": "PASS",
+    "R41-A7": "PASS",
+    "R41-A8": "PASS"
+  },
+  "artifacts": [
+    "SCREEN_CONTRACT.md",
+    "SCREEN_INVENTORY.json",
+    "CONTROL_INVENTORY.csv",
+    "DATA_LINEAGE.csv",
+    "frontend/e2e/*",
+    "frontend/playwright.config.ts",
+    "out/verification/R41/"
+  ],
+  "safety": {
+    "manual_only": true,
+    "trade_execution": false,
+    "scheduler_default_off": true,
+    "no_broker_writes": true
+  },
+  "open_blocker_high": []
+}

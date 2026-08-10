@@ -171,7 +171,7 @@ export function WheelPage() {
   const canOpenTicket = candidate && (openTicket?.row.next_action.suggested_contract_key || candidate.contract_key);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" data-testid="page-wheel">
       <PageHeader
         title="Wheel"
         subtext={`${rows.length} symbol(s) · Risk: ${riskStatus}`}

@@ -10,7 +10,7 @@ export function UniverseHealthPage() {
   const { data, isLoading, isError, error } = useUniverseHealth();
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 p-6" data-testid="page-universe-health">
       <PageHeader
         title="Universe Health"
         subtext="Summary of universe size, recent changes, and data status."

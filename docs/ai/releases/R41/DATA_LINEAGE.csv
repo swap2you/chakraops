@@ -1,0 +1,8 @@
+ui_field,api_key,backend,source,calculation,timestamp,freshness,missing_behavior
+cash,cash / available_cash,holdings_db.get_account_summary / wheel_v2_routes._portfolio_from_account,manual SQLite account balance,direct; never coerce from total_capital,balance updated_at if present,operator-trusted snapshot,null/unavailable → no CSP sizing; zero stays zero
+buying_power,buying_power,holdings_db,manual SQLite,direct,balance updated_at,operator-trusted,null ≠ zero
+total_capital / equity,total_capital,Account.total_capital / portfolio metrics,account policy + positions MTM,distinct from cash,portfolio/metrics as-of,fail closed if required mark missing,do not substitute for cash
+CSP collateral,strike * 100 * contracts,wheel_v2 arbitration / decision engine,ORATS strike + trusted cash,strike×100 per contract,provider quote-as-of,stale/missing → Stay in Cash / blocked,no actionable sized CSP
+ORATS quote,quoteDate / side bid-ask,orats_client.probe_orats_live / live strikes,ORATS /live/strikes,endpoint-aware field presence,provider quote_date,not HTTP completion time,probe FAIL / stale gate
+decision / opportunities,decision_latest / action_needed,evaluation_store_v2 / evaluation_service_v2,out/decision_latest.json,canonical engine only,evaluation_timestamp_utc,explicit eval only; no auto on read,empty / Stay in Cash
+R40 Strategy Lab metrics,oos.metrics / simulation,app.core.backtest.r40,fixtures (not ORATS hist/options),walk-forward SIMULATION,run timestamp,research only,present=false; never claim hist entitlement

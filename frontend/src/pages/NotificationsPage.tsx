@@ -68,7 +68,7 @@ export function NotificationsPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="page-notifications">
       <PageHeader title="Notifications" subtext="Events and alerts (UI parity with Slack)" />
       <Card>
         <CardHeader

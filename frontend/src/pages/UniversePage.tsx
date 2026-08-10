@@ -276,7 +276,7 @@ export function UniversePage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" data-testid="page-universe">
       <PageHeader
         title="Universe"
         subtext={`Universe V2 = research membership source of truth · Eval rows updated ${formatTimestampEt(evalTs)}`}

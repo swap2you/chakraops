@@ -1027,6 +1027,9 @@ from app.api.decision_engine_routes import router as decision_engine_router
 from app.api.universe_v2_routes import router as universe_v2_router
 from app.api.broker_routes import router as broker_router
 from app.api.wheel_v2_routes import router as wheel_v2_router
+from app.api.advisor_routes_r58 import router as advisor_router_r58
+from app.api.monitor_routes_r54 import router as monitor_router_r54
+from app.api.observability_routes_r60 import router as observability_router_r60
 app.include_router(operations_router)
 app.include_router(ui_router)
 app.include_router(copilot_router, prefix="/api/ui")
@@ -1035,6 +1038,9 @@ app.include_router(decision_engine_router, prefix="/api/ui")
 app.include_router(universe_v2_router)
 app.include_router(broker_router)
 app.include_router(wheel_v2_router)
+app.include_router(advisor_router_r58)
+app.include_router(monitor_router_r54)
+app.include_router(observability_router_r60)
 
 app.add_middleware(
     CORSMiddleware,

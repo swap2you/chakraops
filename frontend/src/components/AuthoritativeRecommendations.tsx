@@ -206,6 +206,11 @@ export function AuthoritativeRecommendations({
   const watch = auth?.watch ?? [];
   const blocked = auth?.blocked ?? [];
   const cs = data?.capital_safety ?? null;
+  const stayCodes = reasonLabels(
+    Array.isArray((auth?.stay_in_cash as { reason_codes?: string[] } | null | undefined)?.reason_codes)
+      ? (auth?.stay_in_cash as { reason_codes?: string[] }).reason_codes
+      : undefined
+  );
 
   return (
     <Card data-testid="canonical-primary">
@@ -215,6 +220,11 @@ export function AuthoritativeRecommendations({
         {actionable.length === 0 ? (
           <div data-testid="canonical-stay-in-cash" className="rounded border border-zinc-200 dark:border-zinc-700 p-3 text-sm text-zinc-600 dark:text-zinc-400">
             No actionable recommendations right now — staying in cash is a valid outcome.
+            {stayCodes.length > 0 && (
+              <p className="mt-1 text-xs text-zinc-500" data-testid="canonical-stay-in-cash-reason">
+                Reason: {stayCodes.join("; ")}
+              </p>
+            )}
           </div>
         ) : (
           actionable.map((item) => (

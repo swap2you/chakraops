@@ -828,6 +828,23 @@ export function useUniverseV2Refresh() {
   });
 }
 
+/** R39: Universe V2 near-misses (WATCH + temporary, never safety-critical). */
+export interface UniverseV2NearMiss {
+  symbol: string;
+  reason?: string;
+}
+export interface UniverseV2NearMissesResponse {
+  status?: string;
+  version?: number;
+  near_misses: UniverseV2NearMiss[];
+}
+export function useUniverseV2NearMisses() {
+  return useQuery({
+    queryKey: ["ui", "universe-v2", "near-misses"] as const,
+    queryFn: () => apiGet<UniverseV2NearMissesResponse>("/api/ui/universe-v2/near-misses"),
+  });
+}
+
 /** Phase 21.3: GET /api/ui/universe/symbols — effective list + overlay counts */
 export function useUniverseSymbols() {
   return useQuery({

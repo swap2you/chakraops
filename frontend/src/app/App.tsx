@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { AppLayout } from "@/layout/AppLayout";
 import { DashboardPage } from "@/pages/DashboardPage";
+import { OpportunitiesPage } from "@/pages/OpportunitiesPage";
 import { UniversePage } from "@/pages/UniversePage";
 import { SymbolDiagnosticsPage } from "@/pages/SymbolDiagnosticsPage";
 import { SystemDiagnosticsPage } from "@/pages/SystemDiagnosticsPage";
@@ -39,6 +40,7 @@ export function App() {
           <Routes>
             <Route element={<AppLayout />}>
               <Route path="/" element={<DashboardPage />} />
+              <Route path="/opportunities" element={<OpportunitiesPage />} />
               <Route path="/universe" element={<UniversePage />} />
               <Route path="/symbol-diagnostics" element={<SymbolDiagnosticsPage />} />
               <Route path="/system" element={<SystemDiagnosticsPage />} />

@@ -18,9 +18,9 @@ export function LearnPage() {
         <Card data-testid="learn-daily-routine">
           <CardHeader title="Daily routine (10–15 min)" />
           <ol className="list-decimal list-inside space-y-2 text-sm text-zinc-700 dark:text-zinc-300">
-            <li>Open <Link to="/today" className="text-emerald-600 hover:underline dark:text-emerald-400">Today</Link>.</li>
+            <li>Open <Link to="/" className="text-emerald-600 hover:underline dark:text-emerald-400">Command Center</Link> or <Link to="/today" className="text-emerald-600 hover:underline dark:text-emerald-400">Today checklist</Link>.</li>
             <li>Run evaluation (EOD-biased; check as-of timestamp).</li>
-            <li>Handle Action Needed (ENTRY vs CLOSE/ROLL).</li>
+            <li>Review <Link to="/opportunities" className="text-emerald-600 hover:underline dark:text-emerald-400">Opportunities</Link> (ENTRY vs CLOSE/ROLL).</li>
             <li>Open <Link to="/ticket" className="text-emerald-600 hover:underline dark:text-emerald-400">Ticket</Link> → Execute manually → Save to <Link to="/journal" className="text-emerald-600 hover:underline dark:text-emerald-400">Journal</Link>.</li>
             <li>Clear inbox (Ack NEW, Archive ACKED).</li>
             <li>Mark EOD checklist done.</li>
@@ -68,13 +68,20 @@ export function LearnPage() {
           <div className="space-y-2 text-sm">
             <p className="text-zinc-600 dark:text-zinc-400">Internal:</p>
             <ul className="flex flex-wrap gap-x-4 gap-y-1">
-              <li><Link to="/today" className="text-emerald-600 hover:underline dark:text-emerald-400">Today</Link></li>
+              <li><Link to="/" className="text-emerald-600 hover:underline dark:text-emerald-400">Command Center</Link></li>
+              <li><Link to="/opportunities" className="text-emerald-600 hover:underline dark:text-emerald-400">Opportunities</Link></li>
+              <li><Link to="/today" className="text-emerald-600 hover:underline dark:text-emerald-400">Today checklist</Link></li>
               <li><Link to="/ticket" className="text-emerald-600 hover:underline dark:text-emerald-400">Ticket</Link></li>
               <li><Link to="/journal" className="text-emerald-600 hover:underline dark:text-emerald-400">Journal</Link></li>
+              <li><Link to="/backtest" className="text-emerald-600 hover:underline dark:text-emerald-400">Backtest</Link></li>
               <li><Link to="/reports" className="text-emerald-600 hover:underline dark:text-emerald-400">Reports</Link></li>
               <li><Link to="/system" className="text-emerald-600 hover:underline dark:text-emerald-400">System Diagnostics</Link></li>
             </ul>
-            <p className="text-zinc-600 dark:text-zinc-400 mt-3">Add your favorite videos or docs here (bookmark in browser).</p>
+            <p className="text-zinc-600 dark:text-zinc-400 mt-3">
+              Deferred research UIs (Strategy / Pipeline) remain quarantined under{" "}
+              <code className="text-xs">pages/_quarantine/</code> — not in primary nav.
+            </p>
+            <p className="text-zinc-600 dark:text-zinc-400 mt-1">Add your favorite videos or docs here (bookmark in browser).</p>
           </div>
         </Card>
       </div>

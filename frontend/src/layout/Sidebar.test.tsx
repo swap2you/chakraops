@@ -22,18 +22,19 @@ describe("Sidebar", () => {
     mockGetShowAdvanced.mockReturnValue(false);
   });
 
-  it("renders nav with Dashboard, Universe, Symbol, Wheel, Portfolio, Paper, Learn, Backtest, Notifications, System", () => {
+  it("renders R39 nav groups and primary destinations", () => {
     render(<Sidebar />);
-    expect(screen.getByRole("link", { name: /dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^command center$/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^opportunities$/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /^Universe$/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /symbol/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /symbol diagnostics/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /wheel/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /account & portfolio/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^Portfolio$/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /^Paper$/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /^Learn$/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /backtest/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /notifications/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /system/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /system diagnostics/i })).toBeInTheDocument();
   });
 
   it("R22.3 admin mode: shows Wheel (Admin) label", () => {
@@ -64,15 +65,18 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: /wheel/i })).toBeInTheDocument();
   });
 
-  it("R34.0: renders logical navigation groups", () => {
+  it("R39: renders Command Center IA groups", () => {
     render(<Sidebar />);
-    expect(screen.getByTestId("nav-group-daily")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-group-command-center")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-group-opportunities")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-group-portfolio")).toBeInTheDocument();
     expect(screen.getByTestId("nav-group-research")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-group-account")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-group-insights")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-group-admin")).toBeInTheDocument();
-    // All routes remain reachable after grouping.
+    expect(screen.getByTestId("nav-group-strategy-lab")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-group-operations")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-group-advanced-legacy")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-legacy-note")).toHaveTextContent(/non-primary/i);
     expect(screen.getByRole("link", { name: /^Positions$/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /backtest/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /today checklist/i })).toBeInTheDocument();
   });
 });

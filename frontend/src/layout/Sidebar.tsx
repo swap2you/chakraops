@@ -1,33 +1,73 @@
 import { useState, useEffect } from "react";
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, Globe, Search, Activity, PieChart, Bell, RotateCcw, BookOpen, BarChart3, FileText, Settings, Heart, Calendar, CalendarCheck, LineChart, GraduationCap, Layers, Ticket } from "lucide-react";
+import {
+  LayoutDashboard,
+  Globe,
+  Search,
+  Activity,
+  PieChart,
+  Bell,
+  RotateCcw,
+  BookOpen,
+  BarChart3,
+  FileText,
+  Settings,
+  Heart,
+  Calendar,
+  CalendarCheck,
+  LineChart,
+  GraduationCap,
+  Layers,
+  Ticket,
+  Target,
+} from "lucide-react";
 import { getWheelPageMode, isWheelLinkVisible, getShowAdvanced, setShowAdvanced } from "@/config/features";
 
-// R34.0: logical navigation grouping (no cosmetic redesign). Every existing
-// route is preserved; items are organized under stable section headers so the
-// daily workflow is discoverable.
-const GROUP_ORDER = ["Daily", "Research", "Account", "Insights", "Admin"] as const;
+/** R39: Command Center IA — map existing routes into product groups. */
+const GROUP_ORDER = [
+  "Command Center",
+  "Opportunities",
+  "Portfolio",
+  "Research",
+  "Strategy Lab",
+  "Operations",
+  "Advanced/Legacy",
+] as const;
 
-const navBase = [
-  { path: "/", label: "Dashboard", icon: LayoutDashboard, group: "Daily" },
-  { path: "/today", label: "Today", icon: Calendar, group: "Daily" },
-  { path: "/ticket", label: "Trade Ticket", icon: Ticket, group: "Daily" },
-  { path: "/weekly", label: "Weekly Review", icon: CalendarCheck, group: "Daily" },
+type NavGroup = (typeof GROUP_ORDER)[number];
+
+const navBase: Array<{
+  path: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  group: NavGroup;
+  wheel?: boolean;
+  legacyNote?: boolean;
+}> = [
+  { path: "/", label: "Command Center", icon: LayoutDashboard, group: "Command Center" },
+  { path: "/today", label: "Today checklist", icon: Calendar, group: "Command Center" },
+  { path: "/ticket", label: "Trade Ticket", icon: Ticket, group: "Command Center" },
+  { path: "/opportunities", label: "Opportunities", icon: Target, group: "Opportunities" },
+  { path: "/portfolio", label: "Portfolio", icon: PieChart, group: "Portfolio" },
+  { path: "/positions", label: "Positions", icon: Layers, group: "Portfolio" },
   { path: "/universe", label: "Universe", icon: Globe, group: "Research" },
-  { path: "/symbol-diagnostics", label: "Symbol", icon: Search, group: "Research" },
-  { path: "/wheel", label: "Wheel", icon: RotateCcw, wheel: true, group: "Research" },
-  { path: "/portfolio", label: "Account & Portfolio", icon: PieChart, group: "Account" },
-  { path: "/positions", label: "Positions", icon: Layers, group: "Account" },
-  { path: "/journal", label: "Journal", icon: BookOpen, group: "Account" },
-  { path: "/paper", label: "Paper", icon: FileText, group: "Account" },
-  { path: "/notifications", label: "Notifications", icon: Bell, group: "Insights" },
-  { path: "/reports", label: "Reports", icon: BarChart3, group: "Insights" },
-  { path: "/backtest", label: "Backtest", icon: LineChart, group: "Insights" },
-  { path: "/learn", label: "Learn", icon: GraduationCap, group: "Insights" },
-  { path: "/universe-admin", label: "Universe Admin", icon: Settings, group: "Admin" },
-  { path: "/universe-health", label: "Universe Health", icon: Heart, group: "Admin" },
-  { path: "/system", label: "System", icon: Activity, group: "Admin" },
+  { path: "/symbol-diagnostics", label: "Symbol Diagnostics", icon: Search, group: "Research" },
+  { path: "/backtest", label: "Backtest", icon: LineChart, group: "Strategy Lab" },
+  { path: "/learn", label: "Learn", icon: GraduationCap, group: "Strategy Lab" },
+  { path: "/system", label: "System Diagnostics", icon: Activity, group: "Operations" },
+  { path: "/universe-admin", label: "Universe Admin", icon: Settings, group: "Operations" },
+  { path: "/universe-health", label: "Universe Health", icon: Heart, group: "Operations" },
+  { path: "/wheel", label: "Wheel", icon: RotateCcw, wheel: true, group: "Advanced/Legacy", legacyNote: true },
+  { path: "/paper", label: "Paper", icon: FileText, group: "Advanced/Legacy", legacyNote: true },
+  { path: "/reports", label: "Reports", icon: BarChart3, group: "Advanced/Legacy", legacyNote: true },
+  { path: "/weekly", label: "Weekly Review", icon: CalendarCheck, group: "Advanced/Legacy", legacyNote: true },
+  { path: "/journal", label: "Journal", icon: BookOpen, group: "Advanced/Legacy", legacyNote: true },
+  { path: "/notifications", label: "Notifications", icon: Bell, group: "Advanced/Legacy", legacyNote: true },
 ];
+
+function groupTestId(group: string): string {
+  return `nav-group-${group.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-+$/g, "")}`;
+}
 
 export function Sidebar() {
   const wheelMode = getWheelPageMode();
@@ -38,15 +78,17 @@ export function Sidebar() {
     setShowAdvancedState(getShowAdvanced());
   }, [wheelVisible]);
 
-  const nav = navBase.filter((item) => {
-    if (!("wheel" in item) || !item.wheel) return true;
-    return wheelVisible;
-  }).map((item) => {
-    if ("wheel" in item && item.wheel && wheelMode === "admin") {
-      return { ...item, label: "Wheel (Admin)" };
-    }
-    return item;
-  });
+  const nav = navBase
+    .filter((item) => {
+      if (!item.wheel) return true;
+      return wheelVisible;
+    })
+    .map((item) => {
+      if (item.wheel && wheelMode === "admin") {
+        return { ...item, label: "Wheel (Admin)" };
+      }
+      return item;
+    });
 
   return (
     <aside className="glass flex w-56 shrink-0 flex-col border-r border-zinc-200/80 dark:border-zinc-800/80">
@@ -65,11 +107,17 @@ export function Sidebar() {
         {GROUP_ORDER.map((group) => {
           const items = nav.filter((item) => item.group === group);
           if (items.length === 0) return null;
+          const isLegacy = group === "Advanced/Legacy";
           return (
-            <div key={group} className="space-y-0.5" data-testid={`nav-group-${group.toLowerCase()}`}>
+            <div key={group} className="space-y-0.5" data-testid={groupTestId(group)}>
               <div className="px-2.5 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-600">
                 {group}
               </div>
+              {isLegacy && (
+                <p className="px-2.5 pb-1 text-[10px] leading-snug text-zinc-400 dark:text-zinc-600" data-testid="nav-legacy-note">
+                  Non-primary — not daily decision surfaces
+                </p>
+              )}
               {items.map(({ path, label, icon: Icon }) => (
                 <NavLink
                   key={path}

@@ -31,6 +31,7 @@ vi.mock("@/api/queries", () => ({
   usePortfolioMtm: (...args: unknown[]) => mockUsePortfolioMtm(...args),
   useSharesCandidates: () => ({ data: null }),
   useActionNeeded: (...args: unknown[]) => mockUseActionNeeded(...args),
+  useNotifications: () => ({ data: { notifications: [] } }),
   useRunEval: () => ({
     mutate: vi.fn(),
     mutateAsync: vi.fn(),

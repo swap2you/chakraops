@@ -14,9 +14,9 @@ describe("CommandPalette", () => {
     expect(screen.queryByRole("dialog", { name: /command palette/i })).not.toBeInTheDocument();
   });
 
-  it("clicking Dashboard navigates", () => {
+  it("clicking Command Center navigates", () => {
     render(<CommandPalette open onClose={() => {}} />);
-    const btn = screen.getByRole("button", { name: /dashboard/i });
+    const btn = screen.getByRole("button", { name: /command center/i });
     fireEvent.click(btn);
     expect(window.location.pathname).toBe("/");
   });

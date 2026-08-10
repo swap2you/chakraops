@@ -1,0 +1,35 @@
+{
+  "release": "R39",
+  "verdict": "IMPLEMENTED",
+  "title": "Command Center, Slack & UX Consolidation",
+  "acceptance": {
+    "R39-N1": "PASS",
+    "R39-C1": "PASS",
+    "R39-O1": "PASS",
+    "R39-U1": "PASS",
+    "R39-K1": "PASS",
+    "R39-L1": "PASS"
+  },
+  "safety": {
+    "manual_only": true,
+    "trade_execution": false,
+    "scheduler_enabled": false,
+    "broker_writes": false,
+    "decision_latest_prose": false,
+    "threshold_retune": false
+  },
+  "artifacts": [
+    "docs/ai/releases/R39/R39_SCOPE.md",
+    "docs/ai/releases/R39/R39_DESIGN.md",
+    "frontend/src/layout/Sidebar.tsx",
+    "frontend/src/pages/OpportunitiesPage.tsx",
+    "frontend/src/pages/DashboardPage.tsx",
+    "chakraops/app/core/alerts/slack_wheel_v2_formatter.py"
+  ],
+  "tests": {
+    "backend": "tests/test_r390_slack_wheel_v2_formatter.py",
+    "frontend": "src/layout/Sidebar.test.tsx src/pages/DashboardPage.canonical.test.tsx src/pages/OpportunitiesPage.test.tsx src/components/CommandPalette.test.tsx"
+  },
+  "next": "R40"
+}
+

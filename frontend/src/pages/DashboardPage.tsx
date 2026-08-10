@@ -1,12 +1,13 @@
 import { useState, useMemo } from "react";
 import { formatTimestampEt } from "@/utils/formatTimestamp";
 import { Link } from "react-router-dom";
-import { ExternalLink, Activity, Droplets, Zap, Info, Settings } from "lucide-react";
-import { useArtifactList, useDecision, useUniverse, useUiSystemHealth, useUnifiedPositionsFromDb, usePortfolio, usePortfolioMtm, useDefaultAccount, useRunEval, useSharesCandidates, useActionNeeded } from "@/api/queries";
+import { ExternalLink, Activity, Droplets, Zap, Info, Settings, Bell } from "lucide-react";
+import { useArtifactList, useDecision, useUniverse, useUiSystemHealth, useUnifiedPositionsFromDb, usePortfolio, usePortfolioMtm, useDefaultAccount, useRunEval, useSharesCandidates, useActionNeeded, useNotifications } from "@/api/queries";
 import type { DecisionMode, SymbolEvalSummary, UniverseSymbol } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { AuthoritativeRecommendations } from "@/components/AuthoritativeRecommendations";
 import { constraintToLabel } from "@/utils/sizingConstraints";
+import { reasonLabels } from "@/utils/reasonLabels";
 import {
   Card,
   CardHeader,
@@ -100,6 +101,20 @@ export function DashboardPage() {
   const { data: sharesCandidatesData } = useSharesCandidates();
   const sharesCandidates = sharesCandidatesData?.shares_candidates ?? [];
   const { data: actionNeeded, isLoading: actionNeededLoading, isError: actionNeededError } = useActionNeeded();
+  const { data: notifData } = useNotifications(20, "NEW");
+  const newAlerts = notifData?.notifications ?? [];
+
+  const auth = actionNeeded?.authoritative_recommendations;
+  const oppCounts = {
+    actionable: auth?.actionable?.length ?? 0,
+    watch: auth?.watch?.length ?? 0,
+    blocked: auth?.blocked?.length ?? 0,
+  };
+  const stayReasons = reasonLabels(
+    Array.isArray((auth?.stay_in_cash as { reason_codes?: string[] } | null)?.reason_codes)
+      ? (auth?.stay_in_cash as { reason_codes?: string[] }).reason_codes
+      : undefined
+  );
 
   const { universeSymbols, selectedSignals } = useMemo(() => {
     const artifact = decision?.artifact;
@@ -151,7 +166,14 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Command Center" subtext={isReady ? "Mode, market, and evaluation status" : "AI trading command center"} />
+      <PageHeader
+        title="Command Center"
+        subtext={
+          isReady
+            ? "Today’s actions, positions, cash/collateral, data health, Stay in Cash, and alerts — manual execution only"
+            : "Loading daily command surface…"
+        }
+      />
       {!isReady ? (
         <Card>
           <div className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
@@ -225,6 +247,82 @@ export function DashboardPage() {
         </Card>
       </section>
 
+      {/* R39: daily surface links + opportunities / alerts summary */}
+      <section role="region" aria-label="Command center actions" className="grid grid-cols-1 gap-4 md:grid-cols-3" data-testid="command-center-summary">
+        <Card>
+          <CardHeader title="Actions today" />
+          <div className="space-y-2 text-sm">
+            <p className="text-zinc-600 dark:text-zinc-400">
+              {oppCounts.actionable > 0
+                ? `${oppCounts.actionable} actionable recommendation${oppCounts.actionable === 1 ? "" : "s"}`
+                : "No actionable items — staying in cash is valid"}
+            </p>
+            <div className="flex flex-wrap gap-3 text-xs">
+              <Link to="/today" className="text-emerald-600 hover:underline dark:text-emerald-400">
+                Today checklist →
+              </Link>
+              <Link to="/ticket" className="text-emerald-600 hover:underline dark:text-emerald-400">
+                Trade Ticket →
+              </Link>
+              <Link to="/positions" className="text-emerald-600 hover:underline dark:text-emerald-400">
+                Manage positions →
+              </Link>
+            </div>
+          </div>
+        </Card>
+        <Card data-testid="command-center-opportunities-summary">
+          <CardHeader
+            title="Opportunities"
+            actions={
+              <Link to="/opportunities" className="text-xs text-emerald-600 hover:underline dark:text-emerald-400">
+                View all →
+              </Link>
+            }
+          />
+          <div className="flex flex-wrap gap-4 text-sm">
+            <div>
+              <span className="block text-xs text-zinc-500">Actionable</span>
+              <span className="font-mono font-medium">{oppCounts.actionable}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500">Watch</span>
+              <span className="font-mono font-medium">{oppCounts.watch}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500">Blocked</span>
+              <span className="font-mono font-medium">{oppCounts.blocked}</span>
+            </div>
+          </div>
+          {oppCounts.actionable === 0 && (
+            <div className="mt-2 rounded border border-zinc-200 p-2 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-400" data-testid="command-center-stay-in-cash">
+              Stay in Cash
+              {stayReasons.length > 0 ? `: ${stayReasons.join("; ")}` : " — no actionable candidates right now."}
+            </div>
+          )}
+        </Card>
+        <Card data-testid="command-center-alerts">
+          <CardHeader
+            title="Alerts"
+            actions={
+              <Link to="/notifications" className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline dark:text-emerald-400">
+                <Bell className="h-3 w-3" />
+                Inbox →
+              </Link>
+            }
+          />
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            {newAlerts.length === 0
+              ? "No new alerts."
+              : `${newAlerts.length} new notification${newAlerts.length === 1 ? "" : "s"}`}
+          </p>
+          {newAlerts.slice(0, 3).map((n, i) => (
+            <p key={n.id ?? `alert-${i}`} className="mt-1 truncate text-xs text-zinc-500">
+              {n.symbol ?? "—"} · {n.type ?? "alert"}
+            </p>
+          ))}
+        </Card>
+      </section>
+
       {mode === "MOCK" && (
         <div data-testid="mock-artifact-banner" className="rounded border border-amber-500/50 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-900/30 dark:text-amber-100">
           Artifact browser (non-live). MOCK mode is forensics only — not a live recommendation.
@@ -239,7 +337,14 @@ export function DashboardPage() {
             isLoading={actionNeededLoading}
             isError={actionNeededError}
             providerHealth={{ label: health?.orats?.status, ok: health?.orats?.status === "OK" }}
+            maxItems={5}
           />
+          <p className="text-xs text-zinc-500">
+            Full CSP / CC / Shares / Watch / Near Miss / Blocked buckets:{" "}
+            <Link to="/opportunities" className="text-emerald-600 hover:underline dark:text-emerald-400">
+              Opportunities
+            </Link>
+          </p>
           {/* R34.0 / R36.3: legacy options/shares lists and tier panels are NON-authoritative diagnostics only. */}
           <details data-testid="legacy-diagnostics">
             <summary className="cursor-pointer text-sm font-medium text-zinc-500 dark:text-zinc-400">

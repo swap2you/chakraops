@@ -57,6 +57,7 @@ vi.mock("@/api/queries", () => ({
   usePortfolioMtm: () => ({ data: null }),
   useSharesCandidates: () => ({ data: null }),
   useActionNeeded: (...a: unknown[]) => mockUseActionNeeded(...a),
+  useNotifications: () => ({ data: { notifications: [] } }),
   useRunEval: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false, isSuccess: false, isError: false, error: null }),
 }));
 

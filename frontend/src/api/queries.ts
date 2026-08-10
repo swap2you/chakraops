@@ -2980,3 +2980,81 @@ export function useAdminEvaluationForce() {
     },
   });
 }
+
+// =============================================================================
+// R52/R53: Broker MCP read-only
+// =============================================================================
+
+export type BrokerStatusResponse = {
+  status?: string;
+  status_code?: string;
+  reason?: string;
+  blocker?: string | null;
+  manual_only?: boolean;
+  trade_execution?: boolean;
+  ROBINHOOD_MCP_READ_ONLY_AVAILABLE?: boolean;
+};
+
+export type BrokerAccountRow = {
+  alias: string;
+  account_type?: string;
+  masked_account_number?: string;
+  display_name?: string;
+};
+
+export type BrokerSnapshotPayload = {
+  account_alias?: string;
+  fetched_at?: string;
+  stale?: boolean;
+  completeness?: string;
+  balances?: {
+    cash?: number | null;
+    buying_power?: number | null;
+    equity?: number | null;
+    market_value?: number | null;
+  };
+  equity_positions?: Array<{
+    symbol: string;
+    quantity: number;
+    average_cost?: number | null;
+    market_value?: number | null;
+  }>;
+  option_positions?: Array<{
+    symbol: string;
+    option_type?: string;
+    strike?: number | null;
+    quantity?: number;
+  }>;
+};
+
+export function useBrokerStatus() {
+  return useQuery({
+    queryKey: ["ui", "broker", "status"],
+    queryFn: () => apiGet<BrokerStatusResponse>("/api/ui/broker/status"),
+    staleTime: 15_000,
+  });
+}
+
+export function useBrokerAccounts() {
+  return useQuery({
+    queryKey: ["ui", "broker", "accounts"],
+    queryFn: () =>
+      apiGet<{ accounts: BrokerAccountRow[]; errors?: string[]; status?: string }>("/api/ui/broker/accounts"),
+    staleTime: 30_000,
+  });
+}
+
+export function useBrokerSnapshot(accountAlias = "acct_individual", refresh = false) {
+  const q = refresh ? "?refresh=true&" : "?";
+  return useQuery({
+    queryKey: ["ui", "broker", "snapshot", accountAlias, refresh],
+    queryFn: () =>
+      apiGet<{
+        snapshot: BrokerSnapshotPayload | null;
+        stale?: boolean;
+        status?: string;
+        account_alias?: string;
+      }>(`/api/ui/broker/snapshot${q}account_alias=${encodeURIComponent(accountAlias)}`),
+    staleTime: 15_000,
+  });
+}

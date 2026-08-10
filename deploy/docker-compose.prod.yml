@@ -1,0 +1,131 @@
+# R57 — Secure production Compose scaffolding (domain/VPS binding may be external).
+#
+# From repo root:
+#   copy deploy\.env.prod.example deploy\.env.prod   # then edit secrets locally
+#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod up -d --build
+#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod --profile postgres up -d --build
+#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod --profile monitor up -d
+#
+# Safety: scheduler disabled via env; no broker write enable flags; API not published to host
+# (only frontend nginx on 18873; /api proxied internally). Secrets via env_file / mounts only.
+
+name: chakraops-prod
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    environment:
+      CHAKRAOPS_SCHEDULER_ENABLED: "false"
+      CHAKRAOPS_LEGACY_SCHEDULERS_ENABLED: "false"
+      CHAKRAOPS_ALLOW_ENV_SCHEDULER_OPT_IN: "false"
+      trade_execution: "false"
+      manual_only: "true"
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://127.0.0.1:18873}
+    volumes:
+      - chakraops_data:/workspace/chakraops/data
+      - chakraops_out:/workspace/out
+      # Mount Robinhood token file when using ROBINHOOD_MCP_TOKEN_PATH (host path optional):
+      # - ${ROBINHOOD_TOKEN_HOST_PATH:-./secrets/robinhood_mcp_token}:/run/secrets/robinhood_mcp_token:ro
+    expose:
+      - "8000"
+    # Intentionally no host ports — reverse proxy only (no public raw FastAPI).
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+      args:
+        # Same-origin /api via nginx proxy
+        VITE_API_BASE_URL: ""
+    restart: unless-stopped
+    ports:
+      - "18873:80"
+    depends_on:
+      api:
+        condition: service_started
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional Postgres — enable with: --profile postgres
+  postgres:
+    profiles: ["postgres"]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-chakraops}
+      # Required for --profile postgres; default is a placeholder — replace in .env.prod before real use.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CHANGE_ME}
+      POSTGRES_DB: ${POSTGRES_DB:-chakraops}
+    volumes:
+      - chakraops_pg:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional advisory monitor worker placeholder — does NOT enable scheduler or broker writes.
+  # Enable with: --profile monitor
+  monitor:
+    profiles: ["monitor"]
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    environment:
+      CHAKRAOPS_SCHEDULER_ENABLED: "false"
+      CHAKRAOPS_LEGACY_SCHEDULERS_ENABLED: "false"
+      trade_execution: "false"
+      manual_only: "true"
+      CHAKRAOPS_MONITOR_ROLE: "advisory_placeholder"
+    volumes:
+      - chakraops_data:/workspace/chakraops/data
+      - chakraops_out:/workspace/out
+    # Placeholder: idle loop until a dedicated advisory monitor entrypoint exists (R58+).
+    command:
+      [
+        "python",
+        "-c",
+        "import time; print('R57 monitor placeholder: advisory-only; scheduler off; no broker writes'); time.sleep(10**9)",
+      ]
+    depends_on:
+      api:
+        condition: service_started
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+volumes:
+  chakraops_data:
+  chakraops_out:
+  chakraops_pg:

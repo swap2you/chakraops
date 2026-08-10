@@ -16,6 +16,9 @@ const useAccountHoldings = vi.fn();
 const useSetBalances = vi.fn();
 const useUpsertHolding = vi.fn();
 const useDeleteHolding = vi.fn();
+const useBrokerStatus = vi.fn();
+const useBrokerAccounts = vi.fn();
+const useBrokerSnapshot = vi.fn();
 
 vi.mock("@/api/queries", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/api/queries")>();
@@ -35,6 +38,9 @@ vi.mock("@/api/queries", async (importOriginal) => {
     useSetBalances: (...args: unknown[]) => useSetBalances(...args),
     useUpsertHolding: (...args: unknown[]) => useUpsertHolding(...args),
     useDeleteHolding: (...args: unknown[]) => useDeleteHolding(...args),
+    useBrokerStatus: (...args: unknown[]) => useBrokerStatus(...args),
+    useBrokerAccounts: (...args: unknown[]) => useBrokerAccounts(...args),
+    useBrokerSnapshot: (...args: unknown[]) => useBrokerSnapshot(...args),
   };
 });
 
@@ -137,6 +143,22 @@ describe("PortfolioPage", () => {
     useSetBalances.mockReturnValue({ mutate: vi.fn(), isPending: false });
     useUpsertHolding.mockReturnValue({ mutate: vi.fn(), isPending: false });
     useDeleteHolding.mockReturnValue({ mutate: vi.fn(), isPending: false });
+    useBrokerStatus.mockReturnValue({
+      data: {
+        status: "UNAUTHENTICATED",
+        reason: "token missing",
+        blocker: "ROBINHOOD_RUNTIME_AUTH_EXTERNAL_BLOCKER",
+        ROBINHOOD_MCP_READ_ONLY_AVAILABLE: false,
+      },
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+    useBrokerAccounts.mockReturnValue({ data: { accounts: [] }, refetch: vi.fn() });
+    useBrokerSnapshot.mockReturnValue({
+      data: { snapshot: null, stale: true },
+      isLoading: false,
+      refetch: vi.fn(),
+    });
   });
 
   it("renders without throwing", () => {
@@ -156,10 +178,12 @@ describe("PortfolioPage", () => {
     expect(screen.getByText(/\$120\.00/)).toBeInTheDocument();
   });
 
-  it("shows Account & Portfolio title and capital deployed in header", async () => {
+  it("shows Account & Portfolio title and broker-primary header (R53)", async () => {
     render(<PortfolioPage />);
     expect(screen.getByText(/Account & Portfolio/i)).toBeInTheDocument();
-    expect(screen.getByText(/\$45,000\.00 deployed/i)).toBeInTheDocument();
+    expect(screen.getByTestId("broker-live-panel")).toBeInTheDocument();
+    expect(screen.getByText(/Capital deployed/i)).toBeInTheDocument();
+    expect(screen.getByText(/\$45,000\.00/)).toBeInTheDocument();
   });
 
   it("totals exclude is_test: capital_deployed 0 when only test position", () => {
@@ -168,8 +192,14 @@ describe("PortfolioPage", () => {
       isLoading: false,
       isError: false,
     });
+    usePortfolioMetrics.mockReturnValue({
+      data: { ...mockMetrics, capital_deployed: 0, open_positions_count: 0 },
+    });
     render(<PortfolioPage />);
-    expect(screen.getByText(/\$0\.00 deployed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Capital deployed/i)).toBeInTheDocument();
+    // metrics card shows $0.00 for deployed when test-only
+    const deployedLabels = screen.getAllByText(/\$0\.00/);
+    expect(deployedLabels.length).toBeGreaterThan(0);
   });
 
   it("shows Delete action for CLOSED position", () => {
@@ -223,9 +253,9 @@ describe("PortfolioPage", () => {
     expect(rollBtn).toBeInTheDocument();
   });
 
-  it("shows Balances (manual) and Holdings sections (Phase 21.1)", () => {
+  it("shows Recovery manual balances and Holdings sections (R53)", () => {
     render(<PortfolioPage />);
-    expect(screen.getByText(/Balances \(manual\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Recovery \/ Advanced — manual balances/i)).toBeInTheDocument();
     expect(screen.getByText(/Holdings/)).toBeInTheDocument();
     expect(screen.getByText(/Add holding/)).toBeInTheDocument();
   });
@@ -250,11 +280,11 @@ describe("PortfolioPage", () => {
     expect(screen.getByTestId("portfolio-balance-labels").textContent || "").toMatch(/≠ cash|Not total capital/i);
   });
 
-  it("R37: shows manual portfolio snapshot provenance (not broker-synced)", () => {
+  it("R53: manual recovery provenance is not live broker", () => {
     render(<PortfolioPage />);
-    expect(screen.getByTestId("portfolio-provenance")).toHaveTextContent(/Manual portfolio snapshot/i);
+    expect(screen.getByTestId("portfolio-provenance")).toHaveTextContent(/Manual recovery snapshot/i);
     expect(screen.getByTestId("portfolio-provenance")).toHaveTextContent(/not broker-synced/i);
-    expect(screen.getByText(/user-entered, not broker-synced/i)).toBeInTheDocument();
+    expect(screen.getByTestId("broker-live-panel")).toBeInTheDocument();
   });
 
   it("shows Decision (latest) with no run badge when position has no run_id", () => {

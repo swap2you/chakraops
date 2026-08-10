@@ -109,17 +109,33 @@ def broker_reconcile_summary(
     account_alias: str = Query("acct_individual"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """R52 stub: reconcile summary placeholder (no auto-mutation)."""
+    """R53: compare manual holdings vs broker snapshot. No auto-mutation."""
     _require_ui_key(x_ui_key)
+    from app.core.broker.reconcile_r53 import reconcile_manual_vs_broker
+
     snap = load_snapshot(account_alias)
-    return {
-        "manual_only": True,
-        "trade_execution": False,
-        "account_alias": account_alias,
-        "status": "STUB",
-        "message": "R52 reconcile summary stub — comparison rules deferred; no auto-mutation.",
-        "has_broker_snapshot": snap is not None,
-        "snapshot_stale": bool(snap.stale) if snap else None,
-        "diffs": [],
-        "actions": [],
-    }
+    manual_holdings: list = []
+    try:
+        from app.core.portfolio import holdings_db  # type: ignore
+
+        if hasattr(holdings_db, "list_holdings"):
+            manual_holdings = list(holdings_db.list_holdings() or [])
+        elif hasattr(holdings_db, "get_holdings"):
+            manual_holdings = list(holdings_db.get_holdings() or [])
+    except Exception:
+        manual_holdings = []
+
+    broker_equities = []
+    if snap is not None:
+        broker_equities = [p.to_dict() for p in snap.equity_positions]
+
+    result = reconcile_manual_vs_broker(manual_holdings, broker_equities)
+    result.update(
+        {
+            "account_alias": account_alias,
+            "has_broker_snapshot": snap is not None,
+            "snapshot_stale": bool(snap.stale) if snap else None,
+            "actions": [],
+        }
+    )
+    return result

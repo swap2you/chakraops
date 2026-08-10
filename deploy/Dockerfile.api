@@ -1,0 +1,30 @@
+# R57: API production image. Build from repo root:
+#   docker build -f deploy/Dockerfile.api -t chakraops-api:prod .
+#
+# Secrets are NOT copied — inject via compose env_file / runtime mounts only.
+
+FROM python:3.12-slim
+
+WORKDIR /workspace
+
+COPY chakraops /workspace/chakraops
+
+WORKDIR /workspace/chakraops
+ENV PYTHONPATH=/workspace/chakraops
+ENV PYTHONUNBUFFERED=1
+# Fail-closed defaults baked as process env; compose must not override to enable writes.
+ENV CHAKRAOPS_SCHEDULER_ENABLED=false
+ENV CHAKRAOPS_LEGACY_SCHEDULERS_ENABLED=false
+ENV trade_execution=false
+ENV manual_only=true
+
+RUN pip install --no-cache-dir -r requirements.txt \
+    && useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser \
+    && mkdir -p /workspace/out /workspace/chakraops/data \
+    && chown -R appuser:appuser /workspace
+
+USER appuser
+
+EXPOSE 8000
+
+CMD ["python", "-m", "uvicorn", "app.api.server:app", "--host", "0.0.0.0", "--port", "8000"]

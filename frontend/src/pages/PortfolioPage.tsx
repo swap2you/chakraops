@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   usePortfolio,
   usePortfolioMetrics,
@@ -16,6 +16,7 @@ import {
 } from "@/api/queries";
 import type { PortfolioPosition, AccountHolding, SharePositionSummary, OptionsPositionSummary } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
+import { BrokerLivePanel } from "@/components/BrokerLivePanel";
 import { ClosePositionDrawer } from "@/components/ClosePositionDrawer";
 import { PortfolioPositionDetailDrawer } from "@/components/PortfolioPositionDetailDrawer";
 import {
@@ -57,6 +58,8 @@ function fmtCurrency(n: number | null | undefined): string {
 }
 
 export function PortfolioPage() {
+  const [searchParams] = useSearchParams();
+  const portfolioTab = (searchParams.get("tab") || "").trim().toLowerCase();
   const { data, isLoading, isError } = usePortfolio();
   const { data: metrics } = usePortfolioMetrics();
   const { data: accountsData } = useAccounts();
@@ -72,6 +75,22 @@ export function PortfolioPage() {
   const [balancesEdit, setBalancesEdit] = useState<{ cash: string; buying_power: string } | null>(null);
   const [holdingForm, setHoldingForm] = useState<{ symbol: string; shares: string; avg_cost: string } | null>(null);
   const [sharesFilter, setSharesFilter] = useState<"all" | "cc_eligible">("all");
+
+  // R53/R56: /positions → /portfolio?tab=holdings; activity surfaces Journal (Portfolio nav)
+  useEffect(() => {
+    if (isLoading || isError) return;
+    const targetId =
+      portfolioTab === "holdings"
+        ? "portfolio-holdings"
+        : portfolioTab === "recovery"
+          ? "portfolio-manual-recovery"
+          : portfolioTab === "activity"
+            ? "portfolio-activity"
+            : null;
+    if (!targetId) return;
+    const el = document.getElementById(targetId);
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [portfolioTab, isLoading, isError]);
 
   const positions = data?.positions ?? [];
   const capitalDeployed = data?.capital_deployed ?? 0;
@@ -123,7 +142,22 @@ export function PortfolioPage() {
 
   return (
     <div className="space-y-8" data-testid="page-portfolio">
-      <PageHeader title="Account & Portfolio" subtext={`${positions.length} position(s) · ${fmtCurrency(capitalDeployed)} deployed`} />
+      <PageHeader
+        title="Account & Portfolio"
+        subtext="Live broker snapshot is primary when available · manual controls are Recovery only"
+      />
+
+      <BrokerLivePanel />
+
+      <Card id="portfolio-activity" data-testid="portfolio-activity">
+        <CardHeader
+          title="Activity"
+          description="Trade journal and decision history live under Portfolio · Journal (not a separate primary workspace)."
+        />
+        <Link to="/journal" className="text-sm text-emerald-600 hover:underline dark:text-emerald-400">
+          Open Journal →
+        </Link>
+      </Card>
 
       {metrics && (
         <Card>
@@ -165,13 +199,13 @@ export function PortfolioPage() {
         </Card>
       )}
 
-      <Card>
+      <Card id="portfolio-manual-recovery" data-testid="portfolio-manual-recovery">
         <CardHeader
-          title="Balances (manual)"
-          description="Manual portfolio snapshot — cash, total capital, and buying power are distinct. Cash and buying power are user-entered, not broker-synced. Total capital is the account sizing base and is not the same as cash."
+          title="Recovery / Advanced — manual balances (NOT live)"
+          description="Manual portfolio snapshot for fallback only. Cash, total capital, and buying power are distinct. These values are user-entered and must never masquerade as live broker data."
         />
-        <p className="mb-3 text-xs text-zinc-500 dark:text-zinc-400" data-testid="portfolio-provenance">
-          Provenance: Manual portfolio snapshot · not broker-synced
+        <p className="mb-3 text-xs text-amber-700 dark:text-amber-300" data-testid="portfolio-provenance">
+          Provenance: Manual recovery snapshot · not broker-synced · not primary
         </p>
         {summary ? (
           balancesEdit ? (
@@ -245,7 +279,7 @@ export function PortfolioPage() {
         )}
       </Card>
 
-      <Card>
+      <Card id="portfolio-holdings" data-testid="portfolio-holdings">
         <CardHeader title="Holdings" description="Manual equity holdings (used for CC eligibility: ≥100 shares)." />
         {holdingForm ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-4 max-w-2xl mb-4">

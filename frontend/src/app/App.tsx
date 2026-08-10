@@ -9,7 +9,6 @@ import { SymbolDiagnosticsPage } from "@/pages/SymbolDiagnosticsPage";
 import { SystemDiagnosticsPage } from "@/pages/SystemDiagnosticsPage";
 import { NotificationsPage } from "@/pages/NotificationsPage";
 import { PortfolioPage } from "@/pages/PortfolioPage";
-import { PositionsPage } from "@/pages/PositionsPage";
 import { WheelPage } from "@/pages/WheelPage";
 import { JournalPage } from "@/pages/JournalPage";
 import { TradeTicketPage } from "@/pages/TradeTicketPage";
@@ -21,6 +20,7 @@ import { LearnPage } from "@/pages/LearnPage";
 import { PaperPage } from "@/pages/PaperPage";
 import { UniverseAdminPage } from "@/pages/UniverseAdminPage";
 import { UniverseHealthPage } from "@/pages/UniverseHealthPage";
+import { OptionsWorkspacePage, StocksWorkspacePage, EtfHedgeWorkspacePage } from "@/pages/StrategyWorkspacePages";
 import { getWheelPageMode } from "@/config/features";
 
 const queryClient = new QueryClient({
@@ -45,6 +45,9 @@ export function App() {
             <Route element={<AppLayout />}>
               <Route path="/" element={<DashboardPage />} />
               <Route path="/opportunities" element={<OpportunitiesPage />} />
+              <Route path="/options" element={<OptionsWorkspacePage />} />
+              <Route path="/stocks" element={<StocksWorkspacePage />} />
+              <Route path="/etf-hedge" element={<EtfHedgeWorkspacePage />} />
               <Route path="/universe" element={<UniversePage />} />
               <Route path="/symbol-diagnostics" element={<SymbolDiagnosticsPage />} />
               <Route path="/system" element={<SystemDiagnosticsPage />} />
@@ -60,7 +63,9 @@ export function App() {
               <Route path="/universe-admin" element={<UniverseAdminPage />} />
               <Route path="/universe-health" element={<UniverseHealthPage />} />
               <Route path="/portfolio" element={<PortfolioPage />} />
-              <Route path="/positions" element={<PositionsPage />} />
+              {/* R53/R56: Positions is not primary nav — preserve deep links via Portfolio holdings */}
+              <Route path="/positions" element={<Navigate to="/portfolio?tab=holdings" replace />} />
+              {/* R56: Wheel remains Advanced-only; hidden mode soft-lands on Command Center */}
               {getWheelPageMode() !== "hidden" ? (
                 <Route path="/wheel" element={<WheelPage />} />
               ) : (

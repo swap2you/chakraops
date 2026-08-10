@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, Header, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Header, HTTPException, Path as FPath, Query, Request
 
 from app.ui.live_dashboard_utils import list_decision_files, list_mock_files, load_decision_artifact
 
@@ -3402,6 +3402,100 @@ def ui_backtest_runs(
         raise HTTPException(status_code=500, detail="Unable to list runs")
 
 
+@router.post("/backtest/r40/run")
+async def ui_backtest_r40_run(
+    request: Request,
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R40: Offline Strategy Lab walk-forward SIMULATION (parallel to journal backtest).
+
+    Body: profile, fixture_dir (optional), trades_fixture (optional),
+    train_start, train_end, oos_start, oos_end, account_capital (optional).
+    Always returns simulation=true, manual_only=true. No broker writes.
+    """
+    _require_ui_key(x_ui_key)
+    try:
+        body = await request.json()
+        profile = (body.get("profile") or "balanced").strip() or "balanced"
+        train_start = (body.get("train_start") or "").strip()[:10]
+        train_end = (body.get("train_end") or "").strip()[:10]
+        oos_start = (body.get("oos_start") or "").strip()[:10]
+        oos_end = (body.get("oos_end") or "").strip()[:10]
+        if not all([train_start, train_end, oos_start, oos_end]):
+            raise HTTPException(
+                status_code=400,
+                detail="train_start, train_end, oos_start, oos_end required (YYYY-MM-DD)",
+            )
+        fixture_dir = body.get("fixture_dir")
+        trades_fixture = body.get("trades_fixture")
+        account_capital = float(body.get("account_capital") or 150_000.0)
+        from pathlib import Path as FsPath
+        from app.core.backtest.r40.walk_forward import run_walk_forward, summarize_for_report
+
+        result = run_walk_forward(
+            profile=profile,
+            fixture_dir=FsPath(fixture_dir) if fixture_dir else None,
+            trades_fixture=FsPath(trades_fixture) if trades_fixture else None,
+            train_start=train_start,
+            train_end=train_end,
+            oos_start=oos_start,
+            oos_end=oos_end,
+            account_capital=account_capital,
+        )
+        summary = summarize_for_report(result)
+        # Persist last run for BacktestPage optional panel (gitignored out/)
+        try:
+            out_dir = _repo_root().parent / "out" / "r40"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "r40_last_run.json").write_text(
+                json.dumps(summary, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
+        return {
+            "status": "OK",
+            "simulation": True,
+            "manual_only": True,
+            "label": "SIMULATION",
+            **summary,
+        }
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)[:200])
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("R40 backtest run error: %s", e)
+        raise HTTPException(status_code=500, detail="Unable to run R40 simulation")
+
+
+@router.get("/backtest/r40/last")
+def ui_backtest_r40_last(
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R40: Read last Strategy Lab simulation summary if present (read-only)."""
+    _require_ui_key(x_ui_key)
+    path = _output_dir().parent / "out" / "r40" / "r40_last_run.json"
+    if not path.is_file():
+        # also check repo-level out/
+        alt = _repo_root().parent / "out" / "r40" / "r40_last_run.json"
+        path = alt if alt.is_file() else path
+    if not path.is_file():
+        return {"status": "OK", "simulation": True, "manual_only": True, "present": False}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return {"status": "OK", "simulation": True, "manual_only": True, "present": False}
+        data["present"] = True
+        data["simulation"] = True
+        data["manual_only"] = True
+        data["status"] = "OK"
+        return data
+    except Exception:
+        return {"status": "OK", "simulation": True, "manual_only": True, "present": False}
+
+
 @router.get("/backtest/download")
 def ui_backtest_download(
     run_id: str = Query(..., description="Run UUID"),
@@ -4325,7 +4419,7 @@ def ui_shares_positions_closed_list(
 
 @router.get("/shares/positions/{symbol}")
 def ui_shares_position_get(
-    symbol: str = Path(..., min_length=1, max_length=12),
+    symbol: str = FPath(..., min_length=1, max_length=12),
     account_id: str = Query(..., description="Account ID"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
@@ -4347,7 +4441,7 @@ def ui_shares_position_get(
 
 @router.post("/shares/positions/{symbol}")
 async def ui_shares_position_upsert(
-    symbol: str = Path(..., min_length=1, max_length=12),
+    symbol: str = FPath(..., min_length=1, max_length=12),
     account_id: str | None = Query(default=None),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
     request: Request = None,
@@ -4414,7 +4508,7 @@ async def ui_shares_position_upsert(
 
 @router.delete("/shares/positions/{symbol}")
 def ui_shares_position_delete(
-    symbol: str = Path(..., min_length=1, max_length=12),
+    symbol: str = FPath(..., min_length=1, max_length=12),
     account_id: str = Query(..., description="Account ID"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
@@ -4436,7 +4530,7 @@ def ui_shares_position_delete(
 
 @router.post("/shares/positions/{symbol}/close")
 async def ui_shares_position_close(
-    symbol: str = Path(..., min_length=1, max_length=12),
+    symbol: str = FPath(..., min_length=1, max_length=12),
     account_id: str | None = Query(default=None),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
     request: Request = None,
@@ -6754,7 +6848,7 @@ def ui_shares_candidates(
 
 @router.post("/symbols/{symbol}/recompute")
 def ui_symbol_recompute(
-    symbol: str = Path(..., min_length=1, max_length=12),
+    symbol: str = FPath(..., min_length=1, max_length=12),
     force: bool = Query(False, description="Override market-closed guardrail; if true bypass snapshot (use fresh data)"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:

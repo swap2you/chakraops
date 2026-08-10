@@ -1,11 +1,13 @@
 /**
  * R27.5: Journal-driven backtest replay. Date range, live/paper/mixed; summary + trades; download JSON/CSV.
+ * R40: Parallel Strategy Lab simulation note / last-run panel (does not replace journal replay).
  * Safe labels only (no FAIL/WARN).
  */
 import { useState } from "react";
 import {
   useBacktestRuns,
   useBacktestRun,
+  useR40LastRun,
   downloadBacktestFile,
 } from "@/api/queries";
 import type { BacktestRunResponse } from "@/api/queries";
@@ -55,6 +57,9 @@ export function BacktestPage() {
   const runMutation = useBacktestRun();
   const { data: runsData } = useBacktestRuns(20, 0);
   const runs = runsData?.runs ?? [];
+  const { data: r40Last } = useR40LastRun();
+  const r40Present = Boolean(r40Last?.present);
+  const r40Oos = r40Last?.oos?.metrics;
 
   const handleRun = () => {
     runMutation.mutate(
@@ -77,6 +82,49 @@ export function BacktestPage() {
         title="Backtest"
         subtext="Replay journal entries for a date range. Deterministic summary and trades."
       />
+
+      <Card data-testid="r40-strategy-lab-note">
+        <CardHeader
+          title="R40 Strategy Lab (simulation)"
+          description="Parallel research lane — walk-forward / OOS metrics. Does not replace journal replay below."
+        />
+        <p className="mb-3 text-sm text-zinc-600 dark:text-zinc-400">
+          Offline CLI: <code className="text-xs">python scripts/run_r40_simulation.py</code>
+          {" "}· API: <code className="text-xs">POST /api/ui/backtest/r40/run</code>
+          {" "}· Always labeled SIMULATION · manual only · no broker writes.
+        </p>
+        <div
+          role="note"
+          data-testid="r40-simulation-banner"
+          className="mb-3 rounded-md border border-amber-500/50 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+        >
+          SIMULATION — NOT A LIVE RECOMMENDATION
+        </div>
+        {r40Present && r40Oos ? (
+          <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4" data-testid="r40-last-run">
+            <div>
+              <span className="block text-xs text-zinc-500">Profile</span>
+              <span className="font-mono">{r40Last?.profile ?? "—"}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500">OOS trades</span>
+              <span className="font-mono">{r40Oos.trade_count ?? "—"}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500">OOS expectancy</span>
+              <span className="font-mono">{r40Oos.expectancy != null ? formatCurrency(r40Oos.expectancy) : "—"}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-zinc-500">OOS max drawdown</span>
+              <span className="font-mono">{r40Oos.max_drawdown != null ? formatCurrency(r40Oos.max_drawdown) : "—"}</span>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400" data-testid="r40-no-last-run">
+            No R40 run on disk yet. Run the CLI or POST /api/ui/backtest/r40/run to populate last-run metrics.
+          </p>
+        )}
+      </Card>
 
       <Card>
         <CardHeader title="Run backtest" />

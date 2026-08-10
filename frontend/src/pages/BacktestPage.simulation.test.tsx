@@ -29,6 +29,10 @@ vi.mock("@/api/queries", () => ({
     mutateAsync: vi.fn().mockResolvedValue(mockRunResponse),
     isPending: false,
   }),
+  useR40LastRun: () => ({
+    data: { status: "OK", simulation: true, manual_only: true, present: false },
+    isLoading: false,
+  }),
   downloadBacktestFile: vi.fn(),
 }));
 

@@ -1,29 +1,30 @@
 # ChakraOps Program Status
 
-Last updated: 2026-08-10 (R39 Command Center / Slack / UX Consolidation IMPLEMENTED; SINGLE_OPERATOR_MAINLINE_LOOP_MODE)
+Last updated: 2026-08-10 (master program R36.3–R40 **COMPLETE** — validated for manual operator use)
 
 ## Workflow
 
 - **Mode:** `SINGLE_OPERATOR_MAINLINE_LOOP_MODE` (see `AGENTS.md`)
-- **Branch:** `main` (direct commits; push only after release acceptance green)
+- **Branch:** `main`
 - **Baseline SHA at program start:** `63d83d00e3ceb9ac15a080a54178adf0d7e78267`
 - **Canonical requirements:** `docs/ai/MASTER_PROGRAM_R36_3_R40_REQUIREMENTS.md`
 - Cursor is the only writing agent unless the operator grants a narrow exception.
 
-| Release | Status | Next action |
+| Release | Status | Notes |
 |---|---|---|
-| R31.0–R35.0 | MERGED (historical program) | — |
-| R35.1 | MERGED | — |
-| R35.2 | MERGED | — |
-| R36.1 | MERGED | — |
-| R36.2 | MERGED | — |
-| R36.3 | VALIDATED | — |
-| R37 | NO_GO | Manual portfolio preserved; continue R38 |
-| R38 | IMPLEMENTED | Wheel & Share Decision Engine V2; await gate/validate |
-| R39 | IMPLEMENTED | Command Center / Opportunities / Slack formatter; await gate/validate |
-| R40 | READY_TO_START | After R39; closes master program |
+| R31.0–R35.0 | MERGED | historical |
+| R35.1 | MERGED | dedicated ports |
+| R35.2 | MERGED | ops hardening |
+| R36.1 | MERGED | explainability |
+| R36.2 | MERGED | Universe V2 |
+| R36.3 | VALIDATED | whole-app trust |
+| R37 | NO_GO | Robinhood RO unavailable; manual portfolio |
+| R38 | VALIDATED | Wheel & Share V2 |
+| R39 | VALIDATED | Command Center / Opportunities / Slack |
+| R40 | VALIDATED | backtest lane + calibration registry + runbook |
 
-## Status values
+## Final
 
-`READY_TO_START`, `ACTIVE`, `BLOCKED`, `IMPLEMENTED`, `VALIDATED`, `MERGED`, `NO_GO`, `DEFERRED`.
-
+See `docs/ai/releases/R40/FINAL_HANDOFF.md` and `docs/ai/validation/R40_ACCEPTANCE_MANIFEST.json`.
+
+Optional independent Codex/Cowork handoffs remain under `docs/ai/releases/R40/` for operator re-confirmation.

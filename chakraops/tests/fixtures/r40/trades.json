@@ -1,0 +1,14 @@
+{
+  "trades": [
+    {"entry_date": "2024-01-15", "symbol": "SPY", "strategy": "CSP", "premium": 1.20, "pnl": 120.0, "capital": 45000, "assigned": false, "bid": 1.15, "ask": 1.25},
+    {"entry_date": "2024-02-10", "symbol": "QQQ", "strategy": "CSP", "premium": 0.90, "pnl": 90.0, "capital": 40000, "assigned": false, "bid": 0.85, "ask": 0.95},
+    {"entry_date": "2024-03-05", "symbol": "IWM", "strategy": "CSP", "premium": 0.70, "pnl": -200.0, "capital": 35000, "assigned": true, "bid": 0.65, "ask": 0.75},
+    {"entry_date": "2024-04-12", "symbol": "SPY", "strategy": "CC", "premium": 1.00, "pnl": 100.0, "capital": 45000, "assigned": false, "bid": 0.95, "ask": 1.05},
+    {"entry_date": "2024-05-20", "symbol": "QQQ", "strategy": "CSP", "premium": 1.10, "pnl": 110.0, "capital": 40000, "assigned": false, "bid": 1.05, "ask": 1.15},
+    {"entry_date": "2024-07-08", "symbol": "SPY", "strategy": "CSP", "premium": 1.30, "pnl": 130.0, "capital": 45000, "assigned": false, "bid": 1.25, "ask": 1.35},
+    {"entry_date": "2024-08-14", "symbol": "IWM", "strategy": "CSP", "premium": 0.80, "pnl": -150.0, "capital": 35000, "assigned": false, "bid": 0.75, "ask": 0.85},
+    {"entry_date": "2024-09-03", "symbol": "QQQ", "strategy": "CC", "premium": 0.95, "pnl": 95.0, "capital": 40000, "assigned": false, "bid": 0.90, "ask": 1.00},
+    {"entry_date": "2024-10-22", "symbol": "SPY", "strategy": "CSP", "premium": 1.05, "pnl": 105.0, "capital": 45000, "assigned": false, "bid": 1.00, "ask": 1.10},
+    {"entry_date": "2024-11-18", "symbol": "IWM", "strategy": "CSP", "premium": 0.60, "pnl": -80.0, "capital": 35000, "assigned": true, "bid": 0.55, "ask": 0.65}
+  ]
+}

@@ -1,0 +1,81 @@
+# R40 Threshold Registry — provenance overlay for strategy_profiles.yaml
+#
+# Runtime decisioning STILL reads config/strategy_profiles.yaml (unchanged).
+# This registry documents whether each key is inherited (from profiles, no
+# R40 calibration evidence yet) or calibrated (requires evidence_path).
+#
+# Profile mapping:
+#   conservative | balanced | aggressive  — built-in profiles from strategy_profiles.yaml
+#   custom                                — derived from balanced + operator overrides at load time
+#                                           (not listed as calibrated keys here; overrides are
+#                                           operator-supplied and still inherit baseline provenance)
+#
+# No production threshold retune without evidence. All keys below are
+# source: inherited with evidence_path: null until a future calibration release.
+
+version: 1
+runtime_source: strategy_profiles.yaml
+registry_role: provenance_overlay
+notes: >
+  R40 introduces this registry so operators can see inherited vs calibrated.
+  Values are not duplicated here; look up numbers in strategy_profiles.yaml.
+  Changing a key to source: calibrated requires a non-null evidence_path and
+  an accepted walk-forward / OOS packet — do not retune in place without that.
+
+profiles:
+  conservative:
+    acceptable_regimes: { source: inherited, evidence_path: null }
+    csp_delta_range: { source: inherited, evidence_path: null }
+    cc_delta_range: { source: inherited, evidence_path: null }
+    dte_range: { source: inherited, evidence_path: null }
+    min_return_pct: { source: inherited, evidence_path: null }
+    earnings_blackout_days: { source: inherited, evidence_path: null }
+    liquidity.min_open_interest: { source: inherited, evidence_path: null }
+    liquidity.min_volume: { source: inherited, evidence_path: null }
+    liquidity.max_bid_ask_spread_pct: { source: inherited, evidence_path: null }
+    max_position_allocation_pct: { source: inherited, evidence_path: null }
+    max_symbol_exposure_pct: { source: inherited, evidence_path: null }
+    max_sector_exposure_pct: { source: inherited, evidence_path: null }
+    cash_buffer_pct: { source: inherited, evidence_path: null }
+    actionable_min_score: { source: inherited, evidence_path: null }
+    max_recommendations: { source: inherited, evidence_path: null }
+    profit_management.take_profit_pct: { source: inherited, evidence_path: null }
+    profit_management.roll_at_dte: { source: inherited, evidence_path: null }
+
+  balanced:
+    acceptable_regimes: { source: inherited, evidence_path: null }
+    csp_delta_range: { source: inherited, evidence_path: null }
+    cc_delta_range: { source: inherited, evidence_path: null }
+    dte_range: { source: inherited, evidence_path: null }
+    min_return_pct: { source: inherited, evidence_path: null }
+    earnings_blackout_days: { source: inherited, evidence_path: null }
+    liquidity.min_open_interest: { source: inherited, evidence_path: null }
+    liquidity.min_volume: { source: inherited, evidence_path: null }
+    liquidity.max_bid_ask_spread_pct: { source: inherited, evidence_path: null }
+    max_position_allocation_pct: { source: inherited, evidence_path: null }
+    max_symbol_exposure_pct: { source: inherited, evidence_path: null }
+    max_sector_exposure_pct: { source: inherited, evidence_path: null }
+    cash_buffer_pct: { source: inherited, evidence_path: null }
+    actionable_min_score: { source: inherited, evidence_path: null }
+    max_recommendations: { source: inherited, evidence_path: null }
+    profit_management.take_profit_pct: { source: inherited, evidence_path: null }
+    profit_management.roll_at_dte: { source: inherited, evidence_path: null }
+
+  aggressive:
+    acceptable_regimes: { source: inherited, evidence_path: null }
+    csp_delta_range: { source: inherited, evidence_path: null }
+    cc_delta_range: { source: inherited, evidence_path: null }
+    dte_range: { source: inherited, evidence_path: null }
+    min_return_pct: { source: inherited, evidence_path: null }
+    earnings_blackout_days: { source: inherited, evidence_path: null }
+    liquidity.min_open_interest: { source: inherited, evidence_path: null }
+    liquidity.min_volume: { source: inherited, evidence_path: null }
+    liquidity.max_bid_ask_spread_pct: { source: inherited, evidence_path: null }
+    max_position_allocation_pct: { source: inherited, evidence_path: null }
+    max_symbol_exposure_pct: { source: inherited, evidence_path: null }
+    max_sector_exposure_pct: { source: inherited, evidence_path: null }
+    cash_buffer_pct: { source: inherited, evidence_path: null }
+    actionable_min_score: { source: inherited, evidence_path: null }
+    max_recommendations: { source: inherited, evidence_path: null }
+    profit_management.take_profit_pct: { source: inherited, evidence_path: null }
+    profit_management.roll_at_dte: { source: inherited, evidence_path: null }

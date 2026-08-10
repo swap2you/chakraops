@@ -1,0 +1,29 @@
+{
+  "release": "R40",
+  "verdict": "ACCEPT",
+  "program_verdict": "COMPLETE_VALIDATED_FOR_MANUAL_OPERATOR_USE",
+  "gates": {
+    "backend": "1521 passed, 2 skipped",
+    "frontend": "349 passed, 18 skipped",
+    "build": "PASS"
+  },
+  "open_blocker_high": 0,
+  "reviews": {
+    "cursor_adversarial": "GO",
+    "cursor_uat": "PASS_WITH_NOTES",
+    "codex_handoff": "PREPARED",
+    "cowork_handoff": "PREPARED"
+  },
+  "deferred_non_blocking": [
+    "Universe V2 snapshot stale until market-hours ORATS refresh",
+    "Full ORATS historical options client future",
+    "Today ticket queue device-local"
+  ],
+  "safety": {
+    "manual_only": true,
+    "trade_execution": false,
+    "scheduler_enabled": false,
+    "broker_write": false,
+    "robinhood": "NO_GO"
+  }
+}

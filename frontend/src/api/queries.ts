@@ -645,6 +645,13 @@ function uiBacktestDownloadPath(run_id: string, file: "summary_json" | "trades_c
   p.set("file", file);
   return `/api/ui/backtest/download?${p.toString()}`;
 }
+/** R40: Strategy Lab walk-forward simulation (parallel to journal replay) */
+function uiBacktestR40LastPath(): string {
+  return "/api/ui/backtest/r40/last";
+}
+function uiBacktestR40RunPath(): string {
+  return "/api/ui/backtest/r40/run";
+}
 /** R25.6: Universe Admin */
 function uiUniverseAdminPath(params: { limit?: number; offset?: number; status?: string }): string {
   const p = new URLSearchParams();
@@ -747,6 +754,7 @@ export const queryKeys = {
   uiMonthlyCloseFiles: (month: string, pack?: "live" | "paper") => ["ui", "reports", "monthly", "close", "files", month, pack ?? "live"] as const,
   /** R27.5 */
   uiBacktestRuns: (limit?: number, offset?: number) => ["ui", "backtest", "runs", limit ?? 50, offset ?? 0] as const,
+  uiBacktestR40Last: () => ["ui", "backtest", "r40", "last"] as const,
   /** R25.6 */
   uiUniverseAdmin: (params?: Record<string, unknown>) => ["ui", "universe", "admin", params ?? ""] as const,
   uiUniverseHealth: () => ["ui", "universe", "health"] as const,
@@ -2739,6 +2747,54 @@ export async function downloadBacktestFile(run_id: string, file: "summary_json" 
   a.download = file === "summary_json" ? "backtest_summary.json" : "backtest_trades.csv";
   a.click();
   URL.revokeObjectURL(url);
+}
+
+/** R40 Strategy Lab last simulation (optional panel on Backtest page) */
+export interface R40LastRunResponse {
+  status: string;
+  simulation: boolean;
+  manual_only: boolean;
+  present?: boolean;
+  profile?: string;
+  source?: string;
+  label?: string;
+  oos?: {
+    start?: string;
+    end?: string;
+    metrics?: {
+      trade_count?: number;
+      expectancy?: number | null;
+      win_rate?: number | null;
+      max_drawdown?: number;
+      total_pnl?: number;
+    };
+  };
+  train?: { start?: string; end?: string; metrics?: { trade_count?: number } };
+}
+export function useR40LastRun() {
+  return useQuery({
+    queryKey: queryKeys.uiBacktestR40Last(),
+    queryFn: () => apiGet<R40LastRunResponse>(uiBacktestR40LastPath()),
+    retry: false,
+  });
+}
+export function useR40SimulationRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      profile?: string;
+      train_start: string;
+      train_end: string;
+      oos_start: string;
+      oos_end: string;
+      fixture_dir?: string;
+      trades_fixture?: string;
+      account_capital?: number;
+    }) => apiPost<R40LastRunResponse>(uiBacktestR40RunPath(), payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.uiBacktestR40Last() });
+    },
+  });
 }
 export async function downloadMonthlyCloseFile(month: string, file: string, pack: "live" | "paper" = "live"): Promise<void> {
   const blob = await apiGetBlob(uiMonthlyCloseDownloadPath(month, file, pack));

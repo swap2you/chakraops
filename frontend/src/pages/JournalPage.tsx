@@ -132,7 +132,7 @@ export function JournalPage() {
     <div className="space-y-6 p-6">
       <PageHeader
         title="Journal"
-        subtext="Record manual executions (shares and options). Export to CSV."
+        subtext="Canonical fill record for manual executions (shares and options). Export to CSV."
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -177,6 +177,13 @@ export function JournalPage() {
           </div>
         }
       />
+
+      <div
+        className="rounded border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300"
+        data-testid="journal-canonical-banner"
+      >
+        Journal is the canonical fill record for manual executions. Paper and live fills may both appear here when included; Portfolio is separate.
+      </div>
 
       <div className="flex flex-wrap items-center gap-4">
         <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">

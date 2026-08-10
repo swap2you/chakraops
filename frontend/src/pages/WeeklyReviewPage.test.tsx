@@ -35,6 +35,14 @@ describe("WeeklyReviewPage", () => {
     expect(screen.getByText(/100\.00/)).toBeInTheDocument();
   });
 
+  it("R45: shows sample-size caveat without unsupported performance claims", () => {
+    renderWithRoute(<WeeklyReviewPage />, "/weekly");
+    const caveat = screen.getByTestId("weekly-sample-caveat");
+    expect(caveat).toHaveTextContent(/sample sizes/i);
+    expect(caveat).toHaveTextContent(/not treat short-window/i);
+    expect(caveat.textContent || "").not.toMatch(/guaranteed|alpha|beat the market/i);
+  });
+
   it("mark done calls mutation with WEEKLY kind", async () => {
     const mutateMock = vi.fn();
     mockMarkDone.mockReturnValue({ mutate: mutateMock, isPending: false });

@@ -21,6 +21,12 @@ describe("LearnPage", () => {
     expect(screen.getByText("Links")).toBeInTheDocument();
   });
 
+  it("R45: shows education not live advice banner", () => {
+    render(<LearnPage />);
+    expect(screen.getByTestId("learn-education-banner")).toHaveTextContent(/Education only/i);
+    expect(screen.getByTestId("learn-education-banner")).toHaveTextContent(/not live trading advice/i);
+  });
+
   it("renders internal links to Today, Ticket, Journal, Reports, System", () => {
     render(<LearnPage />);
     expect(screen.getAllByRole("link", { name: /today/i }).length).toBeGreaterThanOrEqual(1);

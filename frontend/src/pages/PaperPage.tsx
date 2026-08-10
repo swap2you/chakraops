@@ -146,7 +146,16 @@ export function PaperPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Paper Portfolio" subtext="Simulated positions and P/L (CSP/CC/SHARES). Manual only." />
+      <PageHeader
+        title="Paper Portfolio"
+        subtext="SIMULATION — isolated from the live portfolio. Simulated positions and P/L (CSP/CC/SHARES). Manual only."
+      />
+      <div
+        className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-100"
+        data-testid="paper-simulation-banner"
+      >
+        <strong>SIMULATION</strong> — Paper results are not live account balances and do not update Portfolio cash or holdings.
+      </div>
       {summary && (
         <Card data-testid="paper-summary-card">
           <CardHeader title={`Summary — ${month}`} />

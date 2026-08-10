@@ -12,6 +12,12 @@ export function LearnPage() {
         title="Learn"
         subtext="Operator guide: daily routine, key terms, and links. No auto-trading; you stay in control."
       />
+      <div
+        className="rounded border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-800 dark:bg-sky-900/30 dark:text-sky-100 max-w-4xl"
+        data-testid="learn-education-banner"
+      >
+        Education only — not live trading advice. Suggestions remain advisory; you decide and execute manually.
+      </div>
 
       <div className="grid gap-6 md:grid-cols-1 max-w-4xl">
         {/* A) Daily routine */}

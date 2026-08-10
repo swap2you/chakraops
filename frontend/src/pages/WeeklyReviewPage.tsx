@@ -35,7 +35,7 @@ export function WeeklyReviewPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Weekly Review" subtext="Week summary and checklist" />
+      <PageHeader title="Weekly Review" subtext="Week summary and checklist — sample-size aware; not a performance guarantee." />
       {pending && (
         <div
           className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-200"
@@ -44,6 +44,12 @@ export function WeeklyReviewPage() {
           Weekly review checklist pending for week {weekKey}.
         </div>
       )}
+      <div
+        className="rounded border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300"
+        data-testid="weekly-sample-caveat"
+      >
+        Figures reflect journaled fills for this week only. Small sample sizes can mislead — do not treat short-window P/L as expected future performance.
+      </div>
 
       <Card data-testid="weekly-summary-card">
         <CardHeader

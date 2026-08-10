@@ -86,6 +86,12 @@ describe("JournalPage", () => {
     expect(screen.getAllByText(/SHARES/).length).toBeGreaterThanOrEqual(1);
   });
 
+  it("R45: states Journal is the canonical fill record", () => {
+    render(<JournalPage />);
+    expect(screen.getByTestId("journal-canonical-banner")).toHaveTextContent(/canonical fill record/i);
+    expect(screen.getByText(/Canonical fill record/i)).toBeInTheDocument();
+  });
+
   it("document text does not contain FAIL or WARN (R25.5 safety)", () => {
     const { container } = render(<JournalPage />);
     const text = container.textContent ?? "";

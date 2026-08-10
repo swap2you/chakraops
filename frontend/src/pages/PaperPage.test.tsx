@@ -76,6 +76,13 @@ describe("PaperPage", () => {
     expect(screen.getByText(/Realized P\/L:/)).toBeInTheDocument();
   });
 
+  it("R45: labels SIMULATION and isolation from live portfolio", () => {
+    render(<PaperPage />);
+    expect(screen.getByTestId("paper-simulation-banner")).toHaveTextContent(/SIMULATION/i);
+    expect(screen.getByTestId("paper-simulation-banner")).toHaveTextContent(/not live account/i);
+    expect(screen.getByText(/isolated from the live portfolio/i)).toBeInTheDocument();
+  });
+
   it("renders Open and Closed tabs and positions card", () => {
     render(<PaperPage />);
     expect(screen.getByTestId("paper-tab-open")).toBeInTheDocument();

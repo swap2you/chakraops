@@ -1,8 +1,9 @@
 // Copyright 2026 ChakraOps
 // SPDX-License-Identifier: MIT
-/** R39: Opportunities page — strategy buckets + near miss / blocked. */
+/** R39/R56: Opportunities page — strategy workspace tabs + buckets. */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@/test/test-utils";
+import userEvent from "@testing-library/user-event";
+import { screen, renderWithRoute } from "@/test/test-utils";
 import { OpportunitiesPage } from "./OpportunitiesPage";
 
 function item(symbol: string, strategy: string, action = "ENTRY", extra: Record<string, unknown> = {}) {
@@ -62,29 +63,56 @@ describe("OpportunitiesPage", () => {
     mockUseActionNeeded.mockReturnValue({ data: payload, isLoading: false, isError: false });
   });
 
-  it("renders page and strategy sections", () => {
-    render(<OpportunitiesPage />);
+  it("renders page and Options workspace sections by default", () => {
+    renderWithRoute(<OpportunitiesPage />, "/opportunities");
     expect(screen.getByTestId("opportunities-page")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /opportunities/i })).toBeInTheDocument();
+    expect(screen.getByTestId("opp-strategy-tabs")).toBeInTheDocument();
+    expect(screen.getByTestId("opp-tab-options")).toHaveAttribute("aria-selected", "true");
     expect(screen.getByTestId("opp-section-csp")).toBeInTheDocument();
     expect(screen.getByTestId("opp-section-cc")).toBeInTheDocument();
-    expect(screen.getByTestId("opp-section-shares")).toBeInTheDocument();
+    expect(screen.queryByTestId("opp-section-shares")).not.toBeInTheDocument();
     expect(screen.getByTestId("opp-section-watch")).toBeInTheDocument();
     expect(screen.getByTestId("opp-section-near-miss")).toBeInTheDocument();
     expect(screen.getByTestId("opp-section-blocked")).toBeInTheDocument();
   });
 
-  it("lists CSP / CC / Shares / Watch / Blocked symbols", () => {
-    render(<OpportunitiesPage />);
+  it("lists CSP / CC / Watch / Blocked on Options tab", () => {
+    renderWithRoute(<OpportunitiesPage />, "/opportunities");
     expect(screen.getByTestId("opp-csp-AAPL")).toBeInTheDocument();
     expect(screen.getByTestId("opp-cc-MSFT")).toBeInTheDocument();
-    expect(screen.getByTestId("opp-shares-WMT")).toBeInTheDocument();
+    expect(screen.queryByTestId("opp-shares-WMT")).not.toBeInTheDocument();
     expect(screen.getByTestId("opp-watch-TSLA")).toBeInTheDocument();
     expect(screen.getByTestId("opp-blocked-ZZZZ")).toBeInTheDocument();
   });
 
-  it("shows universe near-miss symbols", () => {
-    render(<OpportunitiesPage />);
+  it("Stocks workspace shows shares section", async () => {
+    const user = userEvent.setup();
+    renderWithRoute(<OpportunitiesPage />, "/opportunities");
+    await user.click(screen.getByTestId("opp-tab-stocks"));
+    expect(screen.getByTestId("opp-tab-stocks")).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("opp-section-shares")).toBeInTheDocument();
+    expect(screen.getByTestId("opp-shares-WMT")).toBeInTheDocument();
+    expect(screen.queryByTestId("opp-section-csp")).not.toBeInTheDocument();
+  });
+
+  it("honors ?strategy=stocks deep link", () => {
+    renderWithRoute(<OpportunitiesPage />, "/opportunities?strategy=stocks");
+    expect(screen.getByTestId("opp-tab-stocks")).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("opp-shares-WMT")).toBeInTheDocument();
+  });
+
+  it("ETF/Hedge workspace is honest deferred empty state", async () => {
+    const user = userEvent.setup();
+    renderWithRoute(<OpportunitiesPage />, "/opportunities");
+    await user.click(screen.getByTestId("opp-tab-etf-hedge"));
+    expect(screen.getByTestId("opp-section-etf-hedge")).toBeInTheDocument();
+    expect(screen.getByText(/optimizer not shipped yet/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("opp-section-csp")).not.toBeInTheDocument();
+  });
+
+  it("shows universe near-miss symbols on Options workspace", () => {
+    renderWithRoute(<OpportunitiesPage />, "/opportunities");
     expect(screen.getByTestId("opp-near-miss-uv2-NEAR1")).toBeInTheDocument();
   });
 });

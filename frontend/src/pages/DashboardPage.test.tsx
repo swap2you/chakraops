@@ -26,6 +26,26 @@ vi.mock("@/api/queries", () => ({
   useUniverse: () => ({ data: mockUniverse }),
   useUiSystemHealth: (...args: unknown[]) => mockUseUiSystemHealth(...args),
   useUnifiedPositionsFromDb: () => ({ data: { count: 0, items: [] } }),
+  useLivePositionLenses: () => ({
+    data: {
+      live_open_count: 3,
+      live_equity_count: 3,
+      live_option_count: 0,
+      live_authority: "broker_snapshot",
+      live_state: "FRESH",
+      as_of: "2026-08-11T21:15:57Z",
+      lenses: {
+        LIVE_BROKER_EQUITY_POSITIONS: {
+          count: 3,
+          items: [
+            { symbol: "NVDA", quantity: 300, average_cost: 157 },
+            { symbol: "AMZN", quantity: 25, average_cost: 216 },
+            { symbol: "SMCI", quantity: 425, average_cost: 30 },
+          ],
+        },
+      },
+    },
+  }),
   usePortfolio: () => ({ data: { capital_deployed: 0, positions: [] } }),
   useDefaultAccount: () => ({ data: { account: { account_id: "acct_1" } } }),
   usePortfolioMtm: (...args: unknown[]) => mockUsePortfolioMtm(...args),

@@ -225,7 +225,7 @@ export function PortfolioPage() {
           <CardHeader title="Portfolio Metrics" />
           <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4 lg:grid-cols-6">
             <div>
-              <span className="block text-xs text-zinc-500 dark:text-zinc-400">Open positions</span>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-400">Open positions (tracked/manual)</span>
               <span className="font-mono font-medium text-zinc-900 dark:text-zinc-200">{metrics.open_positions_count}</span>
             </div>
             <div>
@@ -666,7 +666,7 @@ export function PortfolioPage() {
               </span>
             </div>
             <div>
-              <span className="block text-xs text-zinc-500 dark:text-zinc-400">Open positions</span>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-400">Open positions (tracked/manual)</span>
               <span className="font-mono text-zinc-700 dark:text-zinc-300">{openPositionsCount}</span>
             </div>
           </div>

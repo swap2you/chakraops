@@ -244,14 +244,44 @@ def _get_positions_unified_integrity_check_health() -> Dict[str, Any]:
     except Exception:
         return {
             "last_checked_at_utc": None,
-            "last_status": "OK",
-            "last_status_label": "OK",
+            "last_status": "NOT_RUN",
+            "last_status_label": "Integrity check not run",
             "last_stale": False,
             "last_reconcile_missing_count": None,
             "last_reconcile_extra_count": None,
             "last_reconcile_mismatched_count": None,
             "last_started_at_utc": None,
             "last_sample_items": None,
+        }
+
+
+def _get_live_position_lenses_health() -> Dict[str, Any]:
+    """R70-ABCD: compact live lens counts for system-health (no full position payloads)."""
+    try:
+        from app.core.portfolio.live_position_lenses_r70 import build_live_position_lenses
+
+        full = build_live_position_lenses()
+        return {
+            "live_state": full.get("live_state"),
+            "live_authority": full.get("live_authority"),
+            "live_open_count": full.get("live_open_count"),
+            "live_equity_count": full.get("live_equity_count"),
+            "live_option_count": full.get("live_option_count"),
+            "manual_open_count": full.get("manual_open_count"),
+            "paper_open_count": full.get("paper_open_count"),
+            "as_of": full.get("as_of"),
+            "sizing_blocked": full.get("sizing_blocked"),
+            "broker_status": full.get("broker_status"),
+        }
+    except Exception:
+        return {
+            "live_state": "UNAVAILABLE",
+            "live_open_count": 0,
+            "live_equity_count": 0,
+            "live_option_count": 0,
+            "manual_open_count": 0,
+            "paper_open_count": 0,
+            "sizing_blocked": True,
         }
 
 
@@ -1426,6 +1456,7 @@ def ui_system_health(
         "positions_unified_reconcile": _get_positions_unified_reconcile_health(),
         "positions_unified_rebuild": _get_positions_unified_rebuild_health(),
         "positions_unified_integrity_check": _get_positions_unified_integrity_check_health(),
+        "live_position_lenses": _get_live_position_lenses_health(),
     }
 
 
@@ -4665,14 +4696,21 @@ def ui_shares_position_delete(
     account_id: str = Query(..., description="Account ID"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """R23.0: Delete share position for account+symbol."""
+    """R23.0/R70-ABCD: Delete share position and un-mirror unified orphans for symbol."""
     _require_ui_key(x_ui_key)
     try:
         from app.core.accounts.holdings_db import delete_share_position
         deleted = delete_share_position(account_id, symbol)
         if not deleted:
             raise HTTPException(status_code=404, detail=f"No share position for {symbol}")
-        return {"deleted": True, "symbol": symbol.strip().upper()}
+        unmirrored = 0
+        try:
+            from app.core.portfolio.live_position_lenses_r70 import unmirror_live_shares_open_by_symbol
+
+            unmirrored = unmirror_live_shares_open_by_symbol(symbol)
+        except Exception:
+            pass
+        return {"deleted": True, "symbol": symbol.strip().upper(), "unified_unmirrored": unmirrored}
     except HTTPException:
         raise
     except Exception as e:
@@ -4803,6 +4841,30 @@ def ui_positions_unified(
         import logging
         logging.getLogger(__name__).exception("Error building unified positions: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/positions/live-lenses")
+def ui_positions_live_lenses(
+    account_alias: str = Query(default="acct_individual"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R70-ABCD Batch A: explicit LIVE vs manual/paper/historical lenses. Broker is LIVE when ready."""
+    _require_ui_key(x_ui_key)
+    from app.core.portfolio.live_position_lenses_r70 import build_live_position_lenses
+
+    return build_live_position_lenses(account_alias=account_alias or "acct_individual")
+
+
+@router.post("/positions/historicalize-orphans")
+def ui_positions_historicalize_orphans(
+    dry_run: bool = Query(default=False),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """R70-ABCD: archive orphan unified live_shares with no holdings counterpart, then rebuild."""
+    _require_ui_key(x_ui_key)
+    from app.core.portfolio.live_position_lenses_r70 import historicalize_orphan_unified_live_shares
+
+    return historicalize_orphan_unified_live_shares(dry_run=dry_run)
 
 
 @router.get("/positions/unified/db")

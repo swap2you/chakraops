@@ -1386,13 +1386,13 @@ def run_positions_unified_integrity_check(include_paper: bool = True) -> Dict[st
 
 
 def get_positions_unified_integrity_check_health() -> Dict[str, Any]:
-    """R29.3/R29.4: System-health block positions_unified_integrity_check. Read-only from state file; safe only."""
+    """R29.3/R29.4/R70-ABCD: System-health integrity block. Never-run → NOT_RUN (not false OK)."""
     state = load_integrity_check_state()
     if not state or not isinstance(state, dict):
         return {
             "last_checked_at_utc": None,
-            "last_status": "OK",
-            "last_status_label": "OK",
+            "last_status": "NOT_RUN",
+            "last_status_label": "Integrity check not run",
             "last_stale": False,
             "last_reconcile_missing_count": None,
             "last_reconcile_extra_count": None,
@@ -1402,10 +1402,18 @@ def get_positions_unified_integrity_check_health() -> Dict[str, Any]:
         }
     last = state.get("last")
     if isinstance(last, dict):
+        finished = last.get("finished_at_utc")
+        status = last.get("status")
+        if not finished and not status:
+            status = "NOT_RUN"
+            label = "Integrity check not run"
+        else:
+            status = status or "OK"
+            label = last.get("status_label") or status
         return {
-            "last_checked_at_utc": last.get("finished_at_utc"),
-            "last_status": last.get("status") or "OK",
-            "last_status_label": last.get("status_label") or "OK",
+            "last_checked_at_utc": finished,
+            "last_status": status,
+            "last_status_label": label,
             "last_stale": state.get("last_stale", False),
             "last_reconcile_missing_count": last.get("missing_count"),
             "last_reconcile_extra_count": last.get("extra_count"),
@@ -1413,10 +1421,18 @@ def get_positions_unified_integrity_check_health() -> Dict[str, Any]:
             "last_started_at_utc": last.get("started_at_utc"),
             "last_sample_items": last.get("sample_items"),
         }
+    checked = state.get("last_checked_at_utc")
+    status = state.get("last_status")
+    if not checked and not status:
+        status = "NOT_RUN"
+        label = "Integrity check not run"
+    else:
+        status = status or "OK"
+        label = state.get("last_status_label") or status
     return {
-        "last_checked_at_utc": state.get("last_checked_at_utc"),
-        "last_status": state.get("last_status") or "OK",
-        "last_status_label": state.get("last_status_label") or "OK",
+        "last_checked_at_utc": checked,
+        "last_status": status,
+        "last_status_label": label,
         "last_stale": state.get("last_stale", False),
         "last_reconcile_missing_count": state.get("last_reconcile_missing_count"),
         "last_reconcile_extra_count": state.get("last_reconcile_extra_count"),
@@ -1427,12 +1443,12 @@ def get_positions_unified_integrity_check_health() -> Dict[str, Any]:
 
 
 def get_positions_unified_integrity_check_result() -> Dict[str, Any]:
-    """R29.4: Read-only last result + history for GET /api/ui/positions/unified/integrity-check. Deterministic ordering."""
+    """R29.4/R70-ABCD: Read-only last result + history. Never-run → NOT_RUN."""
     state = load_integrity_check_state()
     if not state or not isinstance(state, dict):
         return {
-            "status": "OK",
-            "status_label": "OK",
+            "status": "NOT_RUN",
+            "status_label": "Integrity check not run",
             "last": None,
             "history": [],
         }

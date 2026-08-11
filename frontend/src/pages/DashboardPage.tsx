@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { formatTimestampEt } from "@/utils/formatTimestamp";
 import { Link } from "react-router-dom";
 import { ExternalLink, Activity, Droplets, Zap, Info, Settings, Bell } from "lucide-react";
-import { useArtifactList, useDecision, useUniverse, useUiSystemHealth, useUnifiedPositionsFromDb, usePortfolio, usePortfolioMtm, useDefaultAccount, useRunEval, useSharesCandidates, useActionNeeded, useNotifications } from "@/api/queries";
+  import { useArtifactList, useDecision, useUniverse, useUiSystemHealth, useLivePositionLenses, usePortfolio, usePortfolioMtm, useDefaultAccount, useRunEval, useSharesCandidates, useActionNeeded, useNotifications } from "@/api/queries";
 import type { DecisionMode, SymbolEvalSummary, UniverseSymbol } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
 import { AuthoritativeRecommendations } from "@/components/AuthoritativeRecommendations";
@@ -92,7 +92,7 @@ export function DashboardPage() {
   const { data: decision, isLoading: decisionLoading, isError: decisionError, refetch: refetchDecision } = useDecision(mode, filename);
   const { data: universe } = useUniverse();
   const { data: health, isError: healthError } = useUiSystemHealth();
-  const { data: unifiedDb } = useUnifiedPositionsFromDb({ state: "open", include_paper: false });
+  const { data: liveLenses } = useLivePositionLenses("acct_individual");
   const { data: portfolioData } = usePortfolio();
   const { data: defaultAccount } = useDefaultAccount();
   const accountId = (defaultAccount?.account as { account_id?: string })?.account_id ?? null;
@@ -167,8 +167,10 @@ export function DashboardPage() {
     (s) => (s.band ?? "").toUpperCase() === "B" && ((s.final_verdict ?? s.verdict ?? "").toUpperCase() === "ELIGIBLE")
   );
   const eligibleFromDecision = selectedSignals.length > 0 && aTier.length === 0 && bTier.length === 0;
-  const positions = unifiedDb?.items ?? [];
-  const openPositions = positions; // already open-state query
+  const liveOpenCount = liveLenses?.live_open_count ?? 0;
+  const liveEquityItems =
+    (liveLenses?.lenses?.LIVE_BROKER_EQUITY_POSITIONS as { items?: Array<{ symbol?: string; quantity?: number; average_cost?: number | null }> } | undefined)
+      ?.items ?? [];
   const capitalDeployed = portfolioData?.capital_deployed ?? 0;
 
   const isReady = !!decision;
@@ -622,13 +624,18 @@ export function DashboardPage() {
         <section role="region" aria-label="Trade plan" className="space-y-6">
           <StatCard
             label="Open positions (live)"
-            value={openPositions.length}
+            value={liveOpenCount}
             badge={
               <span className="text-xs text-zinc-500 dark:text-zinc-500" data-testid="open-positions-provenance">
-                source={unifiedDb?.authority ?? "positions_unified_db"}
-                {unifiedDb?.as_of ? ` · as_of ${formatTimestampEt(unifiedDb.as_of)}` : ""}
-                {(unifiedDb?.count_expired_excluded ?? 0) > 0
-                  ? ` · excluded expired ${unifiedDb?.count_expired_excluded}`
+                lens=LIVE_TOTAL_POSITIONS
+                {liveLenses?.live_authority ? ` · authority=${liveLenses.live_authority}` : " · authority=unavailable"}
+                {liveLenses?.live_state ? ` · state=${liveLenses.live_state}` : ""}
+                {liveLenses?.as_of ? ` · as_of ${formatTimestampEt(liveLenses.as_of)}` : ""}
+                {typeof liveLenses?.live_equity_count === "number"
+                  ? ` · equities ${liveLenses.live_equity_count}`
+                  : ""}
+                {typeof liveLenses?.live_option_count === "number"
+                  ? ` · options ${liveLenses.live_option_count}`
                   : ""}
               </span>
             }
@@ -663,8 +670,8 @@ export function DashboardPage() {
                   </span>
                 </div>
                 <div>
-                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">Open shares</span>
-                  <span className="font-mono text-zinc-700 dark:text-zinc-300">
+                  <span className="block text-xs text-zinc-500 dark:text-zinc-500">Open shares (manual/risk)</span>
+                  <span className="font-mono text-zinc-700 dark:text-zinc-300" data-testid="guardrails-open-shares">
                     {health.guardrails.metrics?.open_shares_count ?? "—"} / {health.guardrails.limits?.MAX_OPEN_SHARES_POSITIONS ?? "—"}
                   </span>
                 </div>
@@ -740,32 +747,32 @@ export function DashboardPage() {
                 </Link>
               }
             />
-            {positions.length === 0 ? (
-              <EmptyState title="No positions" message="Unified open positions will appear here." />
+            {liveEquityItems.length === 0 ? (
+              <EmptyState title="No live broker positions" message="Fresh Robinhood equities appear here when READ_ONLY_AVAILABLE." />
             ) : (
               <div className="space-y-1.5">
-                {positions.slice(0, 5).map((p, i) => (
-                  <div key={p.id ?? i} className="flex items-center justify-between text-xs">
+                {liveEquityItems.slice(0, 5).map((p, i) => (
+                  <div key={`${p.symbol ?? "sym"}-${i}`} className="flex items-center justify-between text-xs">
                     <Link
-                      to={`/symbol-diagnostics?symbol=${encodeURIComponent(p.symbol)}`}
+                      to={`/symbol-diagnostics?symbol=${encodeURIComponent(p.symbol ?? "")}`}
                       className="font-mono text-zinc-700 hover:underline dark:text-zinc-300 dark:hover:text-zinc-100"
                     >
                       {p.symbol}
                     </Link>
                     <span className="font-mono text-zinc-500 dark:text-zinc-500">
-                      {p.qty != null ? `${p.qty}` : ""}{" "}
-                      {p.avg_price != null ? `$${p.avg_price.toLocaleString()}` : ""}
+                      {p.quantity != null ? `${p.quantity}` : ""}{" "}
+                      {p.average_cost != null ? `$${p.average_cost.toLocaleString()}` : ""}
                     </span>
                   </div>
                 ))}
-                {positions.length > 5 && (
-                  <p className="text-xs text-zinc-500 dark:text-zinc-500">+{positions.length - 5} more</p>
+                {liveEquityItems.length > 5 && (
+                  <p className="text-xs text-zinc-500 dark:text-zinc-500">+{liveEquityItems.length - 5} more</p>
                 )}
               </div>
             )}
-            {positions.length === 0 && (
-              <Link to="/positions" className="mt-2 block text-sm text-emerald-600 hover:underline dark:text-emerald-400">
-                Manage positions →
+            {liveEquityItems.length === 0 && (
+              <Link to="/portfolio" className="mt-2 block text-sm text-emerald-600 hover:underline dark:text-emerald-400">
+                Open Portfolio →
               </Link>
             )}
           </Card>

@@ -52,6 +52,15 @@ vi.mock("@/api/queries", () => ({
   useUniverse: () => ({ data: { symbols: [], updated_at: "2026-01-01T12:00:00Z", source: "ARTIFACT_V2" } }),
   useUiSystemHealth: () => ({ data: mockHealth }),
   useUnifiedPositionsFromDb: () => ({ data: { count: 0, items: [] } }),
+  useLivePositionLenses: () => ({
+    data: {
+      live_open_count: 0,
+      live_equity_count: 0,
+      live_option_count: 0,
+      live_authority: "broker_snapshot",
+      live_state: "FRESH",
+    },
+  }),
   usePortfolio: () => ({ data: { capital_deployed: 0, positions: [] } }),
   useDefaultAccount: () => ({ data: { account: { account_id: "acct_1" } } }),
   usePortfolioMtm: () => ({ data: null }),

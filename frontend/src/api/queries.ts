@@ -1764,6 +1764,41 @@ export function useUnifiedPositionsFromDb(params: {
   });
 }
 
+/** R70-ABCD: GET /api/ui/positions/live-lenses — broker LIVE authority when ready. */
+export type LivePositionLensesResponse = {
+  live_state?: string;
+  live_authority?: string | null;
+  as_of?: string | null;
+  source?: string | null;
+  live_open_count?: number;
+  live_equity_count?: number;
+  live_option_count?: number;
+  manual_open_count?: number;
+  paper_open_count?: number;
+  sizing_blocked?: boolean;
+  broker_status?: string;
+  lenses?: Record<
+    string,
+    {
+      label?: string;
+      count?: number;
+      authority?: string | null;
+      items?: Array<{ symbol?: string; quantity?: number; average_cost?: number | null }>;
+    }
+  >;
+};
+
+export function useLivePositionLenses(accountAlias = "acct_individual", enabled = true) {
+  return useQuery({
+    queryKey: ["ui", "positions", "live-lenses", accountAlias],
+    queryFn: () =>
+      apiGet<LivePositionLensesResponse>(
+        `/api/ui/positions/live-lenses?account_alias=${encodeURIComponent(accountAlias)}`
+      ),
+    enabled,
+  });
+}
+
 /** R28.8: GET /api/ui/positions/unified/reconcile-diff — read-only diff (source vs unified). */
 export function useReconcileDiff(params: {
   include_paper?: boolean;

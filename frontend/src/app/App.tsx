@@ -21,6 +21,7 @@ import { PaperPage } from "@/pages/PaperPage";
 import { UniverseAdminPage } from "@/pages/UniverseAdminPage";
 import { UniverseHealthPage } from "@/pages/UniverseHealthPage";
 import { OptionsWorkspacePage, StocksWorkspacePage, EtfHedgeWorkspacePage } from "@/pages/StrategyWorkspacePages";
+import { StrategyBuilderPage } from "@/pages/StrategyBuilderPage";
 import { getWheelPageMode } from "@/config/features";
 
 const queryClient = new QueryClient({
@@ -63,6 +64,7 @@ export function App() {
               <Route path="/universe-admin" element={<UniverseAdminPage />} />
               <Route path="/universe-health" element={<UniverseHealthPage />} />
               <Route path="/portfolio" element={<PortfolioPage />} />
+              <Route path="/strategy-builder" element={<StrategyBuilderPage />} />
               {/* R53/R56: Positions is not primary nav — preserve deep links via Portfolio holdings */}
               <Route path="/positions" element={<Navigate to="/portfolio?tab=holdings" replace />} />
               {/* R56: Wheel remains Advanced-only; hidden mode soft-lands on Command Center */}

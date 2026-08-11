@@ -256,7 +256,8 @@ describe("PortfolioPage", () => {
   it("shows Recovery manual balances and Holdings sections (R53)", () => {
     render(<PortfolioPage />);
     expect(screen.getByText(/Recovery \/ Advanced — manual balances/i)).toBeInTheDocument();
-    expect(screen.getByText(/Holdings/)).toBeInTheDocument();
+    expect(screen.getByTestId("portfolio-holdings")).toBeInTheDocument();
+    expect(screen.getByTestId("portfolio-tabs")).toBeInTheDocument();
     expect(screen.getByText(/Add holding/)).toBeInTheDocument();
   });
 

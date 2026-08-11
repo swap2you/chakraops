@@ -32,11 +32,35 @@ def _require_ui_key(x_ui_key: str | None = Header(None, alias="x-ui-key")) -> No
 
 
 @router.get("/status")
-def broker_status(x_ui_key: str | None = Header(None, alias="x-ui-key")) -> Dict[str, Any]:
-    """Return Robinhood MCP read-only status (never enables trade execution)."""
-    _require_ui_key(x_ui_key)
-    return robinhood_integration_status()
+def broker_status(
+    account_alias: str = Query("acct_individual", description="Account alias for stale check"),
+    x_ui_key: str | None = Header(None, alias="x-ui-key"),
+) -> Dict[str, Any]:
+    """Return Robinhood MCP read-only status (never enables trade execution).
 
+    R64 production statuses: UNAUTHENTICATED / AUTH_REQUIRED / READ_ONLY_AVAILABLE / STALE / ERROR.
+    """
+    _require_ui_key(x_ui_key)
+    from app.core.broker.status import robinhood_mcp_read_only_status
+
+    import os
+
+    alias = (account_alias or "").strip() or "acct_individual"
+    snap = load_snapshot(alias)
+    token_path = (os.getenv("ROBINHOOD_MCP_TOKEN_PATH") or "").strip()
+    token_env = (os.getenv("ROBINHOOD_MCP_ACCESS_TOKEN") or "").strip()
+    token_configured = bool(token_env or token_path)
+    stale: Optional[bool]
+    if snap is not None:
+        stale = bool(snap.stale)
+    elif token_configured:
+        stale = True
+    else:
+        stale = None
+    return robinhood_mcp_read_only_status(
+        snapshot_stale=stale,
+        auth_required=bool(token_path) and not token_env,
+    )
 
 @router.get("/accounts")
 def broker_accounts(x_ui_key: str | None = Header(None, alias="x-ui-key")) -> Dict[str, Any]:

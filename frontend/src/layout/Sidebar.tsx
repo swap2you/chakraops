@@ -52,6 +52,7 @@ const navBase: Array<{
   { path: "/universe", label: "Universe", icon: Globe, group: "Research" },
   { path: "/symbol-diagnostics", label: "Symbol Diagnostics", icon: Search, group: "Research" },
   { path: "/backtest", label: "Strategy Lab", icon: LineChart, group: "Strategy Lab" },
+  { path: "/strategy-builder", label: "Strategy Builder", icon: Target, group: "Strategy Lab" },
   { path: "/learn", label: "Learn", icon: GraduationCap, group: "Strategy Lab" },
   { path: "/system", label: "System Diagnostics", icon: Activity, group: "Operations" },
   { path: "/notifications", label: "Notifications", icon: Bell, group: "Operations" },

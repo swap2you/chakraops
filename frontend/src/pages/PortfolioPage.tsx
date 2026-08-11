@@ -76,21 +76,36 @@ export function PortfolioPage() {
   const [holdingForm, setHoldingForm] = useState<{ symbol: string; shares: string; avg_cost: string } | null>(null);
   const [sharesFilter, setSharesFilter] = useState<"all" | "cc_eligible">("all");
 
-  // R53/R56: /positions → /portfolio?tab=holdings; activity surfaces Journal (Portfolio nav)
+  // R53/R56/R64: tab deep-links scroll to section anchors
   useEffect(() => {
     if (isLoading || isError) return;
-    const targetId =
-      portfolioTab === "holdings"
-        ? "portfolio-holdings"
-        : portfolioTab === "recovery"
-          ? "portfolio-manual-recovery"
-          : portfolioTab === "activity"
-            ? "portfolio-activity"
-            : null;
+    const tabMap: Record<string, string> = {
+      overview: "portfolio-overview",
+      accounts: "portfolio-accounts",
+      holdings: "portfolio-holdings",
+      options: "portfolio-options",
+      orders: "portfolio-orders",
+      activity: "portfolio-orders",
+      risk: "portfolio-risk",
+      reconciliation: "portfolio-reconciliation",
+      recovery: "portfolio-manual-recovery",
+    };
+    const targetId = tabMap[portfolioTab] || null;
     if (!targetId) return;
     const el = document.getElementById(targetId);
     el?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [portfolioTab, isLoading, isError]);
+
+  const portfolioTabs = [
+    { id: "overview", label: "Overview" },
+    { id: "accounts", label: "Accounts" },
+    { id: "holdings", label: "Holdings" },
+    { id: "options", label: "Options" },
+    { id: "orders", label: "Orders & Activity" },
+    { id: "risk", label: "Risk" },
+    { id: "reconciliation", label: "Reconciliation" },
+    { id: "recovery", label: "Recovery" },
+  ] as const;
 
   const positions = data?.positions ?? [];
   const capitalDeployed = data?.capital_deployed ?? 0;
@@ -147,16 +162,59 @@ export function PortfolioPage() {
         subtext="Live broker snapshot is primary when available · manual controls are Recovery only"
       />
 
-      <BrokerLivePanel />
+      <nav
+        className="flex flex-wrap gap-2 border-b border-zinc-200 pb-3 dark:border-zinc-700"
+        data-testid="portfolio-tabs"
+        aria-label="Portfolio sections"
+      >
+        {portfolioTabs.map((t) => {
+          const active = portfolioTab === t.id || (!portfolioTab && t.id === "overview");
+          return (
+            <Link
+              key={t.id}
+              to={`/portfolio?tab=${t.id}`}
+              className={`rounded px-3 py-1.5 text-sm ${
+                active
+                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                  : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              }`}
+              data-testid={`portfolio-tab-${t.id}`}
+            >
+              {t.label}
+            </Link>
+          );
+        })}
+      </nav>
 
-      <Card id="portfolio-activity" data-testid="portfolio-activity">
+      <div id="portfolio-overview" data-testid="portfolio-overview">
+        <BrokerLivePanel />
+      </div>
+
+      <Card id="portfolio-accounts" data-testid="portfolio-accounts">
         <CardHeader
-          title="Activity"
-          description="Trade journal and decision history live under Portfolio · Journal (not a separate primary workspace)."
+          title="Accounts"
+          description="Masked broker accounts appear in the live panel above. Agentic is never used for execution."
+        />
+      </Card>
+
+      <Card id="portfolio-orders" data-testid="portfolio-orders">
+        <CardHeader
+          title="Orders & Activity"
+          description="Read-only broker orders when available. Journal remains the decision history under Portfolio."
         />
         <Link to="/journal" className="text-sm text-emerald-600 hover:underline dark:text-emerald-400">
           Open Journal →
         </Link>
+      </Card>
+
+      <Card id="portfolio-reconciliation" data-testid="portfolio-reconciliation">
+        <CardHeader
+          title="Reconciliation"
+          description="Compare live broker snapshot with migrated/manual history. Never auto-modifies broker or historical records."
+        />
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          Mismatches are advisory only — no silent overwrite of either source.
+        </p>
       </Card>
 
       {metrics && (
@@ -482,7 +540,7 @@ export function PortfolioPage() {
       )}
 
       {optionsPositions.length > 0 && (
-        <Card>
+        <Card id="portfolio-options" data-testid="portfolio-options">
           <CardHeader
             title="Options Positions"
             description="R27.8: Enriched option positions (mark/source/age, DTE, max profit %, lifecycle recommend+reason)."
@@ -561,6 +619,15 @@ export function PortfolioPage() {
         </Card>
       )}
 
+      {optionsPositions.length === 0 && (
+        <Card id="portfolio-options" data-testid="portfolio-options">
+          <CardHeader
+            title="Options"
+            description="No option positions in current view. Live options appear in the broker snapshot when authenticated."
+          />
+        </Card>
+      )}
+
       {accounts.length > 0 && (
         <Card>
           <CardHeader
@@ -601,8 +668,12 @@ export function PortfolioPage() {
         </Card>
       )}
 
-      {riskData && (
-        <Card className={riskData.status === "FAIL" ? "border-red-500 dark:border-red-600" : riskData.status === "WARN" ? "border-amber-500 dark:border-amber-600" : ""}>
+      {riskData ? (
+        <Card
+          id="portfolio-risk"
+          data-testid="portfolio-risk"
+          className={riskData.status === "FAIL" ? "border-red-500 dark:border-red-600" : riskData.status === "WARN" ? "border-amber-500 dark:border-amber-600" : ""}
+        >
           <CardHeader
             title="Risk (Phase 14.0)"
             description={riskData.status === "FAIL" ? "Limit breach" : riskData.status === "WARN" ? "Warning" : undefined}
@@ -641,6 +712,13 @@ export function PortfolioPage() {
               </ul>
             </div>
           )}
+        </Card>
+      ) : (
+        <Card id="portfolio-risk" data-testid="portfolio-risk">
+          <CardHeader
+            title="Risk"
+            description="Per-account risk isolation — IRA cash is never taxable CSP collateral. Agentic has no execution collateral."
+          />
         </Card>
       )}
 

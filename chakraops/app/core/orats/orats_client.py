@@ -18,6 +18,8 @@ ORATS_BASE = BASE_DATAV2
 ORATS_LIVE_STRIKES = PATH_LIVE_STRIKES
 ORATS_LIVE_SUMMARIES = PATH_LIVE_SUMMARIES
 TIMEOUT_SEC = 10
+MAX_RETRIES_429 = 3
+BACKOFF_BASE_SEC = 2.0
 
 
 class OratsUnavailableError(Exception):
@@ -45,7 +47,7 @@ class OratsUnavailableError(Exception):
 def _orats_get_live(endpoint_path: str, ticker: str, timeout_sec: float = TIMEOUT_SEC) -> tuple[Any, int, int]:
     """
     GET ORATS live endpoint (e.g. /live/strikes or /live/summaries). Returns (parsed_json, status_code, latency_ms).
-    Logs [ORATS_CALL] endpoint= ticker= status= latency_ms= rows= (rows from list or data list).
+    Retries on HTTP 429 with exponential backoff (R70-DEF-100).
     Raises OratsUnavailableError on request failure or non-200. Token from orats_secrets only.
     """
     from app.core.config.orats_secrets import get_orats_token
@@ -53,16 +55,37 @@ def _orats_get_live(endpoint_path: str, ticker: str, timeout_sec: float = TIMEOU
     url = f"{ORATS_BASE.rstrip('/')}{endpoint_path}"
     params: Dict[str, str] = {"token": get_orats_token(), "ticker": ticker.upper()}
     t0 = time.perf_counter()
-    try:
-        r = requests.get(url, params=params, timeout=timeout_sec)
-    except requests.RequestException as e:
-        latency_ms = int((time.perf_counter() - t0) * 1000)
-        # requests exceptions can embed the full URL incl. the token query param.
-        safe_err = redact_secrets(e)
-        logger.warning("[ORATS_CALL] endpoint=%s ticker=%s status=FAIL latency_ms=%s error=%s", endpoint_path, ticker.upper(), latency_ms, safe_err)
-        print(f"[ORATS_CALL] endpoint={endpoint_path} ticker={ticker.upper()} status=FAIL latency_ms={latency_ms} rows=0")
-        raise OratsUnavailableError(f"ORATS request failed: {safe_err}", http_status=0, response_snippet=safe_err[:200], endpoint=endpoint_path, symbol=ticker.upper())
+    r = None
+    for attempt in range(MAX_RETRIES_429 + 1):
+        try:
+            r = requests.get(url, params=params, timeout=timeout_sec)
+        except requests.RequestException as e:
+            latency_ms = int((time.perf_counter() - t0) * 1000)
+            safe_err = redact_secrets(e)
+            logger.warning(
+                "[ORATS_CALL] endpoint=%s ticker=%s status=FAIL latency_ms=%s error=%s",
+                endpoint_path, ticker.upper(), latency_ms, safe_err,
+            )
+            print(f"[ORATS_CALL] endpoint={endpoint_path} ticker={ticker.upper()} status=FAIL latency_ms={latency_ms} rows=0")
+            raise OratsUnavailableError(
+                f"ORATS request failed: {safe_err}",
+                http_status=0,
+                response_snippet=safe_err[:200],
+                endpoint=endpoint_path,
+                symbol=ticker.upper(),
+            ) from None
 
+        if r.status_code == 429 and attempt < MAX_RETRIES_429:
+            backoff = BACKOFF_BASE_SEC ** (attempt + 1)
+            logger.warning(
+                "[ORATS_CALL] endpoint=%s ticker=%s status=429 retry_in=%.1fs attempt=%d",
+                endpoint_path, ticker.upper(), backoff, attempt + 1,
+            )
+            time.sleep(backoff)
+            continue
+        break
+
+    assert r is not None
     latency_ms = int((time.perf_counter() - t0) * 1000)
     try:
         raw: Any = r.json()

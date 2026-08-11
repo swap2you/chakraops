@@ -66,22 +66,12 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: /wheel/i })).toBeInTheDocument();
   });
 
-  it("R56: compact IA — no Positions primary; Journal under Portfolio; Advanced recovery/admin", () => {
+  it("R70-DEF-081: Universe Admin/Health live under Advanced, not Operations", () => {
     render(<Sidebar />);
-    expect(screen.getByTestId("nav-group-command-center")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-group-opportunities")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-group-portfolio")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-group-research")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-group-strategy-lab")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-group-operations")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-group-advanced-legacy")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-legacy-note")).toHaveTextContent(/recovery \/ admin/i);
-    expect(screen.queryByRole("link", { name: /^Positions$/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /^Journal$/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /strategy lab/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /today checklist/i })).toBeInTheDocument();
-    // Wheel stays Advanced, not Opportunities primary
+    const operations = screen.getByTestId("nav-group-operations");
     const advanced = screen.getByTestId("nav-group-advanced-legacy");
-    expect(advanced).toContainElement(screen.getByRole("link", { name: /wheel/i }));
+    expect(operations).not.toContainElement(screen.getByRole("link", { name: /universe admin/i }));
+    expect(advanced).toContainElement(screen.getByRole("link", { name: /universe admin/i }));
+    expect(advanced).toContainElement(screen.getByRole("link", { name: /universe health/i }));
   });
 });

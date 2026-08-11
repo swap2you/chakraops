@@ -82,31 +82,31 @@ def is_short_session(d: date) -> bool:
 
 
 def _us_equity_holidays(year: int) -> Set[date]:
-    """Return set of US equity market (NYSE-style) holidays for the given year."""
+    """Return set of US equity market (NYSE-style) holidays for the given year.
+
+    Fixed-date holidays that fall on a weekend are observed on the adjacent
+    weekday (Sat→Fri, Sun→Mon), matching NYSE practice.
+    """
     holidays: Set[date] = set()
-    # New Year's Day
-    holidays.add(date(year, 1, 1))
-    # MLK Day: 3rd Monday in January
-    holidays.add(_nth_weekday(year, 1, 0, 3))  # Monday=0
-    # Presidents Day: 3rd Monday in February
-    holidays.add(_nth_weekday(year, 2, 0, 3))
-    # Good Friday: Friday before Easter (approximate: use simple rule or 2nd Friday in April for stub)
-    # Common: Easter - 2 days; Easter is first Sun after first full moon after vernal equinox.
-    # Simplified: use known Good Friday for a few years or weekday-based heuristic.
+
+    def _observe(d: date) -> date:
+        if d.weekday() == 5:  # Saturday → Friday
+            return d - timedelta(days=1)
+        if d.weekday() == 6:  # Sunday → Monday
+            return d + timedelta(days=1)
+        return d
+
+    holidays.add(_observe(date(year, 1, 1)))  # New Year's Day
+    holidays.add(_nth_weekday(year, 1, 0, 3))  # MLK Day
+    holidays.add(_nth_weekday(year, 2, 0, 3))  # Presidents Day
     holidays.add(_good_friday(year))
-    # Memorial Day: last Monday in May
-    holidays.add(_last_weekday(year, 5, 0))
-    # Juneteenth: June 19
-    holidays.add(date(year, 6, 19))
-    # Independence Day: July 4
-    holidays.add(date(year, 7, 4))
-    # Labor Day: 1st Monday in September
-    holidays.add(_nth_weekday(year, 9, 0, 1))
-    # Thanksgiving: 4th Thursday in November
-    thanksgiving = _nth_weekday(year, 11, 3, 4)  # Thursday=3
+    holidays.add(_last_weekday(year, 5, 0))  # Memorial Day
+    holidays.add(_observe(date(year, 6, 19)))  # Juneteenth
+    holidays.add(_observe(date(year, 7, 4)))  # Independence Day
+    holidays.add(_nth_weekday(year, 9, 0, 1))  # Labor Day
+    thanksgiving = _nth_weekday(year, 11, 3, 4)
     holidays.add(thanksgiving)
-    # Christmas
-    holidays.add(date(year, 12, 25))
+    holidays.add(_observe(date(year, 12, 25)))  # Christmas
     return holidays
 
 

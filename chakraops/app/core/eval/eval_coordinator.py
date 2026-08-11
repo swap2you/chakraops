@@ -1,6 +1,12 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""R40.1: Exclusive universe-evaluation coordinator (single lock, v2 engine)."""
+"""R40.1: Exclusive universe-evaluation coordinator (single lock, v2 engine).
+
+R70-DEF-040: This module is the PRIMARY LIVE full-universe evaluation authority.
+Secondary / diagnostic writers (scripts/run_and_save.py, single-symbol merge,
+legacy evaluate-now before cutover) must be labeled and must not compete for
+LIVE decision authority.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +16,9 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+# R70-DEF-040: inventory tests assert this marker on the exclusive coordinator.
+PRIMARY_LIVE_EVAL_AUTHORITY = True
 
 _COORD_META_LOCK = threading.Lock()
 _ACTIVE_TRIGGER: Optional[str] = None

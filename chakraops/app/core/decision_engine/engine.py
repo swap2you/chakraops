@@ -18,7 +18,7 @@ created or routed; every output is labeled manual-only.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from app.core.decision_engine import gates as G
 from app.core.decision_engine.contract import (
@@ -67,9 +67,19 @@ def evaluate_candidate(
     *,
     portfolio: PortfolioState,
     now: Optional[datetime] = None,
+    as_of_date: Optional[Any] = None,
+    macro_provider_configured: Optional[bool] = None,
+    event_calendar: Optional[Any] = None,
 ) -> DecisionOutput:
     """Evaluate one (symbol, strategy) candidate into a canonical output."""
+    from datetime import date as date_cls
+
     now = now or datetime.now(timezone.utc)
+    if as_of_date is None:
+        try:
+            as_of_date = now.astimezone().date()
+        except Exception:
+            as_of_date = date_cls.today()
 
     # 1) Data safety: stale / missing critical data blocks action (R32 gate).
     fresh = G.check_data_freshness(inp, now=now)
@@ -86,6 +96,17 @@ def evaluate_candidate(
     if not ok:
         return _blocked(inp, profile.name, r, freshness_payload)
     ok, r = G.earnings_gate(inp, profile)
+    if not ok:
+        return _blocked(inp, profile.name, r, freshness_payload)
+    # R70-DEF-041: session + macro gates (fail closed when calendar unavailable).
+    ok, r = G.session_gate(inp, today=as_of_date)
+    if not ok:
+        return _blocked(inp, profile.name, r, freshness_payload)
+    ok, r = G.macro_event_gate(
+        provider_configured=macro_provider_configured,
+        event_calendar=event_calendar,
+        as_of=as_of_date,
+    )
     if not ok:
         return _blocked(inp, profile.name, r, freshness_payload)
     ok, r = G.liquidity_gate(inp, profile)

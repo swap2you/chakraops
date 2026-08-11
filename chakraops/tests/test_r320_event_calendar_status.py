@@ -12,8 +12,18 @@ from app.core.data_reliability.event_calendar_status import (
 from app.core.environment.event_calendar import Event
 
 
-def test_default_macro_calendar_is_explicitly_unavailable():
+def test_default_macro_calendar_is_static_available():
+    """R70-DEF-041: production default is StaticUsMacroCalendar (AVAILABLE), not silent stub."""
     s = event_calendar_status(14)
+    assert s.state == AVAILABLE
+    assert s.available is True
+    assert s.reason == "OK"
+
+
+def test_explicit_stub_calendar_is_unavailable():
+    from app.core.environment.event_calendar import DefaultEventCalendar
+
+    s = event_calendar_status(14, calendar=DefaultEventCalendar())
     assert s.state == UNAVAILABLE
     assert s.reason == NO_PROVIDER_CONFIGURED
     assert s.available is False
@@ -56,7 +66,9 @@ def test_earnings_available_with_token():
 
 
 def test_to_dict_shape():
-    d = event_calendar_status(14).to_dict()
+    d = event_calendar_status(14, calendar=__import__(
+        "app.core.environment.event_calendar", fromlist=["DefaultEventCalendar"]
+    ).DefaultEventCalendar()).to_dict()
     assert d["kind"] == "macro_events"
     assert d["available"] is False
     assert "as_of_utc" in d

@@ -2710,103 +2710,42 @@ def _generate_candidate_trades(result: Dict[str, Any], stock_price: float, orats
 
 @app.post("/api/ops/evaluate-now")
 def api_ops_evaluate_now() -> Dict[str, Any]:
+    """R70-DEF-040: Alias of exclusive coordinator (PRIMARY LIVE eval authority).
+
+    Formerly bypassed the coordinator and wrote a divergent staged ledger path.
+    Now delegates to ``run_universe_evaluation_exclusive`` — same authority as
+    ``POST /api/ops/evaluate`` and ``POST /api/ui/eval/run``.
     """
-    Run staged universe evaluation synchronously with persistence.
-    Staged evaluation is the single source of truth; no legacy fallback.
-    On staged failure: persist FAILED run, return HTTP 500.
-    """
-    from datetime import datetime, timezone
     try:
-        from app.api.data_health import UNIVERSE_SYMBOLS
-        from app.core.eval.universe_evaluator import run_universe_evaluation_staged
-        from app.core.eval.evaluation_store import (
-            generate_run_id,
-            save_run,
-            save_failed_run,
-            update_latest_pointer,
-            create_run_from_evaluation,
-            acquire_run_lock,
-            release_run_lock,
-            write_run_running,
-            get_current_run_status,
-        )
+        from app.api.data_health import get_universe_symbols
+        from app.core.eval.eval_coordinator import run_universe_evaluation_exclusive
     except ImportError as e:
         return {"started": False, "reason": f"Evaluation module not available: {e}", "run_id": None}
 
-    if not UNIVERSE_SYMBOLS:
+    symbols = list(get_universe_symbols())
+    if not symbols:
         return {"started": False, "reason": "Universe is empty - check config/universe.csv", "run_id": None}
 
-    run_id = generate_run_id()
-    started_at = datetime.now(timezone.utc).isoformat()
-    market_phase = get_market_phase()
-
-    if not acquire_run_lock(run_id, started_at):
-        cur = get_current_run_status()
-        current_run_id = cur.get("run_id") if cur else None
-        logger.info("[EVAL] Evaluate now skipped: run already in progress run_id=%s", current_run_id)
+    result = run_universe_evaluation_exclusive(symbols, mode="LIVE", trigger="ops_evaluate_now")
+    if not result.get("started"):
         return {
             "started": False,
-            "reason": "Evaluation already in progress",
-            "run_id": current_run_id,
+            "reason": result.get("reason") or "already_running",
+            "run_id": result.get("run_id"),
             "status": "RUNNING",
+            "exclusive": True,
+            "authority": "PRIMARY_LIVE_EVAL",
         }
-
-    try:
-        write_run_running(run_id, started_at)
-    except Exception as e:
-        logger.exception("[EVAL] write_run_running failed: %s", e)
-        release_run_lock(expected_run_id=run_id)
-        raise HTTPException(status_code=500, detail=f"Failed to persist run state: {e}")
-
-    try:
-        logger.info("[EVAL] Staged evaluation started run_id=%s", run_id)
-        result = run_universe_evaluation_staged(list(UNIVERSE_SYMBOLS), use_staged=True)
-        run = create_run_from_evaluation(
-            run_id=run_id,
-            started_at=started_at,
-            evaluation_result=result,
-            market_phase=market_phase,
-        )
-        save_run(run)
-        if run.status == "COMPLETED" and run.completed_at:
-            update_latest_pointer(run_id, run.completed_at)
-        try:
-            from app.core.eval.run_artifacts import write_run_artifacts, update_latest_and_recent, purge_old_runs
-            run_dir = write_run_artifacts(run)
-            update_latest_and_recent(run, run_dir)
-            purge_old_runs()
-        except Exception as art_err:
-            logger.warning("[EVAL] Run artifacts write/purge failed (non-fatal): %s", art_err)
-        logger.info("[EVAL] Run %s completed and persisted status=%s", run_id, run.status)
-        try:
-            from app.core.alerts.alert_engine import process_run_completed
-            process_run_completed(run)
-        except Exception as alert_err:
-            logger.warning("[EVAL] Alert processing failed (non-fatal): %s", alert_err)
-        release_run_lock(expected_run_id=run_id)
-        return {
-            "started": True,
-            "reason": "Evaluation completed",
-            "run_id": run_id,
-            "status": run.status,
-            "engine": getattr(run, "engine", "staged"),
-        }
-    except Exception as e:
-        logger.exception("Staged evaluation failed - aborting (no legacy fallback): %s", e)
-        release_run_lock(expected_run_id=run_id)
-        save_failed_run(run_id, str(e), e, started_at)
-        try:
-            from app.core.alerts.alert_engine import process_run_completed
-            from app.core.eval.evaluation_store import load_run
-            failed_run = load_run(run_id)
-            if failed_run:
-                process_run_completed(failed_run)
-        except Exception as alert_err:
-            logger.warning("[EVAL] Alert processing for failed run (non-fatal): %s", alert_err)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Staged evaluation failed: {e}",
-        )
+    return {
+        "started": True,
+        "reason": "Evaluation completed",
+        "run_id": result.get("run_id"),
+        "status": "COMPLETED",
+        "engine": "staged",
+        "exclusive": True,
+        "authority": "PRIMARY_LIVE_EVAL",
+        "counts": result.get("counts"),
+    }
 
 
 @app.get("/api/view/universe-evaluation")

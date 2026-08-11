@@ -51,10 +51,19 @@ Complete browser consent, then Portfolio → **Sync**. Tokens under `C:\ChakraOp
 
 ## Evaluation
 
-- One exclusive coordinator (`run_universe_evaluation_exclusive`)
-- UI: `POST /api/ui/eval/run` · ops: `POST /api/ops/evaluate` (same coordinator — no `run_and_save --limit 5` overwrite)
+- **Primary LIVE authority:** exclusive coordinator `run_universe_evaluation_exclusive` (`PRIMARY_LIVE_EVAL_AUTHORITY`)
+  - UI: `POST /api/ui/eval/run`
+  - Ops: `POST /api/ops/evaluate` and `POST /api/ops/evaluate-now` (alias → same coordinator)
+- **Canonical recommendations:** `decision_engine.live_service` over `EvaluationStoreV2` / `decision_latest.json`
 - Ledger: successful exclusive runs call `save_run` + `update_latest_pointer` (`last_completed_run_id`)
+- **Secondary (non-authoritative):** `scripts/run_and_save.py` (`SECONDARY_EVAL_PATH`), single-symbol merge (`SECONDARY_SYMBOL_MERGE_PATH`) — offline/diagnostics only; do not use for LIVE authority
 - No auto full-universe eval on local start when schedulers are off
+
+## Gates / calendars (R70-DEF-041/042)
+
+- Macro calendar: static US FOMC/NFP/CPI markers; unconfigured stub → `MACRO_CALENDAR_UNAVAILABLE` (fail closed)
+- Session gate: short sessions / min trading days wired into decision engine
+- Market hours: NYSE holiday calendar via `market_calendar.is_market_open_today` (weekdays are not always OPEN)
 
 ## Persistence honesty
 

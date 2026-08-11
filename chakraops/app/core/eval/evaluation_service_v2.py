@@ -1,6 +1,12 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""Phase 7.6: ONE evaluation engine — produces DecisionArtifactV2, writes to store."""
+"""Phase 7.6: ONE evaluation engine — produces DecisionArtifactV2, writes to store.
+
+R70-DEF-040: Full-universe LIVE writes must go through
+``eval_coordinator.run_universe_evaluation_exclusive``. ``evaluate_universe`` is the
+engine invoked by that coordinator. ``evaluate_single_symbol_and_merge`` is a
+SECONDARY merge path (Symbol Diagnostics), not a competing universe authority.
+"""
 
 from __future__ import annotations
 
@@ -28,6 +34,9 @@ from app.core.eval.decision_artifact_v2 import (
 from app.core.eval.evaluation_store_v2 import get_evaluation_store_v2
 
 logger = logging.getLogger(__name__)
+
+# R70-DEF-040: single-symbol merge is secondary (diagnostics), not LIVE universe authority.
+SECONDARY_SYMBOL_MERGE_PATH = True
 
 
 def evaluate_universe(

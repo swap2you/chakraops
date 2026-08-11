@@ -89,9 +89,9 @@ export function DashboardPage() {
   const [filename, setFilename] = useState<string>("decision_latest.json");
 
   const { data: files } = useArtifactList(mode);
-  const { data: decision } = useDecision(mode, filename);
+  const { data: decision, isLoading: decisionLoading, isError: decisionError, refetch: refetchDecision } = useDecision(mode, filename);
   const { data: universe } = useUniverse();
-  const { data: health } = useUiSystemHealth();
+  const { data: health, isError: healthError } = useUiSystemHealth();
   const { data: unifiedDb } = useUnifiedPositionsFromDb({ state: "open", include_paper: false });
   const { data: portfolioData } = usePortfolio();
   const { data: defaultAccount } = useDefaultAccount();
@@ -172,6 +172,7 @@ export function DashboardPage() {
   const capitalDeployed = portfolioData?.capital_deployed ?? 0;
 
   const isReady = !!decision;
+  const backendOutage = decisionError || (healthError && !decision && !decisionLoading);
   const metadata = decision?.artifact?.metadata;
   const marketPhase = health?.market?.phase ?? "n/a";
   const oratsStatus = health?.orats?.status ?? "n/a";
@@ -185,12 +186,31 @@ export function DashboardPage() {
       <PageHeader
         title="Command Center"
         subtext={
-          isReady
+          backendOutage
+            ? "Backend unavailable — decision surface cannot load"
+            : isReady
             ? "Today’s actions, positions, cash/collateral, data health, Stay in Cash, and alerts — manual execution only"
             : "Loading daily command surface…"
         }
       />
-      {!isReady ? (
+      {backendOutage ? (
+        <Card data-testid="command-center-outage">
+          <div className="space-y-3 text-sm">
+            <p className="text-red-600 dark:text-red-400">
+              Unable to reach the decision API. Risk and recommendations are unavailable — not PASS.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                void refetchDecision();
+              }}
+            >
+              Retry
+            </Button>
+          </div>
+        </Card>
+      ) : !isReady ? (
         <Card>
           <div className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
             <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-zinc-400" />

@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""Single source of truth for decision snapshots. Uses staged evaluator pipeline.
+"""SECONDARY / offline eval harness (R70-DEF-040).
 
-Read-only: no broker calls. Writes timestamped copies to --output-dir.
-Latest (decision_latest.json) is written ONLY by EvaluationStoreV2 to canonical path
-<REPO_ROOT>/out/decision_latest.json.
+NOT the primary LIVE evaluation authority. Prefer:
+  POST /api/ui/eval/run  or  POST /api/ops/evaluate
+  → app.core.eval.eval_coordinator.run_universe_evaluation_exclusive
+
+This script may overwrite decision_latest.json without the exclusive lock —
+use only for offline/dev harnesses. See docs/master/RUNBOOK_EXECUTION_CURRENT.md.
 
 Usage:
   cd chakraops
@@ -24,6 +27,9 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+# R70-DEF-040: inventory / authority tests assert this marker.
+SECONDARY_EVAL_PATH = True
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:

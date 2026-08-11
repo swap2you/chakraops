@@ -11,7 +11,7 @@ to an alternate data source.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from app.core.data_reliability.freshness import (
     FreshnessResult,
@@ -186,3 +186,58 @@ def cash_gate(inp: DecisionInput, profile: StrategyProfile, available_cash_after
     if available_cash_after_buffer < one_contract_collateral:
         return (False, ["INSUFFICIENT_CASH"])
     return (True, [])
+
+
+def macro_event_gate(
+    *,
+    provider_configured: Optional[bool] = None,
+    event_calendar: Optional[Any] = None,
+    config: Optional[dict] = None,
+    as_of: Optional[Any] = None,
+) -> Tuple[bool, List[str]]:
+    """R70-DEF-041: Fail closed when macro calendar unavailable; else block in-window events."""
+    from app.core.environment.macro_event_gate import check_macro_event_gate
+    from app.core.settings import get_environment_config
+
+    if event_calendar is None:
+        from app.core.environment.event_calendar import get_default_calendar
+
+        event_calendar = get_default_calendar()
+    if provider_configured is None:
+        provider_configured = bool(getattr(event_calendar, "PROVIDER_CONFIGURED", False))
+
+    cfg = config if config is not None else get_environment_config()
+    reason = check_macro_event_gate(
+        event_calendar,
+        cfg,
+        provider_configured=bool(provider_configured),
+        as_of=as_of,
+    )
+    if reason is None:
+        return (True, [])
+    return (False, [reason.code])
+
+
+def session_gate(
+    inp: DecisionInput,
+    *,
+    today: Optional[Any] = None,
+    config: Optional[dict] = None,
+) -> Tuple[bool, List[str]]:
+    """R70-DEF-041: Wire session/short-session + min trading-days-to-expiry into LIVE path."""
+    from datetime import date, timedelta
+
+    from app.core.environment.session_gate import check_session_gate
+    from app.core.settings import get_environment_config
+
+    as_of = today if today is not None else date.today()
+    cfg = config if config is not None else get_environment_config()
+    expiry_date = None
+    c = inp.contract
+    if c is not None and c.dte is not None:
+        try:
+            expiry_date = as_of + timedelta(days=int(c.dte))
+        except (TypeError, ValueError):
+            expiry_date = None
+    reasons = check_session_gate(as_of, expiry_date, cfg)
+    return (not reasons, reasons)

@@ -133,7 +133,7 @@ export function PortfolioPage() {
 
   if (isLoading) {
     return (
-      <div>
+      <div data-testid="page-portfolio">
         <PageHeader title="Account & Portfolio" subtext="Tracked positions" />
         <Card>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading…</p>
@@ -144,9 +144,11 @@ export function PortfolioPage() {
 
   if (isError) {
     return (
-      <div>
+      <div data-testid="page-portfolio">
         <PageHeader title="Account & Portfolio" />
-        <p className="text-red-500 dark:text-red-400">Failed to load portfolio.</p>
+        <p className="text-red-500 dark:text-red-400" data-testid="portfolio-outage">
+          Failed to load portfolio. Backend unavailable — risk status is not PASS.
+        </p>
       </div>
     );
   }

@@ -122,8 +122,8 @@ function WheelV2Panel({
 }
 
 export function WheelPage() {
-  const { data: accountsData } = useAccounts();
-  const { data: defaultAccountData } = useDefaultAccount();
+  const { data: accountsData, isError: accountsError, isLoading: accountsLoading } = useAccounts();
+  const { data: defaultAccountData, isError: defaultAccountError } = useDefaultAccount();
   const accounts = accountsData?.accounts ?? [];
   const defaultAccount = defaultAccountData?.account;
   const selectedAccount = defaultAccount ?? (accounts.length > 0 ? accounts[0] : null);
@@ -140,16 +140,21 @@ export function WheelPage() {
 
   const symbols = data?.symbols ?? {};
   const rows = Object.values(symbols);
-  const riskStatus = data?.risk_status ?? "PASS";
+  // R70-DEF-073: never default Risk to PASS when backend/overview is missing.
+  const riskStatus = data?.risk_status ?? "UNAVAILABLE";
   const runId = data?.run_id ?? null;
   const wheelIntegrity = data?.wheel_integrity;
   const integrityFail = wheelIntegrity?.status === "FAIL";
   const repairEnabled = integrityFail || repairConfirmed;
   const advisorySymbol = v2Symbol ?? (rows.length > 0 ? rows[0].symbol : null);
 
-  if (isLoading) {
+  const accountsUnavailable = accountsError || defaultAccountError;
+  const overviewUnavailable = Boolean(selectedAccount) && (isError || Boolean(data?.error));
+  const noBackendData = !accountsLoading && !isLoading && (!selectedAccount || !data);
+
+  if (accountsLoading || (Boolean(selectedAccount) && isLoading)) {
     return (
-      <div>
+      <div data-testid="page-wheel">
         <PageHeader title="Wheel" subtext="Lifecycle automation" />
         <Card>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading…</p>
@@ -158,11 +163,14 @@ export function WheelPage() {
     );
   }
 
-  if (isError || data?.error) {
+  if (accountsUnavailable || overviewUnavailable || noBackendData) {
     return (
-      <div>
-        <PageHeader title="Wheel" />
-        <p className="text-red-500 dark:text-red-400">{data?.error ?? "Failed to load wheel overview."}</p>
+      <div data-testid="page-wheel">
+        <PageHeader title="Wheel" subtext="Risk: UNAVAILABLE" />
+        <p className="text-red-500 dark:text-red-400" data-testid="wheel-outage">
+          {data?.error ??
+            "Failed to load wheel overview. Backend unavailable — Risk is UNAVAILABLE (not PASS)."}
+        </p>
       </div>
     );
   }

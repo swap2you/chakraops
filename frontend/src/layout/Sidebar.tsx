@@ -56,8 +56,9 @@ const navBase: Array<{
   { path: "/learn", label: "Learn", icon: GraduationCap, group: "Strategy Lab" },
   { path: "/system", label: "System Diagnostics", icon: Activity, group: "Operations" },
   { path: "/notifications", label: "Notifications", icon: Bell, group: "Operations" },
-  { path: "/universe-admin", label: "Universe Admin", icon: Settings, group: "Operations" },
-  { path: "/universe-health", label: "Universe Health", icon: Heart, group: "Operations" },
+  // R70-DEF-081: demote secondary Universe ops into Advanced to reduce nav clutter
+  { path: "/universe-admin", label: "Universe Admin", icon: Settings, group: "Advanced/Legacy", legacyNote: true },
+  { path: "/universe-health", label: "Universe Health", icon: Heart, group: "Advanced/Legacy", legacyNote: true },
   { path: "/wheel", label: "Wheel", icon: RotateCcw, wheel: true, group: "Advanced/Legacy", legacyNote: true },
   { path: "/paper", label: "Paper", icon: FileText, group: "Advanced/Legacy", legacyNote: true },
   { path: "/reports", label: "Reports", icon: BarChart3, group: "Advanced/Legacy", legacyNote: true },

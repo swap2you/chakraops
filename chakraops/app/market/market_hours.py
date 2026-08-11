@@ -1,6 +1,6 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""Market-hours utility (US/Eastern). Pragmatic weekday 9:30–16:00 ET. Phase 10: market_phase."""
+"""Market-hours utility (US/Eastern). Weekday 9:30–16:00 ET with NYSE holiday calendar (R70-DEF-042)."""
 
 from __future__ import annotations
 
@@ -28,11 +28,16 @@ MarketPhase = str  # "PRE" | "OPEN" | "MID" | "POST" | "CLOSED"
 
 
 def get_market_phase(utc_now: datetime | None = None) -> MarketPhase:
-    """Return PRE (before 9:30 ET), OPEN (9:30–16:00), POST (after 16:00), or CLOSED (weekend/holiday). MID = OPEN (same)."""
+    """Return PRE / OPEN / POST / CLOSED (weekend + US equity holidays)."""
     if utc_now is None:
         utc_now = datetime.now(_UTC)
     et = utc_now.astimezone(_US_EASTERN)
     if et.weekday() >= 5:
+        return "CLOSED"
+    # R70-DEF-042: consult NYSE-style holiday calendar (not weekday-only).
+    from app.core.environment.market_calendar import is_market_open_today
+
+    if not is_market_open_today(et.date()):
         return "CLOSED"
     t = et.time()
     if t < PRE_MARKET_END:
@@ -43,7 +48,7 @@ def get_market_phase(utc_now: datetime | None = None) -> MarketPhase:
 
 
 def is_market_open(utc_now: datetime | None = None) -> bool:
-    """True if current US/Eastern time is weekday 9:30–16:00. Pragmatic (no holiday calendar)."""
+    """True if US/Eastern time is a trading session (weekday, not holiday, 9:30–16:00)."""
     return get_market_phase(utc_now) == "OPEN"
 
 
@@ -78,10 +83,12 @@ def get_eval_interval_seconds(utc_now: datetime | None = None) -> int:
 def get_next_open_close_et(utc_now: datetime | None = None) -> tuple[str | None, str | None]:
     """
     Return (next_open_et, next_close_et) as ISO strings in ET.
-    next_open_et: next 9:30 AM ET (today or next weekday).
-    next_close_et: next 4:00 PM ET (today or next weekday).
+    Skips weekends and US equity holidays (R70-DEF-042).
     """
     from datetime import timedelta, time as dt_time
+
+    from app.core.environment.market_calendar import is_market_open_today
+
     if utc_now is None:
         utc_now = datetime.now(_UTC)
     et = utc_now.astimezone(_US_EASTERN)
@@ -91,9 +98,9 @@ def get_next_open_close_et(utc_now: datetime | None = None) -> tuple[str | None,
     now_t = et.time()
     next_open = None
     next_close = None
-    for d in range(8):
+    for d in range(14):
         cand = today + timedelta(days=d)
-        if cand.weekday() >= 5:
+        if not is_market_open_today(cand):
             continue
         if next_open is None:
             open_dt = datetime.combine(cand, open_t, tzinfo=_US_EASTERN)

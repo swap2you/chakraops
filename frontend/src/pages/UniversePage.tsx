@@ -257,7 +257,7 @@ export function UniversePage() {
   const isLoading = universeLoading;
   if (isLoading) {
     return (
-      <div>
+      <div data-testid="page-universe">
         <PageHeader title="Universe" subtext="Evaluated symbols" />
         <Card>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading…</p>
@@ -268,9 +268,11 @@ export function UniversePage() {
 
   if (isError) {
     return (
-      <div>
+      <div data-testid="page-universe">
         <PageHeader title="Universe" />
-        <p className="text-red-500 dark:text-red-400">Failed to load universe.</p>
+        <p className="text-red-500 dark:text-red-400" data-testid="universe-outage">
+          Failed to load universe. Backend unavailable.
+        </p>
       </div>
     );
   }

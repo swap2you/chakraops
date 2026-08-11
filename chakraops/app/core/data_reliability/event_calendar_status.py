@@ -70,15 +70,26 @@ def event_calendar_status(
 ) -> CalendarStatus:
     """Return explicit AVAILABLE / UNAVAILABLE state for the macro calendar.
 
-    A real calendar provider must be injected (``calendar``) and declared
-    configured (``provider_configured=True``) to be AVAILABLE. The default
-    stub provider yields UNAVAILABLE/NO_PROVIDER_CONFIGURED so an empty list is
-    never mistaken for a confident "no events" answer.
+    A real or static calendar provider must be configured to be AVAILABLE.
+    Empty stub without PROVIDER_CONFIGURED yields UNAVAILABLE so an empty list
+    is never mistaken for a confident "no events" answer (R70-DEF-041).
     """
     as_of = _now_iso(now)
 
-    # Default stub => not configured unless caller asserts otherwise.
-    if calendar is None and not provider_configured:
+    if calendar is None:
+        from app.core.environment.event_calendar import get_default_calendar
+
+        calendar = get_default_calendar()
+
+    if provider_configured is None:
+        if hasattr(calendar, "PROVIDER_CONFIGURED"):
+            provider_configured = bool(getattr(calendar, "PROVIDER_CONFIGURED"))
+        else:
+            # Explicitly injected calendar without the flag → treat as configured.
+            provider_configured = True
+
+    # Stub / unconfigured => not AVAILABLE.
+    if not provider_configured:
         return CalendarStatus(
             kind="macro_events",
             state=UNAVAILABLE,
@@ -88,12 +99,7 @@ def event_calendar_status(
         )
 
     try:
-        if calendar is not None:
-            events = list(calendar.get_upcoming_events(days_ahead))
-        else:
-            from app.core.environment.event_calendar import get_upcoming_events
-
-            events = list(get_upcoming_events(days_ahead))
+        events = list(calendar.get_upcoming_events(days_ahead))
     except Exception:
         return CalendarStatus(
             kind="macro_events",

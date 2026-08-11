@@ -100,8 +100,16 @@ describe("WheelPage", () => {
       isLoading: false,
       isError: false,
     });
-    useDefaultAccount.mockReturnValue({ data: { account: { account_id: "paper" } } });
-    useAccounts.mockReturnValue({ data: { accounts: [{ account_id: "paper" }] } });
+    useDefaultAccount.mockReturnValue({
+      data: { account: { account_id: "paper" } },
+      isLoading: false,
+      isError: false,
+    });
+    useAccounts.mockReturnValue({
+      data: { accounts: [{ account_id: "paper" }] },
+      isLoading: false,
+      isError: false,
+    });
     useWheelAssign.mockReturnValue(mockMutation());
     useWheelUnassign.mockReturnValue(mockMutation());
     useWheelReset.mockReturnValue(mockMutation());
@@ -213,11 +221,31 @@ describe("WheelPage", () => {
     expect(screen.getByTitle(/manual override/i)).toBeInTheDocument();
   });
 
-  it("R22.3: renders Admin/Recovery explanation panel and no raw FAIL_* in panel text", () => {
+  it("R70-DEF-073: never shows Risk PASS when backend/overview is unavailable", () => {
+    useAccounts.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+    useDefaultAccount.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+    useWheelOverview.mockReturnValue({ data: undefined, isLoading: false, isError: false });
     render(<WheelPage />);
-    expect(screen.getByText("Admin / Recovery")).toBeInTheDocument();
-    expect(screen.getByText(/Use Repair only when/)).toBeInTheDocument();
-    const body = document.body.innerHTML;
-    expect(body).not.toMatch(/FAIL_[A-Z_0-9]+/);
+    expect(screen.getByTestId("page-wheel")).toBeInTheDocument();
+    expect(screen.getByTestId("wheel-outage")).toBeInTheDocument();
+    expect(screen.getByText(/Risk is UNAVAILABLE/i)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/Risk:\s*PASS/);
+  });
+
+  it("R70-DEF-073: missing overview data is UNAVAILABLE not PASS", () => {
+    useAccounts.mockReturnValue({
+      data: { accounts: [{ account_id: "acc-1", name: "Main" }] },
+      isLoading: false,
+      isError: false,
+    });
+    useDefaultAccount.mockReturnValue({
+      data: { account: { account_id: "acc-1", name: "Main" } },
+      isLoading: false,
+      isError: false,
+    });
+    useWheelOverview.mockReturnValue({ data: undefined, isLoading: false, isError: false });
+    render(<WheelPage />);
+    expect(screen.getByTestId("wheel-outage")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/Risk:\s*PASS/);
   });
 });

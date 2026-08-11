@@ -51,7 +51,7 @@ export function NotificationsPage() {
 
   if (isLoading) {
     return (
-      <div>
+      <div data-testid="page-notifications">
         <PageHeader title="Notifications" />
         <p className="text-zinc-400">Loading…</p>
       </div>
@@ -60,9 +60,11 @@ export function NotificationsPage() {
 
   if (isError) {
     return (
-      <div>
+      <div data-testid="page-notifications">
         <PageHeader title="Notifications" />
-        <p className="text-red-400">Failed to load notifications.</p>
+        <p className="text-red-400" data-testid="notifications-outage">
+          Failed to load notifications. Backend unavailable.
+        </p>
       </div>
     );
   }

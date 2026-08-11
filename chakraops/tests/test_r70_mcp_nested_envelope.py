@@ -81,3 +81,36 @@ def test_parse_positions_unwraps_data_positions() -> None:
 
 def test_as_list_nested_data_dict() -> None:
     assert _as_list({"data": {"accounts": [{"a": 1}]}}, ("accounts", "data")) == [{"a": 1}]
+
+
+def test_sync_snapshot_loads_accounts_for_known_alias(monkeypatch) -> None:
+    """Known ACCOUNT_ALIASES must still call list_accounts to populate mapping."""
+    from app.core.broker.models import BrokerAccount, BrokerBalances
+    from app.core.broker.robinhood_mcp_provider import RobinhoodMcpReadProvider
+
+    provider = RobinhoodMcpReadProvider(client=object())  # type: ignore[arg-type]
+    called = {"n": 0}
+
+    def _list() -> list:
+        called["n"] += 1
+        provider._alias_to_number = {"acct_individual": "111"}
+        provider._accounts_cache = [
+            BrokerAccount(
+                alias="acct_individual",
+                account_type="individual",
+                masked_account_number="*****111",
+                display_name="Individual",
+            )
+        ]
+        return list(provider._accounts_cache)
+
+    monkeypatch.setattr(provider, "list_accounts", _list)
+    monkeypatch.setattr(provider, "get_account_balances", lambda _a: BrokerBalances(cash=1.0))
+    monkeypatch.setattr(provider, "get_equity_positions", lambda _a: [])
+    monkeypatch.setattr(provider, "get_option_positions", lambda _a: [])
+    monkeypatch.setattr(provider, "get_equity_orders", lambda _a: [])
+
+    snap = provider.sync_snapshot("acct_individual")
+    assert called["n"] == 1
+    assert not snap.errors
+    assert snap.balances.cash == 1.0

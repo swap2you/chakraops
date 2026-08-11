@@ -85,8 +85,9 @@ class RobinhoodMcpReadProvider(BrokerReadProviderBase):
     def sync_snapshot(self, account_alias: str) -> BrokerSnapshot:
         errors: List[str] = []
         alias = (account_alias or "").strip()
-        if alias not in ACCOUNT_ALIASES and alias not in self._alias_to_number:
-            # Ensure mapping exists.
+        # Always resolve alias→account_number via get_accounts when mapping is cold.
+        # Known ACCOUNT_ALIASES alone must not skip discovery (post-OAuth sync would fail).
+        if alias not in self._alias_to_number:
             self.list_accounts()
         if alias not in self._alias_to_number and alias not in {a.alias for a in self._accounts_cache}:
             errors.append(f"unknown_account_alias:{alias}")

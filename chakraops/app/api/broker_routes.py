@@ -49,7 +49,19 @@ def broker_status(
     snap = load_snapshot(alias)
     token_path = (os.getenv("ROBINHOOD_MCP_TOKEN_PATH") or "").strip()
     token_env = (os.getenv("ROBINHOOD_MCP_ACCESS_TOKEN") or "").strip()
-    token_configured = bool(token_env or token_path)
+    oauth_auth_required = False
+    oauth_store_present = False
+    try:
+        from app.core.broker.robinhood_oauth import oauth_status
+
+        oauth = oauth_status()
+        oauth_auth_required = bool(oauth.get("auth_required") or oauth.get("needs_reauth"))
+        oauth_store_present = bool(oauth.get("store_present"))
+    except Exception:
+        oauth = {}
+    from app.core.broker.robinhood_mcp_client import resolve_access_token
+
+    token_configured = bool(token_env or token_path or resolve_access_token(refresh_if_expired=False) or oauth_store_present)
     stale: Optional[bool]
     if snap is not None:
         stale = bool(snap.stale)
@@ -59,7 +71,7 @@ def broker_status(
         stale = None
     return robinhood_mcp_read_only_status(
         snapshot_stale=stale,
-        auth_required=bool(token_path) and not token_env,
+        auth_required=oauth_auth_required or (bool(token_path) and not token_env and not oauth_store_present),
     )
 
 @router.get("/accounts")

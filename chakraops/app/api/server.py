@@ -879,6 +879,16 @@ async def _lifespan(app: FastAPI):
     except Exception as exc:
         logger.error("[CONFIG] Production database gate failed: %s", type(exc).__name__)
         raise
+    # AUTH-001: production / required mode fails closed without users+session secret
+    try:
+        from app.core.security.session_auth import get_auth_mode, validate_auth_startup
+
+        validate_auth_startup()
+        logger.info("[CONFIG] Auth mode=%s (startup gate ok)", get_auth_mode())
+        print(f"[CONFIG] Auth mode={get_auth_mode()}")
+    except Exception as exc:
+        logger.error("[CONFIG] Auth startup gate failed: %s", type(exc).__name__)
+        raise
     from app.core.config.orats_secrets import get_orats_token
     _orats_token_present = bool(get_orats_token())
     if _orats_token_present:
@@ -944,8 +954,13 @@ async def _lifespan(app: FastAPI):
     try:
         from app.core.eval.evaluation_store import clear_stale_run_lock
         clear_stale_run_lock()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("[STARTUP] clear_stale_run_lock failed: %s", type(exc).__name__)
+
+    # R70-DEF-035: local start must not auto-run full-universe evaluation.
+    # (Legacy schedulers remain opt-in; ops master scheduler defaults off.)
+    logger.info("[STARTUP] Full-universe evaluation not started (manual trigger only)")
+    print("[STARTUP] Full-universe evaluation: NOT auto-started (manual_only)")
 
     # R35.0: Unified operations scheduler (disabled-by-default) + optional legacy schedulers
     print("===== OPERATIONS SCHEDULER STARTUP =====")
@@ -1002,26 +1017,94 @@ async def _lifespan(app: FastAPI):
 app = FastAPI(title="ChakraOps API", version="0.1.0", lifespan=_lifespan)
 
 # Phase 7: API key auth (when CHAKRAOPS_API_KEY is set). /health and /api/healthz are always public.
+# AUTH-001 / R70-DEF-002: when session auth is required, do NOT broadly exempt /api/ui.
 CHAKRAOPS_API_KEY = (os.getenv("CHAKRAOPS_API_KEY") or "").strip()
 _PUBLIC_PATHS = frozenset({"/health", "/api/healthz"})
 
 
 @app.middleware("http")
-async def api_key_middleware(request: Request, call_next):
-    """Require X-API-Key for all non-health routes when CHAKRAOPS_API_KEY is set."""
-    path = request.url.path.rstrip("/") or request.url.path
-    if path in _PUBLIC_PATHS or path.startswith("/api/ui"):
+async def session_auth_middleware(request: Request, call_next):
+    """AUTH-001: enforce opaque cookie sessions (+ CSRF on mutating cookie-auth APIs)."""
+    from app.core.security import session_auth as auth
+
+    if not auth.auth_required():
         return await call_next(request)
-    if not CHAKRAOPS_API_KEY:
+
+    path = request.url.path.rstrip("/") or request.url.path
+    if auth.is_auth_public_path(path):
+        return await call_next(request)
+
+    api_key = (os.getenv("CHAKRAOPS_API_KEY") or CHAKRAOPS_API_KEY or "").strip()
+    provided_key = request.headers.get("X-API-Key") or request.headers.get("x-api-key")
+    if api_key and provided_key and provided_key == api_key:
+        # Machine clients with API key bypass cookie session (still no CSRF).
+        return await call_next(request)
+
+    token = request.cookies.get(auth.SESSION_COOKIE)
+    session = auth.get_session(token)
+    if session is None:
+        return JSONResponse(status_code=401, content={"detail": "Not authenticated"})
+
+    if auth.is_state_changing(request.method) and path.startswith("/api/"):
+        # Login is public; other state-changing cookie-auth APIs need CSRF.
+        header = request.headers.get(auth.CSRF_HEADER) or request.headers.get("x-csrf-token")
+        if not auth.validate_csrf(session, header):
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "CSRF token missing or invalid"},
+            )
+
+    request.state.auth_username = session.username
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def api_key_middleware(request: Request, call_next):
+    """Require X-API-Key for non-health routes when CHAKRAOPS_API_KEY is set.
+
+    R70-DEF-002: broad /api/ui exemption only applies when session auth is disabled
+    (local default). When auth is required, session_auth_middleware is authoritative
+    (cookie session or API key); this middleware does not double-gate.
+    """
+    from app.core.security.session_auth import auth_required
+
+    if auth_required():
+        return await call_next(request)
+
+    path = request.url.path.rstrip("/") or request.url.path
+    if path in _PUBLIC_PATHS:
+        return await call_next(request)
+    if path.startswith("/api/auth/"):
+        return await call_next(request)
+    if path.startswith("/api/ui"):
+        return await call_next(request)
+    api_key = (os.getenv("CHAKRAOPS_API_KEY") or CHAKRAOPS_API_KEY or "").strip()
+    if not api_key:
         return await call_next(request)
     key = request.headers.get("X-API-Key") or request.headers.get("x-api-key")
-    if key != CHAKRAOPS_API_KEY:
+    if key != api_key:
         return JSONResponse(
             status_code=401,
             content={"detail": "Missing or invalid X-API-Key"},
             headers={"WWW-Authenticate": "ApiKey"},
         )
     return await call_next(request)
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """R70-DEF-003: outermost so early auth 401/403 responses also get headers."""
+    response = await call_next(request)
+    try:
+        from app.core.security.session_auth import auth_required, is_production_env, security_headers
+
+        if auth_required() or is_production_env():
+            for k, v in security_headers().items():
+                if k not in response.headers:
+                    response.headers[k] = v
+    except Exception:
+        pass
+    return response
 
 
 from app.core.chakraops_ports import frontend_origin_default
@@ -1031,6 +1114,7 @@ _CORS_ORIGINS = [o.strip() for o in _UI_CORS_ORIGINS if o.strip()] or [frontend_
 
 from app.api.operations_routes import router as operations_router
 from app.api.ui_routes import router as ui_router
+from app.api.auth_routes import router as auth_router
 from app.api.copilot import router as copilot_router
 from app.api.data_reliability_routes import router as data_reliability_router
 from app.api.decision_engine_routes import router as decision_engine_router
@@ -1042,6 +1126,7 @@ from app.api.monitor_routes_r54 import router as monitor_router_r54
 from app.api.observability_routes_r60 import router as observability_router_r60
 from app.api.golive_routes_r64_r69 import router as golive_router_r64_r69
 from app.api.risk_routes_r66 import router as risk_router_r66
+app.include_router(auth_router)
 app.include_router(operations_router)
 app.include_router(ui_router)
 app.include_router(copilot_router, prefix="/api/ui")

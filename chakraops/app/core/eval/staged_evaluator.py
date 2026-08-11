@@ -1835,6 +1835,8 @@ def evaluate_symbol_full(
     if result.stage2 and result.stage2.selected_contract:
         put_strike = result.stage2.selected_contract.contract.strike
     try:
+        from app.core.eval.scoring import reconcile_stage1_score_breakdown
+        liq_eval = result.stage_reached != EvaluationStage.STAGE1_ONLY
         breakdown, composite = compute_score_breakdown(
             data_completeness=result.data_completeness,
             regime=result.regime,
@@ -1844,9 +1846,25 @@ def evaluate_symbol_full(
             position_open=result.position_open,
             price=result.price,
             selected_put_strike=put_strike,
+            liquidity_evaluated=liq_eval,
         )
-        result.score = composite
-        result.score_breakdown = breakdown.to_dict()
+        if result.stage_reached == EvaluationStage.STAGE1_ONLY:
+            raw = result.stage1.stage1_score if result.stage1 else result.score
+            result.raw_score = int(raw) if raw is not None else int(result.score)
+            result.score = result.raw_score
+            result.score_breakdown = reconcile_stage1_score_breakdown(
+                breakdown,
+                weighted_composite=composite,
+                stage1_score=result.raw_score,
+                final_score=result.score,
+                market_regime=result.regime,
+            )
+        else:
+            result.score = composite
+            result.raw_score = composite
+            result.score_breakdown = breakdown.to_dict()
+            result.score_breakdown["raw_score"] = composite
+            result.score_breakdown["final_score"] = composite
         result.rank_reasons = build_rank_reasons(
             breakdown, result.regime, result.data_completeness,
             result.liquidity_ok, result.verdict,
@@ -2137,11 +2155,13 @@ def evaluate_universe_staged(
     # Phase 3: Explainable scoring and capital-aware composite (after regime + position gates).
     # Phase 7.5: For Stage1-only, preserve stage1_score (with regime cap) to avoid flattening
     # when compute_score_breakdown would yield identical composite for all (NEUTRAL + HOLD + no liquidity).
+    from app.core.eval.scoring import reconcile_stage1_score_breakdown
     for result in results.values():
         put_strike = None
         if result.stage2 and result.stage2.selected_contract:
             put_strike = result.stage2.selected_contract.contract.strike
         try:
+            liq_eval = result.stage_reached != EvaluationStage.STAGE1_ONLY
             breakdown, composite = compute_score_breakdown(
                 data_completeness=result.data_completeness,
                 regime=result.regime,
@@ -2151,6 +2171,7 @@ def evaluate_universe_staged(
                 position_open=result.position_open,
                 price=result.price,
                 selected_put_strike=put_strike,
+                liquidity_evaluated=liq_eval,
             )
             raw_score_val: int
             final_score_val: int
@@ -2219,9 +2240,18 @@ def evaluate_universe_staged(
                 "regime_cap": regime_cap_val,
                 "applied_caps": applied_caps,
             }
-            bd_dict = breakdown.to_dict()
-            bd_dict["raw_score"] = raw_score_val
-            bd_dict["final_score"] = result.score
+            if result.stage_reached == EvaluationStage.STAGE1_ONLY:
+                bd_dict = reconcile_stage1_score_breakdown(
+                    breakdown,
+                    weighted_composite=composite,
+                    stage1_score=raw_score_val,
+                    final_score=result.score,
+                    market_regime=market_regime_value,
+                )
+            else:
+                bd_dict = breakdown.to_dict()
+                bd_dict["raw_score"] = raw_score_val
+                bd_dict["final_score"] = result.score
             bd_dict["score_caps"] = result.score_caps
             result.score_breakdown = bd_dict
             result.rank_reasons = build_rank_reasons(

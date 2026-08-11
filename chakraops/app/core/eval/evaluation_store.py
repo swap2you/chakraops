@@ -332,7 +332,7 @@ def clear_stale_run_lock() -> None:
         pass
 
 
-def write_run_running(run_id: str, started_at: str) -> None:
+def write_run_running(run_id: str, started_at: str, source: str = "unknown") -> None:
     """Write minimal run file with status=RUNNING so run appears in list and has started_at."""
     run = EvaluationRunFull(
         run_id=run_id,
@@ -345,7 +345,7 @@ def write_run_running(run_id: str, started_at: str) -> None:
         eligible=0,
         shortlisted=0,
         symbols=[],
-        source="scheduled",
+        source=source or "unknown",
     )
     data = asdict(run)
     data["run_version"] = RUN_SCHEMA_VERSION
@@ -621,11 +621,29 @@ def delete_old_runs(keep_count: int = 50) -> int:
 # Conversion from UniverseEvaluationResult
 # ============================================================================
 
+def map_eval_trigger_to_source(trigger: Optional[str]) -> str:
+    """Map coordinator/UI trigger names to EvaluationRunFull.source labels (R70-DEF-035)."""
+    t = (trigger or "").strip().lower()
+    if t in {"ui_eval_run", "ops_evaluate", "admin_force", "manual", "manual_refresh", "force_eval"}:
+        return "manual"
+    if t in {"scheduler", "scheduled", "eod_freeze", "freeze", "freeze_force", "eod_chain", "legacy_scheduler"}:
+        return "scheduled"
+    if t in {"nightly", "nightly_eval"}:
+        return "nightly"
+    if t in {"api", "trigger_evaluation"}:
+        return "api"
+    if t:
+        return t
+    return "unknown"
+
+
 def create_run_from_evaluation(
     run_id: str,
     started_at: str,
     evaluation_result: Any,  # UniverseEvaluationResult
     market_phase: Optional[str] = None,
+    source: Optional[str] = None,
+    trigger: Optional[str] = None,
 ) -> EvaluationRunFull:
     """
     Create an EvaluationRunFull from a UniverseEvaluationResult.
@@ -635,6 +653,8 @@ def create_run_from_evaluation(
     
     if not isinstance(evaluation_result, UniverseEvaluationResult):
         raise TypeError("Expected UniverseEvaluationResult")
+
+    resolved_source = (source or "").strip() or map_eval_trigger_to_source(trigger)
     
     # Convert symbols to dicts
     symbols_data = []
@@ -747,6 +767,7 @@ def create_run_from_evaluation(
         correlation_id=run_id,
         completed_at=completed_at,
         status=status,
+        source=resolved_source,
         duration_seconds=evaluation_result.duration_seconds,
         total=evaluation_result.total,
         evaluated=evaluation_result.evaluated,
@@ -907,6 +928,7 @@ __all__ = [
     "list_runs",
     "delete_old_runs",
     "create_run_from_evaluation",
+    "map_eval_trigger_to_source",
     "build_latest_response",
     "build_runs_list_response",
     "build_run_detail_response",

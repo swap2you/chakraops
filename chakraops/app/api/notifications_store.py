@@ -83,9 +83,29 @@ def append_notification(
     Append a notification to out/notifications.jsonl.
     R28.3: Persist only safe severity + severity_label (no raw WARN/FAIL/PASS in file).
     severity: INFO | WARN | CRITICAL (caller may pass raw; we normalize before persist).
+    R70-DEF-050: suppress byte-identical active (NEW/ACKED) duplicates.
     """
     from app.core.notifications.notification_safe_labels import normalize_notification_severity
     safe_severity, severity_label = normalize_notification_severity(severity or "INFO")
+    msg = message or ""
+    sym = symbol
+    # Durable dedupe: identical type+message+symbol+subtype already active → no-op
+    try:
+        existing = load_notifications(limit=200, state_filter=None, type_filter=ntype)
+        for rec in existing:
+            st = rec.get("state") or "NEW"
+            if st not in ("NEW", "ACKED"):
+                continue
+            if (rec.get("message") or "") != msg:
+                continue
+            if (rec.get("symbol") or None) != (sym or None):
+                continue
+            if (rec.get("subtype") or None) != (subtype or None):
+                continue
+            logger.info("[NOTIFICATIONS] Dedupe skip %s: %s", ntype, msg[:80])
+            return
+    except Exception as exc:
+        logger.warning("[NOTIFICATIONS] dedupe check failed: %s", type(exc).__name__)
     now = datetime.now(timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
@@ -95,7 +115,7 @@ def append_notification(
         "type": ntype,
         "subtype": subtype,
         "symbol": symbol,
-        "message": message or "",
+        "message": msg,
         "details": details or {},
     }
     path = _notifications_path()
@@ -106,7 +126,7 @@ def append_notification(
             with open(path, "a", encoding="utf-8") as f:
                 f.write(line + "\n")
             _prune_if_needed(path)
-    logger.info("[NOTIFICATIONS] Appended %s %s: %s", ntype, safe_severity, (message or "")[:80])
+    logger.info("[NOTIFICATIONS] Appended %s %s: %s", ntype, safe_severity, msg[:80])
 
 
 def _append_state_event(ref_id: str, state: str, extra: Optional[Dict[str, Any]] = None) -> None:
@@ -167,16 +187,47 @@ def append_ack(ref_id: str, ack_by: str = "ui") -> None:
     logger.info("[NOTIFICATIONS] Ack %s by %s", ref_id[:20], ack_by)
 
 
-def append_orats_warn(message: str, details: Optional[Dict[str, Any]] = None) -> None:
-    """Append ORATS WARN/DEGRADED notification (throttled to once per hour)."""
+def _orats_warn_throttle_path() -> Path:
+    return _notifications_path().parent / "orats_warn_throttle.json"
+
+
+def _load_orats_warn_throttle() -> Optional[float]:
     global _LAST_ORATS_WARN_AT
+    if _LAST_ORATS_WARN_AT is not None:
+        return _LAST_ORATS_WARN_AT
+    path = _orats_warn_throttle_path()
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        ts = float(data.get("last_warn_at") or 0)
+        _LAST_ORATS_WARN_AT = ts if ts > 0 else None
+        return _LAST_ORATS_WARN_AT
+    except Exception:
+        return None
+
+
+def _save_orats_warn_throttle(ts: float) -> None:
+    global _LAST_ORATS_WARN_AT
+    _LAST_ORATS_WARN_AT = ts
+    path = _orats_warn_throttle_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"last_warn_at": ts}), encoding="utf-8")
+    except OSError:
+        logger.warning("[NOTIFICATIONS] failed to persist ORATS warn throttle")
+
+
+def append_orats_warn(message: str, details: Optional[Dict[str, Any]] = None) -> None:
+    """Append ORATS WARN/DEGRADED notification (throttled to once per hour; durable across restarts)."""
     import time as _time
     now_ts = _time.time()
     with _LOCK:
-        last = _LAST_ORATS_WARN_AT
+        last = _load_orats_warn_throttle()
         if last is not None and (now_ts - last) < _ORATS_WARN_THROTTLE_SEC:
             return
-        _LAST_ORATS_WARN_AT = now_ts
+        _save_orats_warn_throttle(now_ts)
+    # Append outside throttle lock to avoid nested lock with append_notification
     append_notification("WARN", "ORATS_WARN", message, symbol=None, details=details, subtype="ORATS_STALE")
 
 

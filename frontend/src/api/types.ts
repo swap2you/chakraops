@@ -866,7 +866,9 @@ export interface SymbolDiagnosticsCandidate {
 export interface SymbolDiagnosticsScoreBreakdown {
   data_quality_score?: number;
   regime_score?: number;
-  options_liquidity_score?: number;
+  options_liquidity_score?: number | null;
+  options_liquidity_evaluated?: boolean;
+  score_basis?: string;
   strategy_fit_score?: number;
   capital_efficiency_score?: number;
   composite_score?: number;
@@ -974,6 +976,8 @@ export interface SymbolDiagnosticsResponseExtended extends SymbolDiagnosticsResp
     hold_time_atr?: number | null;
     hold_time_distance_to_t1?: number | null;
     hold_time_sessions?: number | null;
+    hold_time_spot?: number | null;
+    hold_time_t1?: number | null;
   } | null;
   /** R22.5: Shares plan when symbol qualifies (recommendation only). */
   shares_plan?: SharesPlan | null;
@@ -1086,6 +1090,8 @@ export interface SharesPlan {
     hold_time_atr?: number | null;
     hold_time_distance_to_t1?: number | null;
     hold_time_sessions?: number | null;
+    hold_time_spot?: number | null;
+    hold_time_t1?: number | null;
   };
   /** R23.3: hold_time with method (e.g. ATR_DISTANCE). */
   hold_time?: { sessions_to_t1?: number; sessions_to_t2?: number | null; method?: string };
@@ -1140,6 +1146,17 @@ export interface UiPositionsUnifiedDbResponse {
   status_label?: string | null;
   count: number;
   items: UnifiedPosition[];
+  include_paper?: boolean;
+  authority?: string;
+  as_of?: string | null;
+  count_expired_excluded?: number;
+  provenance?: {
+    source?: string;
+    include_paper?: boolean;
+    state?: string;
+    as_of?: string | null;
+    expired_options_excluded_from_open?: boolean;
+  };
 }
 
 /** R28.7: POST /api/ui/positions/unified/rebuild — result payload (safe labels only). */

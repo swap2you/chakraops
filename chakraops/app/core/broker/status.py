@@ -1,6 +1,6 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""R52/R64 Robinhood MCP read-only status helpers for UI/API."""
+"""R52/R64/R70 Robinhood MCP read-only status helpers for UI/API."""
 
 from __future__ import annotations
 
@@ -12,12 +12,13 @@ from app.core.broker.allowlist import (
 )
 from app.core.broker.robinhood_mcp_client import (
     BLOCKER_RUNTIME_AUTH,
+    STATUS_AUTH_REQUIRED,
     STATUS_UNAUTHENTICATED,
     auth_status,
     resolve_access_token,
 )
+from app.core.broker.robinhood_oauth import oauth_status
 
-STATUS_AUTH_REQUIRED = "AUTH_REQUIRED"
 STATUS_READ_ONLY_AVAILABLE = "READ_ONLY_AVAILABLE"
 STATUS_STALE = "STALE"
 STATUS_ERROR = "ERROR"
@@ -42,12 +43,21 @@ def robinhood_mcp_read_only_status(
 ) -> Dict[str, Any]:
     """Status payload for /api/ui/broker/status.
 
-    R64 statuses: UNAUTHENTICATED / AUTH_REQUIRED / READ_ONLY_AVAILABLE / STALE / ERROR.
+    R64/R70 statuses: UNAUTHENTICATED / AUTH_REQUIRED / READ_ONLY_AVAILABLE / STALE / ERROR.
     Always manual_only=true, trade_execution=false. Never exposes write capability.
     """
     auth = auth_status()
-    token_present = bool(resolve_access_token())
+    oauth = oauth_status()
+    token_present = bool(resolve_access_token(refresh_if_expired=False)) and not oauth.get("needs_reauth")
     blocker: Optional[str] = None
+
+    # AUTH_REQUIRED when OAuth store needs browser re-auth, or caller signals 401 path.
+    needs_auth = bool(
+        auth_required
+        or auth.get("auth_required")
+        or oauth.get("auth_required")
+        or oauth.get("needs_reauth")
+    )
 
     if last_error:
         status = STATUS_ERROR
@@ -56,13 +66,21 @@ def robinhood_mcp_read_only_status(
         blocker = code
     elif not token_present:
         # AUTH_REQUIRED when operator must complete OAuth; UNAUTHENTICATED when simply missing.
-        status = STATUS_AUTH_REQUIRED if auth_required else STATUS_UNAUTHENTICATED
+        status = STATUS_AUTH_REQUIRED if needs_auth else STATUS_UNAUTHENTICATED
         code = BLOCKER_RUNTIME_AUTH
-        reason = (
-            "Robinhood MCP access token not configured "
-            "(set ROBINHOOD_MCP_ACCESS_TOKEN or ROBINHOOD_MCP_TOKEN_PATH on the VPS). "
-            "Cursor MCP session ≠ production auth. App remains up; manual portfolio path still valid."
-        )
+        if status == STATUS_AUTH_REQUIRED:
+            reason = (
+                "Robinhood MCP OAuth authorization required. "
+                "Run scripts/robinhood_mcp_authorize.ps1 to complete ChakraOps browser OAuth "
+                "(Cursor MCP session ≠ ChakraOps app auth). App remains up; manual portfolio path still valid."
+            )
+        else:
+            reason = (
+                "Robinhood MCP access token not configured "
+                "(complete ChakraOps OAuth via scripts/robinhood_mcp_authorize.ps1, "
+                "or set ROBINHOOD_MCP_ACCESS_TOKEN / ROBINHOOD_MCP_TOKEN_PATH for migration). "
+                "Cursor MCP session ≠ ChakraOps app auth. App remains up; manual portfolio path still valid."
+            )
         blocker = BLOCKER_RUNTIME_AUTH
     elif snapshot_stale is True:
         status = STATUS_STALE
@@ -96,7 +114,8 @@ def robinhood_mcp_read_only_status(
         "read_allowlist": sorted(ROBINHOOD_READ_TOOL_ALLOWLIST),
         "write_denylist": sorted(ROBINHOOD_WRITE_TOOL_DENYLIST),
         "auth": auth,
-        # Capability flag: token configured (may still be STALE/ERROR).
+        "oauth": oauth,
+        # Capability flag: usable token configured (may still be STALE/ERROR).
         "ROBINHOOD_MCP_READ_ONLY_AVAILABLE": token_present,
         "snapshot_stale": snapshot_stale,
     }

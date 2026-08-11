@@ -43,7 +43,7 @@ def seeded_db(positions_db_override):
             [
                 ("paper_1", "AAPL", "SHARES", 1, 100, 150.0, None, None, None, "2026-02-01T10:00:00", "1", None, None),
                 ("live_shares_2", "SPY", "SHARES", 0, 50, 400.0, None, None, None, "2026-02-02T11:00:00", "2", None, None),
-                ("paper_3", "AAPL", "CSP", 1, 100, 1.5, 150.0, "2026-03-20", "P", "2026-02-03T09:00:00", "3", None, None),
+                ("paper_3", "AAPL", "CSP", 1, 100, 1.5, 150.0, "2027-03-20", "P", "2026-02-03T09:00:00", "3", None, None),
             ],
         )
         conn.commit()

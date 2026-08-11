@@ -159,8 +159,19 @@ def regime_score(regime: Optional[str]) -> int:
     return 50
 
 
-def options_liquidity_score(liquidity_ok: bool, liquidity_grade: Optional[str]) -> int:
-    """0-100 from liquidity pass and grade. A=100, B=80, C=60, else 40; fail=20."""
+def options_liquidity_score(
+    liquidity_ok: bool,
+    liquidity_grade: Optional[str],
+    *,
+    liquidity_evaluated: bool = True,
+) -> Optional[int]:
+    """0-100 from liquidity pass and grade. A=100, B=80, C=60, else 40; fail=20.
+
+    When liquidity was not evaluated (e.g. Stage2 NOT_RUN), return None — never a
+    default numeric that contradicts Risk Flags \"Not evaluated\".
+    """
+    if not liquidity_evaluated:
+        return None
     if not liquidity_ok:
         return 20
     g = (liquidity_grade or "").strip().upper()
@@ -240,7 +251,7 @@ class ScoreBreakdown:
     """Per-symbol score breakdown for UI and banding."""
     data_quality_score: int
     regime_score: int
-    options_liquidity_score: int
+    options_liquidity_score: Optional[int]
     strategy_fit_score: int
     capital_efficiency_score: int
     composite_score: int  # weighted sum, 0-100
@@ -248,12 +259,15 @@ class ScoreBreakdown:
     notional_pct: Optional[float] = None
     capital_penalties: List[str] = field(default_factory=list)
     top_penalty: Optional[str] = None
+    options_liquidity_evaluated: bool = True
+    score_basis: str = "weighted_composite"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "data_quality_score": self.data_quality_score,
             "regime_score": self.regime_score,
             "options_liquidity_score": self.options_liquidity_score,
+            "options_liquidity_evaluated": self.options_liquidity_evaluated,
             "strategy_fit_score": self.strategy_fit_score,
             "capital_efficiency_score": self.capital_efficiency_score,
             "composite_score": self.composite_score,
@@ -261,6 +275,7 @@ class ScoreBreakdown:
             "notional_pct": self.notional_pct,
             "capital_penalties": self.capital_penalties,
             "top_penalty": self.top_penalty,
+            "score_basis": self.score_basis,
         }
 
 
@@ -276,6 +291,7 @@ def compute_score_breakdown(
     selected_put_strike: Optional[float],
     # Optional override for final composite (e.g. after regime cap applied elsewhere)
     base_composite_override: Optional[int] = None,
+    liquidity_evaluated: bool = True,
 ) -> Tuple[ScoreBreakdown, int]:
     """
     Compute full breakdown and final score (0-100).
@@ -297,17 +313,39 @@ def compute_score_breakdown(
 
     dq = data_quality_score(data_completeness)
     rg = regime_score(regime)
-    liq = options_liquidity_score(liquidity_ok, liquidity_grade)
+    liq = options_liquidity_score(
+        liquidity_ok, liquidity_grade, liquidity_evaluated=liquidity_evaluated
+    )
     fit = strategy_fit_score(verdict, position_open)
 
     weights = get_scoring_weights()
-    composite = int(round(
-        dq * weights["data_quality"] +
-        rg * weights["regime"] +
-        liq * weights["options_liquidity"] +
-        fit * weights["strategy_fit"] +
-        ce_score * weights["capital_efficiency"]
-    ))
+    if liq is None:
+        base = (
+            weights["data_quality"]
+            + weights["regime"]
+            + weights["strategy_fit"]
+            + weights["capital_efficiency"]
+        )
+        if base <= 0:
+            base = 1.0
+        composite = int(
+            round(
+                dq * (weights["data_quality"] / base)
+                + rg * (weights["regime"] / base)
+                + fit * (weights["strategy_fit"] / base)
+                + ce_score * (weights["capital_efficiency"] / base)
+            )
+        )
+    else:
+        composite = int(
+            round(
+                dq * weights["data_quality"]
+                + rg * weights["regime"]
+                + float(liq) * weights["options_liquidity"]
+                + fit * weights["strategy_fit"]
+                + ce_score * weights["capital_efficiency"]
+            )
+        )
     composite = max(0, min(100, composite))
 
     if base_composite_override is not None:
@@ -324,8 +362,33 @@ def compute_score_breakdown(
         notional_pct=notional_pct,
         capital_penalties=capital_penalties,
         top_penalty=top_penalty,
+        options_liquidity_evaluated=liquidity_evaluated,
+        score_basis="weighted_composite",
     )
     return breakdown, composite
+
+
+def reconcile_stage1_score_breakdown(
+    breakdown: ScoreBreakdown,
+    *,
+    weighted_composite: int,
+    stage1_score: int,
+    final_score: int,
+    market_regime: Optional[str] = None,
+) -> Dict[str, Any]:
+    """R70-DEF-022: STAGE1_ONLY uses stage1_score; do not present unused weighted composite as the score."""
+    bd = breakdown.to_dict()
+    bd["weighted_composite_reference"] = int(weighted_composite)
+    bd["stage1_score"] = int(stage1_score)
+    bd["raw_score"] = int(stage1_score)
+    bd["final_score"] = int(final_score)
+    bd["composite_score"] = int(final_score)
+    bd["score_basis"] = "stage1_score"
+    bd["options_liquidity_score"] = None
+    bd["options_liquidity_evaluated"] = False
+    if market_regime:
+        bd["market_regime"] = market_regime
+    return bd
 
 
 def build_rank_reasons(

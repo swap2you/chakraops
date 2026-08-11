@@ -601,9 +601,17 @@ export function DashboardPage() {
         </section>
         <section role="region" aria-label="Trade plan" className="space-y-6">
           <StatCard
-            label="Open positions"
+            label="Open positions (live)"
             value={openPositions.length}
-            badge={positions.length > 0 ? <span className="text-xs text-zinc-500 dark:text-zinc-500">{positions.length} total</span> : undefined}
+            badge={
+              <span className="text-xs text-zinc-500 dark:text-zinc-500" data-testid="open-positions-provenance">
+                source={unifiedDb?.authority ?? "positions_unified_db"}
+                {unifiedDb?.as_of ? ` · as_of ${formatTimestampEt(unifiedDb.as_of)}` : ""}
+                {(unifiedDb?.count_expired_excluded ?? 0) > 0
+                  ? ` · excluded expired ${unifiedDb?.count_expired_excluded}`
+                  : ""}
+              </span>
+            }
           />
           <StatCard label="Capital deployed" value={`$${capitalDeployed.toLocaleString()}`} />
           {health?.guardrails != null && (

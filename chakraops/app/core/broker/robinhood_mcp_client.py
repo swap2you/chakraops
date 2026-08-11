@@ -1,9 +1,10 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""R52 Streamable HTTP MCP client skeleton for Robinhood read-only tools.
+"""R52/R70 Streamable HTTP MCP client for Robinhood read-only tools.
 
-Production OAuth token via env (never logged). All tool calls gated by allowlist.
-Does not provide a generic catch-all MCP tool proxy.
+Production OAuth via ChakraOps-local store (never Cursor credentials, never logged).
+Env ROBINHOOD_MCP_ACCESS_TOKEN / ROBINHOOD_MCP_TOKEN_PATH remain migration fallbacks.
+All tool calls gated by allowlist — no generic catch-all MCP tool proxy.
 """
 
 from __future__ import annotations
@@ -19,12 +20,19 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from app.core.broker.allowlist import assert_tool_allowed
+from app.core.broker.robinhood_oauth import (
+    STATUS_AUTH_REQUIRED as OAUTH_STATUS_AUTH_REQUIRED,
+    oauth_status,
+    refresh_access_token,
+    resolve_oauth_access_token,
+)
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MCP_URL = "https://agent.robinhood.com/mcp/trading"
 
 STATUS_UNAUTHENTICATED = "UNAUTHENTICATED"
+STATUS_AUTH_REQUIRED = OAUTH_STATUS_AUTH_REQUIRED
 BLOCKER_RUNTIME_AUTH = "ROBINHOOD_RUNTIME_AUTH_EXTERNAL_BLOCKER"
 
 
@@ -38,11 +46,16 @@ class McpCallResult:
 
 
 class RobinhoodMcpAuthError(RuntimeError):
-    """Raised when token is missing; callers should degrade gracefully."""
+    """Raised when token is missing or re-auth is required; callers degrade gracefully."""
 
-    def __init__(self, message: str = BLOCKER_RUNTIME_AUTH) -> None:
+    def __init__(
+        self,
+        message: str = BLOCKER_RUNTIME_AUTH,
+        *,
+        status: str = STATUS_UNAUTHENTICATED,
+    ) -> None:
         super().__init__(message)
-        self.status = STATUS_UNAUTHENTICATED
+        self.status = status
         self.blocker = BLOCKER_RUNTIME_AUTH
 
 
@@ -50,8 +63,18 @@ def resolve_mcp_url() -> str:
     return (os.getenv("ROBINHOOD_MCP_URL") or DEFAULT_MCP_URL).strip() or DEFAULT_MCP_URL
 
 
-def resolve_access_token() -> Optional[str]:
-    """Load access token from env or token file. Never log the value."""
+def resolve_access_token(*, refresh_if_expired: bool = True) -> Optional[str]:
+    """Prefer ChakraOps OAuth store; fall back to env/token-file for migration.
+
+    Never log the token value.
+    """
+    try:
+        oauth_tok = resolve_oauth_access_token(refresh_if_expired=refresh_if_expired)
+        if oauth_tok:
+            return oauth_tok
+    except Exception as exc:
+        logger.warning("Robinhood OAuth store resolve failed: %s", type(exc).__name__)
+
     direct = (os.getenv("ROBINHOOD_MCP_ACCESS_TOKEN") or "").strip()
     if direct:
         return direct
@@ -70,21 +93,36 @@ def resolve_access_token() -> Optional[str]:
 
 def auth_status() -> Dict[str, Any]:
     """Non-secret auth status for UI/API."""
-    token = resolve_access_token()
-    if token:
+    oauth = oauth_status()
+    token = resolve_access_token(refresh_if_expired=False)
+    if token and not oauth.get("needs_reauth"):
         return {
             "authenticated": True,
             "status": "AUTHENTICATED",
             "blocker": None,
+            "auth_required": False,
             "mcp_url_configured": True,
             "mcp_url_host": _safe_host(resolve_mcp_url()),
+            "oauth": oauth,
+        }
+    if oauth.get("auth_required") or oauth.get("store_present") or oauth.get("needs_reauth"):
+        return {
+            "authenticated": False,
+            "status": STATUS_AUTH_REQUIRED,
+            "blocker": BLOCKER_RUNTIME_AUTH,
+            "auth_required": True,
+            "mcp_url_configured": True,
+            "mcp_url_host": _safe_host(resolve_mcp_url()),
+            "oauth": oauth,
         }
     return {
         "authenticated": False,
         "status": STATUS_UNAUTHENTICATED,
         "blocker": BLOCKER_RUNTIME_AUTH,
+        "auth_required": False,
         "mcp_url_configured": True,
         "mcp_url_host": _safe_host(resolve_mcp_url()),
+        "oauth": oauth,
     }
 
 
@@ -113,6 +151,7 @@ class RobinhoodMcpClient:
         self.timeout_sec = timeout_sec
         # Optional injectable for tests: callable(payload, headers) -> dict
         self._transport = transport
+        self._refreshed_once = False
 
     @property
     def has_token(self) -> bool:
@@ -122,11 +161,14 @@ class RobinhoodMcpClient:
         """Call an allowlisted READ tool. Raises PermissionError for non-allowlisted/write."""
         assert_tool_allowed(name)
         if not self._token:
+            # Prefer AUTH_REQUIRED when OAuth store indicates re-auth is needed.
+            oauth = oauth_status()
+            status = STATUS_AUTH_REQUIRED if oauth.get("auth_required") else STATUS_UNAUTHENTICATED
             return McpCallResult(
                 ok=False,
                 tool=name,
                 error=BLOCKER_RUNTIME_AUTH,
-                data={"status": STATUS_UNAUTHENTICATED, "blocker": BLOCKER_RUNTIME_AUTH},
+                data={"status": status, "blocker": BLOCKER_RUNTIME_AUTH},
             )
 
         args = dict(arguments or {})
@@ -155,8 +197,45 @@ class RobinhoodMcpClient:
             else:
                 raw = self._http_post(body, headers)
             return self._parse_result(name, raw)
+        except _HttpUnauthorized:
+            # 401 → try OAuth refresh once, then AUTH_REQUIRED.
+            if not self._refreshed_once and refresh_access_token():
+                self._refreshed_once = True
+                new_tok = resolve_access_token(refresh_if_expired=False)
+                if new_tok:
+                    self._token = new_tok
+                    headers["Authorization"] = f"Bearer {self._token}"
+                    try:
+                        if self._transport is not None:
+                            raw = self._transport(
+                                body, {k: v for k, v in headers.items() if k != "Authorization"}
+                            )
+                        else:
+                            raw = self._http_post(body, headers)
+                        return self._parse_result(name, raw)
+                    except _HttpUnauthorized:
+                        pass
+                    except Exception as exc:
+                        logger.warning(
+                            "Robinhood MCP call failed after refresh tool=%s err=%s",
+                            name,
+                            type(exc).__name__,
+                        )
+                        return McpCallResult(ok=False, tool=name, error=f"{type(exc).__name__}: {exc}")
+            return McpCallResult(
+                ok=False,
+                tool=name,
+                error=BLOCKER_RUNTIME_AUTH,
+                http_status=401,
+                data={"status": STATUS_AUTH_REQUIRED, "blocker": BLOCKER_RUNTIME_AUTH},
+            )
         except RobinhoodMcpAuthError as exc:
-            return McpCallResult(ok=False, tool=name, error=str(exc), data={"status": STATUS_UNAUTHENTICATED})
+            return McpCallResult(
+                ok=False,
+                tool=name,
+                error=str(exc),
+                data={"status": getattr(exc, "status", STATUS_UNAUTHENTICATED)},
+            )
         except PermissionError:
             raise
         except Exception as exc:
@@ -173,6 +252,8 @@ class RobinhoodMcpClient:
                 content_type = (resp.headers.get("Content-Type") or "").lower()
                 raw_bytes = resp.read()
         except HTTPError as exc:
+            if exc.code == 401:
+                raise _HttpUnauthorized() from exc
             err_body = ""
             try:
                 err_body = exc.read().decode("utf-8", errors="replace")[:500]
@@ -200,7 +281,9 @@ class RobinhoodMcpClient:
             for ev in reversed(events):
                 if isinstance(ev, dict) and ("result" in ev or "error" in ev):
                     return self._from_jsonrpc(tool, ev, raw.get("http_status"))
-            return McpCallResult(ok=False, tool=tool, error="Empty SSE stream from MCP", http_status=raw.get("http_status"))
+            return McpCallResult(
+                ok=False, tool=tool, error="Empty SSE stream from MCP", http_status=raw.get("http_status")
+            )
 
         if isinstance(raw, dict):
             return self._from_jsonrpc(tool, raw, raw.get("_http_status"))
@@ -215,6 +298,10 @@ class RobinhoodMcpClient:
         # MCP tools/call result often nests content[].text JSON.
         data = _unwrap_tool_result(result)
         return McpCallResult(ok=True, tool=tool, data=data, http_status=http_status)
+
+
+class _HttpUnauthorized(Exception):
+    """Internal signal for HTTP 401 from MCP endpoint."""
 
 
 def _unwrap_tool_result(result: Any) -> Any:

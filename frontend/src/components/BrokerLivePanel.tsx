@@ -1,7 +1,10 @@
 /**
- * R53: Broker live portfolio panel — Robinhood MCP read-only snapshot (masked).
+ * R53/R70: Broker live portfolio panel — Robinhood MCP read-only snapshot (masked).
  * Manual edit controls must not appear here.
+ * Sync button must call snapshot with refresh=true so Portfolio populates after auth.
  */
+import { useState } from "react";
+import { apiGet } from "@/api/client";
 import { useBrokerAccounts, useBrokerSnapshot, useBrokerStatus } from "@/api/queries";
 import { Badge, Button, Card, CardHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, EmptyState } from "@/components/ui";
 
@@ -14,6 +17,7 @@ export function BrokerLivePanel() {
   const { data: status, isLoading: stLoading, refetch: refetchStatus } = useBrokerStatus();
   const { data: accountsData, refetch: refetchAccounts } = useBrokerAccounts();
   const { data: snapData, isLoading: snapLoading, refetch: refetchSnap } = useBrokerSnapshot("acct_individual", false);
+  const [syncing, setSyncing] = useState(false);
 
   const statusCode = status?.status ?? "UNKNOWN";
   const available = Boolean(status?.ROBINHOOD_MCP_READ_ONLY_AVAILABLE);
@@ -22,6 +26,19 @@ export function BrokerLivePanel() {
   const equities = snap?.equity_positions ?? [];
   const options = snap?.option_positions ?? [];
   const stale = Boolean(snapData?.stale ?? snap?.stale);
+
+  async function syncLive() {
+    setSyncing(true);
+    try {
+      // Critical: refresh=true triggers live MCP sync so Portfolio can populate after auth.
+      await apiGet(
+        `/api/ui/broker/snapshot?refresh=true&account_alias=${encodeURIComponent("acct_individual")}`
+      );
+      await Promise.all([refetchStatus(), refetchAccounts(), refetchSnap()]);
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   return (
     <div className="space-y-4" data-testid="broker-live-panel">
@@ -42,19 +59,18 @@ export function BrokerLivePanel() {
             variant="secondary"
             size="sm"
             data-testid="broker-refresh-btn"
+            disabled={syncing}
             onClick={() => {
-              void refetchStatus();
-              void refetchAccounts();
-              void refetchSnap();
+              void syncLive();
             }}
           >
-            Refresh status
+            {syncing ? "Syncing…" : "Sync"}
           </Button>
         </div>
         {!available && (
           <p className="mt-3 text-xs text-amber-700 dark:text-amber-300" data-testid="broker-auth-blocker">
             Runtime OAuth token not configured ({status?.blocker ?? "ROBINHOOD_RUNTIME_AUTH_EXTERNAL_BLOCKER"}).
-            Last-good snapshot shown when present. Cursor MCP auth ≠ production token.
+            Last-good snapshot shown when present. Cursor MCP auth ≠ ChakraOps app auth.
           </p>
         )}
       </Card>

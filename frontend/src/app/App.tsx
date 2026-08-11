@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { AppLayout } from "@/layout/AppLayout";
+import { RequireAuth } from "@/components/RequireAuth";
+import { LoginPage } from "@/pages/LoginPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { OpportunitiesPage } from "@/pages/OpportunitiesPage";
 import { UniversePage } from "@/pages/UniversePage";
@@ -43,7 +45,14 @@ export function App() {
       <ThemeProvider>
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Routes>
-            <Route element={<AppLayout />}>
+            <Route path="/login" element={<LoginPage />} />
+            <Route
+              element={
+                <RequireAuth>
+                  <AppLayout />
+                </RequireAuth>
+              }
+            >
               <Route path="/" element={<DashboardPage />} />
               <Route path="/opportunities" element={<OpportunitiesPage />} />
               <Route path="/options" element={<OptionsWorkspacePage />} />

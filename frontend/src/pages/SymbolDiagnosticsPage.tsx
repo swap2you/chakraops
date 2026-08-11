@@ -1122,7 +1122,7 @@ function ExecutionConsole({
                       Sessions to T1 = ceil(|T1-Spot| / ATR)
                     </p>
                     <p className="mt-0.5 text-xs text-zinc-600 dark:text-zinc-400">
-                      Spot {fmt(price ?? data.computed?.support_level)} · T1 {fmt(data.targets?.t1)} · ATR {fmt(data.hold_time_estimate.hold_time_atr)} · Distance {fmt(data.hold_time_estimate.hold_time_distance_to_t1)}
+                      Spot {fmt(data.hold_time_estimate.hold_time_spot ?? price ?? data.computed?.support_level)} · T1 {fmt(data.hold_time_estimate.hold_time_t1 ?? data.targets?.t1)} · ATR {fmt(data.hold_time_estimate.hold_time_atr)} · Distance {fmt(data.hold_time_estimate.hold_time_distance_to_t1)}
                     </p>
                   </>
                 )}
@@ -1273,17 +1273,24 @@ function ExecutionConsole({
               {data.score_breakdown?.strategy_fit_score != null && <Kv label="Strategy fit" value={fmt(data.score_breakdown.strategy_fit_score)} />}
               {data.score_breakdown?.capital_efficiency_score != null && <Kv label="Capital efficiency" value={fmt(data.score_breakdown.capital_efficiency_score)} />}
               {data.score_breakdown?.composite_score != null && <Kv label="Composite" value={fmt(data.score_breakdown.composite_score)} />}
+              {data.score_breakdown?.score_basis != null && (
+                <Kv label="Score basis" value={String(data.score_breakdown.score_basis)} />
+              )}
               <Kv label="Raw score" value={fmt(data.raw_score ?? data.score_breakdown?.raw_score)} />
               <Kv label="Final score" value={fmt(data.final_score ?? data.composite_score ?? data.score_breakdown?.final_score)} />
             </div>
             <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700">
               <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1" data-testid="score-used-line">
-                {data.score_caps?.applied_caps?.length
+                {data.score_breakdown?.score_basis === "stage1_score"
+                  ? "Score used: Stage-1 score (Stage-2 not run)"
+                  : data.score_caps?.applied_caps?.length
                   ? "Score used: Final score (capped)"
                   : "Score used: Raw score (uncapped)"}
               </p>
               <p className="text-xs text-zinc-600 dark:text-zinc-400 mb-3">
-                {data.score_caps?.applied_caps?.length
+                {data.score_breakdown?.score_basis === "stage1_score"
+                  ? "Weighted component composite is not the ranking score when evaluation stopped at Stage 1; final equals stage1_score (after any regime caps)."
+                  : data.score_caps?.applied_caps?.length
                   ? "Regime or other caps limit the final score even when the raw score is high (e.g. from liquidity or strategy fit)."
                   : "Final score equals raw score; no caps were applied."}
               </p>
@@ -1657,7 +1664,7 @@ function SharesTabContent({
             {(holdTimeEst?.hold_time_atr != null && holdTimeEst?.hold_time_distance_to_t1 != null) && (
               <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-700" data-testid="shares-hold-time-block">
                 <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Sessions to T1 = ceil(|T1-Spot| / ATR)</p>
-                <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">Spot {fmt(typeof (price ?? comp?.support_level) === "number" ? (price ?? comp?.support_level) as number : null)} · T1 {fmt(typeof targets?.t1 === "number" ? targets.t1 : null)} · ATR {fmt(typeof holdTimeEst.hold_time_atr === "number" ? holdTimeEst.hold_time_atr : null)} · Distance {fmt(typeof holdTimeEst.hold_time_distance_to_t1 === "number" ? holdTimeEst.hold_time_distance_to_t1 : null)}</p>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">Spot {fmt(typeof (holdTimeEst.hold_time_spot ?? price ?? comp?.support_level) === "number" ? (holdTimeEst.hold_time_spot ?? price ?? comp?.support_level) as number : null)} · T1 {fmt(typeof (holdTimeEst.hold_time_t1 ?? targets?.t1) === "number" ? (holdTimeEst.hold_time_t1 ?? targets?.t1) as number : null)} · ATR {fmt(typeof holdTimeEst.hold_time_atr === "number" ? holdTimeEst.hold_time_atr : null)} · Distance {fmt(typeof holdTimeEst.hold_time_distance_to_t1 === "number" ? holdTimeEst.hold_time_distance_to_t1 : null)}</p>
                 <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">One session = one trading day. Rough estimate of days to T1 if price moves ~1 ATR per day; not a promise.</p>
                 <button type="button" onClick={() => setInfoDrawerKey(holdTimeEst.hold_time_atr != null ? "ATR-based hold time" : "Hold-time estimate")} className="mt-1 text-xs cursor-help underline decoration-dotted">(?)</button>
               </div>

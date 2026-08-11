@@ -5522,13 +5522,16 @@ def _build_hold_time_estimate_at_request_time(
     exit_plan: Dict[str, Any],
 ) -> Optional[Dict[str, Any]]:
     """R22.4/R23.4.7: Hold-time estimate at request time. basis_key maps to display text. Not persisted.
-    Returns hold_time_basis, hold_time_atr, hold_time_distance_to_t1, hold_time_sessions; nulls when unavailable."""
+    Returns hold_time_basis, hold_time_atr, hold_time_distance_to_t1, hold_time_sessions; nulls when unavailable.
+    R70-DEF-022: also returns hold_time_spot / hold_time_t1 actually used so Distance reconciles with display."""
     t1 = exit_plan.get("t1")
     atr = technicals.get("atr")
     spot = technicals.get("spot") or 0
     if t1 is not None and atr is not None and float(atr) > 0:
         try:
-            dist = abs(float(t1) - float(spot))
+            spot_f = float(spot)
+            t1_f = float(t1)
+            dist = abs(t1_f - spot_f)
             if dist <= 0:
                 return {
                     "sessions": 5,
@@ -5537,6 +5540,8 @@ def _build_hold_time_estimate_at_request_time(
                     "hold_time_atr": None,
                     "hold_time_distance_to_t1": None,
                     "hold_time_sessions": None,
+                    "hold_time_spot": None,
+                    "hold_time_t1": None,
                 }
             sessions = max(1, int(round(dist / float(atr))))
             return {
@@ -5546,6 +5551,8 @@ def _build_hold_time_estimate_at_request_time(
                 "hold_time_atr": round(float(atr), 4),
                 "hold_time_distance_to_t1": round(dist, 4),
                 "hold_time_sessions": sessions,
+                "hold_time_spot": round(spot_f, 4),
+                "hold_time_t1": round(t1_f, 4),
             }
         except (TypeError, ValueError):
             pass
@@ -5556,6 +5563,8 @@ def _build_hold_time_estimate_at_request_time(
         "hold_time_atr": None,
         "hold_time_distance_to_t1": None,
         "hold_time_sessions": None,
+        "hold_time_spot": None,
+        "hold_time_t1": None,
     }
 
 

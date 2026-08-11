@@ -188,6 +188,10 @@ def operations_health_snapshot() -> dict:
             r for r in (sched.get("recent_runs") or [])
             if r.get("state") in ("FAILED", "TIMED_OUT")
         ]
+        # R70-RERUN: notifications may arrive while scheduler_running=false — expose honest sources.
+        notification_sources = ["in_app", "reconcile_advisory", "advisory_monitor", "ops_jobs"]
+        if sched.get("running") or sched.get("master_enabled"):
+            notification_sources.append("ops_scheduler")
         return {
             "scheduler_master_enabled": sched.get("master_enabled"),
             "scheduler_running": sched.get("running"),
@@ -197,9 +201,18 @@ def operations_health_snapshot() -> dict:
             "backup_count": len(backups),
             "latest_backup_at": (backups[0].get("created_at") if backups else None),
             "orats_token_present": bool(get_orats_token()),
+            "notification_sources": notification_sources,
+            "notification_note": (
+                "In-app/reconcile/ops-job alerts can appear while legacy/ops scheduler is off; "
+                "they are not owned by scheduler_running."
+            ),
         }
     except Exception:
-        return {"scheduler_master_enabled": False, "scheduler_running": False}
+        return {
+            "scheduler_master_enabled": False,
+            "scheduler_running": False,
+            "notification_sources": ["in_app", "reconcile_advisory", "advisory_monitor", "ops_jobs"],
+        }
 
 
 __all__ = ["SystemHealthSnapshot", "compute_system_health", "operations_health_snapshot"]

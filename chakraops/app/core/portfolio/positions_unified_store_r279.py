@@ -386,22 +386,39 @@ def build_unified_positions(
 
 
 def get_positions_unified_health() -> Dict[str, Any]:
-    """Return health block for system-health: open_count, closed_count, last_build_ts (safe labels only)."""
-    from datetime import datetime, timezone
+    """Return health block for system-health: open_count, closed_count, last_build_ts (safe labels only).
+
+    R70-RERUN / DEF-050: read-only — do not rebuild sources or stamp last_build_ts=now().
+    Counts come from unified DB; last_build_ts is the last operator rebuild timestamp when known.
+    """
     try:
-        open_list = build_unified_positions(state="open", include_paper=True)
-        closed_list = build_unified_positions(state="closed", include_paper=True)
+        init_db()
+        open_count = 0
+        closed_count = 0
+        with _LOCK:
+            conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+            try:
+                open_count = int(conn.execute("SELECT COUNT(*) FROM positions_open").fetchone()[0] or 0)
+                closed_count = int(conn.execute("SELECT COUNT(*) FROM positions_closed").fetchone()[0] or 0)
+            finally:
+                conn.close()
+        rebuild = get_positions_unified_rebuild_health()
+        last_ts = rebuild.get("last_rebuild_at_utc") or rebuild.get("finished_at_utc")
         return {
-            "open_count": len(open_list),
-            "closed_count": len(closed_list),
-            "last_build_ts": datetime.now(timezone.utc).isoformat(),
+            "open_count": open_count,
+            "closed_count": closed_count,
+            "last_build_ts": last_ts,
+            "authority": "positions_unified_db",
+            "read_only": True,
         }
     except Exception as e:
         logger.warning("[R27.9] health build failed: %s", e)
         return {
             "open_count": 0,
             "closed_count": 0,
-            "last_build_ts": datetime.now(timezone.utc).isoformat(),
+            "last_build_ts": None,
+            "authority": "positions_unified_db",
+            "read_only": True,
         }
 
 
@@ -663,6 +680,37 @@ def mirror_paper_close_to_unified(pos: Dict[str, Any]) -> None:
 
 # --- R28.9: DB-first read (what is stored; no source recompute) ---
 
+def _option_expiry_date(expiry: Optional[str]):
+    """Parse YYYY-MM-DD expiry; return date or None."""
+    from datetime import date as _date
+    if not expiry:
+        return None
+    s = str(expiry).strip()[:10]
+    try:
+        y, m, d = int(s[0:4]), int(s[5:7]), int(s[8:10])
+        return _date(y, m, d)
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+def _is_expired_open_option(row: Dict[str, Any], *, today=None) -> bool:
+    """True when an options row (CSP/CC/PUT/CALL) has expiry strictly before today (UTC date)."""
+    from datetime import date as _date, datetime, timezone
+    itype = (row.get("instrument_type") or "").strip().upper()
+    right = (row.get("right") or "").strip().upper()
+    is_opt = itype in {"CSP", "CC", "PUT", "CALL", "OPTION", "OPTIONS"} or right in {"PUT", "CALL"}
+    if not is_opt:
+        return False
+    exp = _option_expiry_date(row.get("expiry"))
+    if exp is None:
+        return False
+    if today is None:
+        today = datetime.now(timezone.utc).date()
+    elif isinstance(today, str):
+        today = _option_expiry_date(today) or _date.today()
+    return exp < today
+
+
 def read_positions_unified_from_db(
     state: str = "open",
     include_paper: bool = True,
@@ -673,6 +721,7 @@ def read_positions_unified_from_db(
     """
     R28.9: Read directly from unified SQLite (positions_open or positions_closed).
     No recompute from sources. Deterministic ordering; safe labels only; no writes.
+    R70-DEF-021: exclude expired options from open live presentation; expose provenance.
     """
     limit = max(0, min(int(limit), 2000))
     want_open = (state or "open").strip().lower() != "closed"
@@ -735,16 +784,37 @@ def read_positions_unified_from_db(
                     })
         finally:
             conn.close()
+    expired_excluded = 0
     if want_open:
+        kept: List[Dict[str, Any]] = []
+        for r in rows:
+            if _is_expired_open_option(r):
+                expired_excluded += 1
+                continue
+            kept.append(r)
+        rows = kept
         rows.sort(key=_sort_key_open)
     else:
         rows.sort(key=_sort_key_closed)
     items = [_safe_dict(r) for r in rows[:limit]]
+    rebuild = get_positions_unified_rebuild_health()
+    as_of = rebuild.get("last_rebuild_at_utc") or rebuild.get("finished_at_utc")
     return {
         "status": "OK",
         "status_label": "OK",
         "count": len(items),
         "items": items,
+        "include_paper": bool(include_paper),
+        "authority": "positions_unified_db",
+        "as_of": as_of,
+        "count_expired_excluded": expired_excluded if want_open else 0,
+        "provenance": {
+            "source": "positions_unified_sqlite",
+            "include_paper": bool(include_paper),
+            "state": "open" if want_open else "closed",
+            "as_of": as_of,
+            "expired_options_excluded_from_open": bool(want_open),
+        },
     }
 
 

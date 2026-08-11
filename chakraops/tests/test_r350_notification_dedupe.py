@@ -7,15 +7,17 @@ from __future__ import annotations
 from unittest.mock import patch
 
 
-def test_notification_dedupe(tmp_path):
+def test_notification_dedupe(tmp_path, monkeypatch):
     notif_path = tmp_path / "notifications.jsonl"
-    with patch("app.api.notifications_store._notifications_path", return_value=notif_path):
-        from app.core.operations.notification_service import notify_job_failure
+    inc_path = tmp_path / "incidents.jsonl"
+    monkeypatch.setattr("app.core.operations.incident_store._path", lambda: inc_path)
+    monkeypatch.setattr("app.api.notifications_store._notifications_path", lambda: notif_path)
+    from app.core.operations.notification_service import notify_job_failure
 
-        notify_job_failure("backup", "disk full", "CRITICAL")
-        notify_job_failure("backup", "disk full", "CRITICAL")
-        text = notif_path.read_text(encoding="utf-8")
-        assert text.count("disk full") == 1
+    notify_job_failure("backup", "disk full", "CRITICAL")
+    notify_job_failure("backup", "disk full", "CRITICAL")
+    text = notif_path.read_text(encoding="utf-8")
+    assert text.count("disk full") == 1
 
 
 def test_recovery_without_open_incident_is_noop(tmp_path, monkeypatch):

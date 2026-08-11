@@ -1,0 +1,19 @@
+# R70-DEF-074: explicit ruff config (gradual adoption).
+# Full E/F/UP/I would report thousands of legacy findings; gate on critical
+# syntax / undefined-name rules until a dedicated cleanup release.
+target-version = "py311"
+line-length = 120
+
+[lint]
+select = ["E9", "F63", "F7", "F82"]
+
+[lint.per-file-ignores]
+# Known legacy undefined-name debt — tracked under R70-DEF-110/111; do not expand.
+"app/core/eval/strategy_rationale.py" = ["F821"]
+"app/core/market_snapshot.py" = ["F821"]
+"app/core/market_time.py" = ["F821"]
+"app/core/options/contract_selector.py" = ["F821"]
+"app/core/options/providers/orats_client.py" = ["F822"]
+"app/core/state_machine/position_state_machine.py" = ["F821"]
+"app/core/trade_construction/engine.py" = ["F821"]
+"app/signals/models.py" = ["F821"]

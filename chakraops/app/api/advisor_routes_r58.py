@@ -4,11 +4,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
-from app.core.advisor.grounding_r58 import build_goal_plan, build_grounded_answer
+from app.core.advisor.deepen_r68 import deepen_ask, education_catalog
+from app.core.advisor.grounding_r58 import build_goal_plan
 
 router = APIRouter(prefix="/api/ui/advisor", tags=["advisor-r58"])
 
@@ -25,6 +26,7 @@ def _require_ui_key(x_ui_key: str | None = Header(None, alias="x-ui-key")) -> No
 
 @router.post("/ask")
 async def advisor_ask(request: Request, x_ui_key: str | None = Header(None, alias="x-ui-key")) -> Dict[str, Any]:
+    """Grounded ask — server synthesizes answers; client prose is not trusted (R70-DEF-060)."""
     _require_ui_key(x_ui_key)
     try:
         body = await request.json()
@@ -32,11 +34,19 @@ async def advisor_ask(request: Request, x_ui_key: str | None = Header(None, alia
         raise HTTPException(status_code=400, detail="Invalid JSON")
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="JSON object required")
-    return build_grounded_answer(
+    # Ignore body["answer"] for default ask; deepen modes generate server-side.
+    return deepen_ask(
         question=str(body.get("question") or ""),
         citations=list(body.get("citations") or []),
-        answer=str(body.get("answer") or ""),
+        answer="",  # never trust client answer on public ask
         confidence=str(body.get("confidence") or "low"),
+        mode=str(body.get("mode") or "ask"),
+        teach_topic=body.get("teach_topic"),
+        compare_left=body.get("compare_left"),
+        compare_right=body.get("compare_right"),
+        no_trade_reasons=list(body.get("no_trade_reasons") or [])
+        if isinstance(body.get("no_trade_reasons"), list)
+        else None,
     )
 
 
@@ -56,12 +66,19 @@ async def advisor_goal_plan(request: Request, x_ui_key: str | None = Header(None
     )
 
 
+@router.get("/education")
+def advisor_education(x_ui_key: str | None = Header(None, alias="x-ui-key")) -> Dict[str, Any]:
+    _require_ui_key(x_ui_key)
+    return education_catalog()
+
+
 @router.get("/status")
 def advisor_status(x_ui_key: str | None = Header(None, alias="x-ui-key")) -> Dict[str, Any]:
     _require_ui_key(x_ui_key)
     return {
         "status": "OK",
         "mode": "grounded_advisory",
+        "answer_source": "server_synthesized",
         "manual_only": True,
         "trade_execution": False,
         "broker_writes": False,

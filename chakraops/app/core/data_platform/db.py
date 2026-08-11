@@ -1,12 +1,17 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
-"""R51 data platform engine — PostgreSQL when DATABASE_URL set; else SQLite."""
+"""R51 data platform engine — PostgreSQL when DATABASE_URL set; else SQLite.
+
+R70 honesty (DEF-030): Production still requires a PostgreSQL DATABASE_URL for the
+SQLAlchemy *platform* engine gate. Critical LIVE portfolio/broker stores remain
+SQLite/JSON until an explicit migration — see runtime_persistence_inventory().
+"""
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
@@ -28,7 +33,7 @@ def _default_sqlite_url() -> str:
 
 
 def is_production_env() -> bool:
-    """True when running in production deploy mode (Postgres mandatory)."""
+    """True when running in production deploy mode (Postgres mandatory for platform URL)."""
     flags = (
         os.environ.get("CHAKRAOPS_PRODUCTION"),
         os.environ.get("DEPLOY_ENV"),
@@ -76,6 +81,70 @@ def resolve_database_url(url: Optional[str] = None) -> str:
     if lower.startswith("postgresql://") and "+psycopg" not in lower:
         return "postgresql+psycopg://" + raw[len("postgresql://") :]
     return raw
+
+
+def runtime_persistence_inventory() -> Dict[str, Any]:
+    """Honest SoT map: platform URL gate vs stores that still write SQLite/JSON.
+
+    R70-DEF-030: Do not claim Postgres is LIVE portfolio/broker SoT until migrated.
+    """
+    try:
+        platform_url = resolve_database_url()
+    except Exception as exc:  # noqa: BLE001 — surface gate errors honestly
+        platform_url = f"UNRESOLVED:{type(exc).__name__}"
+    platform_kind = "postgres" if str(platform_url).startswith("postgresql") else "sqlite"
+    if str(platform_url).startswith("UNRESOLVED:"):
+        platform_kind = "unresolved"
+    return {
+        "schema": "runtime_persistence_inventory_r70",
+        "platform_database": {
+            "engine": "sqlalchemy",
+            "url_kind": platform_kind,
+            "role": "production_url_gate_and_scaffolded_models",
+            "is_live_portfolio_sot": False,
+            "is_live_broker_snapshot_sot": False,
+            "note": (
+                "R62 production gate requires PostgreSQL DATABASE_URL. "
+                "Critical broker/portfolio paths are not yet migrated onto this engine."
+            ),
+        },
+        "critical_runtime_stores": [
+            {
+                "name": "broker_snapshots",
+                "backend": "sqlite+json",
+                "module": "app.core.broker.snapshot_store",
+                "authority": "LIVE last-good broker read",
+            },
+            {
+                "name": "holdings_manual",
+                "backend": "sqlite",
+                "module": "app.core.accounts.holdings_db",
+                "authority": "Recovery/manual entry — not LIVE",
+            },
+            {
+                "name": "positions_unified",
+                "backend": "sqlite",
+                "module": "app.core.portfolio.positions_unified_store_r279",
+                "authority": "Derived mirror / repair surface",
+            },
+            {
+                "name": "ticket_queue",
+                "backend": "sqlite",
+                "module": "app.core.ops.ticket_queue_store_r42",
+                "authority": "Manual ticket queue",
+            },
+            {
+                "name": "decision_artifacts",
+                "backend": "json",
+                "module": "app.core.eval.evaluation_store_v2",
+                "authority": "LIVE decision_latest / eval snapshot",
+            },
+        ],
+        "postgres_is_portfolio_sot": False,
+        "migration_status": "DEFERRED_XL",
+        "manual_only": True,
+        "trade_execution": False,
+    }
 
 
 def get_engine(*, url: Optional[str] = None, force_new: bool = False) -> Engine:

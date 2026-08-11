@@ -7,15 +7,15 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def atomic_write_json(path: Path, obj: Dict[str, Any], indent: int | None = 0) -> None:
+def atomic_write_json(path: Path, obj: Any, indent: int | None = 0) -> None:
     """
     Write JSON to path atomically: write to path.tmp, fsync, rename to path.
-    On rename failure, tmp is left for manual inspection.
+    Accepts dict or list (critical artifact payloads). On rename failure, tmp is left.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

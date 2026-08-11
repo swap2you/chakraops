@@ -1,4 +1,4 @@
-# Phase 4 / R50: Blocking quality gates on main and PRs.
+# Phase 4 / R70: Blocking quality gates on main and PRs.
 # CI does not require ORATS token; tests use fixtures and mocks.
 name: CI
 
@@ -29,15 +29,34 @@ jobs:
           pip install -r requirements.txt
           pip install ruff
 
-      - name: Lint (ruff) — blocking
+      - name: Lint (ruff) — blocking (ruff.toml critical rules)
         run: ruff check app tests --output-format=default
 
       - name: Pytest (unit + integration with mocks; no ORATS token)
         run: python -m pytest tests/ -q --tb=short
 
-      - name: R40.1 / R41–R50 critical regressions
+      - name: R40.1–R70 critical regressions
         run: |
-          python -m pytest tests/test_r401_scheduler_defaults.py tests/test_r401_eval_concurrency.py tests/test_r401_wheel_cash.py tests/test_r41_r401_regressions.py tests/test_r42_ticket_queue.py tests/test_r48_read_no_eval.py -q --tb=short
+          python -m pytest \
+            tests/test_r401_scheduler_defaults.py \
+            tests/test_r401_eval_concurrency.py \
+            tests/test_r401_wheel_cash.py \
+            tests/test_r41_r401_regressions.py \
+            tests/test_r42_ticket_queue.py \
+            tests/test_r48_read_no_eval.py \
+            tests/test_r61_allowlist_hardening.py \
+            tests/test_r62_postgres_production.py \
+            tests/test_r63_compose_golive.py \
+            tests/test_r52_snapshot_fail_closed.py \
+            tests/test_r52_broker_write_denylist.py \
+            tests/test_r54_monitor_signals.py \
+            tests/test_r58_r59_advisor_backtest.py \
+            tests/test_r64_r69_golive.py \
+            tests/test_r70_finance_eval_batch.py \
+            tests/test_r70_def072_startup.py \
+            tests/test_r70_ai_grounding.py \
+            tests/test_r70_persistence_honesty.py \
+            -q --tb=short
 
   frontend:
     runs-on: ubuntu-latest

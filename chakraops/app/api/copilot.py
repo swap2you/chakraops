@@ -681,6 +681,8 @@ async def copilot_ask(
     followups.extend(["What is my position/holdings exposure?", "Is data fresh and scheduler healthy?"])
     followups = list(dict.fromkeys(followups))[:4]
 
+    # Clear stale error after a successful ask (R70-DEF-060 honesty).
+    LAST_COPILOT_ERROR_CODE = None
     request_id = str(uuid.uuid4())
     return {
         "answer_markdown": answer_md,
@@ -689,4 +691,5 @@ async def copilot_ask(
         "used_tools": used_tools,
         "snapshot_used": snapshot_used,
         "request_id": request_id,
+        "last_error_code": None,
     }

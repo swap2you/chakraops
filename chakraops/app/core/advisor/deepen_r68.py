@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional
 
 from app.core.advisor.education_corpus_r68 import get_education_topic, list_education_stubs
@@ -21,10 +22,35 @@ INJECTION_MARKERS = (
     "call robinhood write",
 )
 
+_INVENTED_BALANCE_RE = re.compile(
+    r"(\$\s*[\d,]+(?:\.\d+)?|\b(?:cash|balance|buying power|equity)\s+(?:is|of|=)\s*[\d,]+)",
+    re.IGNORECASE,
+)
+
 
 def detect_prompt_injection(text: str) -> bool:
     t = (text or "").lower()
     return any(m in t for m in INJECTION_MARKERS)
+
+
+def _looks_like_invented_balance(text: str) -> bool:
+    return bool(_INVENTED_BALANCE_RE.search(text or ""))
+
+
+def _server_compose_ask_answer(question: str, citations: List[Dict[str, Any]]) -> str:
+    """Never echo client free-text; compose a citation-bounded advisory stub."""
+    refs = "; ".join(
+        f"{c.get('source')}:{c.get('ref')}"
+        for c in (citations or [])
+        if isinstance(c, dict) and c.get("source")
+    )
+    return (
+        f"Grounded advisory for: {(question or '').strip() or 'n/a'}. "
+        f"Evidence limited to citations ({refs or 'none'}). "
+        "Verify live balances only via broker snapshot / Portfolio APIs — "
+        "do not treat this text as an account statement. "
+        "Advisory only; manual_only; no trade execution."
+    )
 
 
 def explain_why_no_trade(
@@ -46,6 +72,7 @@ def explain_why_no_trade(
         citations=cite,
         answer=answer,
         confidence="medium",
+        trust_client_answer=True,
     )
     out["why_no_trade"] = True
     out["reasons"] = list(reasons or [])
@@ -71,6 +98,7 @@ def compare_strategies(
         citations=cite,
         answer=answer,
         confidence="low",
+        trust_client_answer=True,
     )
     out["comparison"] = {"left": left, "right": right}
     out["promises_returns"] = False
@@ -127,16 +155,17 @@ def deepen_ask(
             citations=teach_cites,
             answer=f"{topic['title']}: {topic['summary']}",
             confidence="medium",
+            trust_client_answer=True,
         )
 
-    # Default ask — still fail closed without citations.
-    # Ensure education_corpus remains allowed (already in ALLOWED_GROUNDED_SOURCES).
+    # Default ask — server synthesizes; ignore client prose.
     _ = ALLOWED_GROUNDED_SOURCES
     return build_grounded_answer(
         question=question,
         citations=citations,
-        answer=answer,
+        answer="",
         confidence=confidence,
+        trust_client_answer=False,
     )
 
 

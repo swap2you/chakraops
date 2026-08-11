@@ -26,7 +26,8 @@ Invoke-WebRequest -Uri "http://127.0.0.1:18873/" -UseBasicParsing
 | Variable | Role |
 |----------|------|
 | `ORATS_API_TOKEN` | Options/market data |
-| `DATABASE_URL` | Optional; `postgresql+psycopg://...` for Postgres; unset → local SQLite under `data/` |
+| `DATABASE_URL` | Production: PostgreSQL required (R62 gate). Local: optional; unset → platform SQLite under `data/`. **Not** LIVE portfolio SoT yet (R70-DEF-030). |
+| `UI_CORS_ORIGINS` | Comma-separated browser origins (not `CORS_ORIGINS`) |
 | `ROBINHOOD_MCP_ACCESS_TOKEN` / `ROBINHOOD_MCP_TOKEN_PATH` | Read-only broker (R52) |
 | `CHAKRAOPS_SCHEDULER_ENABLED` | Must remain `false` unless explicit operator opt-in |
 | Slack webhooks | Optional notifications |
@@ -35,10 +36,12 @@ See `chakraops/.env.example`.
 
 ## Data
 
-- **Transactional:** SQLAlchemy data platform (`app/core/data_platform/`); prefer Postgres in production.
+- **Platform engine:** SQLAlchemy (`app/core/data_platform/`); production requires Postgres URL (gate). Scaffolded models only until store migration.
+- **LIVE SoT:** broker snapshot SQLite/JSON, decision JSON, ticket/journal SQLite — see [DATA_MODEL.md](./DATA_MODEL.md).
 - **Research:** Parquet + DuckDB — not multi-process transactional writes ([RESEARCH_DATA.md](./RESEARCH_DATA.md)).
 - **Backup:** `chakraops/docs/RUNBOOK_BACKUP_RESTORE.md` — exclude `.env` / credentials.
-- Inventory legacy stores before cutover: `python -m app.core.data_platform.migrate_sqlite_inventory` (from `chakraops/`).
+- Inventory stores: `python -m app.core.data_platform.migrate_sqlite_inventory` (from `chakraops/`).
+- Store consolidation (DEF-031): deferred XL.
 
 ## Broker production auth
 

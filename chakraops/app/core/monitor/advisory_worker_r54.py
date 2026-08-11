@@ -154,6 +154,7 @@ class AdvisoryMonitorWorker:
         self.last_emitted: List[AdvisorySignal] = []
         self.last_run_at: Optional[str] = None
         self.running = False
+        self._load_persisted_signals()
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -172,8 +173,35 @@ class AdvisoryMonitorWorker:
             try:
                 self.run_once()
             except Exception as exc:
-                logger.warning("advisory monitor cycle failed: %s", type(exc).__name__)
+                logger.exception("advisory monitor cycle failed: %s", type(exc).__name__)
             self._stop.wait(self.interval_sec)
+
+    def _load_persisted_signals(self) -> None:
+        """R70-DEF-050: restore prior signal set so restart does not re-fire unchanged alerts."""
+        path = self._state_path()
+        if not path.exists():
+            return
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            raw = payload.get("signals") or []
+            restored: List[AdvisorySignal] = []
+            for item in raw:
+                if not isinstance(item, dict):
+                    continue
+                restored.append(
+                    AdvisorySignal(
+                        signal_type=str(item.get("signal_type") or ""),
+                        symbol=str(item.get("symbol") or ""),
+                        message=str(item.get("message") or ""),
+                        as_of=str(item.get("as_of") or datetime.now(timezone.utc).isoformat()),
+                        payload=dict(item.get("payload") or {}),
+                        deep_link=str(item.get("deep_link") or ""),
+                    )
+                )
+            self.last_signals = restored
+            self.last_run_at = payload.get("last_run_at")
+        except Exception as exc:
+            logger.warning("failed to load advisory monitor state: %s", type(exc).__name__)
 
     def run_once(self) -> List[AdvisorySignal]:
         from app.core.broker.status import robinhood_mcp_read_only_status
@@ -217,7 +245,9 @@ class AdvisoryMonitorWorker:
             "deep_link_base": public_base_url(),
         }
         try:
-            self._state_path().write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            from app.core.io.atomic import atomic_write_json
+
+            atomic_write_json(self._state_path(), payload, indent=2)
         except OSError:
             logger.warning("failed to persist advisory monitor state")
 
@@ -226,7 +256,8 @@ class AdvisoryMonitorWorker:
             return
         try:
             from app.core.alerts.slack_dispatcher import is_slack_configured, send_slack_message, get_webhook_for_channel
-        except Exception:
+        except Exception as exc:
+            logger.warning("slack advisory import failed: %s", type(exc).__name__)
             return
         if not is_slack_configured():
             return
@@ -241,8 +272,8 @@ class AdvisoryMonitorWorker:
             )
             try:
                 send_slack_message(webhook, text)
-            except Exception:
-                logger.warning("slack advisory dispatch failed")
+            except Exception as exc:
+                logger.warning("slack advisory dispatch failed: %s", type(exc).__name__)
 
 
 _WORKER: Optional[AdvisoryMonitorWorker] = None

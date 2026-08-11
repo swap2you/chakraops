@@ -210,10 +210,9 @@ def _write(snapshot: BrokerSnapshot) -> None:
         finally:
             c.close()
         try:
-            _json_path(snapshot.account_alias).write_text(
-                json.dumps(payload, indent=2),
-                encoding="utf-8",
-            )
+            from app.core.io.atomic import atomic_write_json
+
+            atomic_write_json(_json_path(snapshot.account_alias), payload, indent=2)
         except OSError as exc:
             logger.warning("JSON snapshot write failed: %s", type(exc).__name__)
 

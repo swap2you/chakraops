@@ -10,7 +10,7 @@
 | Backend | FastAPI (`chakraops/app`) | `18800` |
 | Market data | ORATS (options/strategy) | — |
 | Live portfolio (R52+) | Robinhood MCP **read-only** client | — |
-| Transactional data (R51+) | SQLAlchemy → PostgreSQL preferred; SQLite local default | `DATABASE_URL` |
+| Transactional data (R51+) | SQLAlchemy platform engine; **Postgres URL mandatory in production (gate only)**; critical LIVE portfolio/broker stores remain SQLite/JSON until migrated (R70-DEF-030) | `DATABASE_URL` |
 | Research | Parquet + DuckDB (analytical only) | see [RESEARCH_DATA.md](./RESEARCH_DATA.md) |
 
 ## Layout (keep)
@@ -33,12 +33,14 @@ out/verification/<Rel>/    # evidence (gitignored)
 - Status: `ROBINHOOD_MCP_READ_ONLY_AVAILABLE` when token configured; else `UNAUTHENTICATED` / `ROBINHOOD_RUNTIME_AUTH_EXTERNAL_BLOCKER`.
 - Historical R37 `NO_GO` docs remain archive; not current runtime target.
 
-## Data platform (R51)
+## Data platform (R51 / R70 honesty)
 
 - Package: `app/core/data_platform/`
-- Models: accounts, snapshots, positions, journal fills, tickets, universe lifecycle, decisions, alerts, job runs, audit events.
-- Migrations: Alembic when installed; local SQLite file under `data/` if `DATABASE_URL` unset.
+- Models: accounts, snapshots, positions, journal fills, tickets, universe lifecycle, decisions, alerts, job runs, audit events (**scaffolded**).
+- Production: `DATABASE_URL` must be PostgreSQL (R62 gate). This does **not** mean broker/portfolio SoT is Postgres yet.
+- Runtime LIVE SoT: see [DATA_MODEL.md](./DATA_MODEL.md) (`broker_snapshots_r52.db`, decision JSON, etc.).
 - Legacy SQLite/JSON under `data/` and `out/` are inventoried before migration — do not delete unique journal/history.
+- Store consolidation (R70-DEF-031): **DEFERRED** pending sequenced migration.
 
 ## Safety architecture
 

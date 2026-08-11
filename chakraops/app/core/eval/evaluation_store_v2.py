@@ -145,11 +145,9 @@ def _write_eval_snapshot(artifact: DecisionArtifactV2) -> None:
             logger.warning("[EVAL_STORE_V2] Earnings snapshot fetch failed: %s", e)
     path = _eval_snapshot_path()
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2)
-            f.flush()
-            os.fsync(f.fileno())
+        from app.core.io.atomic import atomic_write_json
+
+        atomic_write_json(path, payload, indent=2)
         logger.debug("[EVAL_STORE_V2] Wrote eval_snapshot %s", path)
     except Exception as e:
         logger.warning("[EVAL_STORE_V2] Failed to write eval_snapshot %s: %s", path, e)

@@ -26,8 +26,14 @@ def test_decision_latest_and_action_needed_do_not_call_evaluate_universe() -> No
                 assert coord_mock.call_count == 0
 
 
-def test_operations_status_reports_schedulers_off() -> None:
+def test_operations_status_reports_schedulers_off(monkeypatch) -> None:
     from app.api.server import app
+
+    monkeypatch.delenv("CHAKRAOPS_SCHEDULER_ENABLED", raising=False)
+    monkeypatch.delenv("CHAKRAOPS_LEGACY_SCHEDULERS_ENABLED", raising=False)
+    monkeypatch.delenv("CHAKRAOPS_ALLOW_ENV_SCHEDULER_OPT_IN", raising=False)
+    monkeypatch.setenv("CHAKRAOPS_SCHEDULER_ENABLED", "false")
+    monkeypatch.setenv("CHAKRAOPS_LEGACY_SCHEDULERS_ENABLED", "false")
 
     client = TestClient(app)
     r = client.get("/api/operations/status")

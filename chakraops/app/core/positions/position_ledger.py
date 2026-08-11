@@ -34,11 +34,11 @@ def load_open_positions(ledger_path: Union[str, Path, None] = None) -> List[Dict
 
 
 def save_open_positions(positions: List[Dict[str, Any]], ledger_path: Union[str, Path, None] = None) -> None:
-    """Write full list of positions to JSON. Creates parent dirs if needed."""
+    """Write full list of positions to JSON atomically. Creates parent dirs if needed."""
+    from app.core.io.atomic import atomic_write_json
+
     path = Path(ledger_path) if ledger_path else _default_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(positions, f, indent=2, default=str)
+    atomic_write_json(path, list(positions or []), indent=2)
 
 
 def _infer_option_type(mode: str) -> str:

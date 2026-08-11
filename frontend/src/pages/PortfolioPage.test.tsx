@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@/test/test-utils";
+import { render, renderWithRoute, screen, fireEvent } from "@/test/test-utils";
 import { PortfolioPage } from "./PortfolioPage";
 
 const usePortfolio = vi.fn();
@@ -162,24 +162,24 @@ describe("PortfolioPage", () => {
   });
 
   it("renders without throwing", () => {
-    expect(() => render(<PortfolioPage />)).not.toThrow();
+    expect(() => renderWithRoute(<PortfolioPage />, '/portfolio?tab=overview')).not.toThrow();
   });
 
   it("shows Close action for OPEN position", async () => {
-    render(<PortfolioPage />);
+    renderWithRoute(<PortfolioPage />, '/portfolio?tab=holdings');
     const closeBtn = await screen.findByRole("button", { name: /close/i });
     expect(closeBtn).toBeInTheDocument();
   });
 
   it("shows Portfolio Metrics card (Phase 12.0)", async () => {
-    render(<PortfolioPage />);
+    renderWithRoute(<PortfolioPage />, '/portfolio?tab=overview');
     expect(screen.getByText(/Portfolio Metrics/)).toBeInTheDocument();
     expect(screen.getByText(/Realized PnL total/)).toBeInTheDocument();
     expect(screen.getByText(/\$120\.00/)).toBeInTheDocument();
   });
 
   it("shows Account & Portfolio title and broker-primary header (R53)", async () => {
-    render(<PortfolioPage />);
+    renderWithRoute(<PortfolioPage />, '/portfolio?tab=overview');
     expect(screen.getByText(/Account & Portfolio/i)).toBeInTheDocument();
     expect(screen.getByTestId("broker-live-panel")).toBeInTheDocument();
     expect(screen.getByText(/Capital deployed/i)).toBeInTheDocument();
@@ -195,7 +195,7 @@ describe("PortfolioPage", () => {
     usePortfolioMetrics.mockReturnValue({
       data: { ...mockMetrics, capital_deployed: 0, open_positions_count: 0 },
     });
-    render(<PortfolioPage />);
+    renderWithRoute(<PortfolioPage />, '/portfolio?tab=overview');
     expect(screen.getByText(/Capital deployed/i)).toBeInTheDocument();
     // metrics card shows $0.00 for deployed when test-only
     const deployedLabels = screen.getAllByText(/\$0\.00/);
@@ -208,7 +208,7 @@ describe("PortfolioPage", () => {
       isLoading: false,
       isError: false,
     });
-    render(<PortfolioPage />);
+    renderWithRoute(<PortfolioPage />, '/portfolio?tab=holdings');
     const deleteBtn = screen.getByRole("button", { name: /delete/i });
     expect(deleteBtn).toBeInTheDocument();
   });
@@ -228,7 +228,7 @@ describe("PortfolioPage", () => {
       isLoading: false,
       isError: false,
     });
-    render(<PortfolioPage />);
+    renderWithRoute(<PortfolioPage />, '/portfolio?tab=holdings');
     const link = screen.getByRole("link", { name: /decision \(run a1b2c3d4/i });
     expect(link).toBeInTheDocument();
     expect(link).toHaveAttribute(
@@ -238,7 +238,7 @@ describe("PortfolioPage", () => {
   });
 
   it("shows View button and opens detail drawer with Details and Timeline tabs (Phase 13.0)", () => {
-    render(<PortfolioPage />);
+    renderWithRoute(<PortfolioPage />, '/portfolio?tab=holdings');
     const viewBtn = screen.getByRole("button", { name: /view/i });
     expect(viewBtn).toBeInTheDocument();
     fireEvent.click(viewBtn);
@@ -247,18 +247,17 @@ describe("PortfolioPage", () => {
   });
 
   it("shows Roll position button for open CSP position (Phase 13.0)", () => {
-    render(<PortfolioPage />);
+    renderWithRoute(<PortfolioPage />, '/portfolio?tab=holdings');
     fireEvent.click(screen.getByRole("button", { name: /view/i }));
     const rollBtn = screen.getByRole("button", { name: /roll position/i });
     expect(rollBtn).toBeInTheDocument();
   });
 
   it("shows Recovery manual balances and Holdings sections (R53)", () => {
-    render(<PortfolioPage />);
+    renderWithRoute(<PortfolioPage />, '/portfolio?tab=recovery');
     expect(screen.getByText(/Recovery \/ Advanced — manual balances/i)).toBeInTheDocument();
-    expect(screen.getByTestId("portfolio-holdings")).toBeInTheDocument();
+    expect(screen.getByTestId("portfolio-manual-recovery")).toBeInTheDocument();
     expect(screen.getByTestId("portfolio-tabs")).toBeInTheDocument();
-    expect(screen.getByText(/Add holding/)).toBeInTheDocument();
   });
 
   it("R44: distinguishes cash vs total capital vs buying power", () => {
@@ -271,7 +270,7 @@ describe("PortfolioPage", () => {
     useAccountSummary.mockReturnValue({
       data: { account_id: "default", name: "Default", cash: 0, buying_power: 25000, holdings_count: 0, base_currency: "USD" },
     });
-    render(<PortfolioPage />);
+    renderWithRoute(<PortfolioPage />, '/portfolio?tab=recovery');
     expect(screen.getByTestId("portfolio-cash")).toHaveTextContent(/Cash \(available\)/i);
     expect(screen.getByTestId("portfolio-cash")).toHaveTextContent(/\$0\.00/);
     expect(screen.getByTestId("portfolio-total-capital")).toHaveTextContent(/Total capital/i);
@@ -282,10 +281,10 @@ describe("PortfolioPage", () => {
   });
 
   it("R53: manual recovery provenance is not live broker", () => {
-    render(<PortfolioPage />);
+    renderWithRoute(<PortfolioPage />, '/portfolio?tab=recovery');
     expect(screen.getByTestId("portfolio-provenance")).toHaveTextContent(/Manual recovery snapshot/i);
     expect(screen.getByTestId("portfolio-provenance")).toHaveTextContent(/not broker-synced/i);
-    expect(screen.getByTestId("broker-live-panel")).toBeInTheDocument();
+    expect(screen.queryByTestId("broker-live-panel")).not.toBeInTheDocument();
   });
 
   it("shows Decision (latest) with no run badge when position has no run_id", () => {
@@ -294,7 +293,7 @@ describe("PortfolioPage", () => {
       isLoading: false,
       isError: false,
     });
-    render(<PortfolioPage />);
+    renderWithRoute(<PortfolioPage />, '/portfolio?tab=holdings');
     const link = screen.getByRole("link", { name: /decision \(latest\)/i });
     expect(link).toBeInTheDocument();
     expect(link).toHaveAttribute("href", "/symbol-diagnostics?symbol=SPY");
@@ -313,7 +312,7 @@ describe("PortfolioPage", () => {
       isLoading: false,
       isError: false,
     });
-    render(<PortfolioPage />);
+    renderWithRoute(<PortfolioPage />, '/portfolio?tab=holdings');
     expect(screen.getByText("Shares Positions")).toBeInTheDocument();
     expect(screen.getAllByText("Mark").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Unrealized P/L")).toBeInTheDocument();
@@ -323,7 +322,7 @@ describe("PortfolioPage", () => {
   });
 
   it("R27.4: document textContent has no FAIL or WARN", () => {
-    render(<PortfolioPage />);
+    renderWithRoute(<PortfolioPage />, '/portfolio?tab=holdings');
     const text = document.body.textContent ?? "";
     expect(text).not.toMatch(/\bFAIL\b/);
     expect(text).not.toMatch(/\bWARN\b/);
@@ -351,7 +350,7 @@ describe("PortfolioPage", () => {
       isLoading: false,
       isError: false,
     });
-    render(<PortfolioPage />);
+    renderWithRoute(<PortfolioPage />, '/portfolio?tab=holdings');
     expect(screen.getByText("Eligible")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /open cc ticket/i })).toBeInTheDocument();
     expect(screen.getByText("CC eligible")).toBeInTheDocument();
@@ -368,7 +367,7 @@ describe("PortfolioPage", () => {
       isLoading: false,
       isError: false,
     });
-    render(<PortfolioPage />);
+    renderWithRoute(<PortfolioPage />, '/portfolio?tab=holdings');
     const text = document.body.textContent ?? "";
     expect(text).not.toMatch(/FAIL_/);
     expect(text).not.toMatch(/WARN_/);
@@ -400,7 +399,7 @@ describe("PortfolioPage", () => {
       isLoading: false,
       isError: false,
     });
-    render(<PortfolioPage />);
+    renderWithRoute(<PortfolioPage />, '/portfolio?tab=options');
     expect(screen.getByText("Options Positions")).toBeInTheDocument();
     expect(screen.getByText("Max profit %")).toBeInTheDocument();
     expect(screen.getByText("Recommend")).toBeInTheDocument();
@@ -427,9 +426,20 @@ describe("PortfolioPage", () => {
       isLoading: false,
       isError: false,
     });
-    render(<PortfolioPage />);
+    renderWithRoute(<PortfolioPage />, '/portfolio?tab=options');
     const text = document.body.textContent ?? "";
     expect(text).not.toMatch(/\bFAIL\b/);
     expect(text).not.toMatch(/\bWARN\b/);
   });
+
+  it("R70-ABCD: tabs render distinct section sets", () => {
+    const { unmount } = renderWithRoute(<PortfolioPage />, "/portfolio?tab=overview");
+    expect(screen.getByTestId("portfolio-overview")).toBeInTheDocument();
+    expect(screen.queryByTestId("portfolio-holdings")).not.toBeInTheDocument();
+    unmount();
+    renderWithRoute(<PortfolioPage />, "/portfolio?tab=holdings");
+    expect(screen.getByTestId("portfolio-holdings")).toBeInTheDocument();
+    expect(screen.queryByTestId("portfolio-overview")).not.toBeInTheDocument();
+  });
 });
+

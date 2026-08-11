@@ -76,7 +76,21 @@ export function PortfolioPage() {
   const [holdingForm, setHoldingForm] = useState<{ symbol: string; shares: string; avg_cost: string } | null>(null);
   const [sharesFilter, setSharesFilter] = useState<"all" | "cc_eligible">("all");
 
-  // R53/R56/R64: tab deep-links scroll to section anchors
+  const portfolioTabs = [
+    { id: "overview", label: "Overview" },
+    { id: "accounts", label: "Accounts" },
+    { id: "holdings", label: "Holdings" },
+    { id: "options", label: "Options" },
+    { id: "orders", label: "Orders & Activity" },
+    { id: "risk", label: "Risk" },
+    { id: "reconciliation", label: "Reconciliation" },
+    { id: "recovery", label: "Recovery" },
+  ] as const;
+
+  const activeTab = (portfolioTab || "overview") as (typeof portfolioTabs)[number]["id"];
+  const show = (section: (typeof portfolioTabs)[number]["id"]) => activeTab === section;
+
+  // R53/R56/R64/R70-ABCD: tab deep-links select a real view (not scroll-only fake tabs)
   useEffect(() => {
     if (isLoading || isError) return;
     const tabMap: Record<string, string> = {
@@ -90,22 +104,13 @@ export function PortfolioPage() {
       reconciliation: "portfolio-reconciliation",
       recovery: "portfolio-manual-recovery",
     };
-    const targetId = tabMap[portfolioTab] || null;
+    const targetId = tabMap[activeTab] || null;
     if (!targetId) return;
     const el = document.getElementById(targetId);
-    el?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [portfolioTab, isLoading, isError]);
-
-  const portfolioTabs = [
-    { id: "overview", label: "Overview" },
-    { id: "accounts", label: "Accounts" },
-    { id: "holdings", label: "Holdings" },
-    { id: "options", label: "Options" },
-    { id: "orders", label: "Orders & Activity" },
-    { id: "risk", label: "Risk" },
-    { id: "reconciliation", label: "Reconciliation" },
-    { id: "recovery", label: "Recovery" },
-  ] as const;
+    if (el && typeof el.scrollIntoView === "function") {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [activeTab, isLoading, isError]);
 
   const positions = data?.positions ?? [];
   const sharesPositions = data?.shares_positions ?? [];
@@ -171,7 +176,7 @@ export function PortfolioPage() {
         aria-label="Portfolio sections"
       >
         {portfolioTabs.map((t) => {
-          const active = portfolioTab === t.id || (!portfolioTab && t.id === "overview");
+          const active = activeTab === t.id;
           return (
             <Link
               key={t.id}
@@ -182,6 +187,7 @@ export function PortfolioPage() {
                   : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
               }`}
               data-testid={`portfolio-tab-${t.id}`}
+              aria-current={active ? "page" : undefined}
             >
               {t.label}
             </Link>
@@ -189,17 +195,25 @@ export function PortfolioPage() {
         })}
       </nav>
 
+      {show("overview") && (
       <div id="portfolio-overview" data-testid="portfolio-overview">
         <BrokerLivePanel />
       </div>
+      )}
 
+      {show("accounts") && (
       <Card id="portfolio-accounts" data-testid="portfolio-accounts">
         <CardHeader
           title="Accounts"
-          description="Masked broker accounts appear in the live panel above. Agentic is never used for execution."
+          description="Masked broker accounts appear in the Overview live panel. Agentic is never used for execution."
         />
+        <Link to="/portfolio?tab=overview" className="text-sm text-emerald-600 hover:underline dark:text-emerald-400">
+          Open Overview (live broker) →
+        </Link>
       </Card>
+      )}
 
+      {show("orders") && (
       <Card id="portfolio-orders" data-testid="portfolio-orders">
         <CardHeader
           title="Orders & Activity"
@@ -209,7 +223,9 @@ export function PortfolioPage() {
           Open Journal →
         </Link>
       </Card>
+      )}
 
+      {show("reconciliation") && (
       <Card id="portfolio-reconciliation" data-testid="portfolio-reconciliation">
         <CardHeader
           title="Reconciliation"
@@ -219,9 +235,10 @@ export function PortfolioPage() {
           Mismatches are advisory only — no silent overwrite of either source.
         </p>
       </Card>
+      )}
 
-      {metrics && (
-        <Card>
+      {show("overview") && metrics && (
+        <Card data-testid="portfolio-metrics">
           <CardHeader title="Portfolio Metrics" />
           <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4 lg:grid-cols-6">
             <div>
@@ -260,6 +277,7 @@ export function PortfolioPage() {
         </Card>
       )}
 
+      {show("recovery") && (
       <Card id="portfolio-manual-recovery" data-testid="portfolio-manual-recovery">
         <CardHeader
           title="Recovery / Advanced — manual balances (NOT live)"
@@ -339,7 +357,9 @@ export function PortfolioPage() {
           <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading balances…</p>
         )}
       </Card>
+      )}
 
+      {show("holdings") && (
       <Card id="portfolio-holdings" data-testid="portfolio-holdings">
         <CardHeader title="Holdings" description="Manual equity holdings (used for CC eligibility: ≥100 shares)." />
         {holdingForm ? (
@@ -439,9 +459,10 @@ export function PortfolioPage() {
           </Table>
         )}
       </Card>
+      )}
 
-      {sharesPositions.length > 0 && (
-        <Card>
+      {show("holdings") && sharesPositions.length > 0 && (
+        <Card data-testid="portfolio-shares-positions">
           <CardHeader
             title="Shares Positions"
             description="R27.4: Mark and Unrealized P/L. R27.7: CC eligible badge and filter; link to Ticket (CC) when eligible."
@@ -542,7 +563,7 @@ export function PortfolioPage() {
         </Card>
       )}
 
-      {optionsPositions.length > 0 && (
+      {show("options") && optionsPositions.length > 0 && (
         <Card id="portfolio-options" data-testid="portfolio-options">
           <CardHeader
             title="Options Positions"
@@ -622,7 +643,7 @@ export function PortfolioPage() {
         </Card>
       )}
 
-      {optionsPositions.length === 0 && (
+      {show("options") && optionsPositions.length === 0 && (
         <Card id="portfolio-options" data-testid="portfolio-options">
           <CardHeader
             title="Options"
@@ -631,8 +652,8 @@ export function PortfolioPage() {
         </Card>
       )}
 
-      {accounts.length > 0 && (
-        <Card>
+      {show("recovery") && accounts.length > 0 && (
+        <Card data-testid="portfolio-account-snapshot">
           <CardHeader
             title="Account"
             description="Manual portfolio snapshot — balances are user-entered; Robinhood sync is NO-GO (not broker-synced)."
@@ -673,7 +694,7 @@ export function PortfolioPage() {
         </Card>
       )}
 
-      {riskData ? (
+      {show("risk") && riskData ? (
         <Card
           id="portfolio-risk"
           data-testid="portfolio-risk"
@@ -718,16 +739,17 @@ export function PortfolioPage() {
             </div>
           )}
         </Card>
-      ) : (
+      ) : show("risk") ? (
         <Card id="portfolio-risk" data-testid="portfolio-risk">
           <CardHeader
             title="Risk"
             description="Per-account risk isolation — IRA cash is never taxable CSP collateral. Agentic has no execution collateral."
           />
         </Card>
-      )}
+      ) : null}
 
-      <Card>
+      {show("holdings") && (
+      <Card data-testid="portfolio-tracked-positions">
         <CardHeader
           title="Positions"
           actions={
@@ -887,6 +909,7 @@ export function PortfolioPage() {
           </Table>
         )}
       </Card>
+      )}
 
       {closeDrawerPosition && (
         <ClosePositionDrawer

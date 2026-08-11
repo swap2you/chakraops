@@ -192,7 +192,7 @@ export function SystemDiagnosticsPage() {
         <CardHeader title="Operations (R35)" description="Scheduler, jobs, backup — manual only; no trade execution" />
         <div className="grid gap-4 p-4 md:grid-cols-2">
           <div data-testid="scheduler-master-status">
-            <p className="text-xs uppercase text-zinc-500">Scheduler master</p>
+            <p className="text-xs uppercase text-zinc-500">Scheduler master (ops)</p>
             <p className="mt-1 font-mono">{opsData?.scheduler?.master_enabled ? "Enabled" : "Disabled (false)"}</p>
           </div>
           <div data-testid="scheduler-legacy-status">
@@ -371,7 +371,7 @@ export function SystemDiagnosticsPage() {
           )}
         </Card>
         <Card>
-          <CardHeader title="Scheduler" />
+          <CardHeader title="Legacy eval scheduler" description="Distinct from ops master scheduler and advisory monitor" />
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-500">interval_minutes</span>

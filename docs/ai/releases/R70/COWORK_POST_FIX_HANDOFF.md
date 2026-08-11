@@ -21,6 +21,6 @@ manual_only · trade_execution=false · no broker writes · scheduler off · Sta
 
 ## Mandatory UAT scope
 
-Follow library `prompts/90_COWORK_POST_FIX_UAT.md` fully. Independently rediscover routes. Recompute representative math. Capture screenshots/console/network (no secrets).
+Follow library `docs/ai/releases/R70/prompts/90_COWORK_POST_FIX_UAT.md` fully (also mirrored under Dropbox remediation `prompts/90_COWORK_POST_FIX_UAT.md`). Independently rediscover routes. Recompute representative math. Capture screenshots/console/network (no secrets).
 
 End marker: `COWORK R70 POST-FIX WHOLE-APPLICATION UAT COMPLETE`

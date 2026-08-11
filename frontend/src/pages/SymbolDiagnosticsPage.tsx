@@ -97,15 +97,6 @@ function computeDte(expiry: string | null | undefined): number | null {
   }
 }
 
-function computeExpectedReturnPct(
-  strike: number | null | undefined,
-  credit: number | null | undefined
-): number | null {
-  // credit_estimate is dollars per share; return on collateral = credit/strike*100.
-  if (strike == null || credit == null || strike <= 0) return null;
-  return (credit / strike) * 100;
-}
-
 function getDefaultCapital(account: unknown): number | null {
   if (account == null || typeof account !== "object" || !("total_capital" in account)) return null;
   const tc = (account as { total_capital?: unknown }).total_capital;
@@ -1032,7 +1023,7 @@ function ExecutionConsole({
               ) : (
                 candidates.map((c, i) => {
                   const dte = computeDte(c.expiry);
-                  const retPct = computeExpectedReturnPct(c.strike ?? undefined, c.credit_estimate ?? undefined);
+                  const retPct = c.expected_return_pct ?? null;
                   const inBand = deltaInBand(c.delta ?? undefined, c.strategy ?? "");
                   const maxLoss = c.max_loss ?? 0;
                   const capUtilPct = totalCapital != null && totalCapital > 0 && maxLoss > 0

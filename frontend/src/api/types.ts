@@ -855,6 +855,8 @@ export interface SymbolDiagnosticsCandidate {
   delta?: number | null;
   credit_estimate?: number | null;
   max_loss?: number | null;
+  /** Server-authored return on collateral % (credit/strike*100). Do not recompute in UI. */
+  expected_return_pct?: number | null;
   why_this_trade?: string | null;
   /** Phase 11.3: Exact contract key from decision (strike-expiry-PUT|CALL) */
   contract_key?: string | null;

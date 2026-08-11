@@ -119,8 +119,10 @@ export function PortfolioPage() {
   const { data: riskData } = usePortfolioRisk(accountId, !!selectedAccount);
   const refreshMarks = useRefreshMarks(accountId);
   const totalCapital = (selectedAccount as { total_capital?: number })?.total_capital ?? 0;
-  const maxCapitalPct = (selectedAccount as { max_capital_per_trade_pct?: number })?.max_capital_per_trade_pct ?? 5;
-  const riskPerTrade = totalCapital > 0 ? (totalCapital * maxCapitalPct) / 100 : 0;
+  const maxCapitalPct = (selectedAccount as { max_capital_per_trade_pct?: number })?.max_capital_per_trade_pct ?? null;
+  // R70-DEF-011: configured account limit from server fields only — not a live risk engine result.
+  const configuredMaxRiskPerTrade =
+    totalCapital > 0 && maxCapitalPct != null ? (totalCapital * maxCapitalPct) / 100 : null;
   // R36.3: display stored account buying_power; never invent from totalCapital - deployed.
   const buyingPower = accountSummary?.buying_power ?? null;
 
@@ -657,9 +659,11 @@ export function PortfolioPage() {
               <span className="font-mono text-zinc-700 dark:text-zinc-300">{fmtCurrency(buyingPower)}</span>
             </div>
             <div>
-              <span className="block text-xs text-zinc-500 dark:text-zinc-400">Risk per trade</span>
-              <span className="font-mono text-zinc-700 dark:text-zinc-300">{fmtCurrency(riskPerTrade)}</span>
-              <span className="mt-0.5 block text-[11px] text-zinc-400 dark:text-zinc-500">From total capital × max %</span>
+              <span className="block text-xs text-zinc-500 dark:text-zinc-400">Configured max risk / trade</span>
+              <span className="font-mono text-zinc-700 dark:text-zinc-300">{fmtCurrency(configuredMaxRiskPerTrade)}</span>
+              <span className="mt-0.5 block text-[11px] text-zinc-400 dark:text-zinc-500">
+                Account settings: total capital × max % (not live risk engine)
+              </span>
             </div>
             <div>
               <span className="block text-xs text-zinc-500 dark:text-zinc-400">Open positions</span>

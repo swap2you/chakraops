@@ -317,7 +317,13 @@ class CandidateRow:
     option_symbol: Optional[str] = None  # OCC symbol when available
 
     def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+        d = asdict(self)
+        # R70-DEF-011: server-side return % (credit $/share ÷ strike × 100). UI must not invent this.
+        if self.strike is not None and self.credit_estimate is not None and float(self.strike) > 0:
+            d["expected_return_pct"] = round((float(self.credit_estimate) / float(self.strike)) * 100.0, 4)
+        else:
+            d["expected_return_pct"] = None
+        return d
 
 
 @dataclass

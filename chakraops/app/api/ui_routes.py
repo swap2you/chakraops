@@ -5788,7 +5788,21 @@ def _build_symbol_diagnostics_from_v2_store(
     shares_position: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build full SymbolDiagnosticsResponseExtended from v2 store (summary + candidates + gates + earnings + diagnostics_details)."""
-    c_dicts = [c.to_dict() if hasattr(c, "to_dict") else (c if isinstance(c, dict) else {}) for c in candidates]
+    c_dicts = []
+    for c in candidates:
+        if hasattr(c, "to_dict"):
+            row = c.to_dict()
+        elif isinstance(c, dict):
+            row = dict(c)
+            # R70-DEF-011: attach server return % when missing on plain dict candidates.
+            if row.get("expected_return_pct") is None:
+                strike = row.get("strike")
+                credit = row.get("credit_estimate")
+                if strike is not None and credit is not None and float(strike) > 0:
+                    row["expected_return_pct"] = round((float(credit) / float(strike)) * 100.0, 4)
+        else:
+            row = {}
+        c_dicts.append(row)
     from app.core.eval.reason_codes import format_reason_for_display
     from app.core.eval.decision_artifact_v2 import gate_code_to_label, gate_name_to_code
     g_list = [

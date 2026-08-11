@@ -5,8 +5,11 @@ Initialize-ChakraOpsCheckout
 
 Write-Host "=== ChakraOps Startup ===" -ForegroundColor Cyan
 
+$pythonPath = Get-ChakraOpsPythonPath
 Write-Host "Checking Python..."
-python --version | Out-Null
+Write-Host "python launcher: $pythonPath"
+& $pythonPath --version | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Python check failed: $pythonPath" }
 
 Write-Host "Checking Node..."
 node --version | Out-Null
@@ -43,7 +46,7 @@ $startupOk = $false
 $healthRegex = '"ok"\s*:\s*true|"status"\s*:\s*"ok"'
 
 try {
-    $backendProc = Start-Process -FilePath "python" -ArgumentList @(
+    $backendProc = Start-Process -FilePath $pythonPath -ArgumentList @(
         "-m", "uvicorn", "app.api.server:app",
         "--host", "127.0.0.1",
         "--port", "$($script:ChakraOpsBackendPort)"
@@ -73,7 +76,7 @@ try {
         -TimeoutSec 60 -ContentRegex $healthRegex
 
     # Ownership uses LISTEN PIDs (not the npm/cmd parent PID).
-    python -c "from app.core.operations.process_ownership import write_record; from app.core.chakraops_ports import BACKEND_PORT, FRONTEND_PORT; write_record(backend_pid=$backendListenPid, frontend_pid=$frontendListenPid, repo_root=r'$($script:ChakraOpsRepoRoot)', backend_cmd='uvicorn app.api.server:app', frontend_cmd='npm run dev', backend_port=BACKEND_PORT, frontend_port=FRONTEND_PORT)" | Out-Null
+    & $pythonPath -c "from app.core.operations.process_ownership import write_record; from app.core.chakraops_ports import BACKEND_PORT, FRONTEND_PORT; write_record(backend_pid=$backendListenPid, frontend_pid=$frontendListenPid, repo_root=r'$($script:ChakraOpsRepoRoot)', backend_cmd='uvicorn app.api.server:app', frontend_cmd='npm run dev', backend_port=BACKEND_PORT, frontend_port=FRONTEND_PORT)" | Out-Null
 
     $startupOk = $true
     Write-Host "Backend PID: $backendListenPid (spawn=$($backendProc.Id))  Frontend PID: $frontendListenPid (spawn=$($frontendProc.Id))"

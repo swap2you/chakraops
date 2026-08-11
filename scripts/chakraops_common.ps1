@@ -19,7 +19,8 @@ function Initialize-ChakraOpsCheckout {
         throw "Stale checkout detected. Use $($script:ChakraOpsRepoRoot)"
     }
     Set-Location -LiteralPath $script:ChakraOpsBackendRoot
-    & python -c "from app.core.operations.process_ownership import validate_repo_root; validate_repo_root(r'$($script:ChakraOpsRepoRoot)')" 2>$null | Out-Null
+    $py = Get-ChakraOpsPythonPath
+    & $py -c "from app.core.operations.process_ownership import validate_repo_root; validate_repo_root(r'$($script:ChakraOpsRepoRoot)')" 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) {
         throw "validate_repo_root failed"
     }
@@ -30,16 +31,23 @@ function Invoke-ChakraOpsPython {
         [Parameter(Mandatory = $true)]
         [string]$Code
     )
-    & python -c $Code
+    $py = Get-ChakraOpsPythonPath
+    & $py -c $Code
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
 }
 
 function Get-ChakraOpsPythonPath {
+    # Prefer project venv so startup matches tested deps (argon2, mcp, etc.).
+    # Bare `python` on PATH may be a system install missing ChakraOps packages.
+    $venvPy = Join-Path $script:ChakraOpsBackendRoot ".venv\Scripts\python.exe"
+    if (Test-Path -LiteralPath $venvPy) {
+        return $venvPy
+    }
     $py = Get-Command python -ErrorAction SilentlyContinue
     if (-not $py) {
-        throw "python not found on PATH"
+        throw "python not found on PATH and venv missing at $venvPy"
     }
     return $py.Source
 }

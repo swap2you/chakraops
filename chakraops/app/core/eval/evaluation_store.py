@@ -403,41 +403,52 @@ def save_failed_run(
     reason: str,
     error: Exception | None = None,
     started_at: Optional[str] = None,
+    source: Optional[str] = None,
+    status: str = "FAILED",
 ) -> None:
     """
-    Persist a failed evaluation run: status=FAILED, error_summary, completed_at, duration.
-    If started_at is None, tries to read from existing run file (RUNNING stub) for this run_id.
+    Persist a failed/abandoned evaluation run: status, error_summary, completed_at, duration.
+    If started_at/source is None, tries to read from existing run file (RUNNING stub).
     """
     err_str = str(error) if error is not None else ""
     logger.warning("[STORE] save_failed_run run_id=%s reason=%s error=%s", run_id, reason, err_str)
     completed_at = datetime.now(timezone.utc).isoformat()
-    if started_at is None:
+    resolved_source = (source or "").strip() or None
+    if started_at is None or resolved_source is None:
         try:
             r = load_run(run_id)
             if r:
-                started_at = r.started_at
+                if started_at is None:
+                    started_at = r.started_at
+                if resolved_source is None:
+                    resolved_source = getattr(r, "source", None) or None
         except Exception:
             pass
         if not started_at:
             started_at = completed_at
+    if not resolved_source:
+        resolved_source = "unknown"
     try:
         start_ts = datetime.fromisoformat(started_at.replace("Z", "+00:00")).timestamp()
         end_ts = datetime.fromisoformat(completed_at.replace("Z", "+00:00")).timestamp()
         duration_seconds = max(0.0, end_ts - start_ts)
     except Exception:
         duration_seconds = 0.0
+    terminal = (status or "FAILED").strip().upper()
+    if terminal not in {"FAILED", "ABANDONED"}:
+        terminal = "FAILED"
     run = EvaluationRunFull(
         run_id=run_id,
         started_at=started_at,
         completed_at=completed_at,
-        status="FAILED",
+        status=terminal,
         duration_seconds=duration_seconds,
         total=0,
         evaluated=0,
         eligible=0,
         shortlisted=0,
         symbols=[],
-        source="scheduled",
+        source=resolved_source,
         error_summary=reason[:500] if reason else err_str[:500],
         errors=[reason] if reason else [],
     )
@@ -454,7 +465,7 @@ def save_failed_run(
                 f.flush()
                 os.fsync(f.fileno())
             os.replace(temp, path)
-            logger.info("[STORE] FAILED run persisted run_id=%s", run_id)
+            logger.info("[STORE] %s run persisted run_id=%s", terminal, run_id)
         except Exception as e:
             if temp.exists():
                 try:
@@ -462,6 +473,65 @@ def save_failed_run(
                 except OSError:
                     pass
             logger.exception("[STORE] save_failed_run persist failed: %s", e)
+
+
+# R70-ABCD: orphan RUNNING timeout (seconds). Active lock for same run_id is preserved.
+STALE_RUNNING_TIMEOUT_SEC = int(os.getenv("CHAKRAOPS_EVAL_STALE_RUNNING_SEC", "3600") or "3600")
+
+
+def abandon_stale_running_runs(*, max_age_sec: Optional[int] = None) -> Dict[str, Any]:
+    """Transition orphan RUNNING stubs older than max_age to ABANDONED with STALE_RUN_TIMEOUT.
+
+    Skips a run_id that still holds the active lock (genuinely in-flight).
+    """
+    age = int(max_age_sec if max_age_sec is not None else STALE_RUNNING_TIMEOUT_SEC)
+    now = datetime.now(timezone.utc)
+    abandoned: List[str] = []
+    skipped_active: List[str] = []
+    eval_dir = _ensure_evaluations_dir()
+    active_run_id = None
+    try:
+        cur = get_current_run_status()
+        if isinstance(cur, dict):
+            active_run_id = cur.get("run_id")
+    except Exception:
+        active_run_id = None
+
+    for path in sorted(eval_dir.glob("eval_*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if str(data.get("status") or "").upper() != "RUNNING":
+            continue
+        run_id = str(data.get("run_id") or path.stem)
+        if active_run_id and run_id == active_run_id:
+            skipped_active.append(run_id)
+            continue
+        started = str(data.get("started_at") or "")
+        try:
+            started_dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
+            if started_dt.tzinfo is None:
+                started_dt = started_dt.replace(tzinfo=timezone.utc)
+            age_sec = (now - started_dt).total_seconds()
+        except Exception:
+            age_sec = age + 1
+        if age_sec < age:
+            continue
+        save_failed_run(
+            run_id,
+            reason="STALE_RUN_TIMEOUT",
+            started_at=started or None,
+            source=str(data.get("source") or "unknown"),
+            status="ABANDONED",
+        )
+        abandoned.append(run_id)
+    return {
+        "abandoned": abandoned,
+        "skipped_active": skipped_active,
+        "max_age_sec": age,
+        "count": len(abandoned),
+    }
 
 
 def save_run(run: EvaluationRunFull) -> None:
@@ -624,7 +694,15 @@ def delete_old_runs(keep_count: int = 50) -> int:
 def map_eval_trigger_to_source(trigger: Optional[str]) -> str:
     """Map coordinator/UI trigger names to EvaluationRunFull.source labels (R70-DEF-035)."""
     t = (trigger or "").strip().lower()
-    if t in {"ui_eval_run", "ops_evaluate", "admin_force", "manual", "manual_refresh", "force_eval"}:
+    if t in {
+        "ui_eval_run",
+        "ops_evaluate",
+        "ops_evaluate_now",
+        "admin_force",
+        "manual",
+        "manual_refresh",
+        "force_eval",
+    }:
         return "manual"
     if t in {"scheduler", "scheduled", "eod_freeze", "freeze", "freeze_force", "eod_chain", "legacy_scheduler"}:
         return "scheduled"

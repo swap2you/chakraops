@@ -950,12 +950,16 @@ async def _lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Could not resolve store path: %s", e)
 
-    # Phase 5: Clear stale run lock on startup (e.g. after crash)
+    # Phase 5 / R70-ABCD: Clear stale run lock and abandon orphan RUNNING ledger rows.
     try:
-        from app.core.eval.evaluation_store import clear_stale_run_lock
+        from app.core.eval.evaluation_store import abandon_stale_running_runs, clear_stale_run_lock
+
         clear_stale_run_lock()
+        abandoned = abandon_stale_running_runs()
+        if abandoned.get("count"):
+            logger.info("[STARTUP] abandoned stale RUNNING evals: %s", abandoned.get("abandoned"))
     except Exception as exc:
-        logger.warning("[STARTUP] clear_stale_run_lock failed: %s", type(exc).__name__)
+        logger.warning("[STARTUP] clear_stale_run_lock/abandon failed: %s", type(exc).__name__)
 
     # R70-DEF-035: local start must not auto-run full-universe evaluation.
     # (Legacy schedulers remain opt-in; ops master scheduler defaults off.)
@@ -1932,11 +1936,16 @@ def api_ops_evaluate(
     symbols = list(get_universe_symbols())
     result = run_universe_evaluation_exclusive(symbols, mode="LIVE", trigger="ops_evaluate")
     if not result.get("started"):
+        reason = result.get("reason") or "already_running"
         return {
             "job_id": None,
             "accepted": False,
-            "reason": result.get("reason") or "already_running",
-            "already_running": True,
+            "reason": reason,
+            "code": result.get("code"),
+            "market_phase": result.get("market_phase"),
+            "already_running": reason == "already_running",
+            "manual_only": True,
+            "trade_execution": False,
         }
     return {
         "job_id": result.get("run_id"),
@@ -2728,13 +2737,18 @@ def api_ops_evaluate_now() -> Dict[str, Any]:
 
     result = run_universe_evaluation_exclusive(symbols, mode="LIVE", trigger="ops_evaluate_now")
     if not result.get("started"):
+        reason = result.get("reason") or "already_running"
         return {
             "started": False,
-            "reason": result.get("reason") or "already_running",
+            "reason": reason,
+            "code": result.get("code"),
+            "market_phase": result.get("market_phase"),
             "run_id": result.get("run_id"),
-            "status": "RUNNING",
+            "status": "RUNNING" if reason == "already_running" else "REJECTED",
             "exclusive": True,
             "authority": "PRIMARY_LIVE_EVAL",
+            "manual_only": True,
+            "trade_execution": False,
         }
     return {
         "started": True,

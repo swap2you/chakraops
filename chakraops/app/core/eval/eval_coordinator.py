@@ -84,14 +84,41 @@ def run_universe_evaluation_exclusive(
     *,
     mode: str = "LIVE",
     trigger: str = "api",
+    allow_when_closed: bool = False,
 ) -> Dict[str, Any]:
     """
     Run evaluate_universe (v2) under the exclusive run lock.
 
     On lock contention returns ``{started: False, reason: \"already_running\"}``.
+    On market closed (normal LIVE) returns ``{started: False, reason: \"market_closed\", market_phase}``
+    without creating a RUNNING stub unless ``allow_when_closed=True``.
     On success returns ``{started: True, reason: \"ok\", run_id, artifact, ...}``.
     Persists v1 ledger run + latest pointer so last_completed_run_id advances (R70-DEF-032).
     """
+    # R70-ABCD Batch B: server-owned market gate for LIVE authority path.
+    if not allow_when_closed:
+        try:
+            from app.market.market_hours import get_market_phase
+
+            phase = (get_market_phase() or "UNKNOWN").strip().upper()
+        except Exception:
+            phase = "UNKNOWN"
+        if phase != "OPEN":
+            logger.info(
+                "[EVAL_COORD] refuse market_closed trigger=%s phase=%s",
+                trigger,
+                phase,
+            )
+            return {
+                "started": False,
+                "reason": "market_closed",
+                "code": "MARKET_CLOSED",
+                "market_phase": phase,
+                "run_id": None,
+                "manual_only": True,
+                "trade_execution": False,
+            }
+
     ok, token = try_begin_universe_evaluation(trigger)
     if not ok:
         return {"started": False, "reason": token, "run_id": None}
@@ -163,8 +190,20 @@ def run_universe_evaluation_exclusive(
             },
             "ledger_persisted": True,
         }
-    except Exception:
+    except Exception as exc:
         logger.exception("[EVAL_COORD] evaluate_universe failed trigger=%s run_id=%s", trigger, run_id)
+        try:
+            from app.core.eval.evaluation_store import map_eval_trigger_to_source, save_failed_run
+
+            save_failed_run(
+                run_id,
+                reason=f"evaluate_failed:{type(exc).__name__}",
+                error=exc,
+                started_at=started_at,
+                source=map_eval_trigger_to_source(active_trigger),
+            )
+        except Exception:
+            logger.exception("[EVAL_COORD] save_failed_run failed run_id=%s", run_id)
         raise
     finally:
         end_universe_evaluation(run_id=run_id)

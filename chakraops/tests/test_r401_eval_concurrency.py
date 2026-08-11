@@ -42,7 +42,9 @@ def test_second_exclusive_run_returns_already_running(tmp_path, monkeypatch: pyt
         "app.core.eval.evaluation_service_v2.evaluate_universe",
         return_value=fake_artifact,
     ) as mock_eval:
-        second = coord.run_universe_evaluation_exclusive(["SPY"], mode="LIVE", trigger="test_second")
+        second = coord.run_universe_evaluation_exclusive(
+            ["SPY"], mode="LIVE", trigger="test_second", allow_when_closed=True
+        )
         assert second.get("started") is False
         assert second.get("reason") == "already_running"
         mock_eval.assert_not_called()
@@ -53,7 +55,9 @@ def test_second_exclusive_run_returns_already_running(tmp_path, monkeypatch: pyt
         "app.core.eval.evaluation_service_v2.evaluate_universe",
         return_value=fake_artifact,
     ) as mock_eval:
-        third = coord.run_universe_evaluation_exclusive(["SPY"], mode="LIVE", trigger="test_third")
+        third = coord.run_universe_evaluation_exclusive(
+            ["SPY"], mode="LIVE", trigger="test_third", allow_when_closed=True
+        )
         assert third.get("started") is True
         assert third.get("reason") == "ok"
         assert third.get("ledger_persisted") is True

@@ -1096,9 +1096,22 @@ def ui_eval_run(
     if not symbols:
         return {"status": "FAILED", "reason": "Universe is empty", "pipeline_timestamp": None, "counts": {}}
     try:
-        result = run_universe_evaluation_exclusive(symbols, mode="LIVE", trigger="ui_eval_run")
+        result = run_universe_evaluation_exclusive(
+            symbols, mode="LIVE", trigger="ui_eval_run", allow_when_closed=bool(force)
+        )
         if not result.get("started"):
-            raise HTTPException(status_code=409, detail=result.get("reason") or "already_running")
+            reason = result.get("reason") or "already_running"
+            if reason == "market_closed":
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "reason": "market_closed",
+                        "code": "MARKET_CLOSED",
+                        "market_phase": result.get("market_phase"),
+                        "message": "Market is closed. Refusing to overwrite canonical decision. Use force=true to override.",
+                    },
+                )
+            raise HTTPException(status_code=409, detail=reason)
         return {
             "status": "OK",
             "pipeline_timestamp": result.get("pipeline_timestamp"),
@@ -1203,7 +1216,9 @@ def ui_admin_evaluation_force(
             }
         phase = get_market_phase() or "UNKNOWN"
         log.info("[ADMIN] Force evaluation requested (market_phase=%s)", phase)
-        result = run_universe_evaluation_exclusive(symbols, mode="LIVE", trigger="admin_force")
+        result = run_universe_evaluation_exclusive(
+            symbols, mode="LIVE", trigger="admin_force", allow_when_closed=True
+        )
         started = result.get("started", False)
         if not started and result.get("reason") == "already_running":
             raise HTTPException(status_code=409, detail="already_running")

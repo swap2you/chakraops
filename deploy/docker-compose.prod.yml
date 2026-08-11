@@ -1,79 +1,24 @@
-# R57 — Secure production Compose scaffolding (domain/VPS binding may be external).
+# R63 — Production Compose for chakraops.cloud
 #
-# From repo root:
-#   copy deploy\.env.prod.example deploy\.env.prod   # then edit secrets locally
-#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod up -d --build
-#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod --profile postgres up -d --build
-#   docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod --profile monitor up -d
+# Preferred path:
+#   Internet → Cloudflare Access → Cloudflare Tunnel → frontend:80 → /api → api:8000
+#   Postgres + advisory monitor internal only.
 #
-# Safety: scheduler disabled via env; no broker write enable flags; API not published to host
-# (only frontend nginx on 18873; /api proxied internally). Secrets via env_file / mounts only.
+# Secrets live on VPS under /opt/chakraops/secrets/ — never in Git.
+# Copy deploy/.env.prod.example → /opt/chakraops/secrets/env.prod (or deploy/.env.prod locally).
+#
+# Local emergency bind (optional):
+#   docker compose -f deploy/docker-compose.prod.yml --env-file ... --profile emergency-bind up -d
 
 name: chakraops-prod
 
 services:
-  api:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile.api
-    restart: unless-stopped
-    env_file:
-      - .env.prod
-    environment:
-      CHAKRAOPS_SCHEDULER_ENABLED: "false"
-      CHAKRAOPS_LEGACY_SCHEDULERS_ENABLED: "false"
-      CHAKRAOPS_ALLOW_ENV_SCHEDULER_OPT_IN: "false"
-      trade_execution: "false"
-      manual_only: "true"
-      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://127.0.0.1:18873}
-    volumes:
-      - chakraops_data:/workspace/chakraops/data
-      - chakraops_out:/workspace/out
-      # Mount Robinhood token file when using ROBINHOOD_MCP_TOKEN_PATH (host path optional):
-      # - ${ROBINHOOD_TOKEN_HOST_PATH:-./secrets/robinhood_mcp_token}:/run/secrets/robinhood_mcp_token:ro
-    expose:
-      - "8000"
-    # Intentionally no host ports — reverse proxy only (no public raw FastAPI).
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/healthz')"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  frontend:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile.frontend
-      args:
-        # Same-origin /api via nginx proxy
-        VITE_API_BASE_URL: ""
-    restart: unless-stopped
-    ports:
-      - "18873:80"
-    depends_on:
-      api:
-        condition: service_started
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  # Optional Postgres — enable with: --profile postgres
   postgres:
-    profiles: ["postgres"]
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-chakraops}
-      # Required for --profile postgres; default is a placeholder — replace in .env.prod before real use.
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CHANGE_ME}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
       POSTGRES_DB: ${POSTGRES_DB:-chakraops}
     volumes:
       - chakraops_pg:/var/lib/postgresql/data
@@ -90,10 +35,7 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # Optional advisory monitor worker placeholder — does NOT enable scheduler or broker writes.
-  # Enable with: --profile monitor
-  monitor:
-    profiles: ["monitor"]
+  api:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.api
@@ -101,23 +43,97 @@ services:
     env_file:
       - .env.prod
     environment:
+      CHAKRAOPS_PRODUCTION: "true"
+      APP_ENV: production
+      CHAKRAOPS_SCHEDULER_ENABLED: "false"
+      CHAKRAOPS_LEGACY_SCHEDULERS_ENABLED: "false"
+      CHAKRAOPS_ALLOW_ENV_SCHEDULER_OPT_IN: "false"
+      trade_execution: "false"
+      manual_only: "true"
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-https://chakraops.cloud}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL required}
+    volumes:
+      - chakraops_data:/workspace/chakraops/data
+      - chakraops_out:/workspace/out
+      - ${ROBINHOOD_TOKEN_HOST_PATH:-../secrets/robinhood_mcp_token}:/run/secrets/robinhood_mcp_token:ro
+    expose:
+      - "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+      args:
+        VITE_API_BASE_URL: ""
+    restart: unless-stopped
+    expose:
+      - "80"
+    # Optional emergency host bind for pre-tunnel local validation only:
+    # ports: ["18873:80"]
+    depends_on:
+      api:
+        condition: service_started
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  monitor:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    environment:
+      CHAKRAOPS_PRODUCTION: "true"
+      APP_ENV: production
       CHAKRAOPS_SCHEDULER_ENABLED: "false"
       CHAKRAOPS_LEGACY_SCHEDULERS_ENABLED: "false"
       trade_execution: "false"
       manual_only: "true"
-      CHAKRAOPS_MONITOR_ROLE: "advisory_placeholder"
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-https://chakraops.cloud}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL required}
+      R54_MONITOR_INTERVAL_SEC: ${R54_MONITOR_INTERVAL_SEC:-90}
     volumes:
       - chakraops_data:/workspace/chakraops/data
       - chakraops_out:/workspace/out
-    # Placeholder: idle loop until a dedicated advisory monitor entrypoint exists (R58+).
-    command:
-      [
-        "python",
-        "-c",
-        "import time; print('R57 monitor placeholder: advisory-only; scheduler off; no broker writes'); time.sleep(10**9)",
-      ]
+      - ${ROBINHOOD_TOKEN_HOST_PATH:-../secrets/robinhood_mcp_token}:/run/secrets/robinhood_mcp_token:ro
+    command: ["python", "scripts/run_advisory_monitor.py"]
     depends_on:
       api:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token-file /run/secrets/cloudflare_tunnel_token
+    volumes:
+      - ${CLOUDFLARE_TUNNEL_TOKEN_HOST_PATH:-../secrets/cloudflare_tunnel_token}:/run/secrets/cloudflare_tunnel_token:ro
+    depends_on:
+      frontend:
         condition: service_started
     logging:
       driver: json-file

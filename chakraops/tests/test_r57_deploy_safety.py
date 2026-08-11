@@ -87,9 +87,9 @@ def test_compose_fail_closed_overrides(compose_text: str):
 
 
 def test_compose_services_present(compose_text: str):
-    for name in ("api:", "frontend:", "postgres:", "monitor:"):
+    for name in ("api:", "frontend:", "postgres:", "monitor:", "cloudflared:"):
         assert name in compose_text
-    assert "profiles:" in compose_text
+    assert "run_advisory_monitor.py" in compose_text
     assert "uvicorn" in _read(DOCKERFILE_API).lower() or "uvicorn" in compose_text.lower()
 
 

@@ -1,0 +1,25 @@
+# Deploy production (manual workflow_dispatch only)
+
+name: deploy-prod
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type chakraops.cloud to confirm"
+        required: true
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm domain
+        if: ${{ github.event.inputs.confirm != 'chakraops.cloud' }}
+        run: |
+          echo "Refusing deploy without confirm=chakraops.cloud"
+          exit 1
+      - name: Document only
+        run: |
+          echo "Production deploy is operator-driven via scripts/deploy_production.ps1 on the VPS."
+          echo "GitHub Environment secrets (SSH host/key) may be wired later; do not auto-deploy every commit."
+          echo "Secrets never live in this repository."

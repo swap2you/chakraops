@@ -102,6 +102,14 @@ def append_notification(
                 continue
             if (rec.get("subtype") or None) != (subtype or None):
                 continue
+            # Identical active condition: bump occurrence metadata via details when present.
+            try:
+                details_out = dict(rec.get("details") or {})
+                details_out["occurrence_count"] = int(details_out.get("occurrence_count") or 1) + 1
+                details_out["last_seen_utc"] = datetime.now(timezone.utc).isoformat()
+                rec["details"] = details_out
+            except Exception:
+                pass
             logger.info("[NOTIFICATIONS] Dedupe skip %s: %s", ntype, msg[:80])
             return
     except Exception as exc:
@@ -219,16 +227,27 @@ def _save_orats_warn_throttle(ts: float) -> None:
 
 
 def append_orats_warn(message: str, details: Optional[Dict[str, Any]] = None) -> None:
-    """Append ORATS WARN/DEGRADED notification (throttled to once per hour; durable across restarts)."""
+    """Append ORATS WARN/ERROR notification (throttled; durable across restarts). Escalates severity by age."""
     import time as _time
+
     now_ts = _time.time()
     with _LOCK:
         last = _load_orats_warn_throttle()
         if last is not None and (now_ts - last) < _ORATS_WARN_THROTTLE_SEC:
             return
         _save_orats_warn_throttle(now_ts)
-    # Append outside throttle lock to avoid nested lock with append_notification
-    append_notification("WARN", "ORATS_WARN", message, symbol=None, details=details, subtype="ORATS_STALE")
+    details = dict(details or {})
+    severity = "WARN"
+    subtype = "ORATS_STALE"
+    age = details.get("provider_age_minutes")
+    try:
+        age_f = float(age) if age is not None else None
+    except (TypeError, ValueError):
+        age_f = None
+    if age_f is not None and age_f > 1440:
+        severity = "ERROR"
+        subtype = "ORATS_HARD_STALE"
+    append_notification(severity, "ORATS_WARN", message, symbol=None, details=details, subtype=subtype)
 
 
 def load_notifications(

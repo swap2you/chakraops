@@ -14,11 +14,19 @@ def _run() -> Dict[str, Any]:
     from app.core.operations.notification_service import notify_job_recovery
 
     store = JobRunStore()
-    interrupted = store.interrupted_started_runs()
+    # Never recover our own in-flight STARTED row (execute_job starts recovery first),
+    # and ignore very young STARTED rows to avoid racing concurrent jobs.
+    interrupted = store.interrupted_started_runs(
+        exclude_job_ids={"recovery_reconciliation"},
+        min_age_seconds=15.0,
+    )
     recovered = []
     for rec in interrupted:
         store.mark_recovered(rec["run_id"], "marked recovered on startup")
-        notify_job_recovery(rec.get("job_id", "unknown"), "interrupted run cleared")
+        job_id = str(rec.get("job_id") or "unknown")
+        # Do not emit recovery noise for the recovery job itself.
+        if job_id != "recovery_reconciliation":
+            notify_job_recovery(job_id, "interrupted run cleared")
         recovered.append(rec["run_id"])
     return {"output_refs": recovered, "metadata": {"count": len(recovered)}}
 

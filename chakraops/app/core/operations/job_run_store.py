@@ -135,8 +135,41 @@ class JobRunStore:
     def recent_for_job(self, job_id: str, limit: int = 20) -> List[Dict[str, Any]]:
         return [r for r in reversed(self.read_all()) if r.get("job_id") == job_id][:limit]
 
-    def interrupted_started_runs(self) -> List[Dict[str, Any]]:
-        return [r for r in self.read_all() if r.get("state") == "STARTED"]
+    def interrupted_started_runs(
+        self,
+        *,
+        exclude_run_ids: Optional[set[str]] = None,
+        exclude_job_ids: Optional[set[str]] = None,
+        min_age_seconds: float = 0.0,
+    ) -> List[Dict[str, Any]]:
+        """Return STARTED runs, optionally excluding ids/jobs and young rows."""
+        from datetime import datetime, timezone
+
+        exclude_run_ids = exclude_run_ids or set()
+        exclude_job_ids = exclude_job_ids or set()
+        now = datetime.now(timezone.utc)
+        out: List[Dict[str, Any]] = []
+        for r in self.read_all():
+            if r.get("state") != "STARTED":
+                continue
+            rid = str(r.get("run_id") or "")
+            jid = str(r.get("job_id") or "")
+            if rid and rid in exclude_run_ids:
+                continue
+            if jid and jid in exclude_job_ids:
+                continue
+            if min_age_seconds > 0:
+                started = str(r.get("started_at") or r.get("ts") or "")
+                try:
+                    started_dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
+                    if started_dt.tzinfo is None:
+                        started_dt = started_dt.replace(tzinfo=timezone.utc)
+                    if (now - started_dt).total_seconds() < min_age_seconds:
+                        continue
+                except Exception:
+                    pass
+            out.append(r)
+        return out
 
     def mark_recovered(self, run_id: str, note: str) -> None:
         self.finish_run(run_id, state="RECOVERED", error_summary=note)

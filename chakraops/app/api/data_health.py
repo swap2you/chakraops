@@ -119,8 +119,16 @@ def _get_effective_orats_timestamp() -> tuple[Optional[str], str, str]:
     return None, "live_probe", "No ORATS success timestamp available"
 
 
+def _orats_error_minutes() -> int:
+    """R70-ABCD: Beyond this many minutes provider/effective age escalates past WARN → ERROR. Default 1440 (1 day)."""
+    try:
+        return int(os.getenv("ORATS_ERROR_MINUTES", "1440").strip())
+    except (TypeError, ValueError):
+        return 1440
+
+
 def _compute_sticky_status(effective_last_success_at: Optional[str] = None) -> str:
-    """Phase 8B: Status from effective timestamp. UNKNOWN/DOWN when no effective success; OK/WARN from age vs window."""
+    """Phase 8B / R70-ABCD: UNKNOWN/DOWN when no success; OK/WARN/ERROR from age vs windows."""
     use_ts = effective_last_success_at if effective_last_success_at is not None else _LAST_SUCCESS_AT
     if use_ts is None and _LAST_ERROR_AT is None:
         return "UNKNOWN"
@@ -132,6 +140,8 @@ def _compute_sticky_status(effective_last_success_at: Optional[str] = None) -> s
         age_minutes = (datetime.now(timezone.utc) - success_dt).total_seconds() / 60
         if age_minutes <= window_min:
             return "OK"
+        if age_minutes > _orats_error_minutes():
+            return "ERROR"
         return "WARN"
     except Exception:
         return "OK" if use_ts else "UNKNOWN"
@@ -214,6 +224,17 @@ def get_orats_freshness_state() -> Dict[str, Any]:
             "as_of": effective_ts,
             "threshold_triggered": "warn_minutes",
         }
+    err_min = _orats_error_minutes()
+    if age_minutes > err_min:
+        return {
+            "state": "ERROR",
+            "state_label": "ERROR",
+            "age_minutes": round(age_minutes, 1),
+            "delay_minutes": warn_min,
+            "as_of": effective_ts,
+            "threshold_triggered": "error_minutes",
+            "reason": f"Data older than {err_min}m hard-stale threshold",
+        }
     return {
         "state": "WARN",
         "state_label": "WARN",
@@ -283,21 +304,26 @@ def _data_health_state() -> Dict[str, Any]:
 
 
 def get_data_health() -> Dict[str, Any]:
-    """Sticky data health: load persisted state, return status (UNKNOWN/OK/WARN/DOWN). Probe only when UNKNOWN or when caller needs refresh."""
+    """Sticky data health: load persisted state, return status. Read path must not emit notifications."""
     _load_persisted_state()
     status = _compute_sticky_status()
-    if status in ("WARN", "DEGRADED"):
-        try:
-            from app.api.notifications_store import append_orats_warn
-            append_orats_warn(
-                f"ORATS status {status}; data may be stale",
-                {"status": status, "last_success_at": _LAST_SUCCESS_AT, "last_error_reason": _LAST_ERROR_REASON},
-            )
-        except Exception as e:
-            logger.debug("[DATA_HEALTH] Failed to append ORATS WARN notification: %s", e)
+    # R70-ABCD: health GET is side-effect free (no ORATS notify-on-read).
     if status == "UNKNOWN":
         _attempt_live_summary()
-    return _data_health_state()
+    state = _data_health_state()
+    provider_ts = _LAST_SUCCESS_AT
+    provider_age = None
+    if provider_ts:
+        try:
+            pdt = datetime.fromisoformat(provider_ts.replace("Z", "+00:00"))
+            provider_age = round((datetime.now(timezone.utc) - pdt).total_seconds() / 60, 1)
+        except Exception:
+            provider_age = None
+    state["provider_last_success_at"] = provider_ts
+    state["provider_age_minutes"] = provider_age
+    state["provider_connectivity_status"] = _compute_sticky_status(provider_ts)
+    state["orats_error_minutes"] = _orats_error_minutes()
+    return state
 
 
 def _record_success(latency_seconds: float) -> None:

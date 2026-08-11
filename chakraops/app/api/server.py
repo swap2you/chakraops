@@ -869,6 +869,16 @@ async def _lifespan(app: FastAPI):
     """Startup: ORATS token (env-only), boot probe, route count, scheduler. No token validation."""
     global _APP_START_TIME_UTC
     _APP_START_TIME_UTC = time.time()
+    # R62: production fails closed without PostgreSQL
+    try:
+        from app.core.data_platform.db import is_production_env, resolve_database_url
+
+        if is_production_env():
+            resolve_database_url()
+            logger.info("[CONFIG] Production PostgreSQL DATABASE_URL validated (redacted)")
+    except Exception as exc:
+        logger.error("[CONFIG] Production database gate failed: %s", type(exc).__name__)
+        raise
     from app.core.config.orats_secrets import get_orats_token
     _orats_token_present = bool(get_orats_token())
     if _orats_token_present:

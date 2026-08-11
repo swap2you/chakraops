@@ -27,8 +27,39 @@ def _default_sqlite_url() -> str:
     return f"sqlite:///{path}"
 
 
+def is_production_env() -> bool:
+    """True when running in production deploy mode (Postgres mandatory)."""
+    flags = (
+        os.environ.get("CHAKRAOPS_PRODUCTION"),
+        os.environ.get("DEPLOY_ENV"),
+        os.environ.get("APP_ENV"),
+    )
+    for f in flags:
+        if (f or "").strip().lower() in {"1", "true", "yes", "production", "prod"}:
+            return True
+    return False
+
+
 def resolve_database_url(url: Optional[str] = None) -> str:
     raw = (url if url is not None else os.environ.get("DATABASE_URL") or "").strip()
+    if is_production_env():
+        if not raw:
+            raise RuntimeError(
+                "Production requires DATABASE_URL with PostgreSQL "
+                "(CHAKRAOPS_PRODUCTION/APP_ENV/DEPLOY_ENV=production). SQLite fallback disabled."
+            )
+        lower = raw.lower()
+        if not (
+            lower.startswith("postgresql://")
+            or lower.startswith("postgresql+psycopg://")
+            or lower.startswith("postgresql+psycopg2://")
+        ):
+            raise RuntimeError(
+                "Production DATABASE_URL must be PostgreSQL; SQLite is not allowed in production."
+            )
+        if lower.startswith("postgresql://") and "+psycopg" not in lower:
+            return "postgresql+psycopg://" + raw[len("postgresql://") :]
+        return raw
     if not raw:
         return _default_sqlite_url()
     lower = raw.lower()

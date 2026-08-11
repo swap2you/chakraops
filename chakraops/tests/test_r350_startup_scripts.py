@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
@@ -22,3 +23,6 @@ def test_startup_scripts_exist_and_reference_correct_path():
     assert "chakraops_common.ps1" in stop_text
     assert '-like "$StaleRoot' not in start_text
     assert "Initialize-ChakraOpsCheckout" in start_text
+    # R70-DEF-072: bare Start-Process npm is forbidden
+    assert re.search(r"Start-Process\s+npm\b", start_text) is None
+    assert "chakraops_startup.ps1" in start_text

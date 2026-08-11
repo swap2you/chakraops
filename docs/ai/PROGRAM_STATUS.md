@@ -1,27 +1,30 @@
 # ChakraOps Program Status
 
-Last updated: 2026-08-10 — **R51–R60 Connected Production Program**
+Last updated: 2026-08-11 — **R61–R70 Production Go-Live**
 
 ## Active program
 
 | Field | Value |
 |-------|-------|
-| Program | `CHAKRAOPS R51–R60 CONNECTED PRODUCTION PROGRAM` |
-| Status | `R51_R60_TECHNICALLY_COMPLETE_PENDING_FINAL_INDEPENDENT_ACCEPTANCE` |
+| Program | `CHAKRAOPS R61–R70 PRODUCTION GOLIVE` |
+| Status | `R61_R70_PRODUCTION_GOLIVE_ACTIVE` |
 | Workflow | `SINGLE_OPERATOR_MAINLINE_LOOP_MODE` |
 | Branch | `main` |
-| Baseline SHA | `32e0449b2b031c2f7079d021298141d1b8cee233` |
+| Baseline SHA | `c34cf39f147b5453eb7c4265057f0e3313a7be15` |
+| Domain | `chakraops.cloud` (do not use `dauji.info`) |
+| Requirements | Dropbox `ChakraOps_R61_R70_Production_GoLive` |
 
 ## Safety (permanent)
 
-manual_only · trade_execution=false · **no broker writes** · Robinhood MCP read-only · ORATS options strategy data · legacy scheduler disabled · Stay in Cash valid · Agentic never used for execution
+manual_only · trade_execution=false · **no broker writes** · Robinhood MCP read-only allowlist · ORATS options strategy data · legacy scheduler disabled · Stay in Cash valid · Agentic never used for execution · no public FastAPI/Postgres
 
-## External gaps (honest)
+## Prior
 
-- `ROBINHOOD_RUNTIME_AUTH_EXTERNAL_BLOCKER` — deployed-app OAuth token one-time setup
-- `DOMAIN_VPS_BINDING_EXTERNAL` — no domain/VPS supplied
-- ORATS hist/backtest entitlement gaps as probed
+| Program | Status |
+|---|---|
+| R51–R60 | TECHNICALLY_COMPLETE — independent acceptance folded into R70 |
+| R61–R70 | ACTIVE |
 
-## Next
+## Current focus
 
-Independent Codex + Cowork acceptance (handoffs under `docs/ai/releases/R60/`). Do not begin R61.
+R61 acceptance hardening + evidence recovery.

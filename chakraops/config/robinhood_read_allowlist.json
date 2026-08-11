@@ -35,9 +35,7 @@
     "get_scans",
     "get_watchlist_items",
     "get_watchlists",
-    "search",
-    "review_equity_order",
-    "review_option_order"
+    "search"
   ],
   "write_denylist": [
     "place_equity_order",

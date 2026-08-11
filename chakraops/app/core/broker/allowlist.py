@@ -47,8 +47,6 @@ ROBINHOOD_READ_TOOL_ALLOWLIST: FrozenSet[str] = frozenset(
         "get_watchlist_items",
         "get_watchlists",
         "search",
-        "review_equity_order",
-        "review_option_order",
     }
 )
 

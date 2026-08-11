@@ -6,7 +6,11 @@ Source: live Cursor MCP server `user-robinhood-trading` (`https://agent.robinhoo
 
 ## READ (allowlisted)
 
-get_accounts, get_portfolio, get_equity_positions, get_option_positions, get_equity_orders, get_option_orders, get_equity_quotes, get_option_quotes, get_option_chains, get_option_instruments, get_option_historicals, get_equity_fundamentals, get_equity_historicals, get_equity_price_book, get_equity_tax_lots, get_equity_technical_indicators, get_equity_tradability, get_financials, get_index_historicals, get_index_quotes, get_indexes, get_earnings_calendar, get_earnings_results, get_option_level_upgrade_info, get_option_watchlist, get_pnl_trade_history, get_popular_watchlists, get_realized_pnl, get_scanner_filter_specs, get_scans, get_watchlist_items, get_watchlists, search, review_equity_order, review_option_order
+get_accounts, get_portfolio, get_equity_positions, get_option_positions, get_equity_orders, get_option_orders, get_equity_quotes, get_option_quotes, get_option_chains, get_option_instruments, get_option_historicals, get_equity_fundamentals, get_equity_historicals, get_equity_price_book, get_equity_tax_lots, get_equity_technical_indicators, get_equity_tradability, get_financials, get_index_historicals, get_index_quotes, get_indexes, get_earnings_calendar, get_earnings_results, get_option_level_upgrade_info, get_option_watchlist, get_pnl_trade_history, get_popular_watchlists, get_realized_pnl, get_scanner_filter_specs, get_scans, get_watchlist_items, get_watchlists, search
+
+## Explicitly excluded from production read allowlist (R61)
+
+`review_equity_order`, `review_option_order` — order preview/simulation surface not required for portfolio reads. Fail-closed unless a future explicit preview feature is accepted.
 
 ## WRITE (denied)
 

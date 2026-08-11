@@ -1,49 +1,27 @@
 # Current State — ChakraOps
 
-_Last updated: 2026-08-10 — **R51_R60_CONNECTED_PRODUCTION_ACTIVE**_
+_Last updated: 2026-08-11 — **R61_R70_PRODUCTION_GOLIVE_ACTIVE**_
 
 ## Release Status
 
 | Field | Value |
 |-------|-------|
-| Program | R51–R60 Connected Production |
-| Status | `R51_R60_CONNECTED_PRODUCTION_ACTIVE` |
+| Program | R61–R70 Production Go-Live |
+| Status | `R61_R70_PRODUCTION_GOLIVE_ACTIVE` |
 | Branch | `main` |
-| Baseline SHA | `32e0449b2b031c2f7079d021298141d1b8cee233` |
+| Baseline SHA | `c34cf39f147b5453eb7c4265057f0e3313a7be15` |
 | Mode | `SINGLE_OPERATOR_MAINLINE_LOOP_MODE` |
-| Requirements | Dropbox `ChakraOps_R51_R60_Connected_Production_Program` |
+| Domain | `https://chakraops.cloud` (IONOS registrar; Cloudflare preferred) |
+| Do not use | `dauji.info` |
 
-## Prior program
+## Prior
 
-| Program | Status |
-|---------|--------|
-| R41–R50 | **TECHNICALLY_COMPLETE** — independent Codex/Cowork acceptance deferred into R60 |
-| R51 | Active — baseline reconciliation, docs, data platform foundation |
-| R52 | In progress (parallel) — Robinhood MCP read-only runtime |
+R51–R60 technically complete on baseline; independent acceptance folded into R70.
 
-## Ports
+## Safety
 
-| Service | Port |
-|---------|------|
-| Backend | http://127.0.0.1:18800 |
-| Frontend | http://127.0.0.1:18873 |
+Manual only. No broker writes. Scheduler fail-closed off. ORATS options strategy data. Robinhood live portfolio when authenticated/fresh. Stay in Cash valid.
 
-## Trading Safety
+## External (owner)
 
-Manual execution only. **No broker writes.** Scheduler fail-closed off. ORATS-only for options strategy data. Stay in Cash valid.
-
-### Broker status (C-8)
-
-- **Historical:** R37 documented `NO_GO` when no safe read path existed — keep `R37_NO_GO.md` as history; do not treat as current target.
-- **Current target:** `ROBINHOOD_MCP_READ_ONLY_AVAILABLE` when `ROBINHOOD_MCP_ACCESS_TOKEN` / `ROBINHOOD_MCP_TOKEN_PATH` is configured.
-- **Without token:** `UNAUTHENTICATED` with `ROBINHOOD_RUNTIME_AUTH_EXTERNAL_BLOCKER` — app stays up; manual portfolio path remains valid.
-
-## External gaps (non-blocking for daily manual ops)
-
-- `ORATS_HIST_OPTIONS_EXTERNAL_ENTITLEMENT_GAP` — `/hist/options` entitlement.
-- Robinhood production OAuth outside Cursor MCP session — document one-time step; continue other releases.
-
-## Operator docs
-
-- Daily: [OPERATOR_RUNBOOK.md](./OPERATOR_RUNBOOK.md) → `chakraops/docs/RUNBOOK_OPERATOR_DAILY.md`
-- Production: [PRODUCTION_RUNBOOK.md](./PRODUCTION_RUNBOOK.md)
+See `docs/ai/releases/R61-R70/OWNER_ACTION_STATE.md` — VPS, Cloudflare zone/NS/Access/Tunnel, Robinhood production OAuth, Slack.

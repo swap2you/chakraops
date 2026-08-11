@@ -13,9 +13,12 @@ def test_second_exclusive_run_returns_already_running(tmp_path, monkeypatch: pyt
     from app.core.eval import eval_coordinator as coord
     from app.core.eval import evaluation_store as store
 
-    # Isolate lock file under tmp
+    # Isolate lock + evaluations dir under tmp
+    eval_dir = tmp_path / "evaluations"
+    eval_dir.mkdir()
+    monkeypatch.setattr(store, "_get_evaluations_dir", lambda: eval_dir)
+    monkeypatch.setattr(store, "_ensure_evaluations_dir", lambda: eval_dir)
     monkeypatch.setattr(store, "_run_lock_path", lambda: tmp_path / "run.lock")
-    monkeypatch.setattr(store, "_ensure_evaluations_dir", lambda: None)
     # Clear any prior lock
     lock = tmp_path / "run.lock"
     if lock.exists():
@@ -53,4 +56,9 @@ def test_second_exclusive_run_returns_already_running(tmp_path, monkeypatch: pyt
         third = coord.run_universe_evaluation_exclusive(["SPY"], mode="LIVE", trigger="test_third")
         assert third.get("started") is True
         assert third.get("reason") == "ok"
+        assert third.get("ledger_persisted") is True
         mock_eval.assert_called_once()
+    assert (eval_dir / f"{third['run_id']}.json").exists()
+    pointer = store.load_latest_pointer()
+    assert pointer is not None
+    assert pointer.run_id == third["run_id"]

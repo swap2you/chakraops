@@ -42,12 +42,22 @@ CRITICAL_TESTS = [
     "tests/test_r70_def072_startup.py",
     "tests/test_r70_ai_grounding.py",
     "tests/test_r70_persistence_honesty.py",
+    "tests/test_r70_auth_session_csrf.py",
+    "tests/test_r70_robinhood_oauth_mocks.py",
+    "tests/test_r70_sot_monitor_batch.py",
 ]
+
+
+def _npm_cmd() -> str:
+    """Windows NVM/npm often requires npm.cmd; bare 'npm' can open Notepad."""
+    if os.name == "nt":
+        return "npm.cmd"
+    return "npm"
 
 
 def run(cmd: list[str], cwd: Path) -> dict:
     print("+", " ".join(cmd), f"(cwd={cwd})")
-    p = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True)
+    p = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, shell=(os.name == "nt" and cmd[0].endswith(".cmd")))
     return {
         "cmd": cmd,
         "cwd": str(cwd),
@@ -60,6 +70,7 @@ def run(cmd: list[str], cwd: Path) -> dict:
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     results: dict = {"gates": {}, "blocking_failures": [], "gate_name": "quality_gate_r70"}
+    npm = _npm_cmd()
 
     results["gates"]["pytest"] = run(
         [str(PY), "-m", "pytest", "-q", "--tb=line"],
@@ -81,10 +92,10 @@ def main() -> int:
     )
     results["gates"]["pip_audit"] = run([str(PY), "-m", "pip_audit", "-f", "json"], BACKEND)
 
-    results["gates"]["frontend_typecheck"] = run(["npm", "run", "typecheck"], FRONTEND)
-    results["gates"]["frontend_test"] = run(["npm", "run", "test", "--", "--run"], FRONTEND)
-    results["gates"]["frontend_build"] = run(["npm", "run", "build"], FRONTEND)
-    results["gates"]["frontend_lint"] = run(["npm", "run", "lint"], FRONTEND)
+    results["gates"]["frontend_typecheck"] = run([npm, "run", "typecheck"], FRONTEND)
+    results["gates"]["frontend_test"] = run([npm, "run", "test", "--", "--run"], FRONTEND)
+    results["gates"]["frontend_build"] = run([npm, "run", "build"], FRONTEND)
+    results["gates"]["frontend_lint"] = run([npm, "run", "lint"], FRONTEND)
 
     if os.environ.get("CHAKRAOPS_SKIP_E2E") == "1":
         results["gates"]["playwright"] = {"returncode": 0, "skipped": True}

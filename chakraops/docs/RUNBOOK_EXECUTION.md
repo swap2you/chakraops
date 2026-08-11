@@ -1,6 +1,10 @@
 # ChakraOps Execution Runbook
 
-Human runbook for clean-room startup, debugging, and troubleshooting. Reflects current ChakraOps (R24.8–R35.0): dedicated dev ports, Docker, Caddy prod, /api routing, healthz, backup, offline proof harness.
+> **R70+ operators:** use the canonical current runbook  
+> [`docs/master/RUNBOOK_EXECUTION_CURRENT.md`](../../docs/master/RUNBOOK_EXECUTION_CURRENT.md).  
+> This file is retained as a historical R24.8–R35 reference and may describe Caddy/BASIC_AUTH layouts that are **not** the preferred production topology.
+
+Human runbook for clean-room startup, debugging, and troubleshooting. Reflects historical ChakraOps (R24.8–R35.0): dedicated dev ports, Docker, Caddy prod, /api routing, healthz, backup, offline proof harness.
 
 **Related runbooks:** [RUNBOOK_STARTUP_SHUTDOWN.md](RUNBOOK_STARTUP_SHUTDOWN.md) · [RUNBOOK_TROUBLESHOOTING.md](RUNBOOK_TROUBLESHOOTING.md) · [VALIDATION_PLAYBOOK.md](VALIDATION_PLAYBOOK.md)
 

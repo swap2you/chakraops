@@ -234,13 +234,22 @@ def _choose_alias(
 
 def _balances_from_portfolio(data: Any) -> BrokerBalances:
     d = data if isinstance(data, dict) else {}
+    # Robinhood MCP wraps payloads as {"data": {...}, "guide": "..."}.
+    if "data" in d and isinstance(d["data"], dict) and not any(
+        k in d for k in ("cash", "equity", "total_value", "buying_power")
+    ):
+        d = d["data"]
     if "portfolio" in d and isinstance(d["portfolio"], dict):
         d = d["portfolio"]
     # Common field name variants — do not invent balances.
     cash = _first_float(d, ("cash", "cash_balance", "equity_cash", "withdrawable_cash"))
-    bp = _first_float(d, ("buying_power", "buyingPower", "portfolio_cash", "cash_available"))
-    equity = _first_float(d, ("equity", "total_equity", "account_value"))
-    mv = _first_float(d, ("market_value", "marketValue", "total_market_value", "equity"))
+    bp_raw = d.get("buying_power")
+    if isinstance(bp_raw, dict):
+        bp = _first_float(bp_raw, ("buying_power", "unleveraged_buying_power", "buyingPower"))
+    else:
+        bp = _first_float(d, ("buying_power", "buyingPower", "portfolio_cash", "cash_available"))
+    equity = _first_float(d, ("equity", "equity_value", "total_equity", "account_value", "total_value"))
+    mv = _first_float(d, ("market_value", "marketValue", "total_market_value", "equity_value", "equity"))
     present = [k for k in d.keys() if isinstance(k, str)]
     return BrokerBalances(
         cash=cash,
@@ -297,7 +306,7 @@ def _parse_option_positions(data: Any) -> List[OptionPosition]:
                 strike=_first_float(row, ("strike", "strike_price")),
                 expiration=str(row.get("expiration") or row.get("expiration_date") or ""),
                 quantity=qty,
-                average_cost=_first_float(row, ("average_cost", "average_open_price", "avg_cost")),
+                average_cost=_first_float(row, ("average_cost", "average_open_price", "average_price", "avg_cost")),
                 side=str(row.get("type") or row.get("side") or ("short" if qty < 0 else "long")),
             )
         )
@@ -324,6 +333,12 @@ def _parse_equity_orders(data: Any) -> List[BrokerOrderSummary]:
 
 
 def _as_list(data: Any, keys: Tuple[str, ...]) -> List[Any]:
+    """Extract a list payload from MCP tool responses.
+
+    Handles current Robinhood MCP envelopes like::
+      {"data": {"accounts": [...]}, "guide": "..."}
+      {"data": {"positions": [...]}, "guide": "..."}
+    """
     if data is None:
         return []
     if isinstance(data, list):
@@ -333,7 +348,12 @@ def _as_list(data: Any, keys: Tuple[str, ...]) -> List[Any]:
             v = data.get(k)
             if isinstance(v, list):
                 return v
-        # Single account object
+            if isinstance(v, dict):
+                # Nested envelope: data -> {accounts|positions|...}
+                nested = _as_list(v, keys)
+                if nested:
+                    return nested
+        # Single account/position object
         if any(k in data for k in ("account_number", "symbol", "quantity")):
             return [data]
     return []

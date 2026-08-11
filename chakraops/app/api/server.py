@@ -1833,61 +1833,58 @@ def api_ops_evaluate(
     request: Request,
     x_trigger_token: Optional[str] = Header(None, alias="X-Trigger-Token"),
 ) -> Dict[str, Any]:
-    """Phase 10: Trigger DRY_RUN evaluation. Cooldown 5 min. Optional X-Trigger-Token from env EVALUATE_TRIGGER_TOKEN."""
-    global _last_eval_ts, _eval_jobs
+    """Trigger full-universe LIVE evaluation via exclusive coordinator (R70-DEF-033).
+
+    Never shells out to run_and_save --limit 5. Concurrent calls return already_running.
+    """
     token = os.getenv("EVALUATE_TRIGGER_TOKEN")
     if token and x_trigger_token != token:
         raise HTTPException(status_code=403, detail="Invalid or missing trigger token")
-    now = time.time()
-    with _jobs_lock:
-        remaining = EVAL_COOLDOWN_SEC - (now - _last_eval_ts)
-        if remaining > 0:
-            return {
-                "job_id": None,
-                "accepted": False,
-                "cooldown_seconds_remaining": int(remaining),
-            }
-        job_id = str(uuid.uuid4())
-        _eval_jobs[job_id] = {"state": "queued", "started_at": None, "finished_at": None, "error": None}
-        _last_eval_ts = now
 
-    def run_eval():
-        global _eval_jobs
-        with _jobs_lock:
-            _eval_jobs[job_id]["state"] = "running"
-            _eval_jobs[job_id]["started_at"] = time.time()
-        try:
-            out_dir = _output_dir()
-            result = subprocess.run(
-                [sys.executable, "-m", "scripts.run_and_save", "--output-dir", out_dir],
-                cwd=str(_repo_root()),
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-            with _jobs_lock:
-                _eval_jobs[job_id]["state"] = "done" if result.returncode == 0 else "failed"
-                _eval_jobs[job_id]["finished_at"] = time.time()
-                if result.returncode != 0:
-                    _eval_jobs[job_id]["error"] = result.stderr[:500] if result.stderr else "Non-zero exit"
-        except subprocess.TimeoutExpired:
-            with _jobs_lock:
-                _eval_jobs[job_id]["state"] = "failed"
-                _eval_jobs[job_id]["finished_at"] = time.time()
-                _eval_jobs[job_id]["error"] = "Timeout (120s)"
-        except Exception as e:
-            with _jobs_lock:
-                _eval_jobs[job_id]["state"] = "failed"
-                _eval_jobs[job_id]["finished_at"] = time.time()
-                _eval_jobs[job_id]["error"] = str(e)[:500]
+    from app.core.eval.eval_coordinator import run_universe_evaluation_exclusive
+    from app.api.data_health import get_universe_symbols
 
-    threading.Thread(target=run_eval, daemon=True).start()
-    return {"job_id": job_id, "accepted": True}
+    symbols = list(get_universe_symbols())
+    result = run_universe_evaluation_exclusive(symbols, mode="LIVE", trigger="ops_evaluate")
+    if not result.get("started"):
+        return {
+            "job_id": None,
+            "accepted": False,
+            "reason": result.get("reason") or "already_running",
+            "already_running": True,
+        }
+    return {
+        "job_id": result.get("run_id"),
+        "accepted": True,
+        "reason": "ok",
+        "run_id": result.get("run_id"),
+        "counts": result.get("counts"),
+        "exclusive": True,
+        "mode": "LIVE",
+    }
 
 
 @app.get("/api/ops/evaluate/{job_id}")
 def api_ops_evaluate_status(job_id: str) -> Dict[str, Any]:
-    """Phase 10/12: Job status (queued|running|done|failed|not_found). Always 200; unknown job_id returns state=not_found."""
+    """Job status for legacy clients. Exclusive path is synchronous; unknown ids -> not_found."""
+    from app.core.eval.evaluation_store import load_latest_pointer, get_current_run_status
+
+    current = get_current_run_status()
+    if current and current.get("run_id") == job_id:
+        return {
+            "state": "running",
+            "started_at": current.get("started_at"),
+            "finished_at": None,
+            "error": None,
+        }
+    pointer = load_latest_pointer()
+    if pointer and getattr(pointer, "run_id", None) == job_id:
+        return {
+            "state": "done",
+            "started_at": None,
+            "finished_at": getattr(pointer, "completed_at", None),
+            "error": None,
+        }
     with _jobs_lock:
         job = _eval_jobs.get(job_id)
     if not job:
@@ -2673,7 +2670,7 @@ def api_ops_evaluate_now() -> Dict[str, Any]:
         write_run_running(run_id, started_at)
     except Exception as e:
         logger.exception("[EVAL] write_run_running failed: %s", e)
-        release_run_lock()
+        release_run_lock(expected_run_id=run_id)
         raise HTTPException(status_code=500, detail=f"Failed to persist run state: {e}")
 
     try:
@@ -2701,7 +2698,7 @@ def api_ops_evaluate_now() -> Dict[str, Any]:
             process_run_completed(run)
         except Exception as alert_err:
             logger.warning("[EVAL] Alert processing failed (non-fatal): %s", alert_err)
-        release_run_lock()
+        release_run_lock(expected_run_id=run_id)
         return {
             "started": True,
             "reason": "Evaluation completed",
@@ -2711,7 +2708,7 @@ def api_ops_evaluate_now() -> Dict[str, Any]:
         }
     except Exception as e:
         logger.exception("Staged evaluation failed - aborting (no legacy fallback): %s", e)
-        release_run_lock()
+        release_run_lock(expected_run_id=run_id)
         save_failed_run(run_id, str(e), e, started_at)
         try:
             from app.core.alerts.alert_engine import process_run_completed

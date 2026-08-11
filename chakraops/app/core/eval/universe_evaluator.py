@@ -292,7 +292,7 @@ def _trigger_evaluation_legacy_background(
         write_run_running(run_id, started_at)
     except Exception as e:
         logger.exception("[EVAL] write_run_running failed: %s", e)
-        release_run_lock()
+        release_run_lock(expected_run_id=run_id)
         with _EVAL_LOCK:
             _IS_RUNNING = False
             _CURRENT_RUN_ID = None
@@ -345,7 +345,7 @@ def _trigger_evaluation_legacy_background(
             except Exception as alert_err:
                 logger.warning("[EVAL] Alert processing for failed run (non-fatal): %s", alert_err)
         finally:
-            release_run_lock()
+            release_run_lock(expected_run_id=run_id)
             with _EVAL_LOCK:
                 _IS_RUNNING = False
                 _CURRENT_RUN_ID = None
@@ -831,16 +831,16 @@ def _generate_candidate_trades(symbol: str, strikes: List[Dict], stock_price: Op
 
             # Target delta range for CSP: -0.20 to -0.35
             if -0.35 <= delta <= -0.20:
-                credit = bid if bid else 0
-                max_loss = (strike * 100) - (credit * 100) if strike else 0
+                credit = 0.0 if bid is None else float(bid)
+                max_loss = (strike * 100) - (credit * 100) if strike is not None else 0.0
 
                 candidates.append(CandidateTrade(
                     strategy="CSP",
                     expiry=expiry,
                     strike=strike,
                     delta=round(delta, 3),
-                    credit_estimate=round(credit, 2) if credit else None,
-                    max_loss=round(max_loss, 2) if max_loss else None,
+                    credit_estimate=round(credit, 2),
+                    max_loss=round(max_loss, 2),
                     why_this_trade=f"Put at {delta:.0%} delta, strike ${strike:.0f}"
                 ))
 

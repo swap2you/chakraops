@@ -127,6 +127,9 @@ def liquidity_gate(inp: DecisionInput, profile: StrategyProfile) -> Tuple[bool, 
     c = inp.contract
     if c is None:
         return (False, ["LIQUIDITY_DATA_MISSING"])
+    # Upstream batch Stage-2 already validated liquidity; do not invent OI/volume.
+    if getattr(inp, "liquidity_validated_upstream", False):
+        return (True, ["LIQUIDITY_VALIDATED_UPSTREAM"])
     reasons: List[str] = []
     req = profile.liquidity
     if c.open_interest is None or c.volume is None or c.bid_ask_spread_pct is None:
@@ -177,7 +180,7 @@ def cash_gate(inp: DecisionInput, profile: StrategyProfile, available_cash_after
     if inp.strategy != CSP:
         return (True, [])
     c = inp.contract
-    if c is None or not c.strike:
+    if c is None or c.strike is None:
         return (False, ["MISSING_CONTRACT"])
     one_contract_collateral = c.strike * 100.0
     if available_cash_after_buffer < one_contract_collateral:

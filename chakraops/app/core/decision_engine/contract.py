@@ -105,6 +105,8 @@ class DecisionInput:
     contract: Optional[OptionContract] = None
     shares_held: int = 0
     sector: Optional[str] = None
+    # Honest upstream liquidity gate (batch Stage-2); do not invent fake OI/volume.
+    liquidity_validated_upstream: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -119,6 +121,7 @@ class DecisionInput:
             "contract": self.contract.to_dict() if self.contract else None,
             "shares_held": self.shares_held,
             "sector": self.sector,
+            "liquidity_validated_upstream": self.liquidity_validated_upstream,
         }
 
 

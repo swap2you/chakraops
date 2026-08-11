@@ -41,20 +41,21 @@ def try_begin_universe_evaluation(trigger: str) -> Tuple[bool, str]:
     return True, run_id
 
 
-def end_universe_evaluation() -> None:
-    """Release the shared run lock."""
+def end_universe_evaluation(run_id: Optional[str] = None) -> None:
+    """Release the shared run lock for the owning run_id when known."""
     from app.core.eval.evaluation_store import release_run_lock
 
     global _ACTIVE_TRIGGER, _ACTIVE_RUN_ID
     with _COORD_META_LOCK:
         trigger = _ACTIVE_TRIGGER
-        run_id = _ACTIVE_RUN_ID
+        active_run_id = _ACTIVE_RUN_ID
+        expected = run_id or active_run_id
         _ACTIVE_TRIGGER = None
         _ACTIVE_RUN_ID = None
     try:
-        release_run_lock()
+        release_run_lock(expected_run_id=expected)
     finally:
-        logger.info("[EVAL_COORD] end trigger=%s run_id=%s", trigger, run_id)
+        logger.info("[EVAL_COORD] end trigger=%s run_id=%s", trigger, expected)
 
 
 def run_universe_evaluation_exclusive(
@@ -76,9 +77,22 @@ def run_universe_evaluation_exclusive(
     run_id = token
     try:
         from app.core.eval.evaluation_service_v2 import evaluate_universe
+        from app.core.eval.evaluation_store import update_latest_pointer
 
         artifact = evaluate_universe(list(symbols), mode=mode)
         meta = getattr(artifact, "metadata", None) or {}
+        # Align artifact run identity with coordinator lock when possible.
+        try:
+            if hasattr(artifact, "metadata") and isinstance(artifact.metadata, dict):
+                artifact.metadata["coordinator_run_id"] = run_id
+                artifact.metadata["trigger"] = trigger
+        except Exception:
+            pass
+        completed_at = datetime.now(timezone.utc).isoformat()
+        try:
+            update_latest_pointer(run_id, completed_at)
+        except Exception:
+            logger.exception("[EVAL_COORD] update_latest_pointer failed run_id=%s", run_id)
         return {
             "started": True,
             "reason": "ok",
@@ -97,4 +111,4 @@ def run_universe_evaluation_exclusive(
         logger.exception("[EVAL_COORD] evaluate_universe failed trigger=%s run_id=%s", trigger, run_id)
         raise
     finally:
-        end_universe_evaluation()
+        end_universe_evaluation(run_id=run_id)

@@ -122,7 +122,7 @@ def _option_contract_from(
     credit = _g(candidate, "credit_estimate")
     if credit is None:
         credit = _g(summary, "expected_credit")
-    premium = (float(credit) / 100.0) if credit is not None else None
+    premium = float(credit) if credit is not None else None
     expiry = _g(candidate, "expiry") or _g(summary, "expiration")
     dte = _dte_from_expiration(expiry, now)
 
@@ -137,10 +137,8 @@ def _option_contract_from(
     liq = _g(diagnostics, "liquidity", {}) or {}
     option_liq_ok = _g(liq, "option_liquidity_ok")
     if option_liq_ok is True:
-        # Liquidity was validated by the upstream batch Stage-2 gate. The artifact
-        # does not persist per-contract OI/volume/spread, so we mark it validated
-        # upstream (transparent provenance) rather than re-measure.
-        oi, volume, spread = 1_000_000, 1_000_000, 0.0
+        # Liquidity validated upstream; do not invent fake OI/volume quantities.
+        # Leave metrics None and record honest provenance for the liquidity gate.
         provenance.append(LIQUIDITY_VALIDATED_UPSTREAM)
     # else: leave None -> canonical liquidity_gate blocks with LIQUIDITY_DATA_MISSING
 
@@ -217,6 +215,7 @@ def build_decision_inputs_from_artifact(
                 contract=contract,
                 shares_held=int(shares_by_symbol.get(symbol, 0) or 0),
                 sector=_sector_for(symbol),
+                liquidity_validated_upstream=(LIQUIDITY_VALIDATED_UPSTREAM in prov),
             )
         )
         if prov:

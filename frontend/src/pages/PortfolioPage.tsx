@@ -108,7 +108,6 @@ export function PortfolioPage() {
   ] as const;
 
   const positions = data?.positions ?? [];
-  const capitalDeployed = data?.capital_deployed ?? 0;
   const sharesPositions = data?.shares_positions ?? [];
   const optionsPositions = data?.options_positions ?? [];
   const openPositionsCount = data?.open_positions_count ?? positions.filter((p) => (p.status ?? "").toUpperCase() === "OPEN" || (p.status ?? "").toUpperCase() === "PARTIAL_EXIT").length;

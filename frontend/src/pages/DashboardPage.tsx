@@ -92,7 +92,7 @@ export function DashboardPage() {
   const { data: decision } = useDecision(mode, filename);
   const { data: universe } = useUniverse();
   const { data: health } = useUiSystemHealth();
-  const { data: unifiedDb } = useUnifiedPositionsFromDb({ state: "open" });
+  const { data: unifiedDb } = useUnifiedPositionsFromDb({ state: "open", include_paper: false });
   const { data: portfolioData } = usePortfolio();
   const { data: defaultAccount } = useDefaultAccount();
   const accountId = (defaultAccount?.account as { account_id?: string })?.account_id ?? null;

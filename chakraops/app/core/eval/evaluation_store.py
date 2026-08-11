@@ -233,13 +233,15 @@ def acquire_run_lock(run_id: str, started_at: str) -> bool:
     """
     Acquire the run lock (create lock file). Prevents overlapping runs.
     Returns True if lock acquired, False if another run is in progress.
-    Cross-platform: uses exclusive create (O_EXCL / 'x' mode).
+    Uses atomic O_CREAT|O_EXCL create; ownership token = run_id.
     """
+    import os
+
     path = _run_lock_path()
     _ensure_evaluations_dir()
     with _STORE_LOCK:
+        # Clear only truly stale locks (mtime-based) under the store lock.
         if path.exists():
-            # Stale lock?
             try:
                 mtime = path.stat().st_mtime
                 if (datetime.now(timezone.utc).timestamp() - mtime) > RUN_LOCK_STALE_SEC:
@@ -249,23 +251,48 @@ def acquire_run_lock(run_id: str, started_at: str) -> bool:
                     return False
             except OSError:
                 return False
+        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
         try:
-            path.write_text(f"{run_id}\n{started_at}", encoding="utf-8")
-            logger.info("[STORE] Run lock acquired run_id=%s", run_id)
-            return True
+            fd = os.open(str(path), flags)
+        except FileExistsError:
+            return False
         except OSError as e:
             logger.warning("[STORE] Run lock create failed: %s", e)
             return False
+        try:
+            payload = f"{run_id}\n{started_at}\n"
+            os.write(fd, payload.encode("utf-8"))
+            try:
+                os.fsync(fd)
+            except OSError:
+                pass
+            logger.info("[STORE] Run lock acquired run_id=%s", run_id)
+            return True
+        finally:
+            os.close(fd)
 
 
-def release_run_lock() -> None:
-    """Release the run lock (remove lock file)."""
+def release_run_lock(expected_run_id: Optional[str] = None) -> None:
+    """Release the run lock. If expected_run_id is set, only release matching lock."""
     path = _run_lock_path()
     with _STORE_LOCK:
         try:
-            if path.exists():
-                path.unlink()
-                logger.info("[STORE] Run lock released")
+            if not path.exists():
+                return
+            if expected_run_id:
+                try:
+                    first = path.read_text(encoding="utf-8").splitlines()[0].strip()
+                except OSError:
+                    first = ""
+                if first and first != expected_run_id:
+                    logger.warning(
+                        "[STORE] Run lock release skipped; holder=%s expected=%s",
+                        first,
+                        expected_run_id,
+                    )
+                    return
+            path.unlink()
+            logger.info("[STORE] Run lock released")
         except OSError as e:
             logger.warning("[STORE] Run lock release failed: %s", e)
 

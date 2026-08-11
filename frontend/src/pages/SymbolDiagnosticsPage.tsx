@@ -101,9 +101,9 @@ function computeExpectedReturnPct(
   strike: number | null | undefined,
   credit: number | null | undefined
 ): number | null {
+  // credit_estimate is dollars per share; return on collateral = credit/strike*100.
   if (strike == null || credit == null || strike <= 0) return null;
-  const notional = strike * 100;
-  return (credit / notional) * 100;
+  return (credit / strike) * 100;
 }
 
 function getDefaultCapital(account: unknown): number | null {

@@ -75,7 +75,7 @@ def _dollar_budget(available_after_buffer: float, max_position_dollars: float, s
 
 def size_csp(inp: DecisionInput, profile: StrategyProfile, portfolio: PortfolioState) -> SizingResult:
     c = inp.contract
-    if c is None or not c.strike:
+    if c is None or c.strike is None:
         return SizingResult(Sizing(explanation=["No contract to size"]), 0.0, ["MISSING_CONTRACT"])
     collateral_per = c.strike * 100.0
     available_after_buffer, max_pos, sym_head, sec_head, flags = _buffer_and_caps(profile, portfolio, inp.symbol, inp.sector)

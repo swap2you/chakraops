@@ -78,7 +78,7 @@ class StrategyEval:
 
 def _evaluate_option(inp: DecisionInput, profile: StrategyProfile, *, is_csp: bool) -> StrategyEval:
     c = inp.contract
-    if c is None or not c.strike or inp.price is None:
+    if c is None or c.strike is None or inp.price is None:
         return StrategyEval(False, 0.0, None, soft_reasons=["MISSING_CONTRACT"])
 
     delta_range = profile.csp_delta_range if is_csp else profile.cc_delta_range

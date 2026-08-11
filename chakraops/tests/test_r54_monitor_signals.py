@@ -12,7 +12,9 @@ def test_disconnected_and_stale_signals():
     signals = evaluate_broker_health_signals(status, {"stale": True, "fetched_at": "t"})
     types = {s.signal_type for s in signals}
     assert "BROKER_DISCONNECTED" in types
-    assert "STALE_DATA" in types
+    # R65/R70: worker emits BROKER_STALE; STALE_DATA remains a vocabulary alias only.
+    assert "BROKER_STALE" in types
+    assert "STALE_DATA" not in types or "BROKER_STALE" in types
     for s in signals:
         assert s.to_dict()["trade_execution"] is False
         assert s.to_dict()["broker_writes"] is False

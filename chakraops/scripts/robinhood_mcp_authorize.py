@@ -216,6 +216,14 @@ async def _authorize_with_mcp_sdk(*, open_browser: bool, redirect_uri: str) -> i
     cb_state = _CallbackState()
     expected_state: dict[str, Optional[str]] = {"state": None}
 
+    # Start callback listener before the SDK opens the browser (avoid race).
+    server_thread = threading.Thread(
+        target=_run_local_callback_server,
+        args=(redirect_uri, cb_state),
+        daemon=True,
+    )
+    server_thread.start()
+
     async def redirect_handler(authorization_url: str) -> None:
         # Capture state from URL for validation messaging only (not printed in full).
         from urllib.parse import parse_qs, urlparse as _urlparse
@@ -230,12 +238,6 @@ async def _authorize_with_mcp_sdk(*, open_browser: bool, redirect_uri: str) -> i
             print(authorization_url)
 
     async def callback_handler() -> AuthorizationCodeResult:
-        server_thread = threading.Thread(
-            target=_run_local_callback_server,
-            args=(redirect_uri, cb_state),
-            daemon=True,
-        )
-        server_thread.start()
         if not cb_state.event.wait(timeout=300):
             raise TimeoutError("Timed out waiting for OAuth callback")
         parsed = parse_callback_url(cb_state.callback_url or "")
@@ -264,25 +266,25 @@ async def _authorize_with_mcp_sdk(*, open_browser: bool, redirect_uri: str) -> i
     except Exception as exc:
         print(f"Warning: discovery cache seed failed ({type(exc).__name__}); refresh may re-discover.")
 
-    oauth = OAuthClientProvider(
-        server_url=mcp_url,
-        client_metadata=OAuthClientMetadata(
-            client_name=DEFAULT_CLIENT_NAME,
-            redirect_uris=[AnyUrl(redirect_uri)],
-            grant_types=["authorization_code", "refresh_token"],
-            response_types=["code"],
-            scope="internal",
-            token_endpoint_auth_method="none",
-        ),
-        storage=FileTokenStorage(),
-        redirect_handler=redirect_handler,
-        callback_handler=callback_handler,
-        timeout=300.0,
-    )
-
     # Trigger OAuth via a protected request (401 → discovery → auth → token).
+    # Compatible with current mcp SDK: OAuthClientProvider has no timeout= kwarg.
     try:
         import httpx2
+
+        oauth = OAuthClientProvider(
+            server_url=mcp_url,
+            client_metadata=OAuthClientMetadata(
+                client_name=DEFAULT_CLIENT_NAME,
+                redirect_uris=[AnyUrl(redirect_uri)],
+                grant_types=["authorization_code", "refresh_token"],
+                response_types=["code"],
+                scope="internal",
+                token_endpoint_auth_method="none",
+            ),
+            storage=FileTokenStorage(),
+            redirect_handler=redirect_handler,
+            callback_handler=callback_handler,
+        )
 
         async with httpx2.AsyncClient(auth=oauth, follow_redirects=True, timeout=60.0) as client:
             # Minimal initialize-style probe; body may be rejected but 401 triggers OAuth.
@@ -308,7 +310,7 @@ async def _authorize_with_mcp_sdk(*, open_browser: bool, redirect_uri: str) -> i
             _ = resp.status_code
     except Exception as exc:
         # Fall back to discovery+PKCE path if SDK flow cannot complete.
-        print(f"MCP SDK OAuth path failed ({type(exc).__name__}); falling back to discovery+PKCE.")
+        print(f"MCP SDK OAuth path failed ({type(exc).__name__}: {exc}); falling back to discovery+PKCE.")
         return _authorize_with_discovery(open_browser=open_browser, redirect_uri=redirect_uri)
 
     if not store.get_access_token():

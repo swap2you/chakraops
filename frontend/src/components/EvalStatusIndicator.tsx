@@ -15,8 +15,8 @@ import type { EvaluationStatusCurrentResponse } from "@/types/universeEvaluation
 
 const IDLE_POLL_MS = 15_000;
 const RUNNING_POLL_MS = 4_000;
-/** Operator-observed typical run time (~90s for the 166-symbol universe); approximation only. */
-const TYPICAL_DURATION_LABEL = "~1–2 min";
+/** Operator-observed runs often take several minutes for the full universe. */
+const TYPICAL_DURATION_LABEL = "several minutes";
 
 function useElapsedSeconds(startedAt: string | null | undefined, active: boolean): number | null {
   const [elapsed, setElapsed] = useState<number | null>(null);
@@ -74,7 +74,7 @@ export function EvalStatusIndicator() {
       <span className="whitespace-nowrap">
         Evaluation running
         {elapsed != null && <span className="tabular-nums"> · {formatElapsed(elapsed)}</span>}
-        <span className="hidden text-amber-600/80 sm:inline dark:text-amber-400/70"> · typically {TYPICAL_DURATION_LABEL}</span>
+        <span className="hidden text-amber-600/80 sm:inline dark:text-amber-400/70"> · may take {TYPICAL_DURATION_LABEL}</span>
       </span>
     </div>
   );

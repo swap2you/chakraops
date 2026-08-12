@@ -152,41 +152,76 @@ def _resolve_symbols(args: argparse.Namespace) -> List[str]:
 
 
 def run_one(args: argparse.Namespace, out_dir: Path) -> Tuple[int, Optional[Path]]:
-    """Run staged evaluation once and write DecisionArtifactV2. Returns (exit_code, path_written)."""
+    """Run staged evaluation once into an isolated output dir — never canonical LIVE.
+
+    R70 Final Closure: refuses to write decision_latest / evaluate_universe(mode=LIVE)
+    into the canonical store. Use POST /api/ui/eval/run (coordinator) for LIVE authority.
+    """
     symbols = _resolve_symbols(args)
     if not symbols:
         print("No symbols to evaluate")
         return 1, None
 
+    # Refuse canonical LIVE overwrite path
+    try:
+        from app.core.eval.evaluation_store_v2 import get_decision_store_path
+
+        canonical_parent = get_decision_store_path().resolve().parent
+    except Exception:
+        canonical_parent = (_REPO_ROOT / "out").resolve()
+    out_resolved = out_dir.resolve()
+    if out_resolved == canonical_parent or out_resolved == (_REPO_ROOT / "out").resolve():
+        print(
+            "REFUSED: scripts/run_and_save.py must not write canonical LIVE "
+            f"(output-dir={out_resolved}). Pass --output-dir to an isolated non-canonical path "
+            "(e.g. out/harness_eval). Primary LIVE path: POST /api/ui/eval/run via eval_coordinator.",
+            file=sys.stderr,
+        )
+        return 2, None
+
     if getattr(args, "all", False):
-        print(f"[RUN] Evaluating full universe ({len(symbols)} symbols)")
+        print(f"[RUN] Evaluating full universe ({len(symbols)} symbols) [SECONDARY HARNESS]")
     else:
-        print(f"Evaluating {len(symbols)} symbols: {symbols}")
+        print(f"Evaluating {len(symbols)} symbols: {symbols} [SECONDARY HARNESS]")
 
     try:
         from app.core.eval.evaluation_service_v2 import evaluate_universe
-        from app.core.eval.evaluation_store_v2 import get_decision_store_path
-        # evaluate_universe writes to canonical DECISION_STORE_PATH via store
-        artifact = evaluate_universe(symbols, mode="LIVE")
+        from app.core.eval.evaluation_store_v2 import reset_output_dir
+
+        # Isolate store writes into harness dir (never canonical out/decision_latest.json)
+        try:
+            artifact = evaluate_universe(symbols, mode="PAPER", output_dir=str(out_resolved))
+        finally:
+            reset_output_dir()
     except Exception as e:
         print(f"Evaluation failed: {e}")
+        try:
+            from app.core.eval.evaluation_store_v2 import reset_output_dir
+
+            reset_output_dir()
+        except Exception:
+            pass
         return 1, None
 
     ts = datetime.now(timezone.utc)
     fname = f"decision_{ts.strftime('%Y-%m-%dT%H%M%S')}Z.json"
     out_path = out_dir / fname
-    artifact_dict = artifact.to_dict()
+    artifact_dict = artifact.to_dict() if hasattr(artifact, "to_dict") else {}
+    if isinstance(artifact_dict, dict):
+        artifact_dict.setdefault("metadata", {})
+        if isinstance(artifact_dict["metadata"], dict):
+            artifact_dict["metadata"]["secondary_harness"] = True
+            artifact_dict["metadata"]["write_canonical"] = False
+            artifact_dict["metadata"]["authority"] = "SECONDARY_HARNESS"
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(artifact_dict, f, indent=2, default=str)
-    latest_path = get_decision_store_path()
-    print(f"Wrote {out_path}")
-    print(f"Latest: {latest_path} (v2, written by store)")
+    print(f"Wrote {out_path} (non-canonical; LIVE authority unchanged)")
     return 0, out_path
 
 
 def enforce_retention(output_dir: Path, max_days: int = 7) -> Tuple[int, List[str]]:
     """Delete old timestamped decision files beyond retention. Keep decision_latest.json."""
-    from datetime import date, timedelta
+    from datetime import timedelta
     keep = {"decision_latest.json", "sample_decision.json", "sample_decision_rich.json"}
     files = [f for f in output_dir.glob("decision_*.json") if f.name not in keep]
     if not files:
@@ -204,12 +239,17 @@ def enforce_retention(output_dir: Path, max_days: int = 7) -> Tuple[int, List[st
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run staged evaluation and save decision snapshots")
+    parser = argparse.ArgumentParser(description="SECONDARY offline eval harness — never canonical LIVE")
     parser.add_argument("--symbols", type=str, default=None, help="Comma-separated symbols (default: SPY,AAPL)")
     parser.add_argument("--limit", type=int, default=5, help="Max symbols when using universe (default: 5)")
     parser.add_argument("--all", action="store_true", help="Evaluate entire universe")
-    parser.add_argument("--output-dir", type=str, default="out", help="Output directory (default: out)")
-    parser.add_argument("--realtime", action="store_true", help="Loop: update decision_latest.json every interval")
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="out/harness_eval",
+        help="Isolated output directory (default: out/harness_eval). Canonical 'out' is refused.",
+    )
+    parser.add_argument("--realtime", action="store_true", help="Loop into isolated output-dir")
     parser.add_argument("--interval", type=int, default=30, help="Refresh interval in seconds (default: 30)")
     parser.add_argument("--skip-cleanup", action="store_true", help="Skip retention cleanup")
     args = parser.parse_args()
@@ -217,25 +257,18 @@ def main() -> int:
     if args.all and args.symbols:
         raise ValueError("Cannot use --all and --symbols together")
 
-    # Canonical out dir = parent of decision_latest.json (same as store)
-    try:
-        from app.core.eval.evaluation_store_v2 import get_decision_store_path
-        _canonical_out = get_decision_store_path().parent
-    except Exception:
-        _canonical_out = _REPO_ROOT / "out"
     out_dir = Path(args.output_dir)
     if not out_dir.is_absolute():
-        if out_dir == Path("out") or str(out_dir) == "out":
-            out_dir = _canonical_out
-        else:
-            out_dir = (_canonical_out.parent / out_dir).resolve()
+        out_dir = (_REPO_ROOT / out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if args.realtime:
-        print("Realtime mode: Ctrl+C to stop")
+        print("Realtime mode (secondary harness): Ctrl+C to stop")
         try:
             while True:
-                run_one(args, out_dir)
+                code, _ = run_one(args, out_dir)
+                if code == 2:
+                    return 2
                 if not args.skip_cleanup:
                     n, _ = enforce_retention(out_dir)
                     if n > 0:

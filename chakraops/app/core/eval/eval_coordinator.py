@@ -152,6 +152,36 @@ def run_universe_evaluation_exclusive(
             duration = max(0.0, (completed_dt - started_dt).total_seconds())
         except Exception:
             duration = float(meta.get("duration_seconds") or 0.0)
+
+        # Tally HOLD / BLOCKED from artifact symbols (ledger counters)
+        hold_n = 0
+        block_n = 0
+        top_holds: List[Dict[str, Any]] = []
+        try:
+            for s in getattr(artifact, "symbols", None) or []:
+                verd = str(getattr(s, "verdict", "") or "").strip().upper()
+                if verd in ("HOLD", "HELD"):
+                    hold_n += 1
+                    if len(top_holds) < 10:
+                        top_holds.append(
+                            {
+                                "symbol": getattr(s, "symbol", None),
+                                "verdict": verd,
+                                "reason": getattr(s, "primary_reason", None),
+                                "score": getattr(s, "score", None),
+                            }
+                        )
+                elif verd in ("BLOCKED", "BLOCK", "INELIGIBLE"):
+                    block_n += 1
+            if hold_n == 0 and block_n == 0:
+                # Fallback: metadata counters when present
+                hold_n = int(meta.get("holds") or meta.get("hold_count") or 0)
+                block_n = int(meta.get("blocks") or meta.get("block_count") or 0)
+        except Exception:
+            pass
+
+        import os
+
         ledger = EvaluationRunFull(
             run_id=run_id,
             started_at=started_at,
@@ -164,10 +194,24 @@ def run_universe_evaluation_exclusive(
             shortlisted=int(meta.get("shortlisted_count") or meta.get("eligible_count") or 0),
             stage1_pass=int(meta.get("evaluated_count_stage1") or 0),
             stage2_pass=int(meta.get("evaluated_count_stage2") or 0),
+            holds=hold_n,
+            blocks=block_n,
+            top_holds=top_holds,
             source=map_eval_trigger_to_source(active_trigger),
             engine="staged",
             correlation_id=run_id,
             market_phase=str(meta.get("market_phase") or "") or None,
+            alerts=[
+                {
+                    "type": "PROVENANCE",
+                    "trigger": active_trigger,
+                    "allow_when_closed": bool(allow_when_closed),
+                    "pid": os.getpid(),
+                    "manual_only": True,
+                    "trade_execution": False,
+                }
+            ],
+            alerts_count=1,
         )
         try:
             save_run(ledger)

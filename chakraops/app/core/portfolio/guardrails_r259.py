@@ -28,8 +28,9 @@ REASON_SECTOR_ADVISORY = "Sector exposure advisory"
 
 
 def build_guardrails_snapshot() -> Dict[str, Any]:
-    """Build a snapshot from account, holdings, share_positions, and tracked option positions.
-    Used as input to compute_portfolio_metrics. All data from holdings_db + positions service.
+    """Build a snapshot from capital authority (broker when fresh) + tracked options.
+
+    Manual holdings are used only when broker capital is unavailable.
     """
     out: Dict[str, Any] = {
         "cash": 0.0,
@@ -38,6 +39,7 @@ def build_guardrails_snapshot() -> Dict[str, Any]:
         "share_positions": [],
         "option_positions": [],
         "symbol_prices": {},
+        "sizing_blocked": False,
     }
     try:
         from app.core.accounts.holdings_db import (
@@ -82,6 +84,12 @@ def build_guardrails_snapshot() -> Dict[str, Any]:
                         "contracts": contracts,
                         "strike": float(strike) if strike is not None else None,
                     })
+    except Exception:
+        pass
+    try:
+        from app.core.portfolio.capital_authority_r70 import apply_capital_to_guardrails_snapshot
+
+        out = apply_capital_to_guardrails_snapshot(out)
     except Exception:
         pass
     return out
@@ -337,6 +345,7 @@ def get_guardrails_metrics_and_status(
     available_budget_usd: float = 0.0
     cash_secured_committed_usd: float = 0.0
     csp_cash_available_usd: float = 0.0
+    sizing_blocked = bool(snap.get("sizing_blocked"))
     try:
         from app.core.portfolio.sizing_r260 import (
             compute_available_budget,
@@ -350,6 +359,12 @@ def get_guardrails_metrics_and_status(
         csp_cash_available_usd = compute_available_cash_for_new_csp(snap_for_csp, cfg)
     except Exception:
         pass
+    if sizing_blocked:
+        # Fail closed for live actionability when broker capital is stale/unavailable.
+        available_budget_usd = 0.0
+        csp_cash_available_usd = 0.0
+        status = STATUS_BLOCKED
+    capital_meta = snap.get("capital_authority") or {}
     return {
         "status": status,
         "metrics": {
@@ -361,6 +376,13 @@ def get_guardrails_metrics_and_status(
             "available_budget_usd": round(available_budget_usd, 2),
             "cash_secured_committed_usd": round(cash_secured_committed_usd, 2),
             "csp_cash_available_usd": round(csp_cash_available_usd, 2),
+            "cash": snap.get("cash"),
+            "sizing_blocked": sizing_blocked,
+            "capital_source": capital_meta.get("source"),
+            "capital_account_alias": capital_meta.get("account_alias"),
+            "capital_as_of": capital_meta.get("as_of"),
+            "capital_state": capital_meta.get("state"),
+            "buying_power": capital_meta.get("buying_power"),
         },
         "limits": {
             "MAX_OPEN_OPTIONS_POSITIONS": max_options,

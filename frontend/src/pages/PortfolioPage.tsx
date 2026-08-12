@@ -13,6 +13,9 @@ import {
   useSetBalances,
   useUpsertHolding,
   useDeleteHolding,
+  useBrokerAccounts,
+  useBrokerSnapshot,
+  useReconcileDiff,
 } from "@/api/queries";
 import type { PortfolioPosition, AccountHolding, SharePositionSummary, OptionsPositionSummary } from "@/api/types";
 import { PageHeader } from "@/components/PageHeader";
@@ -205,11 +208,9 @@ export function PortfolioPage() {
       <Card id="portfolio-accounts" data-testid="portfolio-accounts">
         <CardHeader
           title="Accounts"
-          description="Masked broker accounts appear in the Overview live panel. Agentic is never used for execution."
+          description="Masked broker aliases bridged into the app registry. Agentic is never execution-eligible. Roth cash is never taxable CSP collateral."
         />
-        <Link to="/portfolio?tab=overview" className="text-sm text-emerald-600 hover:underline dark:text-emerald-400">
-          Open Overview (live broker) →
-        </Link>
+        <PortfolioAccountsTab />
       </Card>
       )}
 
@@ -217,9 +218,10 @@ export function PortfolioPage() {
       <Card id="portfolio-orders" data-testid="portfolio-orders">
         <CardHeader
           title="Orders & Activity"
-          description="Read-only broker orders when available. Journal remains the decision history under Portfolio."
+          description="Read-only broker equity orders from the last-good snapshot (bounded). Journal remains decision history."
         />
-        <Link to="/journal" className="text-sm text-emerald-600 hover:underline dark:text-emerald-400">
+        <PortfolioOrdersTab />
+        <Link to="/journal" className="mt-3 inline-block text-sm text-emerald-600 hover:underline dark:text-emerald-400">
           Open Journal →
         </Link>
       </Card>
@@ -229,11 +231,9 @@ export function PortfolioPage() {
       <Card id="portfolio-reconciliation" data-testid="portfolio-reconciliation">
         <CardHeader
           title="Reconciliation"
-          description="Compare live broker snapshot with migrated/manual history. Never auto-modifies broker or historical records."
+          description="Broker vs manual recovery holdings. Never auto-modifies either source."
         />
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          Mismatches are advisory only — no silent overwrite of either source.
-        </p>
+        <PortfolioReconcileTab />
       </Card>
       )}
 
@@ -743,8 +743,17 @@ export function PortfolioPage() {
         <Card id="portfolio-risk" data-testid="portfolio-risk">
           <CardHeader
             title="Risk"
-            description="Per-account risk isolation — IRA cash is never taxable CSP collateral. Agentic has no execution collateral."
+            description={
+              selectedAccount
+                ? "Loading risk for selected account…"
+                : "DATA_BLOCKED — no account available yet. Sync broker or wait for alias bridge."
+            }
           />
+          {!selectedAccount && (
+            <p className="text-sm text-amber-700 dark:text-amber-300" data-testid="portfolio-risk-blocked">
+              DATA_BLOCKED: required account context missing.
+            </p>
+          )}
         </Card>
       ) : null}
 
@@ -925,6 +934,147 @@ export function PortfolioPage() {
         onClose={() => setDetailDrawerPosition(null)}
         onClosed={() => setDetailDrawerPosition(null)}
       />
+    </div>
+  );
+}
+
+function PortfolioAccountsTab() {
+  const { data: registry } = useAccounts();
+  const { data: brokerAccounts } = useBrokerAccounts();
+  const accounts = registry?.accounts ?? [];
+  const masked = new Map((brokerAccounts?.accounts ?? []).map((a) => [a.alias, a]));
+
+  if (accounts.length === 0) {
+    return <EmptyState title="No accounts" description="Broker aliases will appear after bridge/sync." />;
+  }
+
+  return (
+    <Table data-testid="portfolio-accounts-table">
+      <TableHeader>
+        <TableRow>
+          <TableHead>Account</TableHead>
+          <TableHead>Type</TableHead>
+          <TableHead>Source</TableHead>
+          <TableHead>State</TableHead>
+          <TableHead>Cash</TableHead>
+          <TableHead>Equity</TableHead>
+          <TableHead>Execution</TableHead>
+          <TableHead>Default</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {accounts.map((a) => {
+          const row = a as {
+            account_id?: string;
+            account_type?: string;
+            source?: string;
+            capital_state?: string;
+            cash?: number | null;
+            equity?: number | null;
+            execution_eligible?: boolean;
+            is_default?: boolean;
+            broker_alias?: string | null;
+          };
+          const mask = masked.get(row.account_id ?? "") ?? masked.get(row.broker_alias ?? "");
+          return (
+            <TableRow key={row.account_id}>
+              <TableCell className="font-mono">
+                {row.account_id}
+                {mask?.masked_account_number ? (
+                  <span className="ml-2 text-xs text-zinc-500">{mask.masked_account_number}</span>
+                ) : null}
+              </TableCell>
+              <TableCell>{row.account_type}</TableCell>
+              <TableCell className="text-xs">{row.source ?? "—"}</TableCell>
+              <TableCell className="text-xs">{row.capital_state ?? "—"}</TableCell>
+              <TableCell className="font-mono">{fmtCurrency(row.cash ?? null)}</TableCell>
+              <TableCell className="font-mono">{fmtCurrency(row.equity ?? null)}</TableCell>
+              <TableCell>{row.execution_eligible === false ? "No" : "Yes"}</TableCell>
+              <TableCell>{row.is_default ? "Yes" : "—"}</TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
+  );
+}
+
+function PortfolioOrdersTab() {
+  const { data: snapData } = useBrokerSnapshot("acct_individual", false);
+  const orders = (snapData?.snapshot?.equity_orders ?? []).slice(0, 50);
+  if (orders.length === 0) {
+    return (
+      <p className="text-sm text-zinc-500 dark:text-zinc-400" data-testid="portfolio-orders-empty">
+        No equity orders in the current broker snapshot.
+      </p>
+    );
+  }
+  return (
+    <Table data-testid="portfolio-orders-table">
+      <TableHeader>
+        <TableRow>
+          <TableHead>Symbol</TableHead>
+          <TableHead>Side</TableHead>
+          <TableHead>Qty</TableHead>
+          <TableHead>State</TableHead>
+          <TableHead>Created</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {orders.map((o, i) => (
+          <TableRow key={`${o.order_id ?? o.symbol}-${i}`}>
+            <TableCell className="font-mono">{o.symbol ?? "—"}</TableCell>
+            <TableCell>{o.side ?? "—"}</TableCell>
+            <TableCell className="font-mono">{o.quantity ?? "—"}</TableCell>
+            <TableCell>{o.state ?? "—"}</TableCell>
+            <TableCell className="text-xs">{o.created_at ?? "—"}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+function PortfolioReconcileTab() {
+  const { data, isLoading, isError } = useReconcileDiff({ include_paper: true, limit: 100 });
+  if (isLoading) return <p className="text-sm text-zinc-500">Loading reconcile…</p>;
+  if (isError) return <p className="text-sm text-red-600">Failed to load reconcile diff.</p>;
+
+  const broker = (data as { broker_vs_manual?: { status?: string; review_count?: number; diffs?: Array<{ symbol?: string; classification?: string; notes?: string }> } })?.broker_vs_manual;
+  const diffs = (broker?.diffs ?? []).filter((d) => (d.classification ?? "") !== "MATCH").slice(0, 40);
+
+  return (
+    <div className="space-y-3" data-testid="portfolio-reconcile-body">
+      <div className="flex flex-wrap gap-3 text-sm">
+        <Badge variant={data?.status === "OK" ? "success" : "warning"} data-testid="portfolio-reconcile-status">
+          Unified: {data?.status_label ?? data?.status ?? "—"}
+        </Badge>
+        <Badge variant={(broker?.review_count ?? 0) > 0 ? "warning" : "success"}>
+          Broker vs manual: {broker?.status ?? "UNAVAILABLE"} ({broker?.review_count ?? 0} review)
+        </Badge>
+      </div>
+      {diffs.length === 0 ? (
+        <p className="text-sm text-zinc-500">No broker/manual review diffs in current snapshot.</p>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Symbol</TableHead>
+              <TableHead>Class</TableHead>
+              <TableHead>Notes</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {diffs.map((d, i) => (
+              <TableRow key={`${d.symbol}-${d.classification}-${i}`}>
+                <TableCell className="font-mono">{d.symbol}</TableCell>
+                <TableCell>{d.classification}</TableCell>
+                <TableCell className="text-xs">{d.notes}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
     </div>
   );
 }

@@ -392,6 +392,19 @@ export interface UiReconcileDiffResponse {
   extra_count: number;
   mismatched_count: number;
   items: UiReconcileDiffItem[];
+  account_alias?: string;
+  broker_vs_manual?: {
+    status?: string;
+    review_count?: number;
+    message?: string;
+    diffs?: Array<{
+      symbol?: string;
+      classification?: string;
+      notes?: string;
+      broker_qty?: number | null;
+      manual_qty?: number | null;
+    }>;
+  };
 }
 
 export interface UiSystemHealthResponse {

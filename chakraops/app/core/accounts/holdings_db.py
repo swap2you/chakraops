@@ -293,10 +293,18 @@ def delete_holding(symbol: str) -> bool:
 
 def get_holdings_for_evaluation() -> Dict[str, int]:
     """
-    Return symbol -> total shares for default account (holdings + share_positions).
-    Used by eligibility engine for CC gating. Only includes symbols with shares >= 1.
-    R23.0: Merges holdings table and share_positions table.
+    Return symbol -> total shares for default account.
+    When broker capital is FRESH, use broker equity quantities for live CC gating.
+    Manual holdings alone never create live CC eligibility while broker is fresh.
     """
+    try:
+        from app.core.portfolio.capital_authority_r70 import STATE_FRESH, broker_share_quantities, get_capital_snapshot
+
+        cap = get_capital_snapshot("acct_individual", allow_manual_fallback=False)
+        if cap.get("state") == STATE_FRESH:
+            return {k: v for k, v in broker_share_quantities("acct_individual").items() if v >= 1}
+    except Exception:
+        pass
     return get_total_shares_for_evaluation(_DEFAULT_ACCOUNT_ID)
 
 

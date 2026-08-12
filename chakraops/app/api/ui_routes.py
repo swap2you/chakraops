@@ -3745,11 +3745,12 @@ def ui_accounts_default(
     """Get the default account for manual execution. UI-safe wrapper for /api/accounts/default."""
     _require_ui_key(x_ui_key)
     try:
-        from app.core.accounts.service import get_default_account
-        account = get_default_account()
+        from app.core.accounts.account_bridge_r70 import get_default_account_enriched
+
+        account = get_default_account_enriched()
         if account is None:
             return {"account": None, "message": "No default account set"}
-        return {"account": account.to_dict()}
+        return {"account": account}
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Error getting default account: %s", e)
@@ -3760,12 +3761,12 @@ def ui_accounts_default(
 def ui_accounts_list(
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """List all accounts. Phase 10.0."""
+    """List all accounts. Phase 10.0 + R70 broker alias bridge."""
     _require_ui_key(x_ui_key)
     try:
-        from app.core.accounts.service import list_accounts
-        accounts = list_accounts()
-        return {"accounts": [a.to_dict() for a in accounts]}
+        from app.core.accounts.account_bridge_r70 import list_accounts_enriched
+
+        return {"accounts": list_accounts_enriched()}
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Error listing accounts: %s", e)
@@ -4174,7 +4175,7 @@ def ui_portfolio_risk(
     """
     _require_ui_key(x_ui_key)
     try:
-        from app.core.accounts.store import get_account, get_default_account
+        from app.core.accounts.service import get_account, get_default_account
         from app.core.positions.service import list_positions
         from app.core.portfolio.risk import evaluate_portfolio_risk
         account = None
@@ -4209,7 +4210,7 @@ def ui_wheel_overview(
     """
     _require_ui_key(x_ui_key)
     try:
-        from app.core.accounts.store import get_account, get_default_account
+        from app.core.accounts.service import get_account, get_default_account
         from app.core.positions.service import list_positions
         from app.core.portfolio.risk import evaluate_portfolio_risk
         from app.core.wheel.state_store import load_state
@@ -4872,14 +4873,18 @@ def ui_positions_live_lenses(
 
 @router.post("/positions/historicalize-orphans")
 def ui_positions_historicalize_orphans(
-    dry_run: bool = Query(default=False),
+    dry_run: bool = Query(default=True),
+    confirm: bool = Query(default=False),
+    account_alias: str = Query(default="acct_individual"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """R70-ABCD: archive orphan unified live_shares with no holdings counterpart, then rebuild."""
+    """R70: archive orphan unified live_shares vs fresh broker authority. Defaults dry_run."""
     _require_ui_key(x_ui_key)
     from app.core.portfolio.live_position_lenses_r70 import historicalize_orphan_unified_live_shares
 
-    return historicalize_orphan_unified_live_shares(dry_run=dry_run)
+    return historicalize_orphan_unified_live_shares(
+        dry_run=dry_run, confirm=confirm, account_alias=account_alias or "acct_individual"
+    )
 
 
 @router.get("/positions/unified/db")
@@ -4913,13 +4918,68 @@ def ui_positions_unified_reconcile_diff(
     include_paper: bool = Query(default=True, description="Include paper in diff"),
     symbol: str | None = Query(default=None, description="Filter by symbol"),
     limit: int = Query(default=200, ge=1, le=500, description="Max diff items returned"),
+    account_alias: str = Query(default="acct_individual"),
     x_ui_key: str | None = Header(None, alias="x-ui-key"),
 ) -> Dict[str, Any]:
-    """R28.8: Read-only reconcile diff (source vs unified DB). Safe labels only; no FAIL/WARN/PASS; no writes."""
+    """R28.8 + R70: unified source-vs-DB diff plus broker-vs-manual when broker is current."""
     _require_ui_key(x_ui_key)
     try:
         from app.core.portfolio.positions_unified_store_r279 import get_reconcile_diff
-        return get_reconcile_diff(include_paper=include_paper, symbol=symbol, limit=limit)
+
+        unified = get_reconcile_diff(include_paper=include_paper, symbol=symbol, limit=limit)
+        broker_block: Dict[str, Any] = {"status": "UNAVAILABLE", "diffs": [], "review_count": 0}
+        try:
+            from app.core.broker.reconcile import ManualHolding, reconcile_manual_vs_broker
+            from app.core.broker.snapshot_store import load_snapshot
+            from app.core.accounts.holdings_db import list_share_positions, _DEFAULT_ACCOUNT_ID
+            from app.core.portfolio.capital_authority_r70 import STATE_FRESH, get_capital_snapshot
+
+            alias = account_alias or "acct_individual"
+            cap = get_capital_snapshot(alias, allow_manual_fallback=False)
+            snap = load_snapshot(alias)
+            if snap is not None and cap.get("state") in (STATE_FRESH, "STALE"):
+                # Manual book for comparison (recovery holdings + share_positions)
+                manual: list = []
+                try:
+                    from app.core.accounts.holdings_db import list_holdings
+
+                    for h in list_holdings() or []:
+                        manual.append(
+                            ManualHolding(
+                                symbol=str(h.get("symbol") or ""),
+                                shares=float(h.get("shares") or 0),
+                                avg_cost=float(h["avg_cost"]) if h.get("avg_cost") is not None else None,
+                            )
+                        )
+                    for sp in list_share_positions(_DEFAULT_ACCOUNT_ID) or []:
+                        manual.append(
+                            ManualHolding(
+                                symbol=str(sp.get("symbol") or ""),
+                                shares=float(sp.get("quantity") or 0),
+                                avg_cost=float(sp["avg_cost"]) if sp.get("avg_cost") is not None else None,
+                            )
+                        )
+                except Exception:
+                    pass
+                report = reconcile_manual_vs_broker(
+                    account_alias=alias,
+                    snapshot=snap,
+                    manual_holdings=manual,
+                )
+                broker_block = report.to_dict()
+                # Disjoint books must not read as overall OK
+                if report.review_count > 0:
+                    unified["status"] = "Review"
+                    unified["status_label"] = "Differences found"
+        except Exception as be:
+            import logging
+
+            logging.getLogger(__name__).warning("Broker reconcile attach failed: %s", be)
+            broker_block = {"status": "ERROR", "message": str(be), "diffs": [], "review_count": 0}
+
+        unified["broker_vs_manual"] = broker_block
+        unified["account_alias"] = account_alias or "acct_individual"
+        return unified
     except Exception as e:
         import logging
         logging.getLogger(__name__).exception("Reconcile diff error: %s", e)

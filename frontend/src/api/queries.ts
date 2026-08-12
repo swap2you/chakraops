@@ -3060,6 +3060,14 @@ export type BrokerSnapshotPayload = {
     strike?: number | null;
     quantity?: number;
   }>;
+  equity_orders?: Array<{
+    order_id?: string;
+    symbol?: string;
+    state?: string;
+    side?: string;
+    quantity?: number | null;
+    created_at?: string;
+  }>;
 };
 
 export function useBrokerStatus() {

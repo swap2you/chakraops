@@ -90,18 +90,36 @@ def validate_account_data(data: Dict[str, Any], is_create: bool = True) -> List[
 
 
 def list_accounts() -> List[Account]:
-    """List all accounts."""
+    """List all accounts (bridges broker aliases into registry when missing)."""
+    try:
+        from app.core.accounts.account_bridge_r70 import ensure_broker_accounts_bridged
+
+        ensure_broker_accounts_bridged()
+    except Exception as e:
+        logger.warning("[ACCOUNTS] broker bridge skipped: %s", e)
     return store.list_accounts()
 
 
 def get_account(account_id: str) -> Optional[Account]:
     """Get a single account."""
+    try:
+        from app.core.accounts.account_bridge_r70 import ensure_broker_accounts_bridged
+
+        ensure_broker_accounts_bridged()
+    except Exception:
+        pass
     return store.get_account(account_id)
 
 
 def get_default_account() -> Optional[Account]:
-    """Get the current default account."""
-    return store.get_default_account()
+    """Get the current default account (bridges broker aliases; establishes default if needed)."""
+    try:
+        from app.core.accounts.account_bridge_r70 import get_default_account_ensured
+
+        return get_default_account_ensured()
+    except Exception as e:
+        logger.warning("[ACCOUNTS] default ensure failed: %s", e)
+        return store.get_default_account()
 
 
 def create_account(data: Dict[str, Any]) -> Tuple[Optional[Account], List[str]]:

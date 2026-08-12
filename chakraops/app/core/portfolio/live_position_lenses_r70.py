@@ -148,14 +148,21 @@ def build_live_position_lenses(
     }
 
 
-def historicalize_orphan_unified_live_shares(*, dry_run: bool = False) -> Dict[str, Any]:
-    """Move orphan live_shares_* rows not present in holdings into closed archive, then rebuild.
+def historicalize_orphan_unified_live_shares(
+    *,
+    dry_run: bool = True,
+    confirm: bool = False,
+    account_alias: str = "acct_individual",
+) -> Dict[str, Any]:
+    """Archive orphan live_shares_* rows vs fresh broker authority (not manual holdings).
 
-    Seed/test residue with no holdings counterpart is historicalized (not served as LIVE).
-    Legitimate history is preserved in positions_closed. Idempotent when followed by rebuild.
+    Defaults to dry_run=True. Destructive mutation requires confirm=True and a fresh,
+    complete broker snapshot. Manual holdings are never used as proof a broker position
+    is absent.
     """
     from datetime import datetime, timezone
 
+    from app.core.portfolio.capital_authority_r70 import STATE_FRESH, get_capital_snapshot
     from app.core.portfolio.positions_unified_store_r279 import (
         INSTRUMENT_SHARES,
         _LOCK,
@@ -164,10 +171,38 @@ def historicalize_orphan_unified_live_shares(*, dry_run: bool = False) -> Dict[s
         rebuild_positions_unified,
     )
 
+    cap = get_capital_snapshot(account_alias, allow_manual_fallback=False)
+    broker_ready = cap.get("state") == STATE_FRESH and not cap.get("stale")
+    completeness = str(cap.get("completeness") or "").lower()
+    broker_complete = completeness in ("", "complete", "partial")  # refuse empty/missing only below
+
+    refused_reason: Optional[str] = None
+    if not broker_ready:
+        refused_reason = (
+            f"Broker authority not fresh for {account_alias} "
+            f"(state={cap.get('state')}, as_of={cap.get('as_of')})"
+        )
+    else:
+        from app.core.broker.snapshot_store import load_snapshot
+
+        snap = load_snapshot(account_alias)
+        if snap is None:
+            refused_reason = "Broker snapshot missing"
+            broker_ready = False
+        elif getattr(snap, "completeness", None) in ("empty", "missing"):
+            refused_reason = f"Broker snapshot incomplete ({snap.completeness})"
+            broker_ready = False
+            broker_complete = False
+
+    broker_syms: set = set()
+    if broker_ready:
+        from app.core.portfolio.capital_authority_r70 import broker_share_quantities
+
+        broker_syms = {s.upper() for s in broker_share_quantities(account_alias)}
+
     init_db()
-    holdings_syms = {p["symbol"].upper() for p in _manual_recovery_positions() if p.get("symbol")}
     now = datetime.now(timezone.utc).isoformat()
-    moved: List[str] = []
+    candidates: List[Dict[str, Any]] = []
     with _LOCK:
         import sqlite3
 
@@ -181,50 +216,124 @@ def historicalize_orphan_unified_live_shares(*, dry_run: bool = False) -> Dict[s
             for r in rows:
                 sym = str(r["symbol"] or "").upper()
                 rid = str(r["id"] or "")
-                if sym in holdings_syms:
+                if not sym or not rid:
                     continue
-                moved.append(rid)
-                if dry_run:
+                if broker_ready and sym in broker_syms:
                     continue
-                conn.execute(
-                    """INSERT OR REPLACE INTO positions_closed (
-                        id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right,
-                        opened_ts, link_id, notes, tags, closed_ts, realized_pl, fees
-                    ) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        f"hist_{rid}",
-                        sym,
-                        INSTRUMENT_SHARES,
-                        int(r["qty"] or 0),
-                        r["avg_price"],
-                        r["strike"],
-                        r["expiry"],
-                        r["right"],
-                        (r["opened_ts"] or "")[:26],
-                        r["link_id"],
-                        "R70-ABCD historicalized orphan (not LIVE)",
-                        r["tags"],
-                        now[:26],
-                        None,
-                        None,
-                    ),
+                # Only treat as orphan when we have fresh broker proof the symbol is absent.
+                if not broker_ready:
+                    continue
+                candidates.append(
+                    {
+                        "id": rid,
+                        "symbol": sym,
+                        "qty": int(r["qty"] or 0),
+                        "reason": "absent_from_fresh_broker_snapshot",
+                    }
                 )
-                conn.execute("DELETE FROM positions_open WHERE id = ?", (rid,))
-            if not dry_run:
-                conn.commit()
         finally:
             conn.close()
 
+    mutate = (not dry_run) and confirm and broker_ready and refused_reason is None
+    if not dry_run and not confirm:
+        return {
+            "dry_run": False,
+            "confirm": False,
+            "refused": True,
+            "refused_reason": "Destructive historicalize requires confirm=true",
+            "orphan_live_shares_moved": 0,
+            "candidates": candidates[:50],
+            "candidate_count": len(candidates),
+            "broker_state": cap.get("state"),
+            "broker_as_of": cap.get("as_of"),
+            "manual_only": True,
+            "trade_execution": False,
+        }
+    if not dry_run and refused_reason:
+        return {
+            "dry_run": False,
+            "confirm": confirm,
+            "refused": True,
+            "refused_reason": refused_reason,
+            "orphan_live_shares_moved": 0,
+            "candidates": candidates[:50],
+            "candidate_count": len(candidates),
+            "broker_state": cap.get("state"),
+            "broker_as_of": cap.get("as_of"),
+            "manual_only": True,
+            "trade_execution": False,
+        }
+
+    moved: List[str] = []
+    audit: List[Dict[str, Any]] = []
+    if mutate:
+        with _LOCK:
+            import sqlite3
+
+            conn = sqlite3.connect(str(_positions_db_path()), check_same_thread=False)
+            conn.row_factory = sqlite3.Row
+            try:
+                conn.execute("BEGIN")
+                for c in candidates:
+                    rid = c["id"]
+                    sym = c["symbol"]
+                    row = conn.execute(
+                        "SELECT * FROM positions_open WHERE id = ?", (rid,)
+                    ).fetchone()
+                    if row is None:
+                        continue
+                    conn.execute(
+                        """INSERT OR REPLACE INTO positions_closed (
+                            id, symbol, instrument_type, is_paper, qty, avg_price, strike, expiry, right,
+                            opened_ts, link_id, notes, tags, closed_ts, realized_pl, fees
+                        ) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            f"hist_{rid}",
+                            sym,
+                            INSTRUMENT_SHARES,
+                            int(row["qty"] or 0),
+                            row["avg_price"],
+                            row["strike"],
+                            row["expiry"],
+                            row["right"],
+                            (row["opened_ts"] or "")[:26],
+                            row["link_id"],
+                            "R70 historicalized orphan vs fresh broker (not LIVE)",
+                            row["tags"],
+                            now[:26],
+                            None,
+                            None,
+                        ),
+                    )
+                    conn.execute("DELETE FROM positions_open WHERE id = ?", (rid,))
+                    moved.append(rid)
+                    audit.append({**c, "closed_id": f"hist_{rid}", "closed_ts": now})
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+
     rebuild: Dict[str, Any] = {"skipped": True}
-    if not dry_run:
+    if mutate:
         rebuild = rebuild_positions_unified(include_paper=True)
     return {
-        "dry_run": dry_run,
+        "dry_run": dry_run or not mutate,
+        "confirm": confirm,
+        "refused": False,
         "orphan_live_shares_moved": len(moved),
         "sample_ids": moved[:10],
+        "audit": audit[:50],
+        "candidates": candidates[:50] if dry_run or not mutate else [],
+        "candidate_count": len(candidates),
+        "broker_symbols": sorted(broker_syms),
+        "broker_state": cap.get("state"),
+        "broker_as_of": cap.get("as_of"),
         "rebuild": rebuild,
         "manual_only": True,
         "trade_execution": False,
+        "authority": "broker_snapshot",
     }
 
 

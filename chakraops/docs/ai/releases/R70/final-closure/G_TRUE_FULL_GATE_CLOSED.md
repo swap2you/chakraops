@@ -1,7 +1,7 @@
 # R70 Final Closure — Batch G Closure
 
 **Status:** R70_FINAL_CLOSURE_TECHNICALLY_COMPLETE_PENDING_FINAL_INDEPENDENT_REVALIDATION
-**Final SHA:** 5e17d03
+**Final SHA:** `31093176cef891e2cd2638b0ba96f5d5179dc94c`
 **Date:** 2026-08-12
 
 ## True full backend gate

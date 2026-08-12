@@ -31,6 +31,18 @@ def _require_ui_key(x_ui_key: str | None = Header(None, alias="x-ui-key")) -> No
         raise HTTPException(status_code=401, detail="Missing or invalid x-ui-key")
 
 
+def _derive_strategy_data_trustworthy() -> bool:
+    """Fail-closed: options strategies require ORATS provider connectivity OK (not eval clock)."""
+    try:
+        from app.api.data_health import get_data_health
+
+        dh = get_data_health()
+        conn = (dh.get("provider_connectivity_status") or dh.get("status") or "UNKNOWN").upper()
+        return conn == "OK"
+    except Exception:
+        return False
+
+
 @router.get("/broker/runtime-status")
 def golive_broker_runtime_status(x_ui_key: str | None = Header(None, alias="x-ui-key")) -> Dict[str, Any]:
     _require_ui_key(x_ui_key)
@@ -161,6 +173,7 @@ async def golive_strategy_builder(request: Request, x_ui_key: str | None = Heade
         max_drawdown_pct=float(body.get("max_drawdown_pct") or 20),
         assignment_comfort=str(body.get("assignment_comfort") or "medium"),
         target_return_pct=body.get("target_return_pct"),
+        data_trustworthy=_derive_strategy_data_trustworthy(),
     )
 
 

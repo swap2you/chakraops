@@ -102,12 +102,16 @@ def append_notification(
                 continue
             if (rec.get("subtype") or None) != (subtype or None):
                 continue
-            # Identical active condition: bump occurrence metadata via details when present.
+            # Identical active condition: durable occurrence bump (JSONL event)
             try:
                 details_out = dict(rec.get("details") or {})
-                details_out["occurrence_count"] = int(details_out.get("occurrence_count") or 1) + 1
-                details_out["last_seen_utc"] = datetime.now(timezone.utc).isoformat()
-                rec["details"] = details_out
+                new_count = int(details_out.get("occurrence_count") or 1) + 1
+                now_occ = datetime.now(timezone.utc).isoformat()
+                _append_occurrence_event(
+                    str(rec.get("id")),
+                    occurrence_count=new_count,
+                    last_seen_utc=now_occ,
+                )
             except Exception:
                 pass
             logger.info("[NOTIFICATIONS] Dedupe skip %s: %s", ntype, msg[:80])
@@ -150,6 +154,26 @@ def _append_state_event(ref_id: str, state: str, extra: Optional[Dict[str, Any]]
                 f.write(line + "\n")
             _prune_if_needed(path)
     logger.info("[NOTIFICATIONS] State %s for %s", state, ref_id[:20])
+
+
+def _append_occurrence_event(ref_id: str, *, occurrence_count: int, last_seen_utc: str) -> None:
+    """Append durable occurrence bump without changing NEW/ACKED lifecycle state."""
+    record: Dict[str, Any] = {
+        "event": "occurrence",
+        "ref_id": ref_id,
+        "occurrence_count": int(occurrence_count),
+        "last_seen_utc": last_seen_utc,
+        "updated_at": last_seen_utc,
+    }
+    path = _notifications_path()
+    line = json.dumps(record, default=str)
+    with _LOCK:
+        from app.core.io.locks import with_file_lock
+        with with_file_lock(path, timeout_ms=2000):
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+            _prune_if_needed(path)
+    logger.info("[NOTIFICATIONS] Occurrence %s count=%s", ref_id[:20], occurrence_count)
 
 
 def append_archive(ref_id: str) -> None:
@@ -276,6 +300,7 @@ def load_notifications(
     notifications = []
     acks: Dict[str, tuple[str, str]] = {}
     state_events: Dict[str, tuple[str, str]] = {}
+    occurrence_events: Dict[str, tuple[int, str]] = {}
 
     for s in lines:
         try:
@@ -289,11 +314,20 @@ def load_notifications(
             ack_by_val = obj.get("ack_by", "ui")
             if ref_id and ack_at:
                 acks[ref_id] = (ack_at, ack_by_val)
+        elif ev == "occurrence":
+            ref_id = obj.get("ref_id")
+            cnt = obj.get("occurrence_count")
+            seen = obj.get("last_seen_utc") or obj.get("updated_at")
+            if ref_id and cnt is not None:
+                try:
+                    occurrence_events[ref_id] = (int(cnt), str(seen or ""))
+                except (TypeError, ValueError):
+                    pass
         elif ev == "state":
             ref_id = obj.get("ref_id")
             st = obj.get("state")
             updated = obj.get("updated_at")
-            if ref_id and st and updated:
+            if ref_id and st and updated and st != "OCCURRENCE":
                 state_events[ref_id] = (st, updated)
         else:
             notifications.append(obj)
@@ -324,6 +358,13 @@ def load_notifications(
             updated_at = ack_data[0]
         rec["state"] = state
         rec["updated_at"] = updated_at
+        if nid in occurrence_events:
+            occ_count, last_seen = occurrence_events[nid]
+            details = dict(rec.get("details") or {})
+            details["occurrence_count"] = occ_count
+            if last_seen:
+                details["last_seen_utc"] = last_seen
+            rec["details"] = details
         if state == "DELETED" and state_filter != "DELETED":
             continue
         if state_filter and state != state_filter:

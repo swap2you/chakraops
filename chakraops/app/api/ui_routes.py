@@ -888,22 +888,46 @@ def ui_universe_health(
     """R25.6: Universe health summary: total, recently added/removed, warnings count (safe labels)."""
     _require_ui_key(x_ui_key)
     try:
-        from app.api.data_health import get_base_universe_symbols
+        from app.api.data_health import get_base_universe_symbols, get_data_health
         from app.core.universe.universe_overrides import get_effective_symbols
         from app.core.universe.universe_admin_store import recent_changes_days
         base = get_base_universe_symbols()
         symbols = get_effective_symbols(base)
         added_30, removed_30 = recent_changes_days(30)
-        # Warnings: data unavailable count (placeholder; can hook into data health later)
-        warnings_count = 0
-        earnings_upcoming = None  # Optional: hook into earnings advisory when available
+        warnings: list = []
+        try:
+            dh = get_data_health()
+            conn = (dh.get("provider_connectivity_status") or dh.get("status") or "UNKNOWN").upper()
+            if conn in ("WARN", "DEGRADED", "DELAYED"):
+                warnings.append({"code": "ORATS_STALE", "label": "ORATS provider data stale"})
+            elif conn in ("DOWN", "ERROR"):
+                warnings.append({"code": "ORATS_UNAVAILABLE", "label": "ORATS provider unavailable"})
+            elif conn == "UNKNOWN":
+                warnings.append({"code": "ORATS_UNKNOWN", "label": "ORATS provider status unknown"})
+            age = dh.get("provider_age_minutes")
+            if isinstance(age, (int, float)) and age > float(dh.get("evaluation_window_minutes") or 30):
+                if not any(w.get("code") == "ORATS_STALE" for w in warnings):
+                    warnings.append({"code": "ORATS_STALE", "label": "ORATS provider data older than evaluation window"})
+        except Exception:
+            warnings.append({"code": "DATA_HEALTH_UNAVAILABLE", "label": "Data health unavailable"})
+        try:
+            from app.core.universe.universe_v2_store import get_universe_v2_summary  # type: ignore
+        except Exception:
+            get_universe_v2_summary = None  # type: ignore
+        # Membership drift signal
+        if len(symbols) != len(base):
+            warnings.append({
+                "code": "MEMBERSHIP_DRIFT",
+                "label": f"Effective universe ({len(symbols)}) differs from base ({len(base)})",
+            })
         return {
             "total_symbols": len(symbols),
             "base_count": len(base),
             "recently_added": added_30[:20],
             "recently_removed": removed_30[:20],
-            "warnings_count": warnings_count,
-            "earnings_upcoming": earnings_upcoming,
+            "warnings_count": len(warnings),
+            "warnings": warnings[:20],
+            "earnings_upcoming": None,
         }
     except Exception as e:
         import logging
@@ -1268,14 +1292,18 @@ def ui_system_health(
         from app.api.data_health import get_data_health, get_orats_freshness_state
         from app.core.config.eval_config import EVALUATION_QUOTE_WINDOW_MINUTES
         dh = get_data_health()
-        raw = (dh.get("status") or "UNKNOWN").upper()
-        if raw == "OK":
+        orats_last_success = dh.get("last_success_at") or dh.get("provider_last_success_at")
+        # Prefer provider connectivity status when present (never eval clock)
+        raw_conn = (dh.get("provider_connectivity_status") or dh.get("status") or "UNKNOWN").upper()
+        if raw_conn == "OK":
             orats_status = "OK"
-        elif raw in ("WARN", "DEGRADED"):
+        elif raw_conn in ("WARN", "DEGRADED", "DELAYED"):
             orats_status = "WARN"
-        elif raw == "DOWN":
-            orats_status = "DOWN"
-        orats_last_success = dh.get("last_success_at") or dh.get("effective_last_success_at")
+        elif raw_conn in ("DOWN", "ERROR"):
+            orats_status = "DOWN" if raw_conn == "DOWN" else "ERROR"
+        elif raw_conn == "UNKNOWN":
+            orats_status = "UNKNOWN"
+        raw = raw_conn
         orats_avg_latency = dh.get("avg_latency_seconds")
         orats_last_error = dh.get("last_error_reason")
         try:

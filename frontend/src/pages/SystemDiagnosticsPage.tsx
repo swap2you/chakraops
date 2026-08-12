@@ -59,7 +59,8 @@ function checkBadgeVariant(ch: { status?: string }): "success" | "warning" | "da
   const s = (ch.status ?? "").toUpperCase();
   if (s === "FAIL" || s === "CRITICAL") return "danger";
   if (s === "WARN") return "warning";
-  if (s === "PASS" || s === "OK" || s === "SKIP") return "success";
+  if (s === "PASS" || s === "OK") return "success";
+  if (s === "SKIP" || s === "SKIPPED") return "neutral";
   return "neutral";
 }
 

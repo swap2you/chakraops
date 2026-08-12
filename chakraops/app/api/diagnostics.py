@@ -90,34 +90,42 @@ def _load_history(limit: int = 10) -> List[Dict[str, Any]]:
 
 
 def _run_orats_check() -> Dict[str, Any]:
-    """ORATS probe: status, latency_ms, last_success_at."""
+    """ORATS probe: status, latency_ms, last_success_at (provider clock only)."""
     start = time.perf_counter()
     try:
         from app.api.data_health import get_data_health
         dh = get_data_health()
         elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
-        status_raw = (dh.get("status") or "UNKNOWN").upper()
+        status_raw = (
+            dh.get("provider_connectivity_status") or dh.get("status") or "UNKNOWN"
+        ).upper()
         if status_raw in ("OK",):
             status = "PASS"
-        elif status_raw in ("WARN", "DEGRADED"):
+        elif status_raw in ("WARN", "DEGRADED", "DELAYED"):
             status = "WARN"
+        elif status_raw == "UNKNOWN":
+            status = "SKIP"
         else:
             status = "FAIL"
         act = None
         if status == "FAIL":
             act = "Check ORATS API key and connectivity; verify EVALUATION_QUOTE_WINDOW_MINUTES."
         elif status == "WARN":
-            act = "ORATS data may be stale; consider re-running evaluation."
+            act = "ORATS provider data may be stale; refresh live data or re-run evaluation."
+        elif status == "SKIP":
+            act = "ORATS provider status unknown — run explicit refresh or startup probe."
         return {
             "check": "orats",
             "status": status,
             "details": {
                 "status": status_raw,
                 "latency_ms": elapsed_ms,
-                "last_success_at": dh.get("last_success_at") or dh.get("effective_last_success_at"),
+                "last_success_at": dh.get("last_success_at") or dh.get("provider_last_success_at"),
+                "evaluation_completed_at": dh.get("evaluation_completed_at"),
                 "last_error_reason": dh.get("last_error_reason"),
             },
             "recommended_action": act,
+            "status_label": {"PASS": "OK", "WARN": "Stale", "FAIL": "Unavailable", "SKIP": "Skipped"}.get(status, status),
         }
     except Exception as e:
         from app.core.security.redact import redact_secrets
@@ -212,48 +220,34 @@ def _run_universe_check() -> Dict[str, Any]:
 
 
 def _run_positions_check() -> Dict[str, Any]:
-    """Positions GET/POST roundtrip using paper account.
-    Phase 8.6: Unique run_id tag, guaranteed cleanup in finally, no pollution.
-    """
-    run_id = f"DIAG_TEST_{uuid.uuid4().hex[:12]}"
-    test_symbol = "DIAG_TEST"
-    created_position_id: Optional[str] = None
+    """Positions store readability check — no DIAG_TEST writes into live stores."""
     try:
-        from app.core.positions.service import list_positions, add_paper_position
+        from app.core.positions.service import list_positions
+
         before = list_positions(status=None, symbol=None)
-        before_ids = {p.position_id for p in before}
-        pos, errs, _ = add_paper_position({
-            "symbol": test_symbol,
-            "strategy": "CSP",
-            "contracts": 1,
-            "strike": 100.0,
-            "expiration": "2026-12-20",
-            "credit_expected": 1.0,
-            "contract_key": "100-2026-12-20-PUT",
-            "notes": run_id,
-        })
-        if errs or pos is None:
+        open_count = sum(
+            1 for p in before if (getattr(p, "status", "") or "").upper() in ("OPEN", "PARTIAL_EXIT")
+        )
+        # Read-path integrity only: never create synthetic DIAG_TEST positions.
+        after = list_positions(status=None, symbol=None)
+        if len(after) != len(before):
             return {
                 "check": "positions",
                 "status": "FAIL",
-                "details": {"error": "; ".join(errs) if errs else "Failed to create paper position"},
-                "recommended_action": "Check positions store and API; verify paper account.",
-            }
-        created_position_id = pos.position_id
-        after = list_positions(status=None, symbol=None)
-        found = any(p.symbol == test_symbol and p.position_id == pos.position_id for p in after)
-        if found:
-            return {
-                "check": "positions",
-                "status": "PASS",
-                "details": {"get_post_roundtrip": "OK", "created_id": pos.position_id},
-                "recommended_action": None,
+                "details": {"reason": "positions list changed during read check"},
+                "recommended_action": "Check positions store consistency.",
             }
         return {
             "check": "positions",
-            "status": "FAIL",
-            "details": {"reason": "POST succeeded but GET did not return created position"},
-            "recommended_action": "Check positions store consistency.",
+            "status": "PASS",
+            "details": {
+                "get_roundtrip": "OK",
+                "open_count": open_count,
+                "total_count": len(before),
+                "wrote_test_position": False,
+            },
+            "recommended_action": None,
+            "status_label": "OK",
         }
     except Exception as e:
         return {
@@ -262,32 +256,6 @@ def _run_positions_check() -> Dict[str, Any]:
             "details": {"error": str(e)},
             "recommended_action": "Check positions store and API.",
         }
-    finally:
-        # Guaranteed cleanup: always close/remove DIAG_TEST positions we created
-        if created_position_id:
-            try:
-                from app.core.positions.store import update_position
-                update_position(
-                    created_position_id,
-                    {"status": "CLOSED", "closed_at": datetime.now(timezone.utc).isoformat()},
-                )
-            except Exception as cleanup_err:
-                logger.warning("[DIAGNOSTICS] Positions check cleanup failed for %s: %s", created_position_id, cleanup_err)
-        # Also close any other open DIAG_TEST positions from prior failed runs
-        try:
-            from app.core.positions.store import list_positions, update_position
-            all_pos = list_positions(status=None, symbol=test_symbol)
-            for p in all_pos:
-                if p.status in ("OPEN", "PARTIAL_EXIT") and (p.notes or "").startswith("DIAG_TEST_"):
-                    try:
-                        update_position(
-                            p.position_id,
-                            {"status": "CLOSED", "closed_at": datetime.now(timezone.utc).isoformat()},
-                        )
-                    except Exception:
-                        pass
-        except Exception:
-            pass
 
 
 def _run_portfolio_risk_check() -> Dict[str, Any]:
@@ -302,9 +270,10 @@ def _run_portfolio_risk_check() -> Dict[str, Any]:
         if account is None:
             return {
                 "check": "portfolio_risk",
-                "status": "PASS",
+                "status": "SKIP",
                 "details": {"reason": "No default account; skip"},
                 "recommended_action": None,
+                "status_label": "Skipped",
             }
         positions = list_positions(status=None, symbol=None, exclude_test=True)
         open_pos = [p for p in positions if (p.status or "").upper() in ("OPEN", "PARTIAL_EXIT")]
@@ -370,11 +339,11 @@ def _run_scheduler_check(app_start_time_utc: Optional[float] = None) -> Dict[str
         if start_utc is not None:
             elapsed_min = (datetime.now(timezone.utc).timestamp() - start_utc) / 60
             in_grace = elapsed_min < RESTART_GRACE_MINUTES
-        # Market closed or in restart grace: skip WARN/FAIL (return PASS with note)
+        # Market closed or in restart grace: SKIP (not Passed)
         if not market_open or in_grace:
             return {
                 "check": "scheduler",
-                "status": "PASS",
+                "status": "SKIP",
                 "details": {
                     "next_run_at": next_run_at,
                     "last_run_at": last_run_at,
@@ -383,6 +352,7 @@ def _run_scheduler_check(app_start_time_utc: Optional[float] = None) -> Dict[str
                     "note": "market closed" if not market_open else "restart grace window",
                 },
                 "recommended_action": None,
+                "status_label": "Skipped",
             }
         if next_run_at is None and last_run_at is None:
             return {

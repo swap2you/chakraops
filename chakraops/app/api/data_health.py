@@ -2,15 +2,12 @@
 # SPDX-License-Identifier: MIT
 """ORATS data health: sticky status (UNKNOWN/OK/WARN/DOWN), last_success_at, persistence. Used by /api/ops/data-health and startup self-check.
 
-Phase 8B semantics:
-- UNKNOWN: no successful ORATS call has ever occurred.
-- OK: effective_last_success_at within evaluation window.
-- WARN: effective_last_success_at beyond evaluation window (stale).
-- DOWN: last attempt failed and no effective success within window (or never succeeded).
+Phase 8B / R70 Final Closure semantics:
+- UNKNOWN: no successful ORATS provider call has ever occurred.
+- OK/WARN/ERROR/DOWN: derived from provider last_success_at age (not evaluation clock).
+- evaluation_completed_at: separate field for latest completed evaluation usability.
 
-Effective freshness: Prefer latest completed evaluation run's completed_at over live probe
-last_success_at so the banner stays consistent with History/Diagnostics (e.g. run at 3:40 PM
-makes banner show fresh, not "3h ago" from an older probe).
+Provider connectivity must never be greened solely because an evaluation finished.
 """
 
 from __future__ import annotations
@@ -93,30 +90,30 @@ def _persist_state() -> None:
         logger.debug("Failed to persist data_health_state: %s", e)
 
 
-def _get_effective_orats_timestamp() -> tuple[Optional[str], str, str]:
-    """
-    Best available ORATS data timestamp for banner/status.
-    Prefer latest completed evaluation run (persisted_run) over live probe (live_probe).
-    Returns (effective_iso, effective_source, effective_reason).
-    """
+def _get_evaluation_completed_at() -> tuple[Optional[str], str]:
+    """Latest completed evaluation clock — advisory usability only, not provider connectivity."""
     try:
         from app.core.eval.evaluation_store import load_latest_pointer
         pointer = load_latest_pointer()
         if pointer and getattr(pointer, "completed_at", None):
-            return (
-                pointer.completed_at,
-                "persisted_run",
-                "Using latest completed evaluation data",
-            )
+            return pointer.completed_at, "persisted_run"
     except Exception as e:
-        logger.debug("Failed to load latest evaluation pointer for effective timestamp: %s", e)
+        logger.debug("Failed to load latest evaluation pointer: %s", e)
+    return None, "none"
+
+
+def _get_effective_orats_timestamp() -> tuple[Optional[str], str, str]:
+    """
+    Provider ORATS timestamp for connectivity/status/freshness.
+    R70 Final Closure: provider last_success_at only — never evaluation completed_at.
+    """
     if _LAST_SUCCESS_AT:
         return (
             _LAST_SUCCESS_AT,
             "live_probe",
-            "Using live probe (no completed evaluation run)",
+            "Using ORATS provider last_success_at",
         )
-    return None, "live_probe", "No ORATS success timestamp available"
+    return None, "live_probe", "No ORATS provider success timestamp available"
 
 
 def _orats_error_minutes() -> int:
@@ -283,9 +280,10 @@ def _attempt_live_summary() -> None:
 
 
 def _data_health_state() -> Dict[str, Any]:
-    """Current state with sticky status (UNKNOWN/OK/WARN/DOWN). Status and banner use effective_last_success_at."""
-    effective_ts, effective_source, effective_reason = _get_effective_orats_timestamp()
-    status = _compute_sticky_status(effective_ts)
+    """Current state with sticky status from provider last_success_at only."""
+    provider_ts, effective_source, effective_reason = _get_effective_orats_timestamp()
+    status = _compute_sticky_status(provider_ts)
+    eval_ts, eval_source = _get_evaluation_completed_at()
     return {
         "provider": "ORATS",
         "status": status,
@@ -297,19 +295,20 @@ def _data_health_state() -> Dict[str, Any]:
         "entitlement": _ENTITLEMENT,
         "sample_symbol": "SPY",
         "evaluation_window_minutes": _evaluation_window_minutes(),
-        "effective_last_success_at": effective_ts,
+        # Provider clock (authoritative for connectivity)
+        "effective_last_success_at": provider_ts,
         "effective_source": effective_source,
         "effective_reason": effective_reason,
+        # Separate evaluation usability clock (never greens provider status)
+        "evaluation_completed_at": eval_ts,
+        "evaluation_source": eval_source,
     }
 
 
 def get_data_health() -> Dict[str, Any]:
-    """Sticky data health: load persisted state, return status. Read path must not emit notifications."""
+    """Sticky data health: load persisted state, return status. Read path must not probe ORATS."""
     _load_persisted_state()
-    status = _compute_sticky_status()
-    # R70-ABCD: health GET is side-effect free (no ORATS notify-on-read).
-    if status == "UNKNOWN":
-        _attempt_live_summary()
+    # R70 Final Closure: GET is side-effect free — no live probe on UNKNOWN.
     state = _data_health_state()
     provider_ts = _LAST_SUCCESS_AT
     provider_age = None

@@ -257,9 +257,34 @@ def _run_tool(name: str, arguments: Dict[str, Any], symbol: Optional[str]) -> Di
             return {"account": acc.to_dict()}
 
         if name == "get_account_holdings":
-            from app.core.accounts.holdings_db import list_holdings
-            holdings = list_holdings()
-            return {"holdings": holdings}
+            # Prefer fresh LIVE broker equity lens; manual recovery labeled separately.
+            try:
+                from app.core.portfolio.live_position_lenses_r70 import build_live_position_lenses
+
+                lenses = build_live_position_lenses()
+                live = (lenses.get("lenses") or {}).get("LIVE_BROKER_EQUITY_POSITIONS") or {}
+                items = live.get("items") or []
+                if lenses.get("live_state") == "FRESH" and items:
+                    return {
+                        "holdings": items,
+                        "source": "LIVE_BROKER",
+                        "as_of": lenses.get("as_of"),
+                        "live_state": lenses.get("live_state"),
+                        "count": len(items),
+                    }
+                manual = (lenses.get("lenses") or {}).get("MANUAL_RECOVERY_POSITIONS") or {}
+                return {
+                    "holdings": manual.get("items") or [],
+                    "source": "MANUAL_RECOVERY",
+                    "as_of": None,
+                    "live_state": lenses.get("live_state"),
+                    "count": len(manual.get("items") or []),
+                    "note": "Broker LIVE unavailable or empty; showing labeled manual recovery only.",
+                }
+            except Exception:
+                from app.core.accounts.holdings_db import list_holdings
+                holdings = list_holdings()
+                return {"holdings": holdings, "source": "MANUAL_RECOVERY", "note": "fallback"}
 
         if name == "get_share_position":
             sym = (arguments.get("symbol") or symbol or "").strip().upper()
@@ -581,7 +606,10 @@ TOOLS_SCHEMA = [
 SYSTEM_PROMPT = """You are a read-only ChakraOps Ticker Copilot. You help users understand symbol diagnostics, eligibility, and system state.
 
 Rules:
-- Only use the provided tools to get facts. Do not invent numbers or verdicts.
+- Only use the provided tools to get facts. Do not invent numbers, scores, IVR, or verdicts.
+- Cite tool source and as_of when presenting portfolio or score facts. Prefer LIVE_BROKER holdings over manual recovery.
+- Never claim the portfolio is empty when LIVE broker holdings are present in tool output.
+- Do not invent stage-1 score components; if score_basis is stage1_score, describe only published stage1 fields.
 - Do not give financial advice beyond describing what ChakraOps outputs show.
 - Do not recommend placing orders; you can describe what the system indicates (e.g. eligible, delta band).
 - Never reveal API keys, tokens, internal file paths, or secrets.

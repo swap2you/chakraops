@@ -760,8 +760,12 @@ export function DashboardPage() {
                       {p.symbol}
                     </Link>
                     <span className="font-mono text-zinc-500 dark:text-zinc-500">
-                      {p.quantity != null ? `${p.quantity}` : ""}{" "}
-                      {p.average_cost != null ? `$${p.average_cost.toLocaleString()}` : ""}
+                      {p.quantity != null ? `Qty ${p.quantity}` : ""}
+                      {p.average_cost != null ? (
+                        <span className="ml-2" title="Average cost">
+                          Avg cost ${p.average_cost.toLocaleString()}
+                        </span>
+                      ) : null}
                     </span>
                   </div>
                 ))}

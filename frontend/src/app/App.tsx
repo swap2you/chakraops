@@ -22,7 +22,6 @@ import { LearnPage } from "@/pages/LearnPage";
 import { PaperPage } from "@/pages/PaperPage";
 import { UniverseAdminPage } from "@/pages/UniverseAdminPage";
 import { UniverseHealthPage } from "@/pages/UniverseHealthPage";
-import { OptionsWorkspacePage, StocksWorkspacePage, EtfHedgeWorkspacePage } from "@/pages/StrategyWorkspacePages";
 import { StrategyBuilderPage } from "@/pages/StrategyBuilderPage";
 import { getWheelPageMode } from "@/config/features";
 
@@ -55,9 +54,9 @@ export function App() {
             >
               <Route path="/" element={<DashboardPage />} />
               <Route path="/opportunities" element={<OpportunitiesPage />} />
-              <Route path="/options" element={<OptionsWorkspacePage />} />
-              <Route path="/stocks" element={<StocksWorkspacePage />} />
-              <Route path="/etf-hedge" element={<EtfHedgeWorkspacePage />} />
+              <Route path="/options" element={<Navigate to="/opportunities?strategy=CSP" replace />} />
+              <Route path="/stocks" element={<Navigate to="/opportunities?strategy=SHARES" replace />} />
+              <Route path="/etf-hedge" element={<Navigate to="/opportunities?strategy=ETF" replace />} />
               <Route path="/universe" element={<UniversePage />} />
               <Route path="/symbol-diagnostics" element={<SymbolDiagnosticsPage />} />
               <Route path="/system" element={<SystemDiagnosticsPage />} />
@@ -83,7 +82,18 @@ export function App() {
                 <Route path="/wheel" element={<Navigate to="/" replace />} />
               )}
             </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route
+              path="*"
+              element={
+                <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 p-8" data-testid="page-not-found">
+                  <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">Page not found</h1>
+                  <p className="text-sm text-zinc-500">That route does not exist in ChakraOps.</p>
+                  <a href="/" className="text-sm text-emerald-600 hover:underline dark:text-emerald-400">
+                    Back to Command Center
+                  </a>
+                </div>
+              }
+            />
           </Routes>
         </BrowserRouter>
       </ThemeProvider>

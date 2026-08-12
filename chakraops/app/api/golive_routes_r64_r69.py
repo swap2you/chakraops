@@ -186,7 +186,7 @@ async def golive_csp_payoff(request: Request, x_ui_key: str | None = Header(None
     return csp_payoff(
         strike=float(body.get("strike") or 0),
         credit=float(body.get("credit") or 0),
-        spot=float(body.get("spot") or 0),
+        spot=float(body["spot"]) if body.get("spot") is not None else None,
     )
 
 

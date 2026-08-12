@@ -375,8 +375,13 @@ def reconcile_stage1_score_breakdown(
     stage1_score: int,
     final_score: int,
     market_regime: Optional[str] = None,
+    ivr: Optional[float] = None,
+    ivr_band: Optional[str] = None,
+    baseline: Optional[float] = None,
+    ivr_adjustment: Optional[float] = None,
+    data_completeness: Optional[float] = None,
 ) -> Dict[str, Any]:
-    """R70-DEF-022: STAGE1_ONLY uses stage1_score; do not present unused weighted composite as the score."""
+    """R70-DEF-022 / Final Closure: STAGE1_ONLY uses stage1_score; publish IVR drivers; hide unused composite as truth."""
     bd = breakdown.to_dict()
     bd["weighted_composite_reference"] = int(weighted_composite)
     bd["stage1_score"] = int(stage1_score)
@@ -388,6 +393,16 @@ def reconcile_stage1_score_breakdown(
     bd["options_liquidity_evaluated"] = False
     if market_regime:
         bd["market_regime"] = market_regime
+    if ivr is not None:
+        bd["ivr"] = ivr
+    if ivr_band is not None:
+        bd["ivr_band"] = ivr_band
+    if baseline is not None:
+        bd["baseline"] = baseline
+    if ivr_adjustment is not None:
+        bd["ivr_adjustment"] = ivr_adjustment
+    if data_completeness is not None:
+        bd["data_completeness"] = data_completeness
     return bd
 
 

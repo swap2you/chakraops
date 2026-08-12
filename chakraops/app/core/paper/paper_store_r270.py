@@ -278,7 +278,7 @@ def paper_summary_by_month(month: str) -> Dict[str, Any]:
     """month = YYYY-MM. Returns realized_pl, trade_count, win_count, win_rate, fees_total, by_strategy."""
     init_paper_db()
     if len(month) != 7 or month[4] != "-":
-        return {"month": month, "realized_pl": 0, "trade_count": 0, "win_count": 0, "win_rate": 0, "fees_total": 0, "by_strategy": {}}
+        return {"month": month, "realized_pl": 0, "trade_count": 0, "win_count": 0, "win_rate": None, "fees_total": 0, "by_strategy": {}}
     prefix = month + "%"
     with _LOCK:
         conn = _get_conn()
@@ -305,13 +305,13 @@ def paper_summary_by_month(month: str) -> Dict[str, Any]:
     with_pl = [p for p in closed if p.get("realized_pl") is not None]
     win_count = sum(1 for p in with_pl if (p.get("realized_pl") or 0) > 0)
     trade_count = len(with_pl)
-    win_rate = (win_count / trade_count * 100) if trade_count else 0.0
+    win_rate = (win_count / trade_count * 100) if trade_count else None
     return {
         "month": month,
         "realized_pl": round(total_pl, 2),
         "trade_count": trade_count,
         "win_count": win_count,
-        "win_rate": round(win_rate, 1),
+        "win_rate": round(win_rate, 1) if win_rate is not None else None,
         "fees_total": round(fees_total, 2),
         "by_strategy": {k: round(v, 2) for k, v in by_strategy.items()},
     }

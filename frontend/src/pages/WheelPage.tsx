@@ -163,13 +163,34 @@ export function WheelPage() {
     );
   }
 
-  if (accountsUnavailable || overviewUnavailable || noBackendData) {
+  if (accountsUnavailable) {
     return (
       <div data-testid="page-wheel">
-        <PageHeader title="Wheel" subtext="Risk: UNAVAILABLE" />
+        <PageHeader title="Wheel" subtext="Transport error" />
         <p className="text-red-500 dark:text-red-400" data-testid="wheel-outage">
-          {data?.error ??
-            "Failed to load wheel overview. Backend unavailable — Risk is UNAVAILABLE (not PASS)."}
+          Failed to load accounts. Backend unavailable.
+        </p>
+      </div>
+    );
+  }
+
+  if (!selectedAccount || data?.error === "No account found") {
+    return (
+      <div data-testid="page-wheel">
+        <PageHeader title="Wheel" subtext="Account required" />
+        <p className="text-amber-700 dark:text-amber-300" data-testid="wheel-no-account">
+          DATA_BLOCKED: no default account available for wheel overview. Sync broker aliases or set a default account.
+        </p>
+      </div>
+    );
+  }
+
+  if (overviewUnavailable || (noBackendData && !data)) {
+    return (
+      <div data-testid="page-wheel">
+        <PageHeader title="Wheel" subtext="Overview unavailable" />
+        <p className="text-red-500 dark:text-red-400" data-testid="wheel-outage">
+          {data?.error ?? "Failed to load wheel overview."}
         </p>
       </div>
     );

@@ -11,11 +11,11 @@ from app.core.strategy.payoff_r68 import calculate_short_put_payoff
 SCENARIOS = ("conservative", "balanced", "aggressive")
 
 
-def csp_payoff(*, strike: float, credit: float, spot: float = 0.0) -> Dict[str, Any]:
+def csp_payoff(*, strike: float, credit: float, spot: Optional[float] = None) -> Dict[str, Any]:
     """CSP breakeven/max-profit helper used by golive API + acceptance tests."""
     out = calculate_short_put_payoff(strike=strike, premium=credit, contracts=1)
     out["credit"] = float(credit)
-    out["spot"] = float(spot)
+    out["spot"] = float(spot) if spot is not None else None
     out["return_guarantee"] = False
     return out
 

@@ -70,7 +70,7 @@ export function JournalPage() {
   const [editTags, setEditTags] = useState("");
   const [includePaper, setIncludePaper] = useState(false);
   const [paperOnly, setPaperOnly] = useState(false);
-  const [hasPackFilter, setHasPackFilter] = useState(true);
+  const [hasPackFilter, setHasPackFilter] = useState(false);
   const [viewPackEntryId, setViewPackEntryId] = useState<string | null>(null);
   const [downloadingPacks, setDownloadingPacks] = useState(false);
 

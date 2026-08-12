@@ -425,10 +425,12 @@ def ui_decision_file(
     return {**data, "evaluation_timestamp_utc": eval_ts, "decision_store_mtime_utc": store_mtime}
 
 
-def _build_universe_symbols_list(artifact: Any) -> List[Dict[str, Any]]:
+def _build_universe_symbols_list(artifact: Any, *, enrich_shares: bool = False) -> List[Dict[str, Any]]:
     """Build the symbols list for universe response. Used by ui_universe and get_universe_row_for_copilot.
-    R23.4.5: When diagnostics missing, use same request-time technicals + mtf_levels as symbol-diagnostics
-    so shares_eligible matches Shares tab (compute_shares_eligibility with same inputs)."""
+
+    R70 Final Closure: list GET defaults to artifact-only (no request-time ORATS/technical rebuild)
+    so idle /api/ui/universe stays fast. Set enrich_shares=True for single-symbol copilot/detail paths.
+    """
     symbols_out: List[Dict[str, Any]] = []
     if not artifact:
         return symbols_out
@@ -480,15 +482,19 @@ def _build_universe_symbols_list(artifact: Any) -> List[Dict[str, Any]]:
             from app.core.shares.shares_plan import compute_shares_eligibility
             tech = (diag_dict.get("technicals") if diag_dict else (getattr(diag, "technicals", None) if diag else None)) or {}
             mtf_levels = None
-            if not tech and sym_key:
+            if enrich_shares and not tech and sym_key:
                 spot_u = float(getattr(s, "price", None) or getattr(s, "underlying_price", None) or 0)
                 tech = _build_technicals_at_request_time(sym_key, spot_u if spot_u > 0 else None)
-            if sym_key and tech:
+            if enrich_shares and sym_key and tech:
                 mtf_levels = _build_mtf_levels_at_request_time(sym_key, tech, {}, pipeline_ts)
-            shares_eligible, _ = compute_shares_eligibility(s, tech, sel_el, mtf_levels=mtf_levels, symbol=sym_key)
-            row["shares_eligible"] = shares_eligible
+            if tech or enrich_shares:
+                shares_eligible, _ = compute_shares_eligibility(s, tech, sel_el, mtf_levels=mtf_levels, symbol=sym_key)
+                row["shares_eligible"] = shares_eligible
+            else:
+                # Fast path: use persisted eligibility when present
+                row["shares_eligible"] = bool(sel_el.get("shares_eligible")) if "shares_eligible" in sel_el else None
         except Exception:
-            row["shares_eligible"] = False
+            row["shares_eligible"] = False if enrich_shares else None
         sample = (getattr(diag, "sample_rejected_due_to_delta", None) or (diag.get("sample_rejected_due_to_delta") if isinstance(diag, dict) else None) or []) if diag else []
         row["reasons_explained"] = _compute_reasons_explained(
             getattr(s, "primary_reason", None) or "",
@@ -515,7 +521,7 @@ def get_universe_row_for_copilot(symbol: str) -> Optional[Dict[str, Any]]:
     artifact = store.get_latest()
     if not artifact:
         return None
-    symbols_out = _build_universe_symbols_list(artifact)
+    symbols_out = _build_universe_symbols_list(artifact, enrich_shares=True)
     for r in symbols_out:
         if (r.get("symbol") or "").strip().upper() == sym_upper:
             return r

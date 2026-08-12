@@ -157,7 +157,7 @@ export function PortfolioPage() {
       <div data-testid="page-portfolio">
         <PageHeader title="Account & Portfolio" />
         <p className="text-red-500 dark:text-red-400" data-testid="portfolio-outage">
-          Failed to load portfolio. Backend unavailable — risk status is not PASS.
+          Failed to load portfolio (transport error). Domain risk status is not available.
         </p>
       </div>
     );

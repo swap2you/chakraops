@@ -110,10 +110,24 @@ export function TradeTicketPage() {
 
   if (!symbol) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-4" data-testid="page-trade-ticket">
         <PageHeader title="Trade Ticket" />
         <Card>
-          <CardHeader title="No symbol" description="Open a ticket from Action Needed or Symbol Diagnostics (add ?symbol=...&strategy=...&action=...)." />
+          <CardHeader
+            title="Choose a symbol"
+            description="Open from Action Needed or Symbol Diagnostics, or pick a starting point below."
+          />
+          <div className="flex flex-wrap gap-2 text-sm">
+            <a className="text-emerald-600 hover:underline dark:text-emerald-400" href="/ticket?symbol=SPY&strategy=CSP&action=OPEN">
+              SPY CSP OPEN
+            </a>
+            <a className="text-emerald-600 hover:underline dark:text-emerald-400" href="/opportunities">
+              Opportunities
+            </a>
+            <a className="text-emerald-600 hover:underline dark:text-emerald-400" href="/universe">
+              Universe
+            </a>
+          </div>
         </Card>
       </div>
     );

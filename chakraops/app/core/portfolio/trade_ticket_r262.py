@@ -262,14 +262,32 @@ def build_trade_ticket(
         except Exception:
             out["earnings_advisory"] = {"status": "Unavailable", "next_date": None, "days": None, "implied_move_pct": None}
 
-        # Journal draft
+        # Journal draft — strategy-aware action (CSP/CC OPEN = SELL_TO_OPEN, not BUY)
         from datetime import date
         trade_date = date.today().isoformat()
+        strat_u = (strategy or "").strip().upper()
+        act_u = (action or "").strip().upper()
+        if strat_u in ("CSP", "CC"):
+            if act_u in ("OPEN", "SELL", "SELL_TO_OPEN"):
+                journal_action = "SELL_TO_OPEN"
+            elif act_u in ("CLOSE", "BUY", "BUY_TO_CLOSE"):
+                journal_action = "BUY_TO_CLOSE"
+            else:
+                journal_action = act_u or "SELL_TO_OPEN"
+        elif strat_u in ("SHARES", "STOCK", "EQUITY"):
+            if act_u in ("OPEN", "BUY"):
+                journal_action = "BUY"
+            elif act_u in ("CLOSE", "SELL"):
+                journal_action = "SELL"
+            else:
+                journal_action = act_u or "BUY"
+        else:
+            journal_action = "BUY" if act_u in ("OPEN", "BUY") else "SELL" if act_u in ("CLOSE", "SELL") else act_u
         out["journal_draft"] = {
             "trade_date": trade_date,
             "symbol": symbol,
             "strategy": strategy,
-            "action": "BUY" if action in ("OPEN", "BUY") else "SELL" if action in ("CLOSE", "SELL") else action,
+            "action": journal_action,
             "qty": out["sizing"].get("recommended_qty") or out["sizing"].get("recommended_contracts") or 0,
             "price": None,
             "premium": None,

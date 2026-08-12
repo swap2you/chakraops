@@ -219,6 +219,14 @@ def run_universe_evaluation_exclusive(
         except Exception:
             logger.exception("[EVAL_COORD] ledger persist failed run_id=%s", run_id)
             raise
+        # R70 Final Closure Batch D: refresh Universe V2 after successful LIVE publish
+        try:
+            from app.core.universe_v2.builder import build_universe_v2_snapshot
+
+            build_universe_v2_snapshot()
+            logger.info("[EVAL_COORD] universe_v2 snapshot refreshed after run_id=%s", run_id)
+        except Exception:
+            logger.exception("[EVAL_COORD] universe_v2 refresh failed run_id=%s (non-fatal)", run_id)
         return {
             "started": True,
             "reason": "ok",

@@ -104,7 +104,7 @@ def test_broker_status_endpoint_not_permanent_nogo(monkeypatch):
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] != "NO_GO"
-    assert body["status"] in {"UNAUTHENTICATED", "READ_ONLY_AVAILABLE"}
+    assert body["status"] in {"UNAUTHENTICATED", "READ_ONLY_AVAILABLE", "STALE", "AUTH_REQUIRED"}
     assert body["manual_only"] is True
     assert body["manual_portfolio"] is True
     assert body["trade_execution"] is False

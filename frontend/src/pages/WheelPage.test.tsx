@@ -228,7 +228,7 @@ describe("WheelPage", () => {
     render(<WheelPage />);
     expect(screen.getByTestId("page-wheel")).toBeInTheDocument();
     expect(screen.getByTestId("wheel-outage")).toBeInTheDocument();
-    expect(screen.getByText(/Risk is UNAVAILABLE/i)).toBeInTheDocument();
+    expect(screen.getByText(/Backend unavailable/i)).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/Risk:\s*PASS/);
   });
 

@@ -165,9 +165,9 @@ def test_ui_positions_post_persists_and_get_returns(tmp_path):
                 "strategy": "CSP",
                 "contracts": 1,
                 "strike": 450.0,
-                "expiration": "2026-03-21",
+                "expiration": "2026-09-18",
                 "credit_expected": 2.50,
-                "contract_key": "450-2026-03-21-PUT",
+                "contract_key": "450-2026-09-18-PUT",
             },
         )
         assert post.status_code == 200
@@ -216,9 +216,9 @@ def test_ui_positions_post_409_when_collateral_exceeds_max_per_trade(tmp_path):
                     "strategy": "CSP",
                     "contracts": 1,
                     "strike": 450.0,
-                    "expiration": "2026-03-21",
+                    "expiration": "2026-09-18",
                     "credit_expected": 2.50,
-                    "contract_key": "450-2026-03-21-PUT",
+                    "contract_key": "450-2026-09-18-PUT",
                 },
             )
     assert r.status_code == 409
@@ -258,9 +258,9 @@ def test_ui_positions_post_success_when_within_limits(tmp_path):
                         "strategy": "CSP",
                         "contracts": 1,
                         "strike": 450.0,
-                        "expiration": "2026-03-21",
+                        "expiration": "2026-09-18",
                         "credit_expected": 2.50,
-                        "contract_key": "450-2026-03-21-PUT",
+                        "contract_key": "450-2026-09-18-PUT",
                         "decision_ref": {"evaluation_timestamp_utc": "2026-02-17T20:00:00Z", "artifact_source": "LIVE"},
                     },
                 )
@@ -326,9 +326,9 @@ def test_ui_position_decision_with_run_id(tmp_path):
                     "strategy": "CSP",
                     "contracts": 1,
                     "strike": 450.0,
-                    "expiration": "2026-03-21",
+                    "expiration": "2026-09-18",
                     "credit_expected": 2.50,
-                    "contract_key": "450-2026-03-21-PUT",
+                    "contract_key": "450-2026-09-18-PUT",
                     "decision_ref": {"run_id": run_id, "evaluation_timestamp_utc": "2026-02-17T21:00:00Z"},
                 },
             )
@@ -405,9 +405,9 @@ def test_ui_position_decision_warning_when_run_mismatch(tmp_path):
                     "strategy": "CSP",
                     "contracts": 1,
                     "strike": 450.0,
-                    "expiration": "2026-03-21",
+                    "expiration": "2026-09-18",
                     "credit_expected": 2.50,
-                    "contract_key": "450-2026-03-21-PUT",
+                    "contract_key": "450-2026-09-18-PUT",
                     "decision_ref": {"run_id": pos_run_id},
                 },
             )
@@ -441,7 +441,7 @@ def test_ui_positions_post_409_when_options_missing_contract_identity(tmp_path):
                 "strategy": "CSP",
                 "contracts": 1,
                 "strike": 450.0,
-                "expiration": "2026-03-21",
+                "expiration": "2026-09-18",
                 "credit_expected": 250,
             },
         )
@@ -470,9 +470,9 @@ def test_ui_positions_close_pnl_with_fees(tmp_path):
                 "strategy": "CSP",
                 "contracts": 1,
                 "strike": 450.0,
-                "expiration": "2026-03-21",
+                "expiration": "2026-09-18",
                 "credit_expected": 250,
-                "contract_key": "450-2026-03-21-PUT",
+                "contract_key": "450-2026-09-18-PUT",
             },
         )
         assert post.status_code == 200
@@ -529,9 +529,9 @@ def test_ui_positions_close_and_delete_guardrail(tmp_path):
                 "strategy": "CSP",
                 "contracts": 1,
                 "strike": 450.0,
-                "expiration": "2026-03-21",
+                "expiration": "2026-09-18",
                 "credit_expected": 250.0,
-                "contract_key": "450-2026-03-21-PUT",
+                "contract_key": "450-2026-09-18-PUT",
             },
         )
         assert post.status_code == 200
@@ -575,9 +575,9 @@ def test_ui_positions_close_csp_per_share_realized_pnl_positive(tmp_path):
                 "strategy": "CSP",
                 "contracts": 1,
                 "strike": 140.0,
-                "expiration": "2026-03-21",
+                "expiration": "2026-09-18",
                 "credit_expected": 9.40,
-                "contract_key": "140-2026-03-21-PUT",
+                "contract_key": "140-2026-09-18-PUT",
             },
         )
         assert post.status_code == 200
@@ -623,9 +623,9 @@ def test_ui_portfolio_realized_total_equals_sum_of_closed_positions(tmp_path):
                 "strategy": "CSP",
                 "contracts": 1,
                 "strike": 450.0,
-                "expiration": "2026-03-21",
+                "expiration": "2026-09-18",
                 "credit_expected": 250.0,
-                "contract_key": "450-2026-03-21-PUT",
+                "contract_key": "450-2026-09-18-PUT",
             },
         )
         assert p1.status_code == 200
@@ -638,9 +638,9 @@ def test_ui_portfolio_realized_total_equals_sum_of_closed_positions(tmp_path):
                 "strategy": "CSP",
                 "contracts": 1,
                 "strike": 140.0,
-                "expiration": "2026-03-21",
+                "expiration": "2026-09-18",
                 "credit_expected": 9.40,
-                "contract_key": "140-2026-03-21-PUT",
+                "contract_key": "140-2026-09-18-PUT",
             },
         )
         assert p2.status_code == 200
@@ -672,9 +672,9 @@ def test_ui_positions_events_appended_on_create_and_close(tmp_path):
                 "strategy": "CSP",
                 "contracts": 1,
                 "strike": 450.0,
-                "expiration": "2026-03-21",
+                "expiration": "2026-09-18",
                 "credit_expected": 250.0,
-                "contract_key": "450-2026-03-21-PUT",
+                "contract_key": "450-2026-09-18-PUT",
             },
         )
         assert post.status_code == 200
@@ -717,9 +717,9 @@ def test_ui_positions_roll_creates_linked_position_and_events(tmp_path):
                 "strategy": "CSP",
                 "contracts": 1,
                 "strike": 450.0,
-                "expiration": "2026-03-21",
+                "expiration": "2026-09-18",
                 "credit_expected": 250.0,
-                "contract_key": "450-2026-03-21-PUT",
+                "contract_key": "450-2026-09-18-PUT",
             },
         )
         assert post.status_code == 200
@@ -728,9 +728,9 @@ def test_ui_positions_roll_creates_linked_position_and_events(tmp_path):
         roll = client.post(
             f"/api/ui/positions/{pid}/roll",
             json={
-                "contract_key": "460-2026-04-21-PUT",
+                "contract_key": "460-2026-10-02-PUT",
                 "strike": 460.0,
-                "expiration": "2026-04-21",
+                "expiration": "2026-10-02",
                 "contracts": 1,
                 "close_debit": 100.0,
                 "open_credit": 200.0,
@@ -794,9 +794,9 @@ def test_ui_portfolio_risk_pass_when_within_limits(tmp_path):
                         "strategy": "CSP",
                         "contracts": 1,
                         "strike": 300.0,
-                        "expiration": "2026-04-01",  # within default wheel DTE 21–60
+                        "expiration": "2026-09-25",  # within default wheel DTE 21–60
                         "credit_expected": 250.0,
-                        "contract_key": "300-2026-04-01-PUT",
+                        "contract_key": "300-2026-09-25-PUT",
                     },
                 )
                 assert post.status_code == 200
@@ -846,9 +846,9 @@ def test_ui_portfolio_risk_fail_when_breach(tmp_path):
                             "strategy": "CSP",
                             "contracts": 2,
                             "strike": 450.0,
-                            "expiration": "2026-04-01",  # within default wheel DTE 21–60
+                            "expiration": "2026-09-25",  # within default wheel DTE 21–60
                             "credit_expected": 250.0,
-                            "contract_key": "450-2026-04-01-PUT",
+                            "contract_key": "450-2026-09-25-PUT",
                         },
                     )
                     assert post.status_code == 200
@@ -906,9 +906,9 @@ def test_ui_portfolio_risk_diagnostics_emits_notification_on_fail(tmp_path):
                                 "strategy": "CSP",
                                 "contracts": 3,
                                 "strike": 150.0,
-                                "expiration": "2026-04-01",  # within default wheel DTE 21–60
+                                "expiration": "2026-09-25",  # within default wheel DTE 21–60
                                 "credit_expected": 100.0,
-                                "contract_key": "150-2026-04-01-PUT",
+                                "contract_key": "150-2026-09-25-PUT",
                             },
                         )
                         r = client.post("/api/ui/diagnostics/run", params={"checks": "portfolio_risk"})
@@ -946,9 +946,9 @@ def test_ui_marks_refresh_with_mock_fetcher(tmp_path):
                 "strategy": "CSP",
                 "contracts": 1,
                 "strike": 450.0,
-                "expiration": "2026-12-20",
+                "expiration": "2026-09-25",
                 "credit_expected": 250.0,
-                "contract_key": "450-2026-12-20-PUT",
+                "contract_key": "450-2026-09-25-PUT",
             },
         )
         assert post.status_code == 200
@@ -985,7 +985,7 @@ def test_ui_marks_refresh_skips_equity_without_failing(tmp_path):
     positions_dir.mkdir(parents=True, exist_ok=True)
     (positions_dir / "positions.json").write_text(
         '[{"position_id":"pos_1","account_id":"paper","symbol":"AAPL","strategy":"CSP",'
-        '"contracts":1,"strike":150.0,"expiration":"2026-12-20","status":"OPEN",'
+        '"contracts":1,"strike":150.0,"expiration":"2026-09-25","status":"OPEN",'
         '"opened_at":"2026-01-01T12:00:00Z","credit_expected":100.0}]',
         encoding="utf-8",
     )
@@ -1025,9 +1025,9 @@ def test_ui_portfolio_mtm_returns_totals(tmp_path):
                 "strategy": "CSP",
                 "contracts": 1,
                 "strike": 450.0,
-                "expiration": "2026-12-20",
+                "expiration": "2026-09-25",
                 "credit_expected": 250.0,
-                "contract_key": "450-2026-12-20-PUT",
+                "contract_key": "450-2026-09-25-PUT",
             },
         )
         from app.core.positions.service import list_positions
@@ -1213,7 +1213,7 @@ def test_ui_universe_includes_selected_contract_key_when_eligible(tmp_path):
                 "evaluated_at": "2026-02-17",
                 "strategy": "CSP",
                 "price": 450.0,
-                "expiration": "2026-03-20",
+                "expiration": "2026-09-18",
                 "has_candidates": True,
                 "candidate_count": 1,
             }
@@ -1222,13 +1222,13 @@ def test_ui_universe_includes_selected_contract_key_when_eligible(tmp_path):
             {
                 "symbol": "SPY",
                 "strategy": "CSP",
-                "expiry": "2026-03-20",
+                "expiry": "2026-09-18",
                 "strike": 450.0,
                 "delta": -0.25,
                 "credit_estimate": 2.50,
                 "max_loss": 45000,
                 "why_this_trade": "test",
-                "contract_key": "450-2026-03-20-PUT",
+                "contract_key": "450-2026-09-18-PUT",
                 "option_symbol": "SPY  260320P00450000",
             }
         ],
@@ -1250,7 +1250,7 @@ def test_ui_universe_includes_selected_contract_key_when_eligible(tmp_path):
         row = symbols[0]
         assert row.get("symbol") == "SPY"
         assert row.get("verdict") == "ELIGIBLE"
-        assert row.get("selected_contract_key") == "450-2026-03-20-PUT"
+        assert row.get("selected_contract_key") == "450-2026-09-18-PUT"
         assert row.get("option_symbol") == "SPY  260320P00450000"
         assert row.get("strike") == 450.0
     finally:
@@ -1471,7 +1471,7 @@ def test_phase16_mark_refresh_writes_state_and_system_health_includes_it(tmp_pat
     positions_dir.mkdir(parents=True, exist_ok=True)
     (positions_dir / "positions.json").write_text(
         '[{"position_id":"pos_1","account_id":"paper","symbol":"AAPL","strategy":"CSP",'
-        '"contracts":1,"strike":150.0,"expiration":"2026-12-20","status":"OPEN",'
+        '"contracts":1,"strike":150.0,"expiration":"2026-09-25","status":"OPEN",'
         '"opened_at":"2026-01-01T12:00:00Z","credit_expected":100.0}]',
         encoding="utf-8",
     )
@@ -1523,7 +1523,7 @@ def test_phase16_portfolio_risk_notification_throttled(tmp_path):
     positions_dir.mkdir(parents=True, exist_ok=True)
     (positions_dir / "positions.json").write_text(
         '[{"position_id":"pos_1","account_id":"paper","symbol":"AAPL","strategy":"CSP",'
-        '"contracts":5,"strike":200.0,"expiration":"2026-12-20","status":"OPEN",'
+        '"contracts":5,"strike":200.0,"expiration":"2026-09-25","status":"OPEN",'
         '"opened_at":"2026-01-01T12:00:00Z","credit_expected":500.0}]',
         encoding="utf-8",
     )

@@ -16,10 +16,13 @@ if str(_REPO) not in sys.path:
 class TestCanonicalStorePath:
     """Canonical path must be <REPO_ROOT>/out/decision_latest.json, not app/out."""
 
-    def test_canonical_store_path_is_repo_out(self):
-        """Store path ends with /out/decision_latest.json and is under repo root, not app/."""
-        from app.core.eval.evaluation_store_v2 import get_decision_store_path
+    def test_canonical_store_path_is_repo_out(self, monkeypatch):
+        """Store path ends with /out/decision_latest.json (or OUT_DIR override) under repo root, not app/."""
+        import os
+        from app.core.eval.evaluation_store_v2 import get_decision_store_path, reset_output_dir
 
+        monkeypatch.delenv("OUT_DIR", raising=False)
+        reset_output_dir()
         path = get_decision_store_path()
         posix = path.as_posix()
         assert posix.endswith("/out/decision_latest.json"), (

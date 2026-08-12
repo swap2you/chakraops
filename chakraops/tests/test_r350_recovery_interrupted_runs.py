@@ -8,11 +8,23 @@ from pathlib import Path
 
 
 def test_recovery_job_marks_interrupted(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
     from app.core.operations.job_run_store import JobRunStore
     from app.core.operations.jobs.recovery_job import _run
 
     path = tmp_path / "runs.jsonl"
-    JobRunStore(path=path).start_run(job_id="backup", trigger="schedule")
+    store = JobRunStore(path=path)
+    old = (datetime.now(timezone.utc) - timedelta(seconds=60)).isoformat()
+    store._append_unlocked(
+        {
+            "run_id": "backup_old",
+            "job_id": "backup",
+            "state": "STARTED",
+            "started_at": old,
+            "trigger": "schedule",
+        }
+    )
     monkeypatch.setattr("app.core.operations.job_run_store._runs_path", lambda: path)
     result = _run()
     assert result["metadata"]["count"] >= 1

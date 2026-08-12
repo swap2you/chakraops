@@ -25,7 +25,12 @@ def test_monthly_close_store_base_path_override() -> None:
             assert _reports_base_path().resolve() == override.resolve()
         finally:
             reset_reports_base_path()
-    # After reset, path is repo-relative (parents[3] / "data" / "reports"), not a fixed OS path
-    base = _reports_base_path()
-    assert "data" in base.parts
-    assert "reports" in base.parts
+    # After reset, path is repo-relative (data/reports) unless DATA_DIR env overrides.
+    import os
+    if not os.environ.get("DATA_DIR"):
+        base = _reports_base_path()
+        assert "data" in base.parts
+        assert "reports" in base.parts
+    else:
+        base = _reports_base_path()
+        assert "reports" in base.parts

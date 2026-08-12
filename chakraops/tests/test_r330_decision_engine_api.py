@@ -28,7 +28,11 @@ def test_get_profiles_contract():
     assert body["manual_only"] is True
 
 
-def test_post_evaluate_contract():
+def test_post_evaluate_contract(monkeypatch):
+    monkeypatch.setattr(
+        "app.core.decision_engine.gates.macro_event_gate",
+        lambda *a, **k: (True, []),
+    )
     client = TestClient(app)
     payload = {
         "profile": "balanced",

@@ -89,7 +89,7 @@ describe("TradeTicketPage", () => {
 
   it("shows no symbol message when symbol is missing", () => {
     renderWithRoute(<TradeTicketPage />, "/ticket");
-    expect(screen.getByText(/No symbol/)).toBeInTheDocument();
+    expect(screen.getByText(/Choose a symbol/i)).toBeInTheDocument();
   });
 
   it("shows paper section with toggle (R27.0)", () => {

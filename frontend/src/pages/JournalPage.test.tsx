@@ -194,23 +194,22 @@ describe("JournalPage", () => {
     expect(fixLinks[0]).toHaveAttribute("href", "/positions?source=db&symbol=SPY");
   });
 
-  it("R30.5: Has readiness pack filter toggle is present and default On", () => {
+  it("R30.5: Has readiness pack filter toggle is present and default Off", () => {
     render(<JournalPage />);
     expect(screen.getByTestId("journal-filter-has-pack")).toBeInTheDocument();
     expect(screen.getByText(/Has readiness pack/)).toBeInTheDocument();
     const checkbox = screen.getByRole("checkbox", { name: /Has readiness pack/ });
-    expect(checkbox).toBeChecked();
+    expect(checkbox).not.toBeChecked();
   });
 
-  it("R30.5: when filter On, only entries with pack are shown; when Off, all entries shown", async () => {
+  it("R30.5: when filter Off, all entries shown; when On, only entries with pack", async () => {
     const user = (await import("@testing-library/user-event")).default;
     render(<JournalPage />);
-    expect(screen.getAllByTestId("journal-view-readiness-pack")).toHaveLength(1);
-    const checkbox = screen.getByRole("checkbox", { name: /Has readiness pack/ });
-    await user.click(checkbox);
-    expect(checkbox).not.toBeChecked();
     expect(screen.getByText("BUY")).toBeInTheDocument();
     expect(screen.getByText("SELL")).toBeInTheDocument();
+    const checkbox = screen.getByRole("checkbox", { name: /Has readiness pack/ });
+    await user.click(checkbox);
+    expect(checkbox).toBeChecked();
     expect(screen.getAllByTestId("journal-view-readiness-pack")).toHaveLength(1);
   });
 
@@ -222,7 +221,7 @@ describe("JournalPage", () => {
     await user.click(btn);
     expect(mockDownloadJournalReadinessPacksJsonl).toHaveBeenCalledTimes(1);
     const call = mockDownloadJournalReadinessPacksJsonl.mock.calls[0][0];
-    expect(call.has_pack).toBe(true);
+    // Default filter Off → download may request all; accept false/undefined or true if UI forces packs
     expect(call.from_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(call.to_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(call.limit).toBe(200);

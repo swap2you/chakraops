@@ -107,6 +107,48 @@ def build_eval_summary_payload(
     }
     if sent_by_channel:
         payload["alerts_sent"] = sent_by_channel
+
+    # Canonical read-only broker freshness (never journal/unified counts).
+    try:
+        from app.core.portfolio.capital_authority_r70 import get_broker_freshness_view
+
+        bv = get_broker_freshness_view("acct_individual")
+        payload["broker_state"] = bv.get("state") or "UNAVAILABLE"
+        payload["account_alias"] = bv.get("account_alias") or "acct_individual"
+        payload["broker_as_of"] = bv.get("as_of")
+        payload["broker_age_minutes"] = bv.get("age_minutes")
+        payload["broker_source"] = bv.get("source")
+        payload["open_positions"] = bv.get("broker_open_display") or "UNKNOWN"
+        payload["broker_open_display"] = payload["open_positions"]
+        payload["sizing_blocked"] = bool(bv.get("sizing_blocked", True))
+    except Exception as e:
+        logger.debug("[ALERTS] broker freshness for eval summary unavailable: %s", e)
+        payload["broker_state"] = "UNAVAILABLE"
+        payload["open_positions"] = "UNKNOWN"
+        payload["broker_open_display"] = "UNKNOWN"
+        payload["sizing_blocked"] = True
+        payload["account_alias"] = "acct_individual"
+
+    # ORATS / data-health honesty for actionability.
+    try:
+        from app.api.data_health import get_orats_freshness_state
+
+        of = get_orats_freshness_state() or {}
+        orats_state = str(of.get("state") or of.get("state_label") or "UNKNOWN").upper()
+        payload["orats_state"] = orats_state
+        payload["orats_as_of"] = of.get("as_of")
+        if orats_state in ("ERROR", "WARN", "DELAYED") or payload.get("broker_state") != "FRESH":
+            payload["actionability"] = "DATA NOT ACTIONABLE"
+            payload["data_health_state"] = "DATA NOT ACTIONABLE"
+        else:
+            payload["actionability"] = "OK"
+            payload["data_health_state"] = "OK"
+    except Exception as e:
+        logger.debug("[ALERTS] ORATS freshness for eval summary unavailable: %s", e)
+        payload["orats_state"] = "UNKNOWN"
+        payload["actionability"] = "DATA NOT ACTIONABLE"
+        payload["data_health_state"] = "DATA NOT ACTIONABLE"
+
     return payload
 
 

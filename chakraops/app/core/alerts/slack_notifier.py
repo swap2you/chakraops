@@ -87,6 +87,7 @@ class SlackNotifier:
     def _mobile_preview_text(self, alert: Alert) -> str:
         """Top-level text fallback for Slack mobile notifications (required with blocks)."""
         from app.core.alerts.slack_dispatcher import sanitize_slack_text
+        from app.core.portfolio.capital_authority_r70 import robinhood_conflict_check_label
 
         at = alert.alert_type.value
         meta = alert.meta or {}
@@ -94,22 +95,40 @@ class SlackNotifier:
         contract = meta.get("contract_key") or meta.get("contract_detail") or "position"
         qty = meta.get("quantity", "?")
         broker_state = meta.get("broker_state") or meta.get("snapshot_state") or "journal"
+        freshness = str(meta.get("broker_freshness") or meta.get("freshness_state") or "").upper()
+        conflict_label = meta.get("robinhood_conflict_label")
+        if not conflict_label:
+            conflict = meta.get("robinhood_conflict")
+            if conflict is None and "robinhood_conflict" not in meta:
+                conflict = None
+            elif isinstance(conflict, bool):
+                pass
+            else:
+                conflict = None
+            conflict_label = robinhood_conflict_check_label(
+                freshness or "UNAVAILABLE",
+                conflict=conflict if isinstance(conflict, bool) else None,
+            )
         if at == "POSITION_ABORT":
+            live_claim = meta.get("live_confirmed") is True
+            label = "ABORT · LIVE" if live_claim else "ABORT · advisory/unverified"
             text = (
-                f"ABORT · {contract} · qty={qty} · P/L={meta.get('pnl') or meta.get('pnl_dollars') or 'n/a'} · "
+                f"{label} · {contract} · qty={qty} · P/L={meta.get('pnl') or meta.get('pnl_dollars') or 'n/a'} · "
                 f"{broker_state} · MANUAL ONLY — NO ORDER SENT"
             )
         elif at in ("POSITION_EXIT", "POSITION_HOLD", "POSITION_SCALE_OUT"):
             action = "CLOSE REVIEW" if at == "POSITION_EXIT" else ("HOLD" if at == "POSITION_HOLD" else "SCALE OUT")
+            live_claim = meta.get("live_confirmed") is True
+            prefix = action if live_claim else f"{action} · advisory/unverified"
             text = (
-                f"{action} · {contract} · qty={qty} · "
+                f"{prefix} · {contract} · qty={qty} · "
                 f"P/L={meta.get('pnl') or meta.get('pnl_dollars') or 'n/a'} · "
                 f"{broker_state} · MANUAL ONLY — NO ORDER SENT"
             )
         elif at == "POSITION_ENTRY" or at == "SIGNAL":
             text = (
                 f"NEW SETUP · {sym} · {meta.get('strategy') or meta.get('contract_detail') or alert.reason_code} · "
-                f"qty={qty} · no conflicting Robinhood position · MANUAL ONLY — NO ORDER SENT"
+                f"qty={qty} · {conflict_label} · MANUAL ONLY — NO ORDER SENT"
             )
         elif at in ("DATA_HEALTH", "SYSTEM", "REGIME_CHANGE", "PORTFOLIO_RISK_WARN"):
             text = (
@@ -312,20 +331,45 @@ class SlackNotifier:
         alerts_sent = p.get("alerts_sent") or {}
         if isinstance(alerts_sent, dict):
             urgent = int(alerts_sent.get("critical") or 0)
-        broker_state = p.get("broker_state") or p.get("broker_snapshot_state") or "broker n/a"
+        broker_state = p.get("broker_state") or "UNAVAILABLE"
         open_positions = p.get("open_positions")
         if open_positions is None:
-            open_positions = p.get("open_position_count", "n/a")
+            open_positions = p.get("broker_open_display", "UNKNOWN")
         ts = p.get("timestamp") or ""
-        preview = (
-            f"{mode} eval complete · evaluated={total} · qualified={eligible} · "
-            f"{broker_state} · open positions={open_positions} · urgent={urgent} · {ts}"
-        )
+        actionability = p.get("actionability") or p.get("data_health_state") or ""
+        if str(broker_state).upper() == "FRESH" and str(actionability).upper() not in (
+            "DATA NOT ACTIONABLE",
+            "BLOCKED",
+            "ORATS_ERROR",
+            "ERROR",
+        ):
+            preview = (
+                f"{mode} eval complete · evaluated={total} · qualified={eligible} · "
+                f"broker={broker_state} · broker open={open_positions} · urgent={urgent} · {ts}"
+            )
+        elif str(broker_state).upper() == "STALE":
+            preview = (
+                f"{mode} eval complete · evaluated={total} · qualified={eligible} · "
+                f"broker=STALE · broker open=UNKNOWN · DATA NOT ACTIONABLE · {ts}"
+            )
+        else:
+            preview = (
+                f"{mode} eval complete · evaluated={total} · qualified={eligible} · "
+                f"broker={broker_state} · broker open=UNKNOWN · BROKER CHECK NOT PERFORMED · {ts}"
+            )
+        if str(actionability).upper() in ("DATA NOT ACTIONABLE", "ORATS_ERROR", "ERROR", "WARN", "DELAYED"):
+            if "DATA NOT ACTIONABLE" not in preview and "BROKER CHECK" not in preview:
+                preview = f"{preview} · DATA NOT ACTIONABLE ({actionability})"
+
         lines = [
             sanitize_slack_text(preview),
             "",
             "📊 *ChakraOps Eval Summary*",
             f"Mode: {mode} | Run: `{p.get('run_id', '?')}` | {ts}",
+            f"Account: {p.get('account_alias') or 'acct_individual'}",
+            f"Broker: {broker_state} | as_of={p.get('broker_as_of') or 'n/a'} | age_min={p.get('broker_age_minutes') if p.get('broker_age_minutes') is not None else 'n/a'}",
+            f"Broker open positions: {open_positions}",
+            f"ORATS/data-health: {p.get('orats_state') or actionability or 'n/a'}",
             "",
             f"*Counts:* total={total} eligible={eligible} A={p.get('a_tier', 0)} B={p.get('b_tier', 0)} blocked={p.get('blocked', 0)}",
             "MANUAL ONLY — NO ORDER SENT",

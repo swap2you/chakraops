@@ -58,6 +58,10 @@ def _normalize_decision_artifact(data: dict) -> dict:
     meta["run_id"] = "<RUN_ID>"
     meta["pipeline_timestamp"] = "<TS>"
     meta["evaluation_timestamp_utc"] = "<TS>"
+    if "evaluator_run_id" in meta:
+        meta["evaluator_run_id"] = "<EVALUATOR_RUN_ID>"
+    if "coordinator_run_id" in meta:
+        meta["coordinator_run_id"] = "<COORDINATOR_RUN_ID>"
     out["metadata"] = meta
     # Normalize per-symbol evaluated_at if present
     for sym in out.get("symbols") or []:

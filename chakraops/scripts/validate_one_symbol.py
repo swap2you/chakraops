@@ -246,10 +246,14 @@ def main() -> int:
                 timeout=2,
             )
             if r.returncode == 0 and r.stdout:
-                local_build_id = r.stdout.strip()[:12]
+                local_build_id = r.stdout.strip()
         except Exception:
             pass
-        if server_build_id and local_build_id and server_build_id != local_build_id:
+        if server_build_id and local_build_id and not (
+            server_build_id == local_build_id
+            or server_build_id.startswith(local_build_id[:12])
+            or local_build_id.startswith(server_build_id[:12])
+        ):
             build_id_mismatch = True
             build_id_warning_msg = (
                 f"WARNING: Server build_id ({server_build_id}) does not match local working tree ({local_build_id}). "

@@ -145,7 +145,7 @@ def test_run_and_save_seals_set_latest(tmp_path: Path, monkeypatch: pytest.Monke
         def to_dict(self):
             return {"metadata": {}, "symbols": []}
 
-    def _fake_eval(symbols, mode="LIVE", output_dir=None):
+    def _fake_eval(symbols, mode="LIVE", output_dir=None, coordinator_run_id=None):
         assert mode == "PAPER"
         assert output_dir is not None
         assert "harness" in str(output_dir)
@@ -194,7 +194,7 @@ def test_coordinator_tallies_holds_blocks(monkeypatch: pytest.MonkeyPatch) -> No
         "app.market.market_hours.get_market_phase",
         lambda: "OPEN",
     )
-    def _fake_eval(symbols, mode="LIVE"):
+    def _fake_eval(symbols, mode="LIVE", coordinator_run_id=None, output_dir=None):
         assert service._canonical_live_universe_write_is_authorized() is True
         return artifact
 
@@ -237,7 +237,7 @@ def test_coordinator_scope_resets_on_evaluation_failure(monkeypatch: pytest.Monk
         ec._ACTIVE_TRIGGER = "api"
         ec._ACTIVE_RUN_ID = "eval_fail_1"
 
-    def _boom(symbols, mode="LIVE"):
+    def _boom(symbols, mode="LIVE", coordinator_run_id=None, output_dir=None):
         assert service._canonical_live_universe_write_is_authorized() is True
         raise RuntimeError("eval boom")
 

@@ -158,6 +158,9 @@ except ImportError:
 # Bounded delivery: at most ~1 webhook request per second per channel key.
 _last_channel_send_monotonic: Dict[str, float] = {}
 _CHANNEL_MIN_INTERVAL_SEC = 1.0
+_CHANNEL_PACE_LOCK = __import__("threading").Lock()
+# Max seconds we will block the caller waiting on Retry-After / pacing.
+_MAX_BLOCKING_RETRY_AFTER_SEC = 5.0
 
 FORBIDDEN_IN_SLACK_TEXT = (
     "FAIL_",
@@ -173,31 +176,67 @@ FORBIDDEN_IN_SLACK_TEXT = (
 
 
 def sanitize_slack_text(text: str) -> str:
-    """Strip secrets, paths, and raw FAIL_/WARN_ codes from Slack text."""
+    """Strip secrets, paths, and raw FAIL_/WARN_ codes from Slack text.
+
+    Preserves ISO timestamps, run IDs, symbols, strikes, quantities, prices,
+    percentages, DTE, and account aliases (e.g. acct_individual).
+    Does NOT treat arbitrary 6+ digit numbers as account numbers (that corrupts timestamps).
+    """
     import re
 
     out = str(text or "")
     out = re.sub(r"https://hooks\.slack\.com/\S+", "[webhook redacted]", out, flags=re.IGNORECASE)
-    out = re.sub(r"(?i)\b(api[_-]?key|token|bearer)\s*[:=]\s*\S+", r"\1=[redacted]", out)
+    out = re.sub(
+        r"(?i)\b(authorization|api[_-]?key|secret|token|bearer)\s*[:=]\s*\S+",
+        r"\1=[redacted]",
+        out,
+    )
+    out = re.sub(r"(?i)\bBearer\s+[A-Za-z0-9\-._~+/]+=*", "Bearer [redacted]", out)
+    # Windows + Unix private/local paths (keep ISO dates intact).
+    out = re.sub(r"[A-Za-z]:\\(?:Users|home|Development|tmp|Temp|Secrets?)\\[^\s]+", "[path redacted]", out)
     out = re.sub(r"[A-Za-z]:\\[^\s]+", "[path redacted]", out)
-    out = re.sub(r"(/Users|/home|/var|/tmp)/[^\s]+", "[path redacted]", out)
+    out = re.sub(r"(/Users|/home|/var|/tmp|/private)/[^\s]+", "[path redacted]", out)
     out = re.sub(r"\bFAIL_[A-Z0-9_]+\b", "[code]", out)
     out = re.sub(r"\bWARN_[A-Z0-9_]+\b", "[code]", out)
+    # Account numbers only when explicitly labeled — before traceback truncation.
+    out = re.sub(
+        r"(?i)\b(account(?:[_\s-]*number)?|acct(?:[_\s-]*number)?|account#)\s*[:=#]?\s*[A-Za-z0-9\-]{6,}\b",
+        r"\1=[acct redacted]",
+        out,
+    )
     out = re.sub(r"(?i)traceback \(most recent call last\):.*", "[traceback redacted]", out, flags=re.DOTALL)
-    # Never include full account numbers — keep alias-like tokens only.
-    out = re.sub(r"\b\d{6,}\b", "[acct]", out)
     return out.strip()
+
+
+def sanitize_slack_payload(payload: Any) -> Any:
+    """Recursively sanitize all string leaves in a Slack webhook JSON payload."""
+    if isinstance(payload, str):
+        return sanitize_slack_text(payload)
+    if isinstance(payload, list):
+        return [sanitize_slack_payload(x) for x in payload]
+    if isinstance(payload, dict):
+        return {k: sanitize_slack_payload(v) for k, v in payload.items()}
+    return payload
 
 
 def _pace_channel(channel_key: str) -> None:
     key = (channel_key or "default").strip().lower() or "default"
-    now = time.monotonic()
-    last = _last_channel_send_monotonic.get(key)
-    if last is not None:
-        wait = _CHANNEL_MIN_INTERVAL_SEC - (now - last)
+    with _CHANNEL_PACE_LOCK:
+        now = time.monotonic()
+        last = _last_channel_send_monotonic.get(key)
+        wait = 0.0
+        if last is not None:
+            wait = _CHANNEL_MIN_INTERVAL_SEC - (now - last)
         if wait > 0:
-            time.sleep(min(wait, 2.0))
-    _last_channel_send_monotonic[key] = time.monotonic()
+            # Release lock while sleeping so other channels are not blocked.
+            pass
+        else:
+            _last_channel_send_monotonic[key] = now
+            return
+    if wait > 0:
+        time.sleep(min(wait, 2.0))
+        with _CHANNEL_PACE_LOCK:
+            _last_channel_send_monotonic[key] = time.monotonic()
 
 
 def post_slack_webhook(
@@ -212,7 +251,9 @@ def post_slack_webhook(
 
     - Retry at most once for HTTP 429 (honors Retry-After), timeout, or transient 5xx.
     - Do not retry permanent 4xx (except 429).
-    - Pace approximately one request per second per channel_key.
+    - If Retry-After exceeds blocking budget, record failure (do not retry early).
+    - Pace approximately one request per second per channel_key (lock-safe).
+    - Sanitizes the full payload recursively before transmission.
     """
     if not webhook_url or not isinstance(payload, dict):
         return False
@@ -220,10 +261,7 @@ def post_slack_webhook(
         logger.warning("[Slack] requests not installed, skip send")
         return False
 
-    # Ensure text fallback is sanitized when present.
-    if "text" in payload and payload["text"] is not None:
-        payload = dict(payload)
-        payload["text"] = sanitize_slack_text(str(payload["text"]))
+    safe_payload = sanitize_slack_payload(dict(payload))
 
     attempts = 0
     while attempts < 2:
@@ -232,7 +270,7 @@ def post_slack_webhook(
         try:
             r = _requests.post(
                 webhook_url,
-                json=payload,
+                json=safe_payload,
                 timeout=timeout_sec,
                 headers={"Content-Type": "application/json"},
             )
@@ -244,7 +282,14 @@ def post_slack_webhook(
                     delay = float(retry_after) if retry_after is not None else 1.0
                 except (TypeError, ValueError):
                     delay = 1.0
-                time.sleep(min(max(delay, 0.2), 5.0))
+                if delay > _MAX_BLOCKING_RETRY_AFTER_SEC:
+                    logger.warning(
+                        "[Slack] Retry-After=%.1fs exceeds blocking budget %.1fs; deferring (no early retry)",
+                        delay,
+                        _MAX_BLOCKING_RETRY_AFTER_SEC,
+                    )
+                    return False
+                time.sleep(max(delay, 0.2))
                 continue
             if 500 <= r.status_code < 600 and attempts < 2:
                 time.sleep(0.5)
@@ -252,7 +297,6 @@ def post_slack_webhook(
             logger.warning("[Slack] webhook returned %s: %s", r.status_code, (r.text or "")[:200])
             return False
         except Exception as e:
-            # Timeout / connection errors: one retry.
             if attempts < 2:
                 logger.warning("[Slack] transient send failure (will retry once): %s", e)
                 time.sleep(0.5)

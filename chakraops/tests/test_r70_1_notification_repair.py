@@ -58,7 +58,7 @@ def test_coordinator_live_calls_process_run_completed_once(monkeypatch: pytest.M
     monkeypatch.setattr("app.market.market_hours.get_market_phase", lambda: "OPEN")
     monkeypatch.setattr(
         "app.core.eval.evaluation_service_v2.evaluate_universe",
-        lambda symbols, mode="LIVE": artifact,
+        lambda symbols, mode="LIVE", coordinator_run_id=None, output_dir=None: artifact,
     )
     monkeypatch.setattr("app.core.eval.evaluation_store.save_run", lambda run: None)
     monkeypatch.setattr("app.core.eval.evaluation_store.update_latest_pointer", lambda *a, **k: None)
@@ -94,7 +94,7 @@ def test_coordinator_paper_does_not_call_process_run_completed(monkeypatch: pyte
     monkeypatch.setattr("app.market.market_hours.get_market_phase", lambda: "OPEN")
     monkeypatch.setattr(
         "app.core.eval.evaluation_service_v2.evaluate_universe",
-        lambda symbols, mode="LIVE": artifact,
+        lambda symbols, mode="LIVE", coordinator_run_id=None, output_dir=None: artifact,
     )
     monkeypatch.setattr("app.core.eval.evaluation_store.save_run", lambda run: None)
     monkeypatch.setattr("app.core.eval.evaluation_store.update_latest_pointer", lambda *a, **k: None)
@@ -258,6 +258,7 @@ def test_channel_routing_and_mobile_text_fallback(monkeypatch: pytest.MonkeyPatc
         assert last["payload"]["text"].startswith(preview_prefix) or preview_prefix in last["payload"]["text"]
         assert "blocks" in last["payload"]
         assert "MANUAL ONLY — NO ORDER SENT" in last["payload"]["text"]
+        assert "no conflicting Robinhood position" not in last["payload"]["text"]
 
     assert notifier.send_eval_summary(
         "daily",
@@ -361,6 +362,10 @@ def test_sanitize_and_retry_policy() -> None:
     assert "hooks.slack.com" not in clean
     assert "token=[redacted]" in clean or "[redacted]" in clean
     assert "[path redacted]" in clean
+    # Timestamps must not be corrupted by account-number heuristics.
+    ts = "2026-08-13T16:45:59.954155+00:00"
+    assert ".954155" in sanitize_slack_text(ts)
+    assert ".[acct]" not in sanitize_slack_text(ts)
 
     class _Resp:
         def __init__(self, code, headers=None, text=""):

@@ -310,3 +310,114 @@ def list_account_capital_matrix(aliases: Optional[List[str]] = None) -> List[Dic
 
     use = list(aliases) if aliases else list(ACCOUNT_ALIASES)
     return [get_capital_snapshot(a, allow_manual_fallback=(a == "acct_individual")) for a in use]
+
+
+def get_broker_freshness_view(
+    account_alias: str = "acct_individual",
+    *,
+    now: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """
+    Canonical age-based broker freshness for capital, lenses, Slack, and conflict checks.
+
+    state is exactly one of FRESH | STALE | UNAVAILABLE.
+    open_position_count is an int only when FRESH; otherwise None (callers must say UNKNOWN).
+    """
+    alias = (account_alias or "acct_individual").strip() or "acct_individual"
+    from app.core.broker.snapshot_store import load_snapshot
+    from app.core.broker.status import robinhood_mcp_read_only_status
+
+    snap = load_snapshot(alias)
+    # Token / auth readiness without trusting the stored boolean alone.
+    status = robinhood_mcp_read_only_status(snapshot_stale=None)
+    token_ready = bool(status.get("ROBINHOOD_MCP_READ_ONLY_AVAILABLE")) or (
+        str(status.get("status") or "").upper() in ("READ_ONLY_AVAILABLE", "STALE")
+        and bool((status.get("auth") or {}).get("authenticated") or status.get("oauth", {}).get("authenticated"))
+    )
+    # Prefer explicit authenticated flag when present.
+    auth = status.get("auth") or status.get("oauth") or {}
+    if auth.get("authenticated") is True:
+        token_ready = True
+    if str(status.get("status") or "").upper() in ("UNAUTHENTICATED", "AUTH_REQUIRED", "ERROR"):
+        # Still allow age evaluation when a snapshot exists but mark UNAVAILABLE if no snap.
+        if snap is None:
+            token_ready = False
+
+    broker_ready = bool(token_ready) and snap is not None
+    state, _age_ok, age_min = evaluate_snapshot_freshness(
+        snap=snap, broker_ready=broker_ready, now=now
+    )
+    # Pass effective age-based stale into status for observability consistency.
+    effective_stale = state != STATE_FRESH
+    status_eff = robinhood_mcp_read_only_status(
+        snapshot_stale=effective_stale if snap is not None else None
+    )
+
+    open_count: Optional[int] = None
+    if state == STATE_FRESH and snap is not None:
+        eq = len(snap.equity_positions or [])
+        op = len(snap.option_positions or [])
+        open_count = eq + op
+
+    return {
+        "account_alias": alias,
+        "state": state,
+        "stale": state != STATE_FRESH,
+        "sizing_blocked": state != STATE_FRESH,
+        "as_of": getattr(snap, "fetched_at", None) if snap is not None else None,
+        "age_minutes": age_min,
+        "account_state_max_age_minutes": account_state_max_age_minutes(),
+        "source": getattr(snap, "source", None) if snap is not None else None,
+        "freshness": getattr(snap, "freshness", None) if snap is not None else None,
+        "open_position_count": open_count,
+        "broker_open_display": str(open_count) if open_count is not None else "UNKNOWN",
+        "broker_status": status_eff.get("status"),
+        "manual_only": True,
+        "trade_execution": False,
+    }
+
+
+def robinhood_conflict_check_label(
+    freshness_state: str,
+    *,
+    conflict: Optional[bool] = None,
+) -> str:
+    """Truthful Robinhood conflict-check wording for Slack/UI previews."""
+    st = (freshness_state or "").strip().upper()
+    if st == STATE_FRESH:
+        if conflict is True:
+            return "Robinhood conflict check: CONFLICT — existing position detected"
+        if conflict is False:
+            return "Robinhood conflict check: CLEAR"
+        return "Robinhood conflict check: NOT PERFORMED — broker unavailable"
+    if st == STATE_STALE:
+        return "Robinhood conflict check: UNKNOWN — snapshot stale"
+    return "Robinhood conflict check: NOT PERFORMED — broker unavailable"
+
+
+def symbol_has_broker_conflict(
+    symbol: Optional[str],
+    *,
+    account_alias: str = "acct_individual",
+    freshness: Optional[Dict[str, Any]] = None,
+) -> Optional[bool]:
+    """Return True/False only when freshness is FRESH; else None (check not definitive)."""
+    view = freshness or get_broker_freshness_view(account_alias)
+    if view.get("state") != STATE_FRESH:
+        return None
+    sym = (symbol or "").strip().upper()
+    if not sym:
+        # Set-level / universe signal: conflict unknown at symbol grain; treat as clear of specific conflict.
+        return False
+    from app.core.broker.snapshot_store import load_snapshot
+
+    snap = load_snapshot(account_alias)
+    if snap is None:
+        return None
+    for p in snap.equity_positions or []:
+        if (getattr(p, "symbol", "") or "").strip().upper() == sym:
+            return True
+    for p in snap.option_positions or []:
+        if (getattr(p, "symbol", "") or "").strip().upper() == sym:
+            return True
+    return False

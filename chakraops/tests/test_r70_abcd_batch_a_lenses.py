@@ -22,16 +22,19 @@ from app.core.portfolio.positions_unified_store_r279 import (
 )
 
 
-def _snap(*, stale: bool = False, equities: Optional[List[EquityPosition]] = None) -> BrokerSnapshot:
+def _snap(*, stale: bool = False, equities: Optional[List[EquityPosition]] = None, age_minutes: float = 5.0) -> BrokerSnapshot:
+    from datetime import datetime, timedelta, timezone
+
     if equities is None:
         equities = [
             EquityPosition(symbol="NVDA", quantity=300.0, average_cost=157.0),
             EquityPosition(symbol="AMZN", quantity=25.0, average_cost=216.0),
             EquityPosition(symbol="SMCI", quantity=425.0, average_cost=30.0),
         ]
+    fetched = (datetime.now(timezone.utc) - timedelta(minutes=age_minutes)).isoformat().replace("+00:00", "Z")
     return BrokerSnapshot(
         account_alias="acct_individual",
-        fetched_at="2026-08-11T21:15:57Z",
+        fetched_at=fetched,
         balances=BrokerBalances(cash=1.0, buying_power=1.0, equity=1.0),
         equity_positions=list(equities),
         option_positions=[],
@@ -151,6 +154,33 @@ def test_live_lenses_stale_blocks_sizing(monkeypatch: pytest.MonkeyPatch) -> Non
     assert out["live_state"] == "STALE"
     assert out["sizing_blocked"] is True
     assert out["live_open_count"] == 3  # last-good still visible
+
+
+def test_live_lenses_age_exceeded_is_stale_not_boolean(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Age-based freshness must match capital authority (boolean stale=False is insufficient)."""
+    snap = _snap(stale=False, age_minutes=200.0)
+    monkeypatch.setattr("app.core.broker.snapshot_store.load_snapshot", lambda _a: snap)
+    monkeypatch.setattr(
+        "app.core.broker.status.robinhood_mcp_read_only_status",
+        lambda **_kw: {"status": "READ_ONLY_AVAILABLE", "ROBINHOOD_MCP_READ_ONLY_AVAILABLE": True},
+    )
+    monkeypatch.setattr("app.core.portfolio.live_position_lenses_r70._manual_recovery_positions", lambda: [])
+    monkeypatch.setattr("app.core.portfolio.live_position_lenses_r70._paper_open_positions", lambda: [])
+    monkeypatch.setattr("app.core.portfolio.live_position_lenses_r70._historical_closed_count", lambda: 0)
+    monkeypatch.setattr(
+        "app.core.portfolio.live_position_lenses_r70._unified_open_diagnostic",
+        lambda: {"open_live_count": 0, "open_paper_count": 0},
+    )
+    from app.core.portfolio.capital_authority_r70 import get_capital_snapshot, get_broker_freshness_view
+
+    lenses = build_live_position_lenses()
+    cap = get_capital_snapshot("acct_individual")
+    view = get_broker_freshness_view("acct_individual")
+    assert lenses["live_state"] == "STALE"
+    assert lenses["sizing_blocked"] is True
+    assert cap["state"] == "STALE"
+    assert view["state"] == "STALE"
+    assert lenses["live_state"] == cap["state"] == view["state"]
 
 
 def test_paper_excluded_from_live(monkeypatch: pytest.MonkeyPatch) -> None:

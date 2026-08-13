@@ -1173,7 +1173,7 @@ def api_ops_routes() -> list:
 
 
 def _get_build_id() -> Optional[str]:
-    """Return git HEAD commit hash for server/build_id (port mismatch guard)."""
+    """Return full git HEAD commit hash for server/build_id (exact identity proof)."""
     try:
         repo = Path(__file__).resolve().parent.parent.parent
         r = subprocess.run(
@@ -1184,7 +1184,7 @@ def _get_build_id() -> Optional[str]:
             timeout=2,
         )
         if r.returncode == 0 and r.stdout:
-            return r.stdout.strip()[:12]
+            return r.stdout.strip()
     except Exception:
         pass
     return os.environ.get("BUILD_ID")

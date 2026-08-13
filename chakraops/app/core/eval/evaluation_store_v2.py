@@ -128,6 +128,9 @@ def _write_eval_snapshot(artifact: DecisionArtifactV2) -> None:
         "quote_as_of": pipeline_ts,
         "candles_as_of": pipeline_ts,
         "orats_as_of": pipeline_ts,
+        "run_id": run_id,
+        "coordinator_run_id": meta.get("coordinator_run_id") or run_id,
+        "evaluator_run_id": meta.get("evaluator_run_id"),
     }
     # R24.5: Fetch earnings advisory per symbol for snapshot semantics
     as_of_utc = None

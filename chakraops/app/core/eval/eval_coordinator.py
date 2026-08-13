@@ -140,12 +140,15 @@ def run_universe_evaluation_exclusive(
         )
 
         with _coordinator_live_universe_write_scope():
-            artifact = evaluate_universe(list(symbols), mode=mode)
+            artifact = evaluate_universe(
+                list(symbols), mode=mode, coordinator_run_id=run_id
+            )
         meta = getattr(artifact, "metadata", None) or {}
-        # Align artifact run identity with coordinator lock when possible.
+        # Defense-in-depth: ensure in-memory artifact still carries coordinator id.
         try:
             if hasattr(artifact, "metadata") and isinstance(artifact.metadata, dict):
                 artifact.metadata["coordinator_run_id"] = run_id
+                artifact.metadata["run_id"] = run_id
                 artifact.metadata["trigger"] = active_trigger
         except Exception:
             pass

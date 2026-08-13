@@ -84,11 +84,16 @@ def evaluate_universe(
     symbols: List[str],
     mode: str = "LIVE",
     output_dir: Optional[str] = None,
+    coordinator_run_id: Optional[str] = None,
 ) -> DecisionArtifactV2:
     """
     ONE evaluation engine for batch universe.
     Runs staged evaluation, produces DecisionArtifactV2, stores in EvaluationStoreV2.
     Returns the artifact. Also writes decision_latest.json (v2) to disk.
+
+    When ``coordinator_run_id`` is provided (LIVE coordinator path), it is persisted as
+    the primary ``metadata.run_id`` / ``coordinator_run_id``. The internal evaluator UUID
+    is retained as ``evaluator_run_id`` only.
     """
     from app.core.eval.universe_evaluator import run_universe_evaluation_staged
     from app.market.market_hours import get_market_phase
@@ -386,13 +391,15 @@ def evaluate_universe(
         # Phase 7.7: diagnostics_by_symbol
         diagnostics_by_symbol[sym_upper] = _build_diagnostics_details(sr, sym_upper, ts)
 
-    run_id_val = str(uuid.uuid4())
+    evaluator_run_id = str(uuid.uuid4())
+    coord = (coordinator_run_id or "").strip() or None
     metadata = {
         "artifact_version": "v2",
         "mode": mode,
         "pipeline_timestamp": ts,
         "evaluation_timestamp_utc": ts,
-        "run_id": run_id_val,
+        # Primary correlation ID: coordinator when present; else evaluator UUID.
+        "run_id": coord or evaluator_run_id,
         "market_phase": phase,
         "universe_size": len(symbols),
         "evaluated_count_stage1": len(staged_symbols),
@@ -400,6 +407,9 @@ def evaluate_universe(
         "eligible_count": eligible_count,
         "warnings": [],
     }
+    if coord:
+        metadata["coordinator_run_id"] = coord
+        metadata["evaluator_run_id"] = evaluator_run_id
 
     artifact = DecisionArtifactV2(
         metadata=metadata,

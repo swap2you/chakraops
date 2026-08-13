@@ -19,16 +19,107 @@ from app.core.alerts.models import Alert, AlertType, Severity
 
 logger = logging.getLogger(__name__)
 
-# R70.1: idempotency for notification processing (run_id + alert identity).
-_PROCESSED_NOTIFICATION_RUN_IDS: set[str] = set()
+# R70.1: durable notification delivery state (successful sends only).
+_PROCESSED_NOTIFICATION_RUN_IDS: set[str] = set()  # legacy in-memory mirror for tests
 _PROCESSED_ALERT_IDENTITIES: set[str] = set()
+_DELIVERY_STATE_LOCK = __import__("threading").Lock()
+_MAX_DELIVERY_RUNS = 200
+
+
+def _notification_delivery_path() -> Path:
+    return _get_alerts_dir() / "notification_delivery_state.json"
+
+
+def _load_delivery_state() -> Dict[str, Any]:
+    path = _notification_delivery_path()
+    if not path.exists():
+        return {"runs": {}, "order": []}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return {"runs": {}, "order": []}
+        data.setdefault("runs", {})
+        data.setdefault("order", [])
+        return data
+    except Exception as e:
+        logger.debug("[ALERTS] delivery state load failed: %s", e)
+        return {"runs": {}, "order": []}
+
+
+def _atomic_write_delivery_state(data: Dict[str, Any]) -> None:
+    path = _notification_delivery_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        from app.core.io.atomic import atomic_write_json
+
+        atomic_write_json(path, data, indent=0)
+    except Exception:
+        tmp = path.with_suffix(".tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=0)
+        tmp.replace(path)
+
+
+def _prune_delivery_state(data: Dict[str, Any]) -> None:
+    order = list(data.get("order") or [])
+    runs = data.get("runs") or {}
+    # Chronological prune: drop oldest run entries beyond bound.
+    while len(order) > _MAX_DELIVERY_RUNS:
+        old = order.pop(0)
+        runs.pop(old, None)
+    data["order"] = order
+    data["runs"] = runs
+
+
+def _delivery_mark(run_id: str, item_key: str, *, status: str, channel: Optional[str] = None) -> None:
+    if not run_id or not item_key:
+        return
+    with _DELIVERY_STATE_LOCK:
+        data = _load_delivery_state()
+        runs = data.setdefault("runs", {})
+        order = data.setdefault("order", [])
+        if run_id not in runs:
+            runs[run_id] = {"items": {}}
+            order.append(run_id)
+        items = runs[run_id].setdefault("items", {})
+        items[item_key] = {
+            "status": status,
+            "channel": channel,
+            "at": datetime.now(timezone.utc).isoformat(),
+        }
+        _prune_delivery_state(data)
+        _atomic_write_delivery_state(data)
+        if status == "sent":
+            if item_key == "EVAL_SUMMARY":
+                _PROCESSED_NOTIFICATION_RUN_IDS.add(run_id)
+            else:
+                _PROCESSED_ALERT_IDENTITIES.add(f"{run_id}:{item_key}")
+
+
+def _delivery_was_sent(run_id: str, item_key: str) -> bool:
+    if not run_id or not item_key:
+        return False
+    with _DELIVERY_STATE_LOCK:
+        data = _load_delivery_state()
+        items = ((data.get("runs") or {}).get(run_id) or {}).get("items") or {}
+        rec = items.get(item_key) or {}
+        return str(rec.get("status") or "") == "sent"
 
 
 def clear_notification_idempotency_state() -> None:
-    """Test helper: reset in-memory notification dedupe state."""
+    """Test helper: reset in-memory and durable notification dedupe state."""
     global _PROCESSED_NOTIFICATION_RUN_IDS, _PROCESSED_ALERT_IDENTITIES
     _PROCESSED_NOTIFICATION_RUN_IDS = set()
     _PROCESSED_ALERT_IDENTITIES = set()
+    with _DELIVERY_STATE_LOCK:
+        try:
+            path = _notification_delivery_path()
+            if path.exists():
+                path.unlink()
+        except Exception:
+            pass
+        _atomic_write_delivery_state({"runs": {}, "order": []})
 
 
 # Config path: chakraops/config/alerts.yaml
@@ -198,6 +289,33 @@ def build_lifecycle_alerts_for_run(run: Any, config: Dict[str, Any]) -> List[Ale
             meta.setdefault("account_alias", getattr(pos, "account_id", None) or "manual")
             meta.setdefault("broker_source", "manual_journal")
             meta.setdefault("broker_state", "manual journal — not a LIVE Robinhood open")
+            meta["live_confirmed"] = False
+            try:
+                from app.core.portfolio.capital_authority_r70 import (
+                    STATE_FRESH,
+                    get_broker_freshness_view,
+                    symbol_has_broker_conflict,
+                )
+
+                bv = get_broker_freshness_view("acct_individual")
+                meta["broker_freshness"] = bv.get("state")
+                meta["broker_as_of"] = bv.get("as_of")
+                meta["snapshot_age"] = bv.get("age_minutes")
+                meta["freshness"] = bv.get("freshness")
+                conflict = symbol_has_broker_conflict(sym, freshness=bv)
+                if bv.get("state") == STATE_FRESH and conflict is True:
+                    meta["live_confirmed"] = True
+                    meta["broker_source"] = bv.get("source") or "robinhood_mcp"
+                    meta["broker_state"] = "Robinhood confirmed LIVE"
+                    meta["account_alias"] = bv.get("account_alias") or meta["account_alias"]
+                elif bv.get("state") == STATE_FRESH:
+                    meta["broker_state"] = "advisory — journal row not confirmed on fresh broker snapshot"
+                else:
+                    meta["broker_state"] = (
+                        f"advisory/unverified — broker {bv.get('state')}; refresh required"
+                    )
+            except Exception:
+                pass
             meta.setdefault("strategy", getattr(pos, "strategy", None))
             meta.setdefault("expiration", getattr(pos, "expiration", None))
             meta.setdefault("strike", getattr(pos, "strike", None))
@@ -316,6 +434,38 @@ def build_alerts_for_run(run: Any, previous_run: Optional[Any], config: Dict[str
             parts.append("shortlist changed")
         summary = f"Signal set changed: {', '.join(parts)}. Eligible: {len(curr_eligible)}, shortlist: {len(curr_shortlist)}"
         fp = _make_fingerprint("SIGNAL", "SET_CHANGE", None, None, f"{len(curr_eligible)}:{len(curr_shortlist)}")
+        broker_meta: Dict[str, Any] = {"run_id": run_id, "eligible": len(curr_eligible), "shortlisted": len(curr_shortlist)}
+        try:
+            from app.core.portfolio.capital_authority_r70 import (
+                get_broker_freshness_view,
+                robinhood_conflict_check_label,
+                symbol_has_broker_conflict,
+            )
+
+            bv = get_broker_freshness_view("acct_individual")
+            # Universe SIGNAL: conflict at symbol grain unknown → False when FRESH (no specific entry).
+            conflict = symbol_has_broker_conflict(None, freshness=bv)
+            broker_meta.update(
+                {
+                    "broker_freshness": bv.get("state"),
+                    "freshness_state": bv.get("state"),
+                    "broker_as_of": bv.get("as_of"),
+                    "broker_age_minutes": bv.get("age_minutes"),
+                    "account_alias": bv.get("account_alias"),
+                    "robinhood_conflict": conflict,
+                    "robinhood_conflict_label": robinhood_conflict_check_label(
+                        str(bv.get("state") or "UNAVAILABLE"),
+                        conflict=conflict,
+                    ),
+                    "sizing_blocked": bool(bv.get("sizing_blocked", True)),
+                }
+            )
+        except Exception as e:
+            logger.debug("[ALERTS] SIGNAL broker context skipped: %s", e)
+            broker_meta["broker_freshness"] = "UNAVAILABLE"
+            broker_meta["robinhood_conflict_label"] = (
+                "Robinhood conflict check: NOT PERFORMED — broker unavailable"
+            )
         alerts.append(Alert(
             alert_type=AlertType.SIGNAL,
             severity=Severity.INFO,
@@ -326,7 +476,7 @@ def build_alerts_for_run(run: Any, previous_run: Optional[Any], config: Dict[str
             created_at=now,
             stage=None,
             symbol=None,
-            meta={"run_id": run_id, "eligible": len(curr_eligible), "shortlisted": len(curr_shortlist)},
+            meta=broker_meta,
         ))
 
     # DATA_HEALTH: from run errors or data quality issues (one summary alert, no per-symbol spam)
@@ -448,25 +598,13 @@ def process_run_completed(run: Any) -> None:
     sends via Slack (if configured), persists to out/alerts/ and out/lifecycle/.
     No alerts during RUNNING; no per-symbol spam.
 
-    Idempotency: the same (run_id) notification pass is processed at most once.
-    EVAL_SUMMARY is sent only for COMPLETED runs (not failed/rejected).
+    Idempotency: successful (run_id, alert identity) deliveries are durable and
+    not duplicated. Failed deliveries remain retryable. EVAL_SUMMARY only for COMPLETED.
     """
     if getattr(run, "status", None) == "RUNNING":
         return
 
     run_id = str(getattr(run, "run_id", "") or "").strip()
-    if run_id:
-        # Module-level idempotency for duplicate coordinator/legacy invocations.
-        global _PROCESSED_NOTIFICATION_RUN_IDS
-        if run_id in _PROCESSED_NOTIFICATION_RUN_IDS:
-            logger.info("[ALERTS] Skipping duplicate process_run_completed for run_id=%s", run_id)
-            return
-        _PROCESSED_NOTIFICATION_RUN_IDS.add(run_id)
-        # Bound memory for long-lived processes.
-        if len(_PROCESSED_NOTIFICATION_RUN_IDS) > 500:
-            keep = list(_PROCESSED_NOTIFICATION_RUN_IDS)[-250:]
-            _PROCESSED_NOTIFICATION_RUN_IDS.clear()
-            _PROCESSED_NOTIFICATION_RUN_IDS.update(keep)
 
     config = _load_alerts_config()
     enabled = set(config.get("enabled_alert_types") or [])
@@ -511,9 +649,9 @@ def process_run_completed(run: Any) -> None:
     sent_by_channel: Dict[str, int] = {}
 
     for alert in candidates:
-        # Idempotency key: run_id + alert identity (fingerprint)
         identity_key = f"{run_id}:{alert.fingerprint}" if run_id else alert.fingerprint
-        if identity_key in _PROCESSED_ALERT_IDENTITIES:
+        # Durable success: skip only previously successful deliveries.
+        if run_id and _delivery_was_sent(run_id, alert.fingerprint):
             _append_alert_record({
                 "fingerprint": alert.fingerprint,
                 "created_at": alert.created_at,
@@ -523,8 +661,10 @@ def process_run_completed(run: Any) -> None:
                 "action_hint": alert.action_hint,
                 "reason_code": alert.reason_code,
                 "sent": False,
-                "suppressed_reason": "duplicate_run_identity",
+                "suppressed_reason": "already_sent_durable",
             })
+            continue
+        if identity_key in _PROCESSED_ALERT_IDENTITIES and _delivery_was_sent(run_id, alert.fingerprint):
             continue
         if alert.alert_type.value not in enabled:
             _append_alert_record({
@@ -566,16 +706,15 @@ def process_run_completed(run: Any) -> None:
         try:
             sent = notifier.send(alert)
         except Exception as send_exc:
-            # Slack delivery failure must not corrupt a completed evaluation.
             logger.warning("[ALERTS] Slack send exception (non-fatal): %s", send_exc)
             sent = False
-        _PROCESSED_ALERT_IDENTITIES.add(identity_key)
+        ch = notifier._channel_for_alert(alert)
         if sent:
-            ch = notifier._channel_for_alert(alert)
+            _delivery_mark(run_id, alert.fingerprint, status="sent", channel=ch)
             sent_by_channel[ch] = sent_by_channel.get(ch, 0) + 1
-        (recent_lifecycle_fps if alert.alert_type.value in lifecycle_types
-         else recent_portfolio_fps if alert.alert_type.value in portfolio_types
-         else recent_fps).add(alert.fingerprint)
+            fps_to_check.add(alert.fingerprint)
+        else:
+            _delivery_mark(run_id, alert.fingerprint, status="failed", channel=ch)
         if alert.alert_type.value in lifecycle_types:
             _append_lifecycle_log_if_lifecycle(alert, sent=sent)
         _append_alert_record({
@@ -588,7 +727,7 @@ def process_run_completed(run: Any) -> None:
             "reason_code": alert.reason_code,
             "sent": sent,
             "sent_at": datetime.now(timezone.utc).isoformat() if sent else None,
-            "suppressed_reason": None if sent else "slack_not_configured",
+            "suppressed_reason": None if sent else "slack_not_configured_or_failed",
         })
 
     # R21.5.2 / R70.1: EVAL_SUMMARY only for successful COMPLETED runs
@@ -601,6 +740,9 @@ def process_run_completed(run: Any) -> None:
             build_eval_summary_payload,
             should_send_eval_summary_this_run,
         )
+        if run_id and _delivery_was_sent(run_id, "EVAL_SUMMARY"):
+            logger.info("[ALERTS] EVAL_SUMMARY already sent for run_id=%s (durable)", run_id)
+            return
         if should_send_eval_summary_this_run(run_id or ""):
             duration_sec = getattr(run, "duration_seconds", None)
             duration_ms = (duration_sec * 1000) if duration_sec is not None else None
@@ -611,9 +753,14 @@ def process_run_completed(run: Any) -> None:
                 last_run_ok=True,
             )
             try:
-                notifier.send_eval_summary("daily", payload)
+                ok = notifier.send_eval_summary("daily", payload)
+                if ok:
+                    _delivery_mark(run_id, "EVAL_SUMMARY", status="sent", channel="daily")
+                else:
+                    _delivery_mark(run_id, "EVAL_SUMMARY", status="failed", channel="daily")
             except Exception as e:
                 logger.warning("[ALERTS] Eval summary send failed (non-fatal): %s", e)
+                _delivery_mark(run_id, "EVAL_SUMMARY", status="failed", channel="daily")
     except Exception as e:
         logger.warning("[ALERTS] Eval summary send failed (non-fatal): %s", e)
 

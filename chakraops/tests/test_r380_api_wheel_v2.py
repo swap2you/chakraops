@@ -41,5 +41,8 @@ def test_wheel_v2_decision_returns_manual_only():
 
 def test_wheel_v2_decision_route_registered():
     client = TestClient(app)
+    # Newer FastAPI/Starlette versions may retain included routers as nested
+    # routes even though request dispatch and OpenAPI registration are correct.
     paths = {getattr(r, "path", None) for r in app.routes}
+    paths.update(app.openapi().get("paths", {}).keys())
     assert "/api/ui/wheel/v2/decision" in paths

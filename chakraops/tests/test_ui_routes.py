@@ -1285,8 +1285,10 @@ def test_eod_freeze_failure_writes_state_and_notification(tmp_path):
                     with patch("app.api.server.EOD_FREEZE_TIME_ET", "15:58"):
                         with patch("app.api.server.EOD_FREEZE_WINDOW_MINUTES", 10):
                             with patch("app.api.data_health.get_universe_symbols", return_value=["SPY"]):
-                                with patch("app.core.eval.evaluation_service_v2.evaluate_universe") as mock_eval:
-                                    mock_eval.side_effect = RuntimeError("Test failure")
+                                with patch(
+                                    "app.core.eval.eval_coordinator.run_universe_evaluation_exclusive",
+                                    side_effect=RuntimeError("Test failure"),
+                                ):
                                     _maybe_run_eod_freeze(ZoneInfo)
     state = json.loads(state_path.read_text())
     assert state.get("last_result") == "FAIL"
@@ -1443,19 +1445,22 @@ def test_ui_scheduler_run_once_success_when_market_open():
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
     app = _get_app()
-    # Patch where server looks up get_market_phase (imported in server namespace)
+    # Scheduler wiring is the unit under test. Coordinator market gating and the
+    # evaluation engine have dedicated tests and must not depend on wall-clock ET.
     with patch("app.api.server.get_market_phase", return_value="OPEN"):
         with patch("app.api.data_health.UNIVERSE_SYMBOLS", ["SPY"]):
-            with patch("app.core.eval.universe_evaluator.trigger_evaluation") as mock_trigger:
-                mock_trigger.return_value = {"started": True, "reason": "ok"}
-                with patch("app.core.eval.universe_evaluator.get_evaluation_state", return_value={"evaluation_state": "IDLE"}):
-                    client = TestClient(app)
-                    r = client.post("/api/ui/scheduler/run_once")
+            with patch(
+                "app.core.eval.eval_coordinator.run_universe_evaluation_exclusive",
+                return_value={"started": True, "reason": "ok", "run_id": "scheduler-test-1"},
+            ) as mock_exclusive:
+                client = TestClient(app)
+                r = client.post("/api/ui/scheduler/run_once")
     assert r.status_code == 200
     data = r.json()
     assert data["started"] is True
     assert "last_run_at" in data
     assert data["last_result"] == "OK"
+    mock_exclusive.assert_called_once_with(["SPY"], mode="LIVE", trigger="scheduler")
 
 
 def test_phase16_mark_refresh_writes_state_and_system_health_includes_it(tmp_path):

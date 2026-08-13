@@ -128,7 +128,10 @@ def run_universe_evaluation_exclusive(
         started_at = _ACTIVE_STARTED_AT or datetime.now(timezone.utc).isoformat()
         active_trigger = _ACTIVE_TRIGGER or trigger
     try:
-        from app.core.eval.evaluation_service_v2 import evaluate_universe
+        from app.core.eval.evaluation_service_v2 import (
+            _coordinator_live_universe_write_scope,
+            evaluate_universe,
+        )
         from app.core.eval.evaluation_store import (
             EvaluationRunFull,
             map_eval_trigger_to_source,
@@ -136,7 +139,8 @@ def run_universe_evaluation_exclusive(
             update_latest_pointer,
         )
 
-        artifact = evaluate_universe(list(symbols), mode=mode)
+        with _coordinator_live_universe_write_scope():
+            artifact = evaluate_universe(list(symbols), mode=mode)
         meta = getattr(artifact, "metadata", None) or {}
         # Align artifact run identity with coordinator lock when possible.
         try:

@@ -37,6 +37,11 @@ _DEFAULT_OUTPUT_DIR: Optional[Path] = None
 _LOCK = threading.RLock()
 
 
+def is_canonical_output_dir(path: Path) -> bool:
+    """Return True when *path* resolves to the repository LIVE output directory."""
+    return Path(path).resolve() == DECISION_STORE_PATH.parent
+
+
 def _get_output_dir() -> Path:
     global _DEFAULT_OUTPUT_DIR
     if _DEFAULT_OUTPUT_DIR is not None:
@@ -404,4 +409,3 @@ def get_evaluation_store_v2() -> EvaluationStoreV2:
         if _store is None:
             _store = EvaluationStoreV2()
         return _store
-

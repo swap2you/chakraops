@@ -10,6 +10,8 @@ SECONDARY merge path (Symbol Diagnostics), not a competing universe authority.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 import logging
 import uuid
 from dataclasses import asdict
@@ -38,6 +40,45 @@ logger = logging.getLogger(__name__)
 # R70-DEF-040: single-symbol merge is secondary (diagnostics), not LIVE universe authority.
 SECONDARY_SYMBOL_MERGE_PATH = True
 
+# R70.1: Canonical LIVE full-universe publication is valid only while the
+# exclusive coordinator owns this process-local scope. Secondary harnesses may
+# still run PAPER evaluations against isolated output directories.
+_CANONICAL_LIVE_UNIVERSE_WRITE_AUTHORIZED: ContextVar[bool] = ContextVar(
+    "canonical_live_universe_write_authorized",
+    default=False,
+)
+
+
+@contextmanager
+def _coordinator_live_universe_write_scope():
+    """Internal capability used only by eval_coordinator after it owns the run lock."""
+    token = _CANONICAL_LIVE_UNIVERSE_WRITE_AUTHORIZED.set(True)
+    try:
+        yield
+    finally:
+        _CANONICAL_LIVE_UNIVERSE_WRITE_AUTHORIZED.reset(token)
+
+
+def _canonical_live_universe_write_is_authorized() -> bool:
+    """Expose the current scope to focused authority tests without mutating it."""
+    return bool(_CANONICAL_LIVE_UNIVERSE_WRITE_AUTHORIZED.get())
+
+
+def _require_live_universe_write_authority(mode: str) -> None:
+    """Fail closed for canonical LIVE universe writes outside eval_coordinator."""
+    if str(mode or "").strip().upper() != "LIVE":
+        return
+
+    from app.core.eval.evaluation_store_v2 import DECISION_STORE_PATH, get_decision_store_path
+
+    if get_decision_store_path().resolve() != DECISION_STORE_PATH.resolve():
+        return
+    if not _canonical_live_universe_write_is_authorized():
+        raise PermissionError(
+            "Canonical LIVE full-universe evaluation requires "
+            "eval_coordinator.run_universe_evaluation_exclusive"
+        )
+
 
 def evaluate_universe(
     symbols: List[str],
@@ -56,6 +97,8 @@ def evaluate_universe(
         from pathlib import Path as PathLib
         from app.core.eval.evaluation_store_v2 import set_output_dir
         set_output_dir(PathLib(output_dir))
+
+    _require_live_universe_write_authority(mode)
 
     phase = get_market_phase() or "UNKNOWN"
     ts = datetime.now(timezone.utc).isoformat()

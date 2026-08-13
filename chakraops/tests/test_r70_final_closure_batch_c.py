@@ -4,11 +4,51 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+def test_offline_eval_proof_refuses_canonical_out(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import scripts.offline_eval_proof as proof
+    from app.core.eval.evaluation_store_v2 import DECISION_STORE_PATH
+
+    fixture = tmp_path / "fixture.json"
+    fixture.write_text("{}", encoding="utf-8")
+    canonical_file = DECISION_STORE_PATH
+    before = canonical_file.read_bytes() if canonical_file.exists() else None
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "offline_eval_proof.py",
+            "--fixture",
+            str(fixture),
+            "--output-dir",
+            str(canonical_file.parent),
+        ],
+    )
+
+    assert proof.main() == 2
+    after = canonical_file.read_bytes() if canonical_file.exists() else None
+    assert after == before
+
+
+def test_canonical_output_alias_is_detected(tmp_path: Path) -> None:
+    from app.core.eval.evaluation_store_v2 import DECISION_STORE_PATH, is_canonical_output_dir
+
+    alias = tmp_path / "canonical-out-alias"
+    try:
+        alias.symlink_to(DECISION_STORE_PATH.parent, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink unavailable: {exc}")
+    assert is_canonical_output_dir(alias) is True
 
 
 def test_run_and_save_refuses_canonical_out(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -54,6 +94,7 @@ def test_run_and_save_seals_set_latest(tmp_path: Path, monkeypatch: pytest.Monke
 
 def test_coordinator_tallies_holds_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.core.eval import eval_coordinator as ec
+    from app.core.eval import evaluation_service_v2 as service
 
     syms = [
         SimpleNamespace(symbol="A", verdict="HOLD", primary_reason="x", score=10),
@@ -81,10 +122,11 @@ def test_coordinator_tallies_holds_blocks(monkeypatch: pytest.MonkeyPatch) -> No
         "app.market.market_hours.get_market_phase",
         lambda: "OPEN",
     )
-    monkeypatch.setattr(
-        "app.core.eval.evaluation_service_v2.evaluate_universe",
-        lambda symbols, mode="LIVE": artifact,
-    )
+    def _fake_eval(symbols, mode="LIVE"):
+        assert service._canonical_live_universe_write_is_authorized() is True
+        return artifact
+
+    monkeypatch.setattr("app.core.eval.evaluation_service_v2.evaluate_universe", _fake_eval)
     monkeypatch.setattr("app.core.eval.evaluation_store.save_run", _save)
     monkeypatch.setattr("app.core.eval.evaluation_store.update_latest_pointer", lambda *a, **k: None)
 
@@ -94,3 +136,4 @@ def test_coordinator_tallies_holds_blocks(monkeypatch: pytest.MonkeyPatch) -> No
     assert run.holds == 1
     assert run.blocks == 1
     assert run.alerts and run.alerts[0].get("type") == "PROVENANCE"
+    assert service._canonical_live_universe_write_is_authorized() is False

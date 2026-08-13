@@ -193,6 +193,10 @@ def test_channel_routing_and_mobile_text_fallback(monkeypatch: pytest.MonkeyPatc
         captured.append({"channel_key": channel_key, "payload": payload, "url_suffix": url.rsplit("/", 1)[-1]})
         return True
 
+    def _fake_post_result(url, payload, channel_key="default", timeout_sec=10.0):
+        ok = _fake_post(url, payload, channel_key=channel_key, timeout_sec=timeout_sec)
+        return ok, ""
+
     monkeypatch.setattr(
         "app.core.alerts.slack_dispatcher.get_webhook_for_channel",
         lambda ch: {
@@ -203,6 +207,7 @@ def test_channel_routing_and_mobile_text_fallback(monkeypatch: pytest.MonkeyPatc
         }.get(ch),
     )
     monkeypatch.setattr("app.core.alerts.slack_dispatcher.post_slack_webhook", _fake_post)
+    monkeypatch.setattr("app.core.alerts.slack_dispatcher.post_slack_webhook_result", _fake_post_result)
     monkeypatch.setattr("app.core.alerts.slack_status.update_slack_status", lambda *a, **k: None)
 
     now = datetime.now(timezone.utc).isoformat()

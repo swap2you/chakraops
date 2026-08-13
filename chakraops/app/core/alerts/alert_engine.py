@@ -72,7 +72,15 @@ def _prune_delivery_state(data: Dict[str, Any]) -> None:
     data["runs"] = runs
 
 
-def _delivery_mark(run_id: str, item_key: str, *, status: str, channel: Optional[str] = None) -> None:
+def _delivery_mark(
+    run_id: str,
+    item_key: str,
+    *,
+    status: str,
+    channel: Optional[str] = None,
+    failure_category: Optional[str] = None,
+    attempts: Optional[int] = None,
+) -> None:
     if not run_id or not item_key:
         return
     with _DELIVERY_STATE_LOCK:
@@ -83,11 +91,26 @@ def _delivery_mark(run_id: str, item_key: str, *, status: str, channel: Optional
             runs[run_id] = {"items": {}}
             order.append(run_id)
         items = runs[run_id].setdefault("items", {})
-        items[item_key] = {
+        prev = items.get(item_key) or {}
+        rec: Dict[str, Any] = {
             "status": status,
             "channel": channel,
             "at": datetime.now(timezone.utc).isoformat(),
         }
+        # Preserve attempt count across retries.
+        prev_attempts = int(prev.get("attempts") or 0)
+        rec["attempts"] = int(attempts) if attempts is not None else prev_attempts + 1
+        if status == "sent":
+            rec["failure_category"] = None
+        else:
+            cat = (failure_category or prev.get("failure_category") or "send_failed").strip()
+            # Never persist secrets / URLs / tokens.
+            for bad in ("http://", "https://", "hooks.slack", "token", "bearer", "api_key"):
+                if bad in cat.lower():
+                    cat = "send_failed"
+                    break
+            rec["failure_category"] = cat[:64]
+        items[item_key] = rec
         _prune_delivery_state(data)
         _atomic_write_delivery_state(data)
         if status == "sent":
@@ -411,17 +434,30 @@ def build_lifecycle_alerts_for_run(run: Any, config: Dict[str, Any]) -> List[Ale
                 meta["snapshot_age"] = bv.get("age_minutes")
                 # Effective age-based state only — never display raw snap freshness=fresh when STALE.
                 meta["freshness"] = bv.get("state")
-                conflict = symbol_has_broker_conflict(sym, freshness=bv)
+                conflict = symbol_has_broker_conflict(
+                    sym,
+                    freshness=bv,
+                    expiration=getattr(pos, "expiration", None),
+                    strike=getattr(pos, "strike", None),
+                    right=getattr(pos, "option_type", None),
+                    require_exact_option=True,
+                )
                 if bv.get("state") == STATE_FRESH and conflict is True:
                     meta["live_confirmed"] = True
                     meta["broker_source"] = bv.get("source") or "robinhood_mcp"
-                    meta["broker_state"] = "Robinhood confirmed LIVE"
+                    meta["broker_state"] = "Robinhood confirmed LIVE (exact contract)"
                     meta["account_alias"] = bv.get("account_alias") or meta["account_alias"]
                 elif bv.get("state") == STATE_FRESH:
-                    meta["broker_state"] = "advisory — journal row not confirmed on fresh broker snapshot"
-                else:
+                    meta["live_confirmed"] = False
                     meta["broker_state"] = (
-                        f"advisory/unverified — broker {bv.get('state')}; refresh required"
+                        "advisory — exact option not confirmed on fresh broker snapshot; "
+                        "MANUAL REVIEW REQUIRED"
+                    )
+                else:
+                    meta["live_confirmed"] = False
+                    meta["broker_state"] = (
+                        f"advisory/unverified — broker {bv.get('state')}; "
+                        "MANUAL REVIEW REQUIRED — REFRESH ROBINHOOD BEFORE ACTING"
                     )
             except Exception:
                 pass
@@ -622,23 +658,48 @@ def build_alerts_for_run(run: Any, previous_run: Optional[Any], config: Dict[str
                     "broker_age_minutes": bv.get("age_minutes"),
                     "account_alias": bv.get("account_alias"),
                     "sizing_blocked": bool(bv.get("sizing_blocked", True)),
-                    "orats_actionability": "see daily summary",
                 }
             )
             # Per-candidate conflict checks; aggregate never CLEAR unless all checked.
+            # Prefer exact option confirmation when contract fields are present.
             cand_conflicts: List[Dict[str, Any]] = []
             checked_values: List[Optional[bool]] = []
             for c in top_cands:
                 c_sym = c.get("symbol")
-                c_conflict = symbol_has_broker_conflict(c_sym, freshness=bv)
+                c_conflict = symbol_has_broker_conflict(
+                    c_sym,
+                    freshness=bv,
+                    expiration=c.get("expiration"),
+                    strike=c.get("strike"),
+                    right=c.get("right"),
+                )
                 checked_values.append(c_conflict)
                 c_label = robinhood_conflict_check_label(fres_state, conflict=c_conflict, aggregate=False)
+                if c_conflict is None and fres_state == STATE_FRESH:
+                    c_label = "Conflict check: PARTIAL — see candidate details"
                 c["robinhood_conflict"] = c_conflict
                 c["robinhood_conflict_label"] = c_label
                 cand_conflicts.append(
                     {"symbol": c_sym, "conflict": c_conflict, "label": c_label}
                 )
             broker_meta["candidate_conflicts"] = cand_conflicts
+            # ORATS / actionability — phone-first SIGNAL must not rely on daily channel.
+            try:
+                from app.api.data_health import get_orats_freshness_state
+
+                of = get_orats_freshness_state() or {}
+                orats_state = str(of.get("state") or "UNKNOWN").upper()
+            except Exception:
+                orats_state = "UNKNOWN"
+                of = {}
+            broker_meta["orats_state"] = orats_state
+            broker_meta["orats_as_of"] = of.get("as_of")
+            if fres_state != STATE_FRESH or orats_state in ("ERROR", "WARN", "DELAYED", "UNKNOWN", "STALE"):
+                broker_meta["actionability"] = "DATA NOT ACTIONABLE"
+                broker_meta["orats_actionability"] = "DATA NOT ACTIONABLE"
+            else:
+                broker_meta["actionability"] = "MANUAL ONLY — NO ORDER SENT"
+                broker_meta["orats_actionability"] = "OK"
             if not top_cands:
                 # Aggregate SIGNAL with no symbol: never CLEAR.
                 _ = symbol_has_broker_conflict(None, freshness=bv)  # must be None
@@ -683,6 +744,22 @@ def build_alerts_for_run(run: Any, previous_run: Optional[Any], config: Dict[str
             broker_meta["robinhood_conflict_label"] = (
                 "Conflict check: NOT PERFORMED — no symbol supplied"
             )
+            broker_meta["orats_state"] = broker_meta.get("orats_state") or "UNKNOWN"
+            broker_meta["actionability"] = "DATA NOT ACTIONABLE"
+            broker_meta["orats_actionability"] = "DATA NOT ACTIONABLE"
+
+        if primary and broker_meta.get("actionability") == "DATA NOT ACTIONABLE":
+            summary = (
+                f"Qualified setup (DATA NOT ACTIONABLE): {primary.get('symbol')} "
+                f"{primary.get('strategy') or 'CSP'} "
+                f"score={primary.get('score')} band={primary.get('band')}. "
+                f"{', '.join(parts)}. Eligible: {len(curr_eligible)}"
+            )
+            action_hint = (
+                f"DATA NOT ACTIONABLE — review only {primary.get('symbol')} — "
+                f"MANUAL ONLY — NO ORDER SENT"
+            )
+
         alerts.append(Alert(
             alert_type=AlertType.SIGNAL,
             severity=Severity.INFO,
@@ -697,8 +774,7 @@ def build_alerts_for_run(run: Any, previous_run: Optional[Any], config: Dict[str
             meta=broker_meta,
         ))
 
-    # DATA_HEALTH: from run errors or data quality issues (one summary alert, no per-symbol spam)
-    if "DATA_HEALTH" in enabled:
+    # DATA_HEALTH: from run errors or data quality issues (one summary alert, no per-symbol spam)    if "DATA_HEALTH" in enabled:
         errors = getattr(run, "errors", None) or []
         err_count = len(errors)
         if err_count > 0:
@@ -977,15 +1053,53 @@ def process_run_completed(run: Any) -> None:
                 duration_ms=duration_ms,
                 last_run_ok=True,
             )
-            try:
-                ok = notifier.send_eval_summary("daily", payload)
+            # Bounded recovery: up to 2 attempts for transient categories; no_webhook stops.
+            max_attempts = 2
+            attempt = 0
+            last_cat = "send_failed"
+            ok = False
+            while attempt < max_attempts:
+                attempt += 1
+                try:
+                    ok = notifier.send_eval_summary("daily", payload)
+                    last_cat = getattr(notifier, "last_failure_category", None) or (
+                        "" if ok else "send_failed"
+                    )
+                except Exception as e:
+                    logger.warning("[ALERTS] Eval summary send failed (non-fatal): %s", e)
+                    ok = False
+                    last_cat = "exception"
                 if ok:
-                    _delivery_mark(run_id, "EVAL_SUMMARY", status="sent", channel="daily")
-                else:
-                    _delivery_mark(run_id, "EVAL_SUMMARY", status="failed", channel="daily")
-            except Exception as e:
-                logger.warning("[ALERTS] Eval summary send failed (non-fatal): %s", e)
-                _delivery_mark(run_id, "EVAL_SUMMARY", status="failed", channel="daily")
+                    _delivery_mark(
+                        run_id,
+                        "EVAL_SUMMARY",
+                        status="sent",
+                        channel="daily",
+                        failure_category=None,
+                        attempts=attempt,
+                    )
+                    break
+                _delivery_mark(
+                    run_id,
+                    "EVAL_SUMMARY",
+                    status="failed",
+                    channel="daily",
+                    failure_category=last_cat or "send_failed",
+                    attempts=attempt,
+                )
+                # Retry only transient categories.
+                if (last_cat or "") not in (
+                    "http_5xx",
+                    "timeout",
+                    "transient_network",
+                    "http_429_deferred",
+                    "send_failed",
+                ):
+                    break
+                if attempt < max_attempts:
+                    import time as _time
+
+                    _time.sleep(0.4)
     except Exception as e:
         logger.warning("[ALERTS] Eval summary send failed (non-fatal): %s", e)
 

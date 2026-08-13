@@ -309,6 +309,17 @@ def _parse_option_positions(data: Any) -> List[OptionPosition]:
                 quantity=qty,
                 average_cost=_first_float(row, ("average_cost", "average_open_price", "average_price", "avg_cost")),
                 side=str(row.get("type") or row.get("side") or ("short" if qty < 0 else "long")),
+                meta={
+                    "instrument_id": str(
+                        row.get("instrument_id")
+                        or row.get("option_id")
+                        or row.get("instrument")
+                        or ""
+                    ).strip()
+                    or None,
+                    "position_id": str(row.get("id") or row.get("position_id") or "").strip() or None,
+                    "option_id": str(row.get("option_id") or "").strip() or None,
+                },
             )
         )
     return out

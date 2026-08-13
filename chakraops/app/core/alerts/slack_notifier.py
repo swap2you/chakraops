@@ -149,10 +149,25 @@ class SlackNotifier:
             if score is not None or band:
                 score_band = f" · score={score} band={band}"
             run_bit = f" · run={run_id}" if run_id else ""
+            broker_bit = f" · broker={freshness or 'UNAVAILABLE'}"
+            orats_state = str(meta.get("orats_state") or "").upper()
+            orats_bit = f" · orats={orats_state}" if orats_state else ""
+            actionability = str(meta.get("actionability") or "")
+            actionable_bit = ""
+            if "DATA NOT ACTIONABLE" in actionability.upper() or orats_state in (
+                "ERROR",
+                "WARN",
+                "DELAYED",
+                "STALE",
+                "UNKNOWN",
+            ):
+                actionable_bit = " · DATA NOT ACTIONABLE"
+                # Do not use actionable entry language when data is not actionable.
             text = (
                 f"NEW SETUP · {display_sym} · {strategy}{score_band} · "
                 f"{qty_tag}={qty_disp if qty_disp is not None else 'n/a'} · "
-                f"{conflict_label}{run_bit} · MANUAL ONLY — NO ORDER SENT"
+                f"{conflict_label}{broker_bit}{orats_bit}{actionable_bit}{run_bit} · "
+                f"MANUAL ONLY — NO ORDER SENT"
             )
         elif at in ("DATA_HEALTH", "SYSTEM", "REGIME_CHANGE", "PORTFOLIO_RISK_WARN"):
             text = (
@@ -172,6 +187,8 @@ class SlackNotifier:
         # Phase 3: Portfolio risk alerts
         if alert.alert_type.value in ("PORTFOLIO_RISK_WARN", "PORTFOLIO_RISK_BLOCK"):
             return self._build_portfolio_blocks(alert)
+        if alert.alert_type.value == "SIGNAL":
+            return self._build_signal_blocks(alert)
         # Default format for non-lifecycle alerts
         severity_emoji = {"INFO": "ℹ️", "WARN": "⚠️", "CRITICAL": "🔴"}.get(alert.severity.value, "•")
         header = f"{severity_emoji} *ChakraOps Alert* `{alert.alert_type.value}`"
@@ -200,6 +217,51 @@ class SlackNotifier:
             "elements": [{"type": "mrkdwn", "text": " | ".join(context_parts)}],
         }
         return [section_header, section_summary, section_action, context]
+
+    def _build_signal_blocks(self, alert: Alert) -> list:
+        """Phone-first SIGNAL expanded blocks — do not rely on daily channel for safety context."""
+        from app.core.alerts.slack_dispatcher import sanitize_slack_text
+
+        meta = alert.meta or {}
+        cands = meta.get("candidates") or []
+        primary = cands[0] if cands and isinstance(cands[0], dict) else {}
+        actionability = str(meta.get("actionability") or "")
+        not_actionable = "DATA NOT ACTIONABLE" in actionability.upper()
+        parts = [
+            "📡 *SIGNAL*",
+            f"Run: `{meta.get('run_id') or meta.get('eval_run_id') or 'n/a'}`",
+            f"Symbol: {primary.get('symbol') or alert.symbol or 'MULTI'}",
+            f"Strategy: {meta.get('strategy') or primary.get('strategy') or 'n/a'}",
+            f"Score/band: {meta.get('score') if meta.get('score') is not None else primary.get('score')} / "
+            f"{meta.get('band') or primary.get('band') or 'n/a'}",
+            (
+                f"Contract: exp={meta.get('expiration') or primary.get('expiration') or 'n/a'} "
+                f"strike={meta.get('strike') if meta.get('strike') is not None else primary.get('strike')} "
+                f"right={meta.get('right') or primary.get('right') or 'n/a'}"
+            ),
+            f"Qty: {meta.get('quantity') if meta.get('quantity') is not None else meta.get('suggested_quantity') or primary.get('suggested_quantity') or 'n/a'}"
+            + (" (suggested)" if meta.get("quantity") is None else ""),
+            f"Broker freshness: {meta.get('broker_freshness') or meta.get('freshness_state') or 'UNAVAILABLE'}",
+            f"Conflict: {meta.get('robinhood_conflict_label') or 'n/a'}",
+            f"ORATS: {meta.get('orats_state') or 'UNKNOWN'}",
+            f"Actionability: {actionability or ('DATA NOT ACTIONABLE' if not_actionable else 'MANUAL ONLY — NO ORDER SENT')}",
+        ]
+        if not_actionable:
+            parts.append("DATA NOT ACTIONABLE — do not treat as entry/exit instruction")
+        parts.append("MANUAL ONLY — NO ORDER SENT")
+        text = sanitize_slack_text("\n".join(parts))
+        return [
+            {"type": "section", "text": {"type": "mrkdwn", "text": text}},
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": sanitize_slack_text(f"{alert.created_at} | {alert.reason_code}"),
+                    }
+                ],
+            },
+        ]
 
     def _build_lifecycle_blocks(self, alert: Alert) -> list:
         """Expanded Slack format for lifecycle / position action alerts."""
@@ -347,27 +409,49 @@ class SlackNotifier:
         ]
 
     def send_eval_summary(self, channel: str, payload: Dict[str, Any]) -> bool:
-        """R21.5.2: Send EVAL_SUMMARY to channel (daily). Updates slack_status with payload_type EVAL_SUMMARY."""
-        from app.core.alerts.slack_dispatcher import get_webhook_for_channel, post_slack_webhook
+        """Send EVAL_SUMMARY to channel (daily). Sets last_failure_category (secret-free)."""
+        from app.core.alerts.slack_dispatcher import (
+            get_webhook_for_channel,
+            post_slack_webhook_result,
+        )
         from app.core.alerts.slack_status import update_slack_status
+
+        self.last_failure_category = ""
+        try:
+            from app.core.alerts.slack_dispatcher import ensure_slack_env_loaded
+
+            ensure_slack_env_loaded()
+        except Exception:
+            pass
 
         webhook = get_webhook_for_channel(channel)
         if not webhook:
             logger.debug("[ALERTS] Slack not configured for %s; eval summary skipped", channel)
-            update_slack_status(channel, ok=False, error="Slack not configured", payload_type="EVAL_SUMMARY")
+            update_slack_status(channel, ok=False, error="no_webhook", payload_type="EVAL_SUMMARY")
+            self.last_failure_category = "no_webhook"
             return False
         text = self._format_eval_summary(payload)
         try:
-            ok = post_slack_webhook(webhook, {"text": text}, channel_key=channel or "daily")
+            ok, category = post_slack_webhook_result(
+                webhook, {"text": text}, channel_key=channel or "daily"
+            )
             if ok:
                 logger.info("[ALERTS] Sent EVAL_SUMMARY to %s run_id=%s", channel, payload.get("run_id", "?"))
                 update_slack_status(channel, ok=True, payload_type="EVAL_SUMMARY")
+                self.last_failure_category = ""
                 return True
-            update_slack_status(channel, ok=False, error="send_failed", payload_type="EVAL_SUMMARY")
+            self.last_failure_category = category or "send_failed"
+            update_slack_status(
+                channel,
+                ok=False,
+                error=(self.last_failure_category)[:80],
+                payload_type="EVAL_SUMMARY",
+            )
             return False
         except Exception as e:
             logger.warning("[ALERTS] EVAL_SUMMARY send failed (%s): %s", channel, e)
-            update_slack_status(channel, ok=False, error=str(e), payload_type="EVAL_SUMMARY")
+            update_slack_status(channel, ok=False, error="exception", payload_type="EVAL_SUMMARY")
+            self.last_failure_category = "exception"
             return False
 
     def _format_eval_summary(self, p: Dict[str, Any]) -> str:

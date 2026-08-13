@@ -14,7 +14,7 @@ Usage (from repo root):
 Or from chakraops dir:
   python scripts/offline_eval_proof.py --fixture tests/fixtures/r25_1_offline_fixture.json
 
-R25.1: Default --output-dir is a temp directory. Use --output-dir out to write to repo out/.
+R70.1: This is a secondary PAPER-only harness. It refuses the canonical repository out/.
 """
 
 from __future__ import annotations
@@ -32,6 +32,9 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 _CHAKRAOPS_ROOT = _SCRIPT_DIR.parent
 if str(_CHAKRAOPS_ROOT) not in sys.path:
     sys.path.insert(0, str(_CHAKRAOPS_ROOT))
+
+# R70.1: inventory tests assert that every non-coordinator evaluator is labeled.
+SECONDARY_EVAL_PATH = True
 
 
 # Hygiene: same rules as test_decision_artifact_hygiene_r227 (no prose, no FAIL_/WARN_)
@@ -110,7 +113,7 @@ def main() -> int:
         "--output-dir",
         type=str,
         default=None,
-        help="Output directory for decision_latest.json (default: temp dir; use 'out' for repo out/)",
+        help="Isolated output directory for PAPER artifacts (default: temp dir; canonical out is refused)",
     )
     args = parser.parse_args()
 
@@ -127,23 +130,27 @@ def main() -> int:
         print(f"FAIL: Fixture not found: {fixture_path}")
         return 1
 
-    # R25.1: Default to temp dir so repo out/ is not polluted
+    # R25.1/R70.1: Default to temp and refuse every resolved alias of canonical out/.
     if args.output_dir:
         out_dir = Path(args.output_dir).resolve()
-        if not out_dir.is_absolute() and not args.output_dir.startswith(("out", "/", "\\")):
-            out_dir = Path.cwd() / args.output_dir
-        out_dir = out_dir.resolve()
     else:
         out_dir = Path(tempfile.mkdtemp(prefix="chakraops_offline_proof_"))
+
+    from app.core.eval.evaluation_store_v2 import is_canonical_output_dir, reset_output_dir
+
+    if is_canonical_output_dir(out_dir):
+        print(
+            "REFUSED: offline_eval_proof.py is PAPER-only and must not target "
+            f"canonical LIVE output ({out_dir}).",
+            file=sys.stderr,
+        )
+        return 2
+
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"Output dir: {out_dir}")
 
     from app.core.eval.offline_fixture_provider import build_universe_result_from_fixture, load_fixture
     from app.core.eval.evaluation_service_v2 import evaluate_universe
-    from app.core.eval.evaluation_store_v2 import (
-        set_output_dir,
-        reset_output_dir,
-    )
     from unittest.mock import patch
 
     symbols = load_fixture(fixture_path).get("symbols") or []
@@ -151,11 +158,10 @@ def main() -> int:
         print("FAIL: Fixture has no symbols")
         return 1
 
-    set_output_dir(out_dir)
     try:
         mock_result = build_universe_result_from_fixture(fixture_path)
         with patch("app.core.eval.universe_evaluator.run_universe_evaluation_staged", return_value=mock_result):
-            artifact = evaluate_universe(symbols, mode="LIVE")
+            artifact = evaluate_universe(symbols, mode="PAPER", output_dir=str(out_dir))
     finally:
         reset_output_dir()
 

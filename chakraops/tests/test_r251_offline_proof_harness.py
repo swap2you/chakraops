@@ -58,6 +58,10 @@ def _normalize_decision_artifact(data: dict) -> dict:
     meta["run_id"] = "<RUN_ID>"
     meta["pipeline_timestamp"] = "<TS>"
     meta["evaluation_timestamp_utc"] = "<TS>"
+    if "evaluator_run_id" in meta:
+        meta["evaluator_run_id"] = "<EVALUATOR_RUN_ID>"
+    if "coordinator_run_id" in meta:
+        meta["coordinator_run_id"] = "<COORDINATOR_RUN_ID>"
     out["metadata"] = meta
     # Normalize per-symbol evaluated_at if present
     for sym in out.get("symbols") or []:
@@ -139,7 +143,7 @@ def test_r251_offline_proof_hygiene_no_fail_warn(fixture_path: Path, tmp_path: P
         with patch("app.core.eval.universe_evaluator.run_universe_evaluation_staged", return_value=mock_result):
             evaluate_universe(
                 load_fixture(fixture_path).get("symbols") or ["NVDA", "NKE", "HD"],
-                mode="LIVE",
+                mode="PAPER",
             )
         raw_path = tmp_path / "decision_latest.json"
         assert raw_path.exists()
@@ -161,7 +165,7 @@ def test_r251_offline_proof_determinism_run_twice(fixture_path: Path, tmp_path: 
     set_output_dir(tmp_path)
     try:
         with patch("app.core.eval.universe_evaluator.run_universe_evaluation_staged", return_value=mock_result):
-            evaluate_universe(symbols, mode="LIVE")
+            evaluate_universe(symbols, mode="PAPER")
     finally:
         reset_output_dir()
 
@@ -176,7 +180,7 @@ def test_r251_offline_proof_determinism_run_twice(fixture_path: Path, tmp_path: 
     set_output_dir(tmp_path2)
     try:
         with patch("app.core.eval.universe_evaluator.run_universe_evaluation_staged", return_value=mock_result):
-            evaluate_universe(symbols, mode="LIVE")
+            evaluate_universe(symbols, mode="PAPER")
     finally:
         reset_output_dir()
 
@@ -199,7 +203,7 @@ def test_r251_offline_proof_applied_caps_reason_code_only(fixture_path: Path, tm
         mock_result = build_universe_result_from_fixture(fixture_path)
         symbols = load_fixture(fixture_path).get("symbols") or []
         with patch("app.core.eval.universe_evaluator.run_universe_evaluation_staged", return_value=mock_result):
-            evaluate_universe(symbols, mode="LIVE")
+            evaluate_universe(symbols, mode="PAPER")
         raw = json.loads((tmp_path / "decision_latest.json").read_text(encoding="utf-8"))
         for sym in raw.get("symbols") or []:
             sb = (sym or {}).get("score_breakdown") or {}

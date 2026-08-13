@@ -7,13 +7,13 @@ NOT the primary LIVE evaluation authority. Prefer:
   POST /api/ui/eval/run  or  POST /api/ops/evaluate
   → app.core.eval.eval_coordinator.run_universe_evaluation_exclusive
 
-This script may overwrite decision_latest.json without the exclusive lock —
-use only for offline/dev harnesses. See docs/master/RUNBOOK_EXECUTION_CURRENT.md.
+This script is PAPER-only and refuses the canonical output directory. Use it
+only for offline/dev harnesses. See docs/master/RUNBOOK_EXECUTION_CURRENT.md.
 
 Usage:
   cd chakraops
   $env:PYTHONPATH=(Get-Location).Path
-  python scripts/run_and_save.py --symbols SPY,AAPL --output-dir out
+  python scripts/run_and_save.py --symbols SPY,AAPL --output-dir out/harness_eval
   python scripts/run_and_save.py --realtime --interval 30
 """
 

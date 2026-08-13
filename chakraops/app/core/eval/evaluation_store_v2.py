@@ -37,6 +37,11 @@ _DEFAULT_OUTPUT_DIR: Optional[Path] = None
 _LOCK = threading.RLock()
 
 
+def is_canonical_output_dir(path: Path) -> bool:
+    """Return True when *path* resolves to the repository LIVE output directory."""
+    return Path(path).resolve() == DECISION_STORE_PATH.parent
+
+
 def _get_output_dir() -> Path:
     global _DEFAULT_OUTPUT_DIR
     if _DEFAULT_OUTPUT_DIR is not None:
@@ -51,9 +56,14 @@ def set_output_dir(path: Path) -> None:
 
 
 def reset_output_dir() -> None:
-    """Reset output dir to canonical (for test isolation)."""
+    """Restore the process default output directory.
+
+    If ``OUT_DIR`` is set, return to that isolated directory. Otherwise return
+    to the repository canonical path. Tests must not clobber live ``out/``.
+    """
     global _DEFAULT_OUTPUT_DIR
-    _DEFAULT_OUTPUT_DIR = None
+    env = os.environ.get("OUT_DIR")
+    _DEFAULT_OUTPUT_DIR = Path(env).resolve() if env else None
 
 
 # R26.7: Restore drill — OUT_DIR env override (minimal; tests can still set_output_dir after import)
@@ -118,6 +128,9 @@ def _write_eval_snapshot(artifact: DecisionArtifactV2) -> None:
         "quote_as_of": pipeline_ts,
         "candles_as_of": pipeline_ts,
         "orats_as_of": pipeline_ts,
+        "run_id": run_id,
+        "coordinator_run_id": meta.get("coordinator_run_id") or run_id,
+        "evaluator_run_id": meta.get("evaluator_run_id"),
     }
     # R24.5: Fetch earnings advisory per symbol for snapshot semantics
     as_of_utc = None
@@ -404,4 +417,3 @@ def get_evaluation_store_v2() -> EvaluationStoreV2:
         if _store is None:
             _store = EvaluationStoreV2()
         return _store
-

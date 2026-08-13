@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import ast
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict
@@ -66,11 +67,100 @@ def test_r70_def040_primary_authority_markers() -> None:
 
 def test_r70_def040_secondary_paths_are_labeled() -> None:
     """Offline/dev harness and single-symbol merge must be marked secondary."""
+    import scripts.offline_eval_proof as offline
     import scripts.run_and_save as ras
     from app.core.eval import evaluation_service_v2 as v2
 
+    assert getattr(offline, "SECONDARY_EVAL_PATH", False) is True
     assert getattr(ras, "SECONDARY_EVAL_PATH", False) is True
     assert getattr(v2, "SECONDARY_SYMBOL_MERGE_PATH", False) is True
+
+
+def test_r70_def040_direct_universe_evaluator_inventory_is_closed() -> None:
+    """Every production/script caller is known; only the coordinator may request LIVE."""
+    root = Path(__file__).resolve().parents[1]
+    callers: dict[str, list[str | None]] = {}
+
+    for source_root in (root / "app", root / "scripts"):
+        for source_path in source_root.rglob("*.py"):
+            tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                name = node.func.id if isinstance(node.func, ast.Name) else (
+                    node.func.attr if isinstance(node.func, ast.Attribute) else None
+                )
+                if name != "evaluate_universe":
+                    continue
+                mode: str | None = None
+                for keyword in node.keywords:
+                    if keyword.arg == "mode" and isinstance(keyword.value, ast.Constant):
+                        mode = keyword.value.value
+                relative = source_path.relative_to(root).as_posix()
+                callers.setdefault(relative, []).append(mode)
+
+    assert callers == {
+        "app/core/eval/eval_coordinator.py": [None],
+        "scripts/offline_eval_proof.py": ["PAPER"],
+        "scripts/run_and_save.py": ["PAPER"],
+    }
+
+
+def test_r70_def040_live_universe_authority_fails_closed_outside_coordinator() -> None:
+    from app.core.eval import evaluation_service_v2 as service
+    from app.core.eval.evaluation_store_v2 import (
+        DECISION_STORE_PATH,
+        get_decision_store_path,
+        reset_output_dir,
+        set_output_dir,
+    )
+
+    # Point the in-memory store at the true canonical path without writing.
+    set_output_dir(DECISION_STORE_PATH.parent)
+    try:
+        assert get_decision_store_path().resolve() == DECISION_STORE_PATH.resolve()
+        assert service._canonical_live_universe_write_is_authorized() is False
+        with pytest.raises(PermissionError, match="eval_coordinator"):
+            service._require_live_universe_write_authority("LIVE")
+        service._require_live_universe_write_authority("PAPER")
+    finally:
+        reset_output_dir()
+
+
+def test_reset_output_dir_honors_out_dir_env_and_does_not_target_canonical(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from app.core.eval.evaluation_store_v2 import (
+        DECISION_STORE_PATH,
+        get_decision_store_path,
+        reset_output_dir,
+        set_output_dir,
+    )
+
+    isolated = tmp_path / "isolated_out"
+    isolated.mkdir()
+    monkeypatch.setenv("OUT_DIR", str(isolated))
+    set_output_dir(tmp_path / "other")
+    reset_output_dir()
+    restored = get_decision_store_path().resolve()
+    assert restored == (isolated / "decision_latest.json").resolve()
+    assert restored != DECISION_STORE_PATH.resolve()
+
+
+def test_r70_def040_coordinator_scope_is_private_to_coordinator_source() -> None:
+    """No script or API route may acquire the coordinator's process-local capability."""
+    root = Path(__file__).resolve().parents[1]
+    needle = "_coordinator_live_universe_write_scope"
+    owners = {
+        path.relative_to(root).as_posix()
+        for source_root in (root / "app", root / "scripts")
+        for path in source_root.rglob("*.py")
+        if needle in path.read_text(encoding="utf-8")
+    }
+    assert owners == {
+        "app/core/eval/eval_coordinator.py",
+        "app/core/eval/evaluation_service_v2.py",
+    }
 
 
 # ---------------------------------------------------------------------------

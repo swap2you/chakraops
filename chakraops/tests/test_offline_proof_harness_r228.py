@@ -36,7 +36,7 @@ def _run_offline_eval(fixture_path: Path, output_dir: Path):
     try:
         mock_result = build_universe_result_from_fixture(fixture_path)
         with patch("app.core.eval.universe_evaluator.run_universe_evaluation_staged", return_value=mock_result):
-            return evaluate_universe(symbols, mode="LIVE")
+            return evaluate_universe(symbols, mode="PAPER")
     finally:
         reset_output_dir()
 

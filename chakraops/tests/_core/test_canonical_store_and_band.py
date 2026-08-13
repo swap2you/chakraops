@@ -16,27 +16,22 @@ if str(_REPO) not in sys.path:
 class TestCanonicalStorePath:
     """Canonical path must be <REPO_ROOT>/out/decision_latest.json, not app/out."""
 
-    def test_canonical_store_path_is_repo_out(self, monkeypatch):
-        """Store path ends with /out/decision_latest.json (or OUT_DIR override) under repo root, not app/."""
-        import os
-        from app.core.eval.evaluation_store_v2 import get_decision_store_path, reset_output_dir
+    def test_canonical_store_path_is_repo_out(self):
+        """Canonical constant is <REPO_ROOT>/out/decision_latest.json, not app/out."""
+        from app.core.eval.evaluation_store_v2 import DECISION_STORE_PATH
 
-        monkeypatch.delenv("OUT_DIR", raising=False)
-        reset_output_dir()
-        path = get_decision_store_path()
-        posix = path.as_posix()
+        posix = DECISION_STORE_PATH.as_posix()
         assert posix.endswith("/out/decision_latest.json"), (
             f"Expected path to end with /out/decision_latest.json, got {posix}"
         )
         assert "/app/out/" not in posix, (
             f"Path must not be under app/out (use repo root out/). Got {posix}"
         )
-        # Should be under repo root (parent of chakraops)
         repo_root = _REPO.parent
         try:
-            path.relative_to(repo_root)
+            DECISION_STORE_PATH.relative_to(repo_root)
         except ValueError:
-            pytest.fail(f"Path {path} should be under repo root {repo_root}")
+            pytest.fail(f"Path {DECISION_STORE_PATH} should be under repo root {repo_root}")
 
 
 class TestBandReasonMatchesBand:
@@ -75,11 +70,14 @@ class TestBandReasonMatchesBand:
         """Run evaluation on SPY,AAPL; each symbol row has band_reason matching band, no verdict."""
         from app.core.eval.decision_artifact_v2 import assign_band, assign_band_reason
         from app.core.eval.evaluation_service_v2 import evaluate_universe
+        from app.core.eval.evaluation_store_v2 import reset_output_dir
 
         try:
             artifact = evaluate_universe(["SPY", "AAPL"], mode="LIVE", output_dir=str(tmp_path))
         except Exception as e:
             pytest.skip(f"Evaluation requires ORATS: {e}")
+        finally:
+            reset_output_dir()
         for s in artifact.symbols:
             band = s.band
             reason = s.band_reason or ""
@@ -97,11 +95,14 @@ class TestSanityStoreInvariants:
     def test_store_file_has_required_structure(self, tmp_path):
         """After evaluation, store file has artifact_version, metadata, symbols."""
         from app.core.eval.evaluation_service_v2 import evaluate_universe
+        from app.core.eval.evaluation_store_v2 import reset_output_dir
 
         try:
             evaluate_universe(["SPY"], mode="LIVE", output_dir=str(tmp_path))
         except Exception as e:
             pytest.skip(f"Requires ORATS: {e}")
+        finally:
+            reset_output_dir()
         store_path = tmp_path / "decision_latest.json"
         assert store_path.exists()
         with open(store_path, "r", encoding="utf-8") as f:

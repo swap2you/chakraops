@@ -94,21 +94,26 @@ def test_get_total_shares_for_evaluation_merges_holdings_and_share_positions(tmp
     try:
         from app.core.accounts import holdings_db
         with patch.object(holdings_db, "_db_path", return_value=db_file):
-            holdings_db.init_db()
-            aid = "default"
-            # Holdings: AAPL 50
-            holdings_db.upsert_holding("AAPL", 50)
-            # Share position: NVDA 100
-            holdings_db.upsert_share_position(aid, "NVDA", 100)
-            # Share position: AAPL 60 (adds to same symbol)
-            holdings_db.upsert_share_position(aid, "AAPL", 60)
-            total = holdings_db.get_total_shares_for_evaluation(aid)
-            assert total.get("AAPL") == 110  # 50 + 60
-            assert total.get("NVDA") == 100
-            # get_holdings_for_evaluation uses default account and same merge
-            ev = holdings_db.get_holdings_for_evaluation()
-            assert ev.get("AAPL") == 110
-            assert ev.get("NVDA") == 100
+            # Force manual/DB merge path — do not prefer live broker equity when FRESH.
+            with patch(
+                "app.core.portfolio.capital_authority_r70.get_capital_snapshot",
+                return_value={"state": "UNAVAILABLE", "sizing_blocked": True},
+            ):
+                holdings_db.init_db()
+                aid = "default"
+                # Holdings: AAPL 50
+                holdings_db.upsert_holding("AAPL", 50)
+                # Share position: NVDA 100
+                holdings_db.upsert_share_position(aid, "NVDA", 100)
+                # Share position: AAPL 60 (adds to same symbol)
+                holdings_db.upsert_share_position(aid, "AAPL", 60)
+                total = holdings_db.get_total_shares_for_evaluation(aid)
+                assert total.get("AAPL") == 110  # 50 + 60
+                assert total.get("NVDA") == 100
+                # get_holdings_for_evaluation uses default account and same merge
+                ev = holdings_db.get_holdings_for_evaluation()
+                assert ev.get("AAPL") == 110
+                assert ev.get("NVDA") == 100
     finally:
         if prev is not None:
             os.environ["CHAKRAOPS_OUT"] = prev

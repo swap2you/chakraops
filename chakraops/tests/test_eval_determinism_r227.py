@@ -58,12 +58,12 @@ def test_universe_eval_and_recompute_same_core_same_output(tmp_path: Path) -> No
 
     try:
         with patch("app.core.eval.universe_evaluator.run_universe_evaluation_staged", return_value=mock_result):
-            artifact_universe = evaluate_universe([TEST_SYMBOL], mode="LIVE")
+            artifact_universe = evaluate_universe([TEST_SYMBOL], mode="PAPER")
         row_universe = next((s for s in artifact_universe.symbols if (s.symbol or "").strip().upper() == TEST_SYMBOL), None)
         assert row_universe is not None, "Symbol from universe eval must be present"
 
         with patch("app.core.eval.universe_evaluator.run_universe_evaluation_staged", return_value=mock_result):
-            artifact_recompute = evaluate_single_symbol_and_merge(symbol=TEST_SYMBOL, mode="LIVE")
+            artifact_recompute = evaluate_single_symbol_and_merge(symbol=TEST_SYMBOL, mode="PAPER")
         row_recompute = next((s for s in artifact_recompute.symbols if (s.symbol or "").strip().upper() == TEST_SYMBOL), None)
         assert row_recompute is not None, "Symbol from recompute merge must be present"
 
@@ -97,7 +97,7 @@ def test_eval_run_writes_snapshot_recompute_without_force_uses_it(tmp_path: Path
     mock_result = _make_mock_staged_result()
     try:
         with patch("app.core.eval.universe_evaluator.run_universe_evaluation_staged", return_value=mock_result):
-            artifact = evaluate_universe([TEST_SYMBOL], mode="LIVE")
+            artifact = evaluate_universe([TEST_SYMBOL], mode="PAPER")
         store = get_evaluation_store_v2()
         row_before = store.get_symbol(TEST_SYMBOL)
         assert row_before is not None

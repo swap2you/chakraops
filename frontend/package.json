@@ -8,11 +8,11 @@
     "build": "tsc -b && cross-env ROLLUP_SKIP_NODEJS_NATIVE=1 vite build",
     "lint": "eslint .",
     "preview": "cross-env ROLLUP_SKIP_NODEJS_NATIVE=1 vite preview",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "cross-env ROLLUP_SKIP_NODEJS_NATIVE=1 vitest run",
+    "test:watch": "cross-env ROLLUP_SKIP_NODEJS_NATIVE=1 vitest",
     "typecheck": "tsc --noEmit",
     "check": "npm run test && npm run build",
-    "live:check": "vitest run src/test/liveSchema.test.ts",
+    "live:check": "cross-env ROLLUP_SKIP_NODEJS_NATIVE=1 vitest run src/test/liveSchema.test.ts",
     "ci:health": "npm run typecheck && npm run test && npm run build",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install chromium"
@@ -33,7 +33,6 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
-    "@rollup/rollup-win32-x64-msvc": "^4.57.1",
     "@testing-library/jest-dom": "^6.1.5",
     "@testing-library/react": "^14.1.2",
     "@testing-library/user-event": "^14.6.1",
@@ -51,5 +50,8 @@
     "typescript": "^5.3.3",
     "vite": "^5.0.8",
     "vitest": "^1.2.0"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-win32-x64-msvc": "^4.57.1"
   }
 }

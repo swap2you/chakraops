@@ -28,15 +28,19 @@ def build_live_position_lenses(
 ) -> Dict[str, Any]:
     """Return explicit position lenses with counts, provenance, and sizing gate."""
     from app.core.broker.snapshot_store import load_snapshot
-    from app.core.broker.status import robinhood_mcp_read_only_status
-
-    snap = load_snapshot(account_alias)
-    snap_stale = bool(snap.stale) if snap is not None else True
-    status = robinhood_mcp_read_only_status(snapshot_stale=snap_stale if snap is not None else None)
-    broker_ready = bool(status.get("ROBINHOOD_MCP_READ_ONLY_AVAILABLE")) and snap is not None
-    broker_fresh = bool(
-        broker_ready and not snap_stale and bool(getattr(snap, "fetched_at", None))
+    from app.core.portfolio.capital_authority_r70 import (
+        STATE_FRESH,
+        STATE_STALE,
+        STATE_UNAVAILABLE,
+        get_broker_freshness_view,
     )
+
+    fresh_view = get_broker_freshness_view(account_alias)
+    live_state = str(fresh_view.get("state") or STATE_UNAVAILABLE)
+    snap = load_snapshot(account_alias)
+    broker_ready = live_state in (STATE_FRESH, STATE_STALE) and snap is not None
+    # LIVE claims only when age-based freshness is FRESH.
+    broker_fresh = live_state == STATE_FRESH
 
     equities: List[Dict[str, Any]] = []
     options: List[Dict[str, Any]] = []
@@ -69,51 +73,50 @@ def build_live_position_lenses(
             )
 
     live_authority = "broker_snapshot" if broker_ready else "unavailable"
-    live_state = "FRESH" if broker_fresh else ("STALE" if broker_ready else "UNAVAILABLE")
-    if broker_ready and snap_stale:
-        live_state = "STALE"
 
-    # LIVE totals only from broker when ready; never from unified orphans.
-    live_equity_count = len(equities) if broker_ready else 0
-    live_option_count = len(options) if broker_ready else 0
-    live_total = live_equity_count + live_option_count if broker_ready else 0
+    # Last-good positions remain visible when STALE; LIVE authority only when FRESH.
+    show_positions = broker_ready
+    live_equity_count = len(equities) if show_positions else 0
+    live_option_count = len(options) if show_positions else 0
+    live_total = live_equity_count + live_option_count if show_positions else 0
 
     manual = _manual_recovery_positions()
     paper = _paper_open_positions()
     historical = _historical_closed_count()
     unified_diag = _unified_open_diagnostic()
 
-    sizing_blocked = (not broker_ready) or live_state == "STALE" or live_state == "UNAVAILABLE"
+    sizing_blocked = bool(fresh_view.get("sizing_blocked", True)) or not broker_fresh
 
     return {
         "manual_only": True,
         "trade_execution": False,
         "account_alias": account_alias,
-        "broker_status": status.get("status"),
+        "broker_status": fresh_view.get("broker_status"),
         "live_state": live_state,
-        "live_authority": live_authority if broker_ready else None,
-        "as_of": snap.fetched_at if snap is not None else None,
-        "source": snap.source if snap is not None else None,
-        "freshness": snap.freshness if snap is not None else None,
-        "stale": snap_stale if snap is not None else True,
+        "live_authority": live_authority if broker_fresh else None,
+        "as_of": fresh_view.get("as_of"),
+        "source": fresh_view.get("source"),
+        "freshness": fresh_view.get("freshness"),
+        "age_minutes": fresh_view.get("age_minutes"),
+        "stale": live_state != STATE_FRESH,
         "sizing_blocked": sizing_blocked,
         "lenses": {
             LENS_LIVE_BROKER_EQUITY: {
                 "label": "Live broker equity positions",
-                "count": live_equity_count,
-                "items": equities if broker_ready else [],
-                "authority": live_authority if broker_ready else None,
+                "count": live_equity_count if broker_fresh else live_equity_count,
+                "items": equities if show_positions else [],
+                "authority": live_authority if broker_fresh else None,
             },
             LENS_LIVE_BROKER_OPTION: {
                 "label": "Live broker option positions",
                 "count": live_option_count,
-                "items": options if broker_ready else [],
-                "authority": live_authority if broker_ready else None,
+                "items": options if show_positions else [],
+                "authority": live_authority if broker_fresh else None,
             },
             LENS_LIVE_TOTAL: {
                 "label": "Live total positions (broker)",
-                "count": live_total,
-                "authority": live_authority if broker_ready else None,
+                "count": live_total if broker_fresh else live_total,
+                "authority": live_authority if broker_fresh else None,
             },
             LENS_MANUAL_RECOVERY: {
                 "label": "Manual recovery holdings (not live)",

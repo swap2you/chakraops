@@ -310,3 +310,320 @@ def list_account_capital_matrix(aliases: Optional[List[str]] = None) -> List[Dic
 
     use = list(aliases) if aliases else list(ACCOUNT_ALIASES)
     return [get_capital_snapshot(a, allow_manual_fallback=(a == "acct_individual")) for a in use]
+
+
+def get_broker_freshness_view(
+    account_alias: str = "acct_individual",
+    *,
+    now: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """
+    Canonical age-based broker freshness for capital, lenses, Slack, and conflict checks.
+
+    state is exactly one of FRESH | STALE | UNAVAILABLE.
+    open_position_count is an int only when FRESH; otherwise None (callers must say UNKNOWN).
+    """
+    alias = (account_alias or "acct_individual").strip() or "acct_individual"
+    from app.core.broker.snapshot_store import load_snapshot
+    from app.core.broker.status import robinhood_mcp_read_only_status
+
+    snap = load_snapshot(alias)
+    # Token / auth readiness without trusting the stored boolean alone.
+    status = robinhood_mcp_read_only_status(snapshot_stale=None)
+    token_ready = bool(status.get("ROBINHOOD_MCP_READ_ONLY_AVAILABLE")) or (
+        str(status.get("status") or "").upper() in ("READ_ONLY_AVAILABLE", "STALE")
+        and bool((status.get("auth") or {}).get("authenticated") or status.get("oauth", {}).get("authenticated"))
+    )
+    # Prefer explicit authenticated flag when present.
+    auth = status.get("auth") or status.get("oauth") or {}
+    if auth.get("authenticated") is True:
+        token_ready = True
+    if str(status.get("status") or "").upper() in ("UNAUTHENTICATED", "AUTH_REQUIRED", "ERROR"):
+        # Still allow age evaluation when a snapshot exists but mark UNAVAILABLE if no snap.
+        if snap is None:
+            token_ready = False
+
+    broker_ready = bool(token_ready) and snap is not None
+    state, _age_ok, age_min = evaluate_snapshot_freshness(
+        snap=snap, broker_ready=broker_ready, now=now
+    )
+    # Pass effective age-based stale into status for observability consistency.
+    effective_stale = state != STATE_FRESH
+    status_eff = robinhood_mcp_read_only_status(
+        snapshot_stale=effective_stale if snap is not None else None
+    )
+
+    open_count: Optional[int] = None
+    if state == STATE_FRESH and snap is not None:
+        eq = len(snap.equity_positions or [])
+        op = len(snap.option_positions or [])
+        open_count = eq + op
+
+    return {
+        "account_alias": alias,
+        "state": state,
+        "stale": state != STATE_FRESH,
+        "sizing_blocked": state != STATE_FRESH,
+        "as_of": getattr(snap, "fetched_at", None) if snap is not None else None,
+        "age_minutes": age_min,
+        "account_state_max_age_minutes": account_state_max_age_minutes(),
+        "source": getattr(snap, "source", None) if snap is not None else None,
+        "freshness": getattr(snap, "freshness", None) if snap is not None else None,
+        "open_position_count": open_count,
+        "broker_open_display": str(open_count) if open_count is not None else "UNKNOWN",
+        "broker_status": status_eff.get("status"),
+        "manual_only": True,
+        "trade_execution": False,
+    }
+
+
+def robinhood_conflict_check_label(
+    freshness_state: str,
+    *,
+    conflict: Optional[bool] = None,
+    aggregate: bool = False,
+    checked_all: Optional[bool] = None,
+) -> str:
+    """Truthful Robinhood conflict-check wording for Slack/UI previews.
+
+    Aggregate / universe-level signals must never claim CLEAR unless every
+    referenced symbol was individually checked against a fresh snapshot.
+    """
+    st = (freshness_state or "").strip().upper()
+    if aggregate:
+        if checked_all is False or conflict is None:
+            if not st or st == STATE_UNAVAILABLE:
+                return "Conflict check: NOT PERFORMED — no symbol supplied"
+            if st != STATE_FRESH:
+                return "Conflict check: NOT PERFORMED — no symbol supplied"
+            return "Conflict check: PARTIAL — see candidate details"
+        if conflict is True:
+            return "Robinhood conflict check: CONFLICT — existing position detected"
+        if conflict is False and checked_all is True and st == STATE_FRESH:
+            return "Robinhood conflict check: CLEAR"
+        return "Conflict check: PARTIAL — see candidate details"
+    if st == STATE_FRESH:
+        if conflict is True:
+            return "Robinhood conflict check: CONFLICT — existing position detected"
+        if conflict is False:
+            return "Robinhood conflict check: CLEAR"
+        return "Robinhood conflict check: NOT PERFORMED — no symbol supplied"
+    if st == STATE_STALE:
+        return "Robinhood conflict check: UNKNOWN — snapshot stale"
+    return "Robinhood conflict check: NOT PERFORMED — broker unavailable"
+
+
+def _norm_right(right: Optional[str]) -> str:
+    r = (right or "").strip().lower()
+    if r in ("p", "put"):
+        return "put"
+    if r in ("c", "call"):
+        return "call"
+    return r
+
+
+def _norm_expiration(exp: Optional[str]) -> str:
+    s = (exp or "").strip()
+    if not s:
+        return ""
+    if "T" in s:
+        s = s.split("T", 1)[0]
+    return s[:10]
+
+
+def _strikes_equal(a: Any, b: Any, *, tol: float = 1e-6) -> bool:
+    try:
+        if a is None or b is None:
+            return False
+        return abs(float(a) - float(b)) <= tol
+    except (TypeError, ValueError):
+        return False
+
+
+def exact_option_broker_confirmation(
+    *,
+    symbol: Optional[str],
+    expiration: Optional[str] = None,
+    strike: Any = None,
+    right: Optional[str] = None,
+    broker_instrument_id: Optional[str] = None,
+    broker_position_id: Optional[str] = None,
+    account_alias: str = "acct_individual",
+    freshness: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Exact options confirmation. Never treats underlying-only as option confirmation."""
+    view = freshness or get_broker_freshness_view(account_alias)
+    fres = str(view.get("state") or STATE_UNAVAILABLE)
+    base: Dict[str, Any] = {
+        "status": "UNKNOWN",
+        "live_confirmed": False,
+        "freshness_state": fres,
+        "matched_fields": [],
+        "reason": "",
+    }
+    if fres != STATE_FRESH:
+        base["reason"] = "snapshot_not_fresh"
+        return base
+    sym = (symbol or "").strip().upper()
+    if not sym:
+        base["reason"] = "no_symbol"
+        return base
+    exp = _norm_expiration(expiration)
+    rgt = _norm_right(right)
+    if not exp or strike is None or rgt not in ("put", "call"):
+        base["status"] = "PARTIAL"
+        base["reason"] = "missing_contract_fields"
+        return base
+
+    from app.core.broker.snapshot_store import load_snapshot
+
+    snap = load_snapshot(account_alias)
+    if snap is None:
+        base["reason"] = "no_snapshot"
+        return base
+
+    want_instr = (broker_instrument_id or "").strip()
+    want_pos = (broker_position_id or "").strip()
+    candidates = []
+    for p in snap.option_positions or []:
+        if (getattr(p, "symbol", "") or "").strip().upper() != sym:
+            continue
+        meta = getattr(p, "meta", None) or {}
+        instr = str(meta.get("instrument_id") or meta.get("option_id") or "").strip()
+        pos_id = str(meta.get("position_id") or meta.get("id") or "").strip()
+        candidates.append(p)
+        if want_instr and instr and want_instr == instr:
+            return {
+                "status": "MATCH",
+                "live_confirmed": True,
+                "freshness_state": fres,
+                "matched_fields": ["instrument_id"],
+                "reason": "instrument_id",
+            }
+        if want_pos and pos_id and want_pos == pos_id:
+            return {
+                "status": "MATCH",
+                "live_confirmed": True,
+                "freshness_state": fres,
+                "matched_fields": ["position_id"],
+                "reason": "position_id",
+            }
+
+    for p in candidates:
+        if _norm_expiration(getattr(p, "expiration", None)) != exp:
+            continue
+        if _norm_right(getattr(p, "option_type", None)) != rgt:
+            continue
+        if not _strikes_equal(getattr(p, "strike", None), strike):
+            continue
+        return {
+            "status": "MATCH",
+            "live_confirmed": True,
+            "freshness_state": fres,
+            "matched_fields": ["symbol", "expiration", "strike", "right"],
+            "reason": "contract_fields",
+        }
+    for p in snap.equity_positions or []:
+        if (getattr(p, "symbol", "") or "").strip().upper() == sym:
+            return {
+                "status": "NO_MATCH",
+                "live_confirmed": False,
+                "freshness_state": fres,
+                "matched_fields": [],
+                "reason": "equity_only_not_option_confirmation",
+            }
+    if candidates:
+        return {
+            "status": "NO_MATCH",
+            "live_confirmed": False,
+            "freshness_state": fres,
+            "matched_fields": [],
+            "reason": "option_fields_mismatch",
+        }
+    return {
+        "status": "NO_MATCH",
+        "live_confirmed": False,
+        "freshness_state": fres,
+        "matched_fields": [],
+        "reason": "no_matching_option",
+    }
+
+
+def symbol_has_broker_conflict(
+    symbol: Optional[str],
+    *,
+    account_alias: str = "acct_individual",
+    freshness: Optional[Dict[str, Any]] = None,
+    expiration: Optional[str] = None,
+    strike: Any = None,
+    right: Optional[str] = None,
+    broker_instrument_id: Optional[str] = None,
+    broker_position_id: Optional[str] = None,
+    require_exact_option: bool = False,
+) -> Optional[bool]:
+    """Return True/False only when freshness is FRESH and a definitive check is possible.
+
+    require_exact_option=True: underlying-only option/equity matches never confirm
+    an options position (MATCH→True, NO_MATCH→False, else None).
+    """
+    view = freshness or get_broker_freshness_view(account_alias)
+    if view.get("state") != STATE_FRESH:
+        return None
+    sym = (symbol or "").strip().upper()
+    if not sym:
+        return None
+    from app.core.broker.snapshot_store import load_snapshot
+
+    snap = load_snapshot(account_alias)
+    if snap is None:
+        return None
+
+    if require_exact_option:
+        conf = exact_option_broker_confirmation(
+            symbol=sym,
+            expiration=expiration,
+            strike=strike,
+            right=right,
+            broker_instrument_id=broker_instrument_id,
+            broker_position_id=broker_position_id,
+            account_alias=account_alias,
+            freshness=view,
+        )
+        if conf["status"] == "MATCH":
+            return True
+        if conf["status"] == "NO_MATCH":
+            return False
+        return None
+
+    for p in snap.equity_positions or []:
+        if (getattr(p, "symbol", "") or "").strip().upper() == sym:
+            return True
+    has_contract = bool(_norm_expiration(expiration)) and strike is not None and _norm_right(right) in (
+        "put",
+        "call",
+    )
+    option_hits = [
+        p
+        for p in (snap.option_positions or [])
+        if (getattr(p, "symbol", "") or "").strip().upper() == sym
+    ]
+    if has_contract:
+        conf = exact_option_broker_confirmation(
+            symbol=sym,
+            expiration=expiration,
+            strike=strike,
+            right=right,
+            broker_instrument_id=broker_instrument_id,
+            broker_position_id=broker_position_id,
+            account_alias=account_alias,
+            freshness=view,
+        )
+        if conf["status"] == "MATCH":
+            return True
+        if conf["status"] == "NO_MATCH":
+            return False
+        return None
+    if option_hits:
+        # Options on underlying without exact contract fields → unknown/partial.
+        return None
+    return False

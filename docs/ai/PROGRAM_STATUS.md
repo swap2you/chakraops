@@ -1,16 +1,31 @@
 # ChakraOps Program Status
 
-Last updated: 2026-08-11 — **R70 remediation code-complete; post-fix handoffs ready**
+Last updated: 2026-08-13 — **R70.1 authority remediation implemented; Cursor revalidation required**
 
 | Field | Value |
 |-------|-------|
-| Status | `R70_REMEDIATION_CODE_COMPLETE_POST_FIX_HANDOFFS_READY` |
-| Branch | `main` (synced) |
-| Start SHA | `dbe78dec9c45b0c2bd46c7ffb4b544e7263ef71f` |
-| Current HEAD | `65ba9a7d720a33ecd3d36320c57bede73fce7c1d` |
+| Status | `R70_1_REMEDIATED_PENDING_CURSOR_FULL_GATE` |
+| Branch | `release/R70.1` (candidate; not yet accepted or merged) |
+| Reviewed base SHA | `b898a5cd5f51858669845927c20479efd28cc252` |
+| Remediation range | Resolve with `git log --oneline b898a5c..HEAD`; the published candidate may be connector-squashed |
+| Candidate tip | Resolve with `git rev-parse HEAD`; acceptance evidence must record the exact immutable SHA |
 | Deployment | DEFERRED (no chakraops.cloud this run) |
 | R71 | NOT STARTED |
 
 Safety: manual_only · trade_execution=false · no broker writes · legacy scheduler off · Stay in Cash valid
 
-Post-fix: `docs/ai/releases/R70/*_POST_FIX_HANDOFF.md` · library prompts `90`–`93`
+The prior closure at `b898a5c` is superseded by a **NO_GO** finding: a secondary
+offline harness could direct a LIVE full-universe evaluation into canonical
+`out`. R70.1 closes that route in code and adds fail-closed authority tests.
+
+Local Codex gates on the candidate:
+
+- Backend: **1762 passed, 6 skipped**, exit 0.
+- Ruff: `app tests` clean.
+- Frontend: clean Node 20 install, typecheck, and production build exit 0.
+- Frontend Vitest: **not accepted in this sandbox**. The runner leaves its
+  Tinypool task open even for an isolated one-line test; Cursor must produce a
+  complete `npm run test` exit 0 at the exact candidate SHA.
+
+Do not claim R70 GO, merge, deploy, or start R71 until the Cursor full gate and
+independent revalidation both accept the same candidate SHA.

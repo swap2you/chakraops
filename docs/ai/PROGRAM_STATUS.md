@@ -7,7 +7,7 @@ Last updated: 2026-08-13 — **R70.1 authority remediation implemented; Cursor r
 | Status | `R70_1_REMEDIATED_PENDING_CURSOR_FULL_GATE` |
 | Branch | `release/R70.1` (candidate; not yet accepted or merged) |
 | Reviewed base SHA | `b898a5cd5f51858669845927c20479efd28cc252` |
-| Remediation commits | `e577616`, `755163b`, `166bbe0` |
+| Remediation range | Resolve with `git log --oneline b898a5c..HEAD`; the published candidate may be connector-squashed |
 | Candidate tip | Resolve with `git rev-parse HEAD`; acceptance evidence must record the exact immutable SHA |
 | Deployment | DEFERRED (no chakraops.cloud this run) |
 | R71 | NOT STARTED |

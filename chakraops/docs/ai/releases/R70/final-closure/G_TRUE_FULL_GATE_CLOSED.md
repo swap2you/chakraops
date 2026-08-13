@@ -2,7 +2,7 @@
 
 **Status:** R70_1_REMEDIATED_PENDING_CURSOR_FULL_GATE_AND_INDEPENDENT_REVALIDATION
 **Reviewed base:** `b898a5cd5f51858669845927c20479efd28cc252`
-**Remediation commits:** `e577616`, `755163b`, `166bbe0`
+**Remediation range:** inspect `git log --oneline b898a5c..HEAD`; the published candidate may be connector-squashed
 **Candidate SHA:** record `git rev-parse HEAD` in the external acceptance evidence
 **Date:** 2026-08-13
 
@@ -65,4 +65,3 @@ Ruff: `ruff check app tests` — exit 0.
 
 Do not claim R70 GO, merge, deploy, or start R71 until Cursor and the final
 independent reviewer both accept the same candidate SHA.
-

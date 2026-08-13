@@ -13,12 +13,15 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def _clear_notification_idempotency():
-    from app.core.alerts.alert_engine import clear_notification_idempotency_state
+def _clear_notification_idempotency(tmp_path, monkeypatch):
+    from app.core.alerts import alert_engine as ae
 
-    clear_notification_idempotency_state()
+    monkeypatch.setenv("CHAKRAOPS_ALLOW_CLEAR_NOTIFICATION_STATE", "1")
+    monkeypatch.setenv("OUT_DIR", str(tmp_path / "out"))
+    monkeypatch.setattr(ae, "_get_alerts_dir", lambda: tmp_path / "alerts")
+    ae.clear_notification_idempotency_state()
     yield
-    clear_notification_idempotency_state()
+    ae.clear_notification_idempotency_state()
 
 
 def _completed_run(run_id: str = "coord-live-1") -> MagicMock:

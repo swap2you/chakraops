@@ -156,9 +156,15 @@ except ImportError:
 
 
 # Bounded delivery: at most ~1 webhook request per second per channel key.
+# Per-channel locks + atomic next-send reservation so concurrent same-channel
+# callers reserve distinct slots; unrelated channels do not block each other.
+import threading as _threading
+
 _last_channel_send_monotonic: Dict[str, float] = {}
+_next_channel_send_monotonic: Dict[str, float] = {}
 _CHANNEL_MIN_INTERVAL_SEC = 1.0
-_CHANNEL_PACE_LOCK = __import__("threading").Lock()
+_CHANNEL_LOCKS: Dict[str, _threading.Lock] = {}
+_CHANNEL_LOCKS_GUARD = _threading.Lock()
 # Max seconds we will block the caller waiting on Retry-After / pacing.
 _MAX_BLOCKING_RETRY_AFTER_SEC = 5.0
 
@@ -219,24 +225,30 @@ def sanitize_slack_payload(payload: Any) -> Any:
     return payload
 
 
-def _pace_channel(channel_key: str) -> None:
+def _channel_lock(channel_key: str) -> _threading.Lock:
     key = (channel_key or "default").strip().lower() or "default"
-    with _CHANNEL_PACE_LOCK:
+    with _CHANNEL_LOCKS_GUARD:
+        lock = _CHANNEL_LOCKS.get(key)
+        if lock is None:
+            lock = _threading.Lock()
+            _CHANNEL_LOCKS[key] = lock
+        return lock
+
+
+def _pace_channel(channel_key: str) -> None:
+    """Reserve a distinct send slot for this channel, then sleep outside the lock."""
+    key = (channel_key or "default").strip().lower() or "default"
+    lock = _channel_lock(key)
+    wait = 0.0
+    with lock:
         now = time.monotonic()
-        last = _last_channel_send_monotonic.get(key)
-        wait = 0.0
-        if last is not None:
-            wait = _CHANNEL_MIN_INTERVAL_SEC - (now - last)
-        if wait > 0:
-            # Release lock while sleeping so other channels are not blocked.
-            pass
-        else:
-            _last_channel_send_monotonic[key] = now
-            return
+        next_allowed = float(_next_channel_send_monotonic.get(key, 0.0) or 0.0)
+        send_at = max(now, next_allowed)
+        _next_channel_send_monotonic[key] = send_at + _CHANNEL_MIN_INTERVAL_SEC
+        _last_channel_send_monotonic[key] = send_at
+        wait = max(0.0, send_at - now)
     if wait > 0:
         time.sleep(min(wait, 2.0))
-        with _CHANNEL_PACE_LOCK:
-            _last_channel_send_monotonic[key] = time.monotonic()
 
 
 def post_slack_webhook(
@@ -349,10 +361,23 @@ def _fmt_signal(p: Dict[str, Any]) -> str:
 
 
 def _fmt_position_exit(p: Dict[str, Any], exit_priority: Optional[str] = None) -> str:
-    """Phase 7.3: CRITICAL EXIT / POSITION EXIT REQUIRED format."""
+    """Phase 7.3: CRITICAL EXIT / POSITION EXIT REQUIRED format.
+
+    Imperative close language only when live_confirmed is True; otherwise advisory.
+    """
     priority = (exit_priority or p.get("exit_priority") or "?").strip()
     pct = p.get("premium_capture_pct")
     pct_s = "%.0f%%" % (pct * 100) if pct is not None else "N/A"
+    live_confirmed = p.get("live_confirmed") is True
+    action = (
+        "Action: CLOSE POSITION IMMEDIATELY"
+        if live_confirmed
+        else (
+            "Action: MANUAL REVIEW REQUIRED — "
+            "POSITION NOT CONFIRMED BY FRESH BROKER SNAPSHOT — "
+            "REFRESH ROBINHOOD BEFORE ACTING"
+        )
+    )
     lines = [
         "🔴 *POSITION EXIT REQUIRED*",
         "Symbol: %s" % (p.get("symbol") or "?"),
@@ -361,7 +386,8 @@ def _fmt_position_exit(p: Dict[str, Any], exit_priority: Optional[str] = None) -
         "DTE: %s" % (_str_num(p.get("dte"))),
         "",
         "Reason: %s" % priority,
-        "Action: CLOSE POSITION IMMEDIATELY",
+        action,
+        "MANUAL ONLY — NO ORDER SENT",
     ]
     return "\n".join(lines)
 

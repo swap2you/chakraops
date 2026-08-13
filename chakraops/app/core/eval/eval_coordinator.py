@@ -79,6 +79,100 @@ def end_universe_evaluation(run_id: Optional[str] = None) -> None:
         logger.info("[EVAL_COORD] end trigger=%s run_id=%s", trigger, expected)
 
 
+def _ledger_symbols_and_candidates_from_artifact(artifact: Any) -> tuple[list, list]:
+    """Normalize DecisionArtifactV2 into ledger symbols + top_candidates (artifact only)."""
+    from app.core.eval.decision_artifact_v2 import assign_band
+
+    symbols_out: list = []
+    candidates_by_sym: dict = {}
+    try:
+        cbs = getattr(artifact, "candidates_by_symbol", None) or {}
+        if isinstance(cbs, dict):
+            for k, rows in cbs.items():
+                candidates_by_sym[str(k).strip().upper()] = list(rows or [])
+    except Exception:
+        candidates_by_sym = {}
+
+    for s in getattr(artifact, "symbols", None) or []:
+        try:
+            sym = (getattr(s, "symbol", None) or "").strip().upper()
+            if not sym:
+                continue
+            verd = str(getattr(s, "verdict", "") or getattr(s, "final_verdict", "") or "").strip().upper()
+            score = getattr(s, "score", None)
+            if score is None:
+                score = getattr(s, "final_score", None)
+            band = getattr(s, "band", None) or assign_band(score)
+            strategy = getattr(s, "strategy", None) or "CSP"
+            primary_reason = getattr(s, "primary_reason", None)
+            if not primary_reason:
+                codes = getattr(s, "primary_reason_codes", None) or []
+                if codes:
+                    primary_reason = ",".join(str(c) for c in codes[:3])
+            cand_rows = candidates_by_sym.get(sym) or []
+            # Prefer selected_candidates matching this symbol from artifact-level list.
+            if not cand_rows:
+                for sc in getattr(artifact, "selected_candidates", None) or []:
+                    if (getattr(sc, "symbol", "") or "").strip().upper() == sym:
+                        cand_rows.append(sc)
+            candidate_trades = []
+            for ct in cand_rows:
+                if hasattr(ct, "to_dict"):
+                    d = ct.to_dict()
+                elif isinstance(ct, dict):
+                    d = dict(ct)
+                else:
+                    d = {
+                        "strategy": getattr(ct, "strategy", strategy),
+                        "expiry": getattr(ct, "expiry", None),
+                        "strike": getattr(ct, "strike", None),
+                        "delta": getattr(ct, "delta", None),
+                        "credit_estimate": getattr(ct, "credit_estimate", None),
+                        "max_loss": getattr(ct, "max_loss", None),
+                        "contract_key": getattr(ct, "contract_key", None),
+                        "option_symbol": getattr(ct, "option_symbol", None),
+                        "why_this_trade": getattr(ct, "why_this_trade", None),
+                    }
+                # Normalize keys used by Slack signal builder.
+                d.setdefault("strategy", strategy)
+                if d.get("expiry") and not d.get("expiration"):
+                    d["expiration"] = d.get("expiry")
+                candidate_trades.append(d)
+            row = {
+                "symbol": sym,
+                "verdict": verd or "NOT_EVALUATED",
+                "score": score,
+                "band": band,
+                "strategy": strategy,
+                "primary_reason": primary_reason,
+                "expiration": getattr(s, "expiration", None),
+                "price": getattr(s, "price", None) or getattr(s, "underlying_price", None),
+                "candidate_trades": candidate_trades,
+                "has_candidates": bool(candidate_trades) or bool(getattr(s, "has_candidates", False)),
+                "candidate_count": len(candidate_trades) or int(getattr(s, "candidate_count", 0) or 0),
+            }
+            # Prefer first candidate contract identity onto the symbol row for convenience.
+            if candidate_trades:
+                first = candidate_trades[0]
+                row["selected_expiration"] = first.get("expiration") or first.get("expiry")
+                row["selected_strike"] = first.get("strike")
+                row["selected_contract_key"] = first.get("contract_key") or first.get("option_symbol")
+                if first.get("strategy"):
+                    row["strategy"] = first.get("strategy")
+            symbols_out.append(row)
+        except Exception:
+            logger.debug("[EVAL_COORD] skip symbol row for ledger", exc_info=True)
+            continue
+
+    eligible = [r for r in symbols_out if r.get("verdict") == "ELIGIBLE"]
+    top_candidates = sorted(
+        eligible,
+        key=lambda x: float(x.get("score") or 0),
+        reverse=True,
+    )[:10]
+    return symbols_out, top_candidates
+
+
 def run_universe_evaluation_exclusive(
     symbols: List[str],
     *,
@@ -189,20 +283,33 @@ def run_universe_evaluation_exclusive(
 
         import os
 
+        # Derive symbols / top_candidates from the exact DecisionArtifactV2 just persisted.
+        ledger_symbols, top_candidates = _ledger_symbols_and_candidates_from_artifact(artifact)
+        eligible_from_ledger = len([r for r in ledger_symbols if r.get("verdict") == "ELIGIBLE"])
+        shortlisted_from_ledger = len(
+            [r for r in ledger_symbols if r.get("verdict") == "SHORTLISTED"]
+        )
         ledger = EvaluationRunFull(
             run_id=run_id,
             started_at=started_at,
             completed_at=completed_at,
             status="COMPLETED",
             duration_seconds=duration,
-            total=int(meta.get("universe_size") or len(symbols) or 0),
-            evaluated=int(meta.get("evaluated_count_stage1") or 0),
-            eligible=int(meta.get("eligible_count") or 0),
-            shortlisted=int(meta.get("shortlisted_count") or meta.get("eligible_count") or 0),
+            total=int(meta.get("universe_size") or len(symbols) or len(ledger_symbols) or 0),
+            evaluated=int(meta.get("evaluated_count_stage1") or len(ledger_symbols) or 0),
+            eligible=int(meta.get("eligible_count") or eligible_from_ledger or 0),
+            shortlisted=int(
+                meta.get("shortlisted_count")
+                or meta.get("eligible_count")
+                or shortlisted_from_ledger
+                or 0
+            ),
             stage1_pass=int(meta.get("evaluated_count_stage1") or 0),
             stage2_pass=int(meta.get("evaluated_count_stage2") or 0),
             holds=hold_n,
             blocks=block_n,
+            symbols=ledger_symbols,
+            top_candidates=top_candidates,
             top_holds=top_holds,
             source=map_eval_trigger_to_source(active_trigger),
             engine="staged",
@@ -223,12 +330,20 @@ def run_universe_evaluation_exclusive(
         try:
             save_run(ledger)
             update_latest_pointer(run_id, completed_at)
+            logger.info(
+                "[EVAL_COORD] ledger persisted run_id=%s symbols=%s eligible=%s top_candidates=%s",
+                run_id,
+                len(ledger_symbols),
+                ledger.eligible,
+                len(top_candidates),
+            )
         except Exception:
             logger.exception("[EVAL_COORD] ledger persist failed run_id=%s", run_id)
             raise
-        # R70.1: Slack/alerts fire only for successful LIVE coordinator runs.
-        # PAPER / secondary harnesses must not acquire this path; failed runs
-        # never reach here (exception path below does not call process_run_completed).
+        # R70.1 run-status contract:
+        # - completed LIVE → daily summary + applicable candidate/lifecycle alerts
+        # - failed LIVE → at most one DATA_HEALTH/SYSTEM failure notify (exception path)
+        # - PAPER / rejected / skipped / lock-refused → no Slack
         if str(mode or "").strip().upper() == "LIVE":
             try:
                 from app.core.alerts.alert_engine import process_run_completed
@@ -287,6 +402,21 @@ def run_universe_evaluation_exclusive(
             )
         except Exception:
             logger.exception("[EVAL_COORD] save_failed_run failed run_id=%s", run_id)
+        # Failed LIVE: at most one SYSTEM/DATA_HEALTH failure notification; never a
+        # success EVAL_SUMMARY or trading SIGNAL. PAPER: no Slack.
+        if str(mode or "").strip().upper() == "LIVE":
+            try:
+                from app.core.alerts.alert_engine import process_run_completed
+                from app.core.eval.evaluation_store import load_run
+
+                failed_ledger = load_run(run_id)
+                if failed_ledger is not None:
+                    process_run_completed(failed_ledger)
+            except Exception:
+                logger.exception(
+                    "[EVAL_COORD] LIVE failure notification failed run_id=%s (non-fatal)",
+                    run_id,
+                )
         raise
     finally:
         end_universe_evaluation(run_id=run_id)

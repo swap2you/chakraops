@@ -10,11 +10,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
-def test_process_run_completed_sends_eval_summary_once_and_updates_slack_status(tmp_path):
+def test_process_run_completed_sends_eval_summary_once_and_updates_slack_status(tmp_path, monkeypatch):
     """After mocked evaluation completion, SlackNotifier.send_eval_summary is called once for daily and slack_status daily gets payload_type EVAL_SUMMARY."""
+    from app.core.alerts import alert_engine as ae
     from app.core.alerts.alert_engine import clear_notification_idempotency_state, process_run_completed
     from app.core.alerts.slack_status import get_slack_status
 
+    monkeypatch.setenv("CHAKRAOPS_ALLOW_CLEAR_NOTIFICATION_STATE", "1")
+    monkeypatch.setenv("OUT_DIR", str(tmp_path / "out"))
+    monkeypatch.setattr(ae, "_get_alerts_dir", lambda: tmp_path / "alerts")
     clear_notification_idempotency_state()
 
     run = MagicMock()

@@ -381,15 +381,33 @@ def robinhood_conflict_check_label(
     freshness_state: str,
     *,
     conflict: Optional[bool] = None,
+    aggregate: bool = False,
+    checked_all: Optional[bool] = None,
 ) -> str:
-    """Truthful Robinhood conflict-check wording for Slack/UI previews."""
+    """Truthful Robinhood conflict-check wording for Slack/UI previews.
+
+    Aggregate / universe-level signals must never claim CLEAR unless every
+    referenced symbol was individually checked against a fresh snapshot.
+    """
     st = (freshness_state or "").strip().upper()
+    if aggregate:
+        if checked_all is False or conflict is None:
+            if not st or st == STATE_UNAVAILABLE:
+                return "Conflict check: NOT PERFORMED — no symbol supplied"
+            if st != STATE_FRESH:
+                return "Conflict check: NOT PERFORMED — no symbol supplied"
+            return "Conflict check: PARTIAL — see candidate details"
+        if conflict is True:
+            return "Robinhood conflict check: CONFLICT — existing position detected"
+        if conflict is False and checked_all is True and st == STATE_FRESH:
+            return "Robinhood conflict check: CLEAR"
+        return "Conflict check: PARTIAL — see candidate details"
     if st == STATE_FRESH:
         if conflict is True:
             return "Robinhood conflict check: CONFLICT — existing position detected"
         if conflict is False:
             return "Robinhood conflict check: CLEAR"
-        return "Robinhood conflict check: NOT PERFORMED — broker unavailable"
+        return "Robinhood conflict check: NOT PERFORMED — no symbol supplied"
     if st == STATE_STALE:
         return "Robinhood conflict check: UNKNOWN — snapshot stale"
     return "Robinhood conflict check: NOT PERFORMED — broker unavailable"
@@ -401,14 +419,14 @@ def symbol_has_broker_conflict(
     account_alias: str = "acct_individual",
     freshness: Optional[Dict[str, Any]] = None,
 ) -> Optional[bool]:
-    """Return True/False only when freshness is FRESH; else None (check not definitive)."""
+    """Return True/False only when freshness is FRESH and a symbol is supplied; else None."""
     view = freshness or get_broker_freshness_view(account_alias)
     if view.get("state") != STATE_FRESH:
         return None
     sym = (symbol or "").strip().upper()
     if not sym:
-        # Set-level / universe signal: conflict unknown at symbol grain; treat as clear of specific conflict.
-        return False
+        # Aggregate / universe signal: no symbol → unknown (never CLEAR).
+        return None
     from app.core.broker.snapshot_store import load_snapshot
 
     snap = load_snapshot(account_alias)

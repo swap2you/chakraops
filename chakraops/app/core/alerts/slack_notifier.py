@@ -126,9 +126,33 @@ class SlackNotifier:
                 f"{broker_state} · MANUAL ONLY — NO ORDER SENT"
             )
         elif at == "POSITION_ENTRY" or at == "SIGNAL":
+            # Prefer rich candidate identity over generic "NEW SETUP · ?"
+            cands = meta.get("candidates") or []
+            primary = cands[0] if cands and isinstance(cands[0], dict) else {}
+            display_sym = primary.get("symbol") or (sym if sym != "?" else None) or "MULTI"
+            strategy = (
+                meta.get("strategy")
+                or primary.get("strategy")
+                or meta.get("contract_detail")
+                or alert.reason_code
+            )
+            score = meta.get("score") if meta.get("score") is not None else primary.get("score")
+            band = meta.get("band") or primary.get("band")
+            run_id = meta.get("run_id") or meta.get("eval_run_id") or ""
+            qty_disp = meta.get("quantity")
+            if qty_disp is None:
+                qty_disp = meta.get("suggested_quantity") or primary.get("suggested_quantity") or primary.get("quantity")
+                qty_tag = "suggested_qty"
+            else:
+                qty_tag = "qty"
+            score_band = ""
+            if score is not None or band:
+                score_band = f" · score={score} band={band}"
+            run_bit = f" · run={run_id}" if run_id else ""
             text = (
-                f"NEW SETUP · {sym} · {meta.get('strategy') or meta.get('contract_detail') or alert.reason_code} · "
-                f"qty={qty} · {conflict_label} · MANUAL ONLY — NO ORDER SENT"
+                f"NEW SETUP · {display_sym} · {strategy}{score_band} · "
+                f"{qty_tag}={qty_disp if qty_disp is not None else 'n/a'} · "
+                f"{conflict_label}{run_bit} · MANUAL ONLY — NO ORDER SENT"
             )
         elif at in ("DATA_HEALTH", "SYSTEM", "REGIME_CHANGE", "PORTFOLIO_RISK_WARN"):
             text = (
@@ -184,7 +208,15 @@ class SlackNotifier:
         meta = alert.meta or {}
         at = alert.alert_type.value
         sym = alert.symbol or ""
+        live_confirmed = meta.get("live_confirmed") is True
         parts = []
+
+        def _advisory_action() -> str:
+            return (
+                "Action: MANUAL REVIEW REQUIRED — "
+                "POSITION NOT CONFIRMED BY FRESH BROKER SNAPSHOT — "
+                "REFRESH ROBINHOOD BEFORE ACTING"
+            )
 
         if at == "POSITION_ENTRY":
             parts.append(f"🟢 ENTRY — {sym} ({meta.get('strategy', 'CSP')})")
@@ -197,20 +229,32 @@ class SlackNotifier:
         elif at == "POSITION_SCALE_OUT":
             parts.append(f"🟡 SCALE OUT — {sym}")
             parts.append("Target 1 hit")
-            parts.append("Action: EXIT 1 CONTRACT NOW")
+            if live_confirmed:
+                parts.append("Action: EXIT 1 CONTRACT NOW")
+            else:
+                parts.append(_advisory_action())
         elif at == "POSITION_EXIT":
             if alert.reason_code == "STOP_LOSS":
                 parts.append(f"🔴 STOP LOSS — {sym}")
                 parts.append("Price breached stop")
-                parts.append("Action: EXIT IMMEDIATELY")
+                if live_confirmed:
+                    parts.append("Action: EXIT IMMEDIATELY")
+                else:
+                    parts.append(_advisory_action())
             else:
                 parts.append(f"🟠 CLOSE REVIEW — {sym}")
                 parts.append(meta.get("reason_detail", "Target 2 hit"))
-                parts.append("Action: EXIT ALL REMAINING")
+                if live_confirmed:
+                    parts.append("Action: EXIT ALL REMAINING")
+                else:
+                    parts.append(_advisory_action())
         elif at == "POSITION_ABORT":
             parts.append(f"🚨 ABORT — {sym}")
             parts.append("Regime no longer allowed")
-            parts.append("Action: CLOSE POSITION ASAP")
+            if live_confirmed:
+                parts.append("Action: CLOSE POSITION ASAP")
+            else:
+                parts.append(_advisory_action())
         elif at == "POSITION_HOLD":
             parts.append(f"⏸️ HOLD — {sym}")
             parts.append(meta.get("reason_detail", "Data unreliable"))
@@ -227,7 +271,13 @@ class SlackNotifier:
         if meta.get("broker_as_of") or meta.get("snapshot_as_of"):
             parts.append(f"Broker snapshot as_of: {meta.get('broker_as_of') or meta.get('snapshot_as_of')}")
         age = meta.get("snapshot_age") or meta.get("snapshot_age_sec")
-        freshness = meta.get("freshness") or meta.get("snapshot_freshness")
+        # Prefer effective age-based broker_freshness / freshness_state over raw snap tag.
+        freshness = (
+            meta.get("broker_freshness")
+            or meta.get("freshness_state")
+            or meta.get("freshness")
+            or meta.get("snapshot_freshness")
+        )
         if age is not None or freshness:
             parts.append(f"Snapshot age/freshness: {age if age is not None else 'n/a'} / {freshness or 'n/a'}")
         parts.append(f"Symbol: {sym}")

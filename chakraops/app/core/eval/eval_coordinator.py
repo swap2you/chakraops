@@ -223,6 +223,30 @@ def run_universe_evaluation_exclusive(
         except Exception:
             logger.exception("[EVAL_COORD] ledger persist failed run_id=%s", run_id)
             raise
+        # R70.1: Slack/alerts fire only for successful LIVE coordinator runs.
+        # PAPER / secondary harnesses must not acquire this path; failed runs
+        # never reach here (exception path below does not call process_run_completed).
+        if str(mode or "").strip().upper() == "LIVE":
+            try:
+                from app.core.alerts.alert_engine import process_run_completed
+
+                process_run_completed(ledger)
+            except Exception:
+                logger.exception("[EVAL_COORD] alert processing failed run_id=%s (non-fatal)", run_id)
+            # Options lifecycle UI notifications are emitted from evaluate_universe
+            # via the artifact. Do not emit a second Slack-capable path here.
+            # UI-store emit from_run is optional and must not call SlackNotifier.
+            try:
+                from app.core.alerts.options_lifecycle_notifications import (
+                    emit_options_lifecycle_notifications_from_run,
+                )
+
+                emit_options_lifecycle_notifications_from_run(ledger)
+            except Exception:
+                logger.exception(
+                    "[EVAL_COORD] options lifecycle notifications failed run_id=%s (non-fatal)",
+                    run_id,
+                )
         # R70 Final Closure Batch D: refresh Universe V2 after successful LIVE publish
         try:
             from app.core.universe_v2.builder import build_universe_v2_snapshot

@@ -198,6 +198,19 @@ def test_coordinator_tallies_holds_blocks(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr("app.core.eval.evaluation_service_v2.evaluate_universe", _fake_eval)
     monkeypatch.setattr("app.core.eval.evaluation_store.save_run", _save)
     monkeypatch.setattr("app.core.eval.evaluation_store.update_latest_pointer", lambda *a, **k: None)
+    alert_calls: list = []
+    monkeypatch.setattr(
+        "app.core.alerts.alert_engine.process_run_completed",
+        lambda run: alert_calls.append(run),
+    )
+    monkeypatch.setattr(
+        "app.core.alerts.options_lifecycle_notifications.emit_options_lifecycle_notifications_from_run",
+        lambda run: None,
+    )
+    monkeypatch.setattr(
+        "app.core.universe_v2.builder.build_universe_v2_snapshot",
+        lambda: None,
+    )
 
     out = ec.run_universe_evaluation_exclusive(["A", "B", "C"], trigger="api")
     assert out.get("started") is True
@@ -206,6 +219,8 @@ def test_coordinator_tallies_holds_blocks(monkeypatch: pytest.MonkeyPatch) -> No
     assert run.blocks == 1
     assert run.alerts and run.alerts[0].get("type") == "PROVENANCE"
     assert service._canonical_live_universe_write_is_authorized() is False
+    assert len(alert_calls) == 1
+    assert alert_calls[0] is run
 
 
 def test_coordinator_scope_resets_on_evaluation_failure(monkeypatch: pytest.MonkeyPatch) -> None:

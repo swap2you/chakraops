@@ -70,11 +70,14 @@ class TestBandReasonMatchesBand:
         """Run evaluation on SPY,AAPL; each symbol row has band_reason matching band, no verdict."""
         from app.core.eval.decision_artifact_v2 import assign_band, assign_band_reason
         from app.core.eval.evaluation_service_v2 import evaluate_universe
+        from app.core.eval.evaluation_store_v2 import reset_output_dir
 
         try:
             artifact = evaluate_universe(["SPY", "AAPL"], mode="LIVE", output_dir=str(tmp_path))
         except Exception as e:
             pytest.skip(f"Evaluation requires ORATS: {e}")
+        finally:
+            reset_output_dir()
         for s in artifact.symbols:
             band = s.band
             reason = s.band_reason or ""
@@ -92,11 +95,14 @@ class TestSanityStoreInvariants:
     def test_store_file_has_required_structure(self, tmp_path):
         """After evaluation, store file has artifact_version, metadata, symbols."""
         from app.core.eval.evaluation_service_v2 import evaluate_universe
+        from app.core.eval.evaluation_store_v2 import reset_output_dir
 
         try:
             evaluate_universe(["SPY"], mode="LIVE", output_dir=str(tmp_path))
         except Exception as e:
             pytest.skip(f"Requires ORATS: {e}")
+        finally:
+            reset_output_dir()
         store_path = tmp_path / "decision_latest.json"
         assert store_path.exists()
         with open(store_path, "r", encoding="utf-8") as f:

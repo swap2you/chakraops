@@ -12,8 +12,10 @@ import pytest
 
 def test_process_run_completed_sends_eval_summary_once_and_updates_slack_status(tmp_path):
     """After mocked evaluation completion, SlackNotifier.send_eval_summary is called once for daily and slack_status daily gets payload_type EVAL_SUMMARY."""
-    from app.core.alerts.alert_engine import process_run_completed
+    from app.core.alerts.alert_engine import clear_notification_idempotency_state, process_run_completed
     from app.core.alerts.slack_status import get_slack_status
+
+    clear_notification_idempotency_state()
 
     run = MagicMock()
     run.run_id = "eval_20260220_120000_abc12345"
@@ -55,7 +57,7 @@ def test_process_run_completed_sends_eval_summary_once_and_updates_slack_status(
     # Verify that when send_eval_summary actually runs, slack_status is updated with payload_type EVAL_SUMMARY
     with patch("app.core.alerts.slack_status._status_path", return_value=slack_status_path):
         with patch("app.core.alerts.slack_dispatcher.get_webhook_for_channel", return_value="https://hooks.slack.com/daily"):
-            with patch("app.core.alerts.slack_notifier.requests.post", return_value=MagicMock(status_code=200)):
+            with patch("app.core.alerts.slack_dispatcher.post_slack_webhook", return_value=True):
                 from app.core.alerts.slack_notifier import SlackNotifier
                 notifier = SlackNotifier({})
                 notifier.send_eval_summary("daily", payload)

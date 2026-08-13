@@ -20,11 +20,14 @@ class TestOneStoreGuardrails:
     def test_band_never_null_for_all_symbols(self, tmp_path):
         """Every symbol row has band in A/B/C/D and band_reason references that band."""
         from app.core.eval.evaluation_service_v2 import evaluate_universe
+        from app.core.eval.evaluation_store_v2 import reset_output_dir
 
         try:
             artifact = evaluate_universe(["SPY", "AAPL"], mode="LIVE", output_dir=str(tmp_path))
         except Exception as e:
             pytest.skip(f"Requires ORATS: {e}")
+        finally:
+            reset_output_dir()
         for s in artifact.symbols:
             assert s.band in ("A", "B", "C", "D"), f"Symbol {s.symbol}: band must be A|B|C|D, got {s.band}"
             assert s.band_reason, f"Symbol {s.symbol}: band_reason must not be empty"

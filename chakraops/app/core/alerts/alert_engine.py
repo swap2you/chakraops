@@ -19,6 +19,18 @@ from app.core.alerts.models import Alert, AlertType, Severity
 
 logger = logging.getLogger(__name__)
 
+# R70.1: idempotency for notification processing (run_id + alert identity).
+_PROCESSED_NOTIFICATION_RUN_IDS: set[str] = set()
+_PROCESSED_ALERT_IDENTITIES: set[str] = set()
+
+
+def clear_notification_idempotency_state() -> None:
+    """Test helper: reset in-memory notification dedupe state."""
+    global _PROCESSED_NOTIFICATION_RUN_IDS, _PROCESSED_ALERT_IDENTITIES
+    _PROCESSED_NOTIFICATION_RUN_IDS = set()
+    _PROCESSED_ALERT_IDENTITIES = set()
+
+
 # Config path: chakraops/config/alerts.yaml
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
@@ -181,10 +193,51 @@ def build_lifecycle_alerts_for_run(run: Any, config: Dict[str, Any]) -> List[Ale
             meta["position_id"] = pos.position_id
             meta["lifecycle_state"] = ev.lifecycle_state.value
             meta["eval_run_id"] = run_id
+            # Expanded Slack position fields (journal-tracked; never claim LIVE broker open
+            # unless broker confirmation meta is explicitly present).
+            meta.setdefault("account_alias", getattr(pos, "account_id", None) or "manual")
+            meta.setdefault("broker_source", "manual_journal")
+            meta.setdefault("broker_state", "manual journal — not a LIVE Robinhood open")
+            meta.setdefault("strategy", getattr(pos, "strategy", None))
+            meta.setdefault("expiration", getattr(pos, "expiration", None))
+            meta.setdefault("strike", getattr(pos, "strike", None))
+            meta.setdefault("right", getattr(pos, "option_type", None))
+            meta.setdefault(
+                "quantity",
+                getattr(pos, "contracts", None) or getattr(pos, "quantity", None),
+            )
+            meta.setdefault(
+                "contract_key",
+                getattr(pos, "contract_key", None) or getattr(pos, "option_symbol", None),
+            )
+            if getattr(pos, "strike", None) is not None and getattr(pos, "expiration", None):
+                right = (getattr(pos, "option_type", None) or "?").upper()[:1] or "?"
+                meta.setdefault(
+                    "contract_detail",
+                    f"{pos.symbol} {pos.expiration} {right} {pos.strike}",
+                )
+            meta.setdefault("entry_credit", getattr(pos, "open_credit", None) or getattr(pos, "credit_expected", None))
+            meta.setdefault("cost_basis", getattr(pos, "open_price", None))
+            meta.setdefault("mark", getattr(pos, "mark_price_per_contract", None))
+            meta.setdefault("mark_ts", getattr(pos, "mark_time_utc", None))
+            try:
+                from app.core.positions.lifecycle import compute_dte
+
+                meta.setdefault("dte", compute_dte(getattr(pos, "expiration", None)))
+            except Exception:
+                pass
+            meta.setdefault("recommendation", ev.directive)
             if ev.action.value == "EXIT" and ev.reason and ev.reason.value == "STOP_LOSS":
                 meta["reason_detail"] = "Price breached stop"
             elif ev.action.value == "EXIT":
                 meta["reason_detail"] = "Target 2 hit"
+            reasons = []
+            if ev.reason:
+                reasons.append(str(ev.reason.value))
+            if meta.get("reason_detail"):
+                reasons.append(str(meta["reason_detail"]))
+            meta.setdefault("reasons", reasons[:2])
+            meta.setdefault("trigger", ev.reason.value if ev.reason else ev.action.value)
             alerts.append(Alert(
                 alert_type=at,
                 severity=severity,
@@ -394,9 +447,27 @@ def process_run_completed(run: Any) -> None:
     Builds alerts (evaluation + lifecycle), dedupes by fingerprint cooldown,
     sends via Slack (if configured), persists to out/alerts/ and out/lifecycle/.
     No alerts during RUNNING; no per-symbol spam.
+
+    Idempotency: the same (run_id) notification pass is processed at most once.
+    EVAL_SUMMARY is sent only for COMPLETED runs (not failed/rejected).
     """
     if getattr(run, "status", None) == "RUNNING":
         return
+
+    run_id = str(getattr(run, "run_id", "") or "").strip()
+    if run_id:
+        # Module-level idempotency for duplicate coordinator/legacy invocations.
+        global _PROCESSED_NOTIFICATION_RUN_IDS
+        if run_id in _PROCESSED_NOTIFICATION_RUN_IDS:
+            logger.info("[ALERTS] Skipping duplicate process_run_completed for run_id=%s", run_id)
+            return
+        _PROCESSED_NOTIFICATION_RUN_IDS.add(run_id)
+        # Bound memory for long-lived processes.
+        if len(_PROCESSED_NOTIFICATION_RUN_IDS) > 500:
+            keep = list(_PROCESSED_NOTIFICATION_RUN_IDS)[-250:]
+            _PROCESSED_NOTIFICATION_RUN_IDS.clear()
+            _PROCESSED_NOTIFICATION_RUN_IDS.update(keep)
+
     config = _load_alerts_config()
     enabled = set(config.get("enabled_alert_types") or [])
     cooldown_hours = max(0, config.get("cooldown_hours", 6))
@@ -440,6 +511,21 @@ def process_run_completed(run: Any) -> None:
     sent_by_channel: Dict[str, int] = {}
 
     for alert in candidates:
+        # Idempotency key: run_id + alert identity (fingerprint)
+        identity_key = f"{run_id}:{alert.fingerprint}" if run_id else alert.fingerprint
+        if identity_key in _PROCESSED_ALERT_IDENTITIES:
+            _append_alert_record({
+                "fingerprint": alert.fingerprint,
+                "created_at": alert.created_at,
+                "alert_type": alert.alert_type.value,
+                "severity": alert.severity.value,
+                "summary": alert.summary,
+                "action_hint": alert.action_hint,
+                "reason_code": alert.reason_code,
+                "sent": False,
+                "suppressed_reason": "duplicate_run_identity",
+            })
+            continue
         if alert.alert_type.value not in enabled:
             _append_alert_record({
                 "fingerprint": alert.fingerprint,
@@ -476,7 +562,14 @@ def process_run_completed(run: Any) -> None:
                 _append_lifecycle_log_if_lifecycle(alert, sent=False)
             logger.debug("[ALERTS] Suppressed (cooldown) fingerprint=%s", alert.fingerprint[:8])
             continue
-        sent = notifier.send(alert)
+        sent = False
+        try:
+            sent = notifier.send(alert)
+        except Exception as send_exc:
+            # Slack delivery failure must not corrupt a completed evaluation.
+            logger.warning("[ALERTS] Slack send exception (non-fatal): %s", send_exc)
+            sent = False
+        _PROCESSED_ALERT_IDENTITIES.add(identity_key)
         if sent:
             ch = notifier._channel_for_alert(alert)
             sent_by_channel[ch] = sent_by_channel.get(ch, 0) + 1
@@ -498,22 +591,29 @@ def process_run_completed(run: Any) -> None:
             "suppressed_reason": None if sent else "slack_not_configured",
         })
 
-    # R21.5.2: One EVAL_SUMMARY to daily channel after every completed run (throttle for scheduler)
+    # R21.5.2 / R70.1: EVAL_SUMMARY only for successful COMPLETED runs
     try:
+        status = str(getattr(run, "status", "") or "").strip().upper()
+        if status != "COMPLETED":
+            logger.info("[ALERTS] Skipping EVAL_SUMMARY for non-COMPLETED status=%s run_id=%s", status, run_id)
+            return
         from app.core.alerts.eval_summary import (
             build_eval_summary_payload,
             should_send_eval_summary_this_run,
         )
-        if should_send_eval_summary_this_run(getattr(run, "run_id", "") or ""):
+        if should_send_eval_summary_this_run(run_id or ""):
             duration_sec = getattr(run, "duration_seconds", None)
             duration_ms = (duration_sec * 1000) if duration_sec is not None else None
             payload = build_eval_summary_payload(
                 run,
                 sent_by_channel=sent_by_channel or None,
                 duration_ms=duration_ms,
-                last_run_ok=(getattr(run, "status", None) == "COMPLETED"),
+                last_run_ok=True,
             )
-            notifier.send_eval_summary("daily", payload)
+            try:
+                notifier.send_eval_summary("daily", payload)
+            except Exception as e:
+                logger.warning("[ALERTS] Eval summary send failed (non-fatal): %s", e)
     except Exception as e:
         logger.warning("[ALERTS] Eval summary send failed (non-fatal): %s", e)
 

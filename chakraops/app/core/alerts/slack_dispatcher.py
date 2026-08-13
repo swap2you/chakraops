@@ -8,6 +8,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -154,27 +155,122 @@ except ImportError:
     _requests = None  # type: ignore[assignment]
 
 
-def send_slack_message(webhook_url: str, text: str) -> bool:
-    """POST JSON {text: message} to webhook. Return True on success. Handle exceptions safely."""
-    if not webhook_url or not text:
+# Bounded delivery: at most ~1 webhook request per second per channel key.
+_last_channel_send_monotonic: Dict[str, float] = {}
+_CHANNEL_MIN_INTERVAL_SEC = 1.0
+
+FORBIDDEN_IN_SLACK_TEXT = (
+    "FAIL_",
+    "WARN_",
+    "api_key",
+    "token",
+    "traceback",
+    "Traceback",
+    'File "',
+    "hooks.slack.com",
+    "Bearer ",
+)
+
+
+def sanitize_slack_text(text: str) -> str:
+    """Strip secrets, paths, and raw FAIL_/WARN_ codes from Slack text."""
+    import re
+
+    out = str(text or "")
+    out = re.sub(r"https://hooks\.slack\.com/\S+", "[webhook redacted]", out, flags=re.IGNORECASE)
+    out = re.sub(r"(?i)\b(api[_-]?key|token|bearer)\s*[:=]\s*\S+", r"\1=[redacted]", out)
+    out = re.sub(r"[A-Za-z]:\\[^\s]+", "[path redacted]", out)
+    out = re.sub(r"(/Users|/home|/var|/tmp)/[^\s]+", "[path redacted]", out)
+    out = re.sub(r"\bFAIL_[A-Z0-9_]+\b", "[code]", out)
+    out = re.sub(r"\bWARN_[A-Z0-9_]+\b", "[code]", out)
+    out = re.sub(r"(?i)traceback \(most recent call last\):.*", "[traceback redacted]", out, flags=re.DOTALL)
+    # Never include full account numbers — keep alias-like tokens only.
+    out = re.sub(r"\b\d{6,}\b", "[acct]", out)
+    return out.strip()
+
+
+def _pace_channel(channel_key: str) -> None:
+    key = (channel_key or "default").strip().lower() or "default"
+    now = time.monotonic()
+    last = _last_channel_send_monotonic.get(key)
+    if last is not None:
+        wait = _CHANNEL_MIN_INTERVAL_SEC - (now - last)
+        if wait > 0:
+            time.sleep(min(wait, 2.0))
+    _last_channel_send_monotonic[key] = time.monotonic()
+
+
+def post_slack_webhook(
+    webhook_url: str,
+    payload: Dict[str, Any],
+    *,
+    channel_key: str = "default",
+    timeout_sec: float = 10.0,
+) -> bool:
+    """
+    POST JSON to an incoming webhook with bounded retry.
+
+    - Retry at most once for HTTP 429 (honors Retry-After), timeout, or transient 5xx.
+    - Do not retry permanent 4xx (except 429).
+    - Pace approximately one request per second per channel_key.
+    """
+    if not webhook_url or not isinstance(payload, dict):
         return False
     if _requests is None:
         logger.warning("[Slack] requests not installed, skip send")
         return False
-    try:
-        r = _requests.post(
-            webhook_url,
-            json={"text": text},
-            timeout=10,
-            headers={"Content-Type": "application/json"},
-        )
-        ok = 200 <= r.status_code < 300
-        if not ok:
-            logger.warning("[Slack] webhook returned %s: %s", r.status_code, r.text[:200])
-        return ok
-    except Exception as e:
-        logger.warning("[Slack] send failed: %s", e)
+
+    # Ensure text fallback is sanitized when present.
+    if "text" in payload and payload["text"] is not None:
+        payload = dict(payload)
+        payload["text"] = sanitize_slack_text(str(payload["text"]))
+
+    attempts = 0
+    while attempts < 2:
+        attempts += 1
+        _pace_channel(channel_key)
+        try:
+            r = _requests.post(
+                webhook_url,
+                json=payload,
+                timeout=timeout_sec,
+                headers={"Content-Type": "application/json"},
+            )
+            if 200 <= r.status_code < 300:
+                return True
+            if r.status_code == 429 and attempts < 2:
+                retry_after = r.headers.get("Retry-After")
+                try:
+                    delay = float(retry_after) if retry_after is not None else 1.0
+                except (TypeError, ValueError):
+                    delay = 1.0
+                time.sleep(min(max(delay, 0.2), 5.0))
+                continue
+            if 500 <= r.status_code < 600 and attempts < 2:
+                time.sleep(0.5)
+                continue
+            logger.warning("[Slack] webhook returned %s: %s", r.status_code, (r.text or "")[:200])
+            return False
+        except Exception as e:
+            # Timeout / connection errors: one retry.
+            if attempts < 2:
+                logger.warning("[Slack] transient send failure (will retry once): %s", e)
+                time.sleep(0.5)
+                continue
+            logger.warning("[Slack] send failed: %s", e)
+            return False
+    return False
+
+
+def send_slack_message(webhook_url: str, text: str, *, channel_key: str = "default") -> bool:
+    """POST JSON {text: message} to webhook. Return True on success. Handle exceptions safely."""
+    if not webhook_url or not text:
         return False
+    return post_slack_webhook(
+        webhook_url,
+        {"text": sanitize_slack_text(text)},
+        channel_key=channel_key,
+    )
 
 
 def _fmt_signal(p: Dict[str, Any]) -> str:

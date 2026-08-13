@@ -8,8 +8,6 @@ import logging
 import os
 from typing import Any, Dict, Optional
 
-import requests
-
 from app.core.alerts.models import Alert
 
 logger = logging.getLogger(__name__)
@@ -62,6 +60,7 @@ class SlackNotifier:
 
     def send(self, alert: Alert) -> bool:
         """Send one alert to Slack. Returns True if sent, False if skipped (no webhook) or failed. R21.5.1: updates per-channel status."""
+        from app.core.alerts.slack_dispatcher import post_slack_webhook
         from app.core.alerts.slack_status import update_slack_status
         channel = self._channel_for_alert(alert)
         webhook = self._webhook_for_alert(alert)
@@ -70,21 +69,58 @@ class SlackNotifier:
             update_slack_status(channel, ok=False, error="no_webhook", payload_type=alert.alert_type.value)
             return False
         blocks = self._build_blocks(alert)
+        preview = self._mobile_preview_text(alert)
+        payload = {"text": preview, "blocks": blocks}
         try:
-            resp = requests.post(
-                webhook,
-                json={"blocks": blocks},
-                headers={"Content-Type": "application/json"},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            logger.info("[ALERTS] Sent to Slack %s: %s %s", channel, alert.alert_type.value, alert.reason_code)
-            update_slack_status(channel, ok=True, payload_type=alert.alert_type.value)
-            return True
-        except requests.RequestException as e:
+            ok = post_slack_webhook(webhook, payload, channel_key=channel)
+            if ok:
+                logger.info("[ALERTS] Sent to Slack %s: %s %s", channel, alert.alert_type.value, alert.reason_code)
+                update_slack_status(channel, ok=True, payload_type=alert.alert_type.value)
+                return True
+            update_slack_status(channel, ok=False, error="send_failed", payload_type=alert.alert_type.value)
+            return False
+        except Exception as e:
             logger.warning("[ALERTS] Slack send failed (%s): %s", channel, e)
             update_slack_status(channel, ok=False, error=str(e), payload_type=alert.alert_type.value)
             return False
+
+    def _mobile_preview_text(self, alert: Alert) -> str:
+        """Top-level text fallback for Slack mobile notifications (required with blocks)."""
+        from app.core.alerts.slack_dispatcher import sanitize_slack_text
+
+        at = alert.alert_type.value
+        meta = alert.meta or {}
+        sym = alert.symbol or "?"
+        contract = meta.get("contract_key") or meta.get("contract_detail") or "position"
+        qty = meta.get("quantity", "?")
+        broker_state = meta.get("broker_state") or meta.get("snapshot_state") or "journal"
+        if at == "POSITION_ABORT":
+            text = (
+                f"ABORT · {contract} · qty={qty} · P/L={meta.get('pnl') or meta.get('pnl_dollars') or 'n/a'} · "
+                f"{broker_state} · MANUAL ONLY — NO ORDER SENT"
+            )
+        elif at in ("POSITION_EXIT", "POSITION_HOLD", "POSITION_SCALE_OUT"):
+            action = "CLOSE REVIEW" if at == "POSITION_EXIT" else ("HOLD" if at == "POSITION_HOLD" else "SCALE OUT")
+            text = (
+                f"{action} · {contract} · qty={qty} · "
+                f"P/L={meta.get('pnl') or meta.get('pnl_dollars') or 'n/a'} · "
+                f"{broker_state} · MANUAL ONLY — NO ORDER SENT"
+            )
+        elif at == "POSITION_ENTRY" or at == "SIGNAL":
+            text = (
+                f"NEW SETUP · {sym} · {meta.get('strategy') or meta.get('contract_detail') or alert.reason_code} · "
+                f"qty={qty} · no conflicting Robinhood position · MANUAL ONLY — NO ORDER SENT"
+            )
+        elif at in ("DATA_HEALTH", "SYSTEM", "REGIME_CHANGE", "PORTFOLIO_RISK_WARN"):
+            text = (
+                f"BROKER/ORATS/SYSTEM ISSUE · {alert.summary[:120]} · "
+                f"{alert.action_hint[:80]} · MANUAL ONLY — NO ORDER SENT"
+            )
+        elif at == "PORTFOLIO_RISK_BLOCK":
+            text = f"ABORT · portfolio block · {alert.summary[:120]} · MANUAL ONLY — NO ORDER SENT"
+        else:
+            text = f"{at} · {sym} · {alert.summary[:120]} · MANUAL ONLY — NO ORDER SENT"
+        return sanitize_slack_text(text)
 
     def _build_blocks(self, alert: Alert) -> list:
         # Phase 2C: Lifecycle alerts use exact Slack format
@@ -123,7 +159,9 @@ class SlackNotifier:
         return [section_header, section_summary, section_action, context]
 
     def _build_lifecycle_blocks(self, alert: Alert) -> list:
-        """Phase 2C: Exact Slack format for lifecycle directive alerts."""
+        """Expanded Slack format for lifecycle / position action alerts."""
+        from app.core.alerts.slack_dispatcher import sanitize_slack_text
+
         meta = alert.meta or {}
         at = alert.alert_type.value
         sym = alert.symbol or ""
@@ -147,7 +185,7 @@ class SlackNotifier:
                 parts.append("Price breached stop")
                 parts.append("Action: EXIT IMMEDIATELY")
             else:
-                parts.append(f"🟠 EXIT — {sym}")
+                parts.append(f"🟠 CLOSE REVIEW — {sym}")
                 parts.append(meta.get("reason_detail", "Target 2 hit"))
                 parts.append("Action: EXIT ALL REMAINING")
         elif at == "POSITION_ABORT":
@@ -163,14 +201,58 @@ class SlackNotifier:
             parts.append(alert.summary)
             parts.append(f"Action: {alert.action_hint}")
 
-        text = "\n".join(parts)
+        # Required expanded fields for every position action message.
+        parts.append("")
+        parts.append(f"Account: {meta.get('account_alias') or 'manual'}")
+        parts.append(f"Broker source: {meta.get('broker_source') or 'manual_journal'}")
+        if meta.get("broker_as_of") or meta.get("snapshot_as_of"):
+            parts.append(f"Broker snapshot as_of: {meta.get('broker_as_of') or meta.get('snapshot_as_of')}")
+        age = meta.get("snapshot_age") or meta.get("snapshot_age_sec")
+        freshness = meta.get("freshness") or meta.get("snapshot_freshness")
+        if age is not None or freshness:
+            parts.append(f"Snapshot age/freshness: {age if age is not None else 'n/a'} / {freshness or 'n/a'}")
+        parts.append(f"Symbol: {sym}")
+        parts.append(f"Strategy: {meta.get('strategy') or 'n/a'}")
+        if meta.get("expiration") or meta.get("strike") is not None or meta.get("right"):
+            parts.append(
+                f"Option: exp={meta.get('expiration') or 'n/a'} "
+                f"strike={meta.get('strike') if meta.get('strike') is not None else 'n/a'} "
+                f"right={meta.get('right') or 'n/a'}"
+            )
+        parts.append(f"Quantity: {meta.get('quantity', 'n/a')}")
+        if meta.get("entry_credit") is not None or meta.get("cost_basis") is not None:
+            parts.append(
+                f"Entry/cost: credit={meta.get('entry_credit', 'n/a')} basis={meta.get('cost_basis', 'n/a')}"
+            )
+        if meta.get("mark") is not None:
+            parts.append(f"Mark: {meta.get('mark')} @ {meta.get('mark_ts') or 'n/a'}")
+        pnl = meta.get("pnl_dollars") if meta.get("pnl_dollars") is not None else meta.get("pnl")
+        pnl_pct = meta.get("pnl_pct")
+        if pnl is not None or pnl_pct is not None:
+            parts.append(f"P/L: {pnl if pnl is not None else 'n/a'} ({pnl_pct if pnl_pct is not None else 'n/a'}%)")
+        if meta.get("dte") is not None:
+            parts.append(f"DTE: {meta.get('dte')}")
+        parts.append(f"Recommendation: {meta.get('recommendation') or alert.action_hint}")
+        trigger = meta.get("trigger") or alert.reason_code
+        reasons = meta.get("reasons") or []
+        if isinstance(reasons, list):
+            reason_txt = "; ".join(str(r) for r in reasons[:2])
+        else:
+            reason_txt = str(reasons)
+        parts.append(f"Trigger: {trigger}" + (f" — {reason_txt}" if reason_txt else ""))
+        parts.append(f"Run ID: {meta.get('eval_run_id') or meta.get('run_id') or 'n/a'}")
+        # Never describe a local/manual/history row as a LIVE Robinhood open.
+        parts.append(f"Position class: {meta.get('broker_state') or 'manual journal — not a LIVE Robinhood open'}")
+        parts.append("MANUAL ONLY — NO ORDER SENT")
+
+        text = sanitize_slack_text("\n".join(parts))
         section = {
             "type": "section",
             "text": {"type": "mrkdwn", "text": text},
         }
         context = {
             "type": "context",
-            "elements": [{"type": "mrkdwn", "text": f"{alert.created_at} | {alert.reason_code}"}],
+            "elements": [{"type": "mrkdwn", "text": sanitize_slack_text(f"{alert.created_at} | {alert.reason_code}")}],
         }
         return [section, context]
 
@@ -197,7 +279,7 @@ class SlackNotifier:
 
     def send_eval_summary(self, channel: str, payload: Dict[str, Any]) -> bool:
         """R21.5.2: Send EVAL_SUMMARY to channel (daily). Updates slack_status with payload_type EVAL_SUMMARY."""
-        from app.core.alerts.slack_dispatcher import get_webhook_for_channel
+        from app.core.alerts.slack_dispatcher import get_webhook_for_channel, post_slack_webhook
         from app.core.alerts.slack_status import update_slack_status
 
         webhook = get_webhook_for_channel(channel)
@@ -207,28 +289,46 @@ class SlackNotifier:
             return False
         text = self._format_eval_summary(payload)
         try:
-            resp = requests.post(
-                webhook,
-                json={"text": text},
-                headers={"Content-Type": "application/json"},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            logger.info("[ALERTS] Sent EVAL_SUMMARY to %s run_id=%s", channel, payload.get("run_id", "?"))
-            update_slack_status(channel, ok=True, payload_type="EVAL_SUMMARY")
-            return True
-        except requests.RequestException as e:
+            ok = post_slack_webhook(webhook, {"text": text}, channel_key=channel or "daily")
+            if ok:
+                logger.info("[ALERTS] Sent EVAL_SUMMARY to %s run_id=%s", channel, payload.get("run_id", "?"))
+                update_slack_status(channel, ok=True, payload_type="EVAL_SUMMARY")
+                return True
+            update_slack_status(channel, ok=False, error="send_failed", payload_type="EVAL_SUMMARY")
+            return False
+        except Exception as e:
             logger.warning("[ALERTS] EVAL_SUMMARY send failed (%s): %s", channel, e)
             update_slack_status(channel, ok=False, error=str(e), payload_type="EVAL_SUMMARY")
             return False
 
     def _format_eval_summary(self, p: Dict[str, Any]) -> str:
-        """Concise one-message format for EVAL_SUMMARY."""
+        """Concise one-message format for EVAL_SUMMARY with mobile-friendly first line."""
+        from app.core.alerts.slack_dispatcher import sanitize_slack_text
+
+        mode = p.get("mode", "LIVE")
+        total = p.get("total", 0)
+        eligible = p.get("eligible", 0)
+        urgent = 0
+        alerts_sent = p.get("alerts_sent") or {}
+        if isinstance(alerts_sent, dict):
+            urgent = int(alerts_sent.get("critical") or 0)
+        broker_state = p.get("broker_state") or p.get("broker_snapshot_state") or "broker n/a"
+        open_positions = p.get("open_positions")
+        if open_positions is None:
+            open_positions = p.get("open_position_count", "n/a")
+        ts = p.get("timestamp") or ""
+        preview = (
+            f"{mode} eval complete · evaluated={total} · qualified={eligible} · "
+            f"{broker_state} · open positions={open_positions} · urgent={urgent} · {ts}"
+        )
         lines = [
-            "📊 *ChakraOps Eval Summary*",
-            f"Mode: {p.get('mode', '?')} | Run: `{p.get('run_id', '?')}` | {p.get('timestamp', '')}",
+            sanitize_slack_text(preview),
             "",
-            f"*Counts:* total={p.get('total', 0)} eligible={p.get('eligible', 0)} A={p.get('a_tier', 0)} B={p.get('b_tier', 0)} blocked={p.get('blocked', 0)}",
+            "📊 *ChakraOps Eval Summary*",
+            f"Mode: {mode} | Run: `{p.get('run_id', '?')}` | {ts}",
+            "",
+            f"*Counts:* total={total} eligible={eligible} A={p.get('a_tier', 0)} B={p.get('b_tier', 0)} blocked={p.get('blocked', 0)}",
+            "MANUAL ONLY — NO ORDER SENT",
         ]
         top = p.get("top_eligibles") or []
         if top:
@@ -239,10 +339,12 @@ class SlackNotifier:
                 score = e.get("score")
                 band = e.get("band", "?")
                 lines.append(f"  • {sym} {strat} score={score} band={band}")
-        alerts_sent = p.get("alerts_sent")
         if alerts_sent:
-            lines.append(f"*Alerts this run:* signals={alerts_sent.get('signals', 0)} data_health={alerts_sent.get('data_health', 0)} critical={alerts_sent.get('critical', 0)}")
+            lines.append(
+                f"*Alerts this run:* signals={alerts_sent.get('signals', 0)} "
+                f"data_health={alerts_sent.get('data_health', 0)} critical={alerts_sent.get('critical', 0)}"
+            )
         dur = p.get("duration_ms")
         if dur is not None:
             lines.append(f"Duration: {dur:.0f}ms | last_run_ok: {p.get('last_run_ok', '?')}")
-        return "\n".join(lines)
+        return sanitize_slack_text("\n".join(lines))

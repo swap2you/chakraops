@@ -73,8 +73,11 @@ def test_canonical_output_alias_is_detected(tmp_path: Path) -> None:
     try:
         assert is_canonical_output_dir(alias) is True
     finally:
-        if alias.exists():
-            alias.rmdir()
+        if alias.exists() or alias.is_symlink():
+            try:
+                alias.unlink()
+            except OSError:
+                alias.rmdir()
 
 
 def test_canonical_output_relative_path_alias_is_detected() -> None:

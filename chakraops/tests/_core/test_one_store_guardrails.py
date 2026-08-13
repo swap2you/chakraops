@@ -31,19 +31,17 @@ class TestOneStoreGuardrails:
             assert s.band in (s.band_reason or ""), f"Symbol {s.symbol}: band_reason must reference band"
 
     def test_store_path_is_repo_root_out(self):
-        """get_decision_store_path() endswith /out/decision_latest.json and is under repo root (NOT chakraops/app/out)."""
-        from app.core.eval.evaluation_store_v2 import get_decision_store_path, reset_output_dir
+        """Canonical store constant is <repo>/out/decision_latest.json, not chakraops/app/out."""
+        from app.core.eval.evaluation_store_v2 import DECISION_STORE_PATH
 
-        reset_output_dir()
-        path = get_decision_store_path()
-        posix = path.as_posix()
+        posix = DECISION_STORE_PATH.as_posix()
         assert posix.endswith("/out/decision_latest.json"), f"Path must end with /out/decision_latest.json: {posix}"
         assert "/app/out/" not in posix, f"Path must NOT be under chakraops/app/out: {posix}"
         repo_root = _REPO.parent
         try:
-            path.relative_to(repo_root)
+            DECISION_STORE_PATH.relative_to(repo_root)
         except ValueError:
-            pytest.fail(f"Path {path} must be under repo root {repo_root}")
+            pytest.fail(f"Path {DECISION_STORE_PATH} must be under repo root {repo_root}")
 
     def test_no_v1_imports_or_fallbacks(self):
         """UI LIVE decision path uses EvaluationStoreV2 only; no v1 fallbacks. No decision_snapshot merge on frontend."""

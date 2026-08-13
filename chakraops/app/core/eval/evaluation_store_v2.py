@@ -56,9 +56,14 @@ def set_output_dir(path: Path) -> None:
 
 
 def reset_output_dir() -> None:
-    """Reset output dir to canonical (for test isolation)."""
+    """Restore the process default output directory.
+
+    If ``OUT_DIR`` is set, return to that isolated directory. Otherwise return
+    to the repository canonical path. Tests must not clobber live ``out/``.
+    """
     global _DEFAULT_OUTPUT_DIR
-    _DEFAULT_OUTPUT_DIR = None
+    env = os.environ.get("OUT_DIR")
+    _DEFAULT_OUTPUT_DIR = Path(env).resolve() if env else None
 
 
 # R26.7: Restore drill — OUT_DIR env override (minimal; tests can still set_output_dir after import)

@@ -108,13 +108,43 @@ def test_r70_def040_direct_universe_evaluator_inventory_is_closed() -> None:
 
 def test_r70_def040_live_universe_authority_fails_closed_outside_coordinator() -> None:
     from app.core.eval import evaluation_service_v2 as service
-    from app.core.eval.evaluation_store_v2 import reset_output_dir
+    from app.core.eval.evaluation_store_v2 import (
+        DECISION_STORE_PATH,
+        get_decision_store_path,
+        reset_output_dir,
+        set_output_dir,
+    )
 
+    # Point the in-memory store at the true canonical path without writing.
+    set_output_dir(DECISION_STORE_PATH.parent)
+    try:
+        assert get_decision_store_path().resolve() == DECISION_STORE_PATH.resolve()
+        assert service._canonical_live_universe_write_is_authorized() is False
+        with pytest.raises(PermissionError, match="eval_coordinator"):
+            service._require_live_universe_write_authority("LIVE")
+        service._require_live_universe_write_authority("PAPER")
+    finally:
+        reset_output_dir()
+
+
+def test_reset_output_dir_honors_out_dir_env_and_does_not_target_canonical(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from app.core.eval.evaluation_store_v2 import (
+        DECISION_STORE_PATH,
+        get_decision_store_path,
+        reset_output_dir,
+        set_output_dir,
+    )
+
+    isolated = tmp_path / "isolated_out"
+    isolated.mkdir()
+    monkeypatch.setenv("OUT_DIR", str(isolated))
+    set_output_dir(tmp_path / "other")
     reset_output_dir()
-    assert service._canonical_live_universe_write_is_authorized() is False
-    with pytest.raises(PermissionError, match="eval_coordinator"):
-        service._require_live_universe_write_authority("LIVE")
-    service._require_live_universe_write_authority("PAPER")
+    restored = get_decision_store_path().resolve()
+    assert restored == (isolated / "decision_latest.json").resolve()
+    assert restored != DECISION_STORE_PATH.resolve()
 
 
 def test_r70_def040_coordinator_scope_is_private_to_coordinator_source() -> None:

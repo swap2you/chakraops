@@ -16,27 +16,22 @@ if str(_REPO) not in sys.path:
 class TestCanonicalStorePath:
     """Canonical path must be <REPO_ROOT>/out/decision_latest.json, not app/out."""
 
-    def test_canonical_store_path_is_repo_out(self, monkeypatch):
-        """Store path ends with /out/decision_latest.json (or OUT_DIR override) under repo root, not app/."""
-        import os
-        from app.core.eval.evaluation_store_v2 import get_decision_store_path, reset_output_dir
+    def test_canonical_store_path_is_repo_out(self):
+        """Canonical constant is <REPO_ROOT>/out/decision_latest.json, not app/out."""
+        from app.core.eval.evaluation_store_v2 import DECISION_STORE_PATH
 
-        monkeypatch.delenv("OUT_DIR", raising=False)
-        reset_output_dir()
-        path = get_decision_store_path()
-        posix = path.as_posix()
+        posix = DECISION_STORE_PATH.as_posix()
         assert posix.endswith("/out/decision_latest.json"), (
             f"Expected path to end with /out/decision_latest.json, got {posix}"
         )
         assert "/app/out/" not in posix, (
             f"Path must not be under app/out (use repo root out/). Got {posix}"
         )
-        # Should be under repo root (parent of chakraops)
         repo_root = _REPO.parent
         try:
-            path.relative_to(repo_root)
+            DECISION_STORE_PATH.relative_to(repo_root)
         except ValueError:
-            pytest.fail(f"Path {path} should be under repo root {repo_root}")
+            pytest.fail(f"Path {DECISION_STORE_PATH} should be under repo root {repo_root}")
 
 
 class TestBandReasonMatchesBand:

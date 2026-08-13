@@ -33,7 +33,7 @@ OUT_DIR=<iso> DATA_DIR=<iso> .\.venv\Scripts\python.exe -m pytest tests -q --tb=
 
 Codex result on Linux: **1762 passed, 6 skipped**, exit 0 (74.89s).
 
-Focused authority result: **35 passed**, exit 0.
+Focused authority result: **32 collected**, exit 0 (Codex Linux: 32 passed; Windows may skip the symlink-only alias case if the process lacks symlink privilege).
 
 Ruff: `ruff check app tests` — exit 0.
 

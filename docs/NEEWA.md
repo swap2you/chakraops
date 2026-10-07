@@ -12,8 +12,8 @@ Registry id: `PRJ-CHAKRAOPS`. One entry. There is no second dev tree.
 - Cursor implements, one writer at a time, on this checkout.
 - ChatGPT-authenticated Codex (`codex exec`, not an OpenAI API key) validates read-only after the writer yields.
 - The Windows worker identity is the interactive user that runs `%LOCALAPPDATA%\NEEWA\worker`. A Linux coordinator dispatches work to that worker. A path written in a document is not remote filesystem access.
-- Recurring snapshot, regression, and market-health schedules stay off.
-- Trading stays manual. No broker writes, no public deployment, no unrequested Slack sends.
+- Trading stays manual. No broker writes and no public deployment.
+- Recurring snapshots, regression, and Slack notices to the verified owner destination are authorized by `requirements/NEEWA_ChakraOps_Autonomous_Delivery_Charter.md`. The GitHub market-health workflow stays manual.
 - ORATS is the options data provider. Credentials stay in `backend/.env`.
 
 ## Model routing

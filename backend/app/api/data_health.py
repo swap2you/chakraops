@@ -197,12 +197,23 @@ def get_orats_freshness_state() -> Dict[str, Any]:
         age_minutes = (datetime.now(timezone.utc) - success_dt).total_seconds() / 60
     except (ValueError, TypeError):
         return {
-            "state": "OK",
-            "state_label": "OK",
+            "state": "UNKNOWN",
+            "state_label": "UNKNOWN",
             "age_minutes": None,
             "delay_minutes": warn_min,
             "as_of": effective_ts,
-            "threshold_triggered": "ok_minutes",
+            "threshold_triggered": None,
+            "reason": "ORATS timestamp is malformed",
+        }
+    if age_minutes < 0:
+        return {
+            "state": "UNKNOWN",
+            "state_label": "UNKNOWN",
+            "age_minutes": round(age_minutes, 1),
+            "delay_minutes": warn_min,
+            "as_of": effective_ts,
+            "threshold_triggered": None,
+            "reason": "ORATS timestamp is in the future",
         }
     if age_minutes <= ok_min:
         return {

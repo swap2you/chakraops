@@ -55,7 +55,8 @@ Use only when mainline mode is blocked or the operator explicitly requests it:
 - No silent provider fallback.
 - Stay in cash is a valid outcome.
 - Broker execution and order routing stay disabled.
-- Snapshot and regression code may exist and be tested. Do not register, enable, or run recurring snapshot, regression, or market-health schedules.
+- Broker execution and order routing stay disabled.
+- Recurring snapshots, overnight regression, and owner Slack notifications are authorized by `requirements/NEEWA_ChakraOps_Autonomous_Delivery_Charter.md` after this checkout is the sole writer. Do not revive a legacy cron with incorrect session assumptions. The GitHub market-health workflow stays manual.
 
 ## Artifact Safety
 

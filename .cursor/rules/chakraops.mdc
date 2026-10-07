@@ -30,7 +30,8 @@ description: ChakraOps Cursor agent rules — mainline loop + safety baseline
 - Preserve manual-only execution. Do not add or imply automated order routing.
 - Preserve ORATS-only provider rule. Do not add silent provider fallbacks.
 - Preserve safe UI labels. Do not expose raw `FAIL_`, `WARN_`, or `PASS` tokens in UI-facing output.
-- Broker execution stays disabled. Do not register or run recurring snapshot, regression, or market-health jobs.
+- Broker execution stays disabled. No order placement, cancellation, exercise, or transfer.
+- Recurring snapshots, regression, and owner Slack notifications are authorized by `requirements/NEEWA_ChakraOps_Autonomous_Delivery_Charter.md`. Do not revive an old cron that ignores the exchange calendar. Market-health GitHub cron stays off.
 - Robinhood integration, if any, is hard read-only with write denylist.
 
 ## Required Gates Before DONE

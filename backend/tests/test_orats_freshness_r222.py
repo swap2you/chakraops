@@ -59,6 +59,29 @@ def test_get_orats_freshness_state_unknown_when_no_timestamp_and_no_error():
     assert state.get("as_of") is None
 
 
+def test_malformed_orats_timestamp_is_unknown():
+    from app.api.data_health import get_orats_freshness_state
+    with patch("app.api.data_health._get_effective_orats_timestamp", return_value=("not-a-timestamp", "test", "test")):
+        with patch("app.api.data_health._LAST_ERROR_AT", None):
+            state = get_orats_freshness_state()
+    assert state.get("state") == "UNKNOWN"
+    assert state.get("threshold_triggered") is None
+    assert "malformed" in (state.get("reason") or "").lower()
+
+
+def test_future_orats_timestamp_is_unknown():
+    from app.api.data_health import get_orats_freshness_state
+    with patch(
+        "app.api.data_health._get_effective_orats_timestamp",
+        return_value=("2999-01-01T00:00:00+00:00", "test", "test"),
+    ):
+        with patch("app.api.data_health._LAST_ERROR_AT", None):
+            state = get_orats_freshness_state()
+    assert state.get("state") == "UNKNOWN"
+    assert state.get("threshold_triggered") is None
+    assert "future" in (state.get("reason") or "").lower()
+
+
 def test_get_orats_freshness_state_error_when_no_timestamp():
     """When no effective timestamp and last error set, state is ERROR; threshold_triggered is error."""
     from app.api.data_health import get_orats_freshness_state

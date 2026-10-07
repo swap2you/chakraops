@@ -1,5 +1,7 @@
 # ChakraOps — Scheduler Operations Runbook (R35.0)
 
+Recurring jobs stay unregistered. Current commands are in `docs/OPERATIONS.md` (`C:\Users\swap2\NEEWA-Personal\projects\ChakraOps`). Paths below that name `C:\Development\Workspace\ChakraOps-dev` are historical.
+
 Repository: `C:\Development\Workspace\ChakraOps-dev\chakraops`
 
 ## Defaults (disabled by default)

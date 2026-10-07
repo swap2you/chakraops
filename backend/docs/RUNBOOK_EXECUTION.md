@@ -1,5 +1,7 @@
 # ChakraOps Execution Runbook
 
+Current commands and the canonical checkout are in `docs/OPERATIONS.md` (`C:\Users\swap2\NEEWA-Personal\projects\ChakraOps`). Paths below that name `C:\Development\Workspace\ChakraOps-dev` are historical.
+
 > **R70+ operators:** use the canonical current runbook  
 > [`docs/master/RUNBOOK_EXECUTION_CURRENT.md`](../../docs/master/RUNBOOK_EXECUTION_CURRENT.md).  
 > This file is retained as a historical R24.8–R35 reference and may describe Caddy/BASIC_AUTH layouts that are **not** the preferred production topology.

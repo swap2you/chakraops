@@ -172,20 +172,12 @@ def _redact_sk(msg: str) -> str:
         return msg
     return re.sub(r"sk-[a-zA-Z0-9]+", "sk-***", msg)
 
-# Allowlisted doc paths for search_docs (relative to repo root). Phase 23 + enhancements only.
+# Allowlisted doc paths for search_docs (relative to repo root). Current operating docs only.
 COPILOT_DOCS_ALLOWLIST: List[str] = [
-    "docs/releases/R23.0_requirements.md",
-    "docs/releases/R23.0_release_notes.md",
-    "docs/releases/R23.1_requirements.md",
-    "docs/releases/R23.1_release_notes.md",
-    "docs/releases/R23.2_requirements.md",
-    "docs/releases/R23.2_release_notes.md",
-    "docs/releases/R23.3_requirements.md",
-    "docs/releases/R23.3_release_notes.md",
-    "docs/releases/R23.4_requirements.md",
-    "docs/releases/R23.4_release_notes.md",
-    "chakraops/docs/enhancements/phase_22_trading_intelligence_and_prod_readiness.md",
-    "chakraops/docs/releases/RELEASE_CHECKLIST.md",
+    "AGENTS.md",
+    "docs/OPERATIONS.md",
+    "docs/NEEWA.md",
+    "docs/master/CHAKRAOPS_MASTER_PRD.md",
 ]
 
 # Forbidden patterns in model output — replace with safe message if detected
@@ -199,7 +191,7 @@ COPILOT_FORBIDDEN_PATTERNS = [
 
 
 def _repo_root() -> Path:
-    """Workspace root (parent of chakraops) so docs/releases and chakraops/docs both resolve."""
+    """Repository root so current operating docs resolve."""
     return Path(__file__).resolve().parents[3]
 
 

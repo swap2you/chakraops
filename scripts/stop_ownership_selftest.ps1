@@ -15,9 +15,11 @@ Set-StrictMode -Version Latest
 $repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $backendRoot = Join-Path $repo 'backend'
 $stopScript = Join-Path $repo 'scripts\stop_chakraops.ps1'
+. "$PSScriptRoot\chakraops_common.ps1"
+$py = Get-ChakraOpsPythonPath
 
 Push-Location $backendRoot
-$existing = python -c "from app.core.operations.process_ownership import read_record; print('YES' if read_record() else 'NO')"
+$existing = & $py -c "from app.core.operations.process_ownership import read_record; print('YES' if read_record() else 'NO')"
 Pop-Location
 if ($existing -eq 'YES') {
     Write-Host "REFUSING: an ownership record already exists (a recorded stack may be running)." -ForegroundColor Yellow
@@ -38,19 +40,19 @@ write_record(backend_pid=$bpid, frontend_pid=$fpid, repo_root=r'''$repoRoot''',
              backend_port=$bport, frontend_port=$fport)
 "@
     Push-Location $backendRoot
-    python -c $code | Out-Null
+    & $py -c $code | Out-Null
     Pop-Location
 }
 
 function Clear-Record {
     Push-Location $backendRoot
-    python -c "from app.core.operations.process_ownership import clear_record; clear_record()" | Out-Null
+    & $py -c "from app.core.operations.process_ownership import clear_record; clear_record()" | Out-Null
     Pop-Location
 }
 
 function Record-Exists {
     Push-Location $backendRoot
-    $r = python -c "from app.core.operations.process_ownership import read_record; print('YES' if read_record() else 'NO')"
+    $r = & $py -c "from app.core.operations.process_ownership import read_record; print('YES' if read_record() else 'NO')"
     Pop-Location
     return ($r -eq 'YES')
 }
@@ -64,7 +66,7 @@ function Start-NodeListener([int]$Port) {
 
 function Start-PyModuleListener([int]$Port) {
     # Mirrors `python -m uvicorn ...` command-line shape: `python -m <module> ...`.
-    $p = Start-Process python -ArgumentList '-m', 'http.server', "$Port", '--bind', '127.0.0.1' -PassThru -WindowStyle Hidden
+    $p = Start-Process $py -ArgumentList '-m', 'http.server', "$Port", '--bind', '127.0.0.1' -PassThru -WindowStyle Hidden
     Start-Sleep -Seconds 2
     return $p
 }

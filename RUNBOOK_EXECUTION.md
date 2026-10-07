@@ -1,5 +1,7 @@
 # ChakraOps Frontend — Execution Runbook
 
+Current commands and the canonical checkout are in `docs/OPERATIONS.md` (`C:\Users\swap2\NEEWA-Personal\projects\ChakraOps`).
+
 Runbook for running, testing, and demoing the ChakraOps React frontend (Phase 7.1–8.6). Read-only UI; no execution, journaling, or strategy configuration.
 
 ---

@@ -1,6 +1,8 @@
 # ChakraOps R70+ Execution Runbook (CURRENT)
 
-**Repo:** `C:\Development\Workspace\ChakraOps-dev\chakraops` · branch `main` · `SINGLE_OPERATOR_MAINLINE_LOOP_MODE`  
+Current commands and the canonical checkout are in `docs/OPERATIONS.md` (`C:\Users\swap2\NEEWA-Personal\projects\ChakraOps`). The steps below are historical detail.
+
+**Repo:** `C:\Users\swap2\NEEWA-Personal\projects\ChakraOps` · branch `main` · `SINGLE_OPERATOR_MAINLINE_LOOP_MODE`  
 **Domain (deferred deploy):** `https://chakraops.cloud` — do not touch `dauji.info` during local remediation.
 
 Historical R24–R35 Caddy/world docs remain under archived release notes; this file is operator SoT for R70+.

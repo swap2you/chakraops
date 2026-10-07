@@ -182,7 +182,7 @@ Diagnostics are for developers only; no sensitive data. Use them to confirm scen
 
 ## Scripts (Phase 9)
 
-- **`scripts/market-health-check.ts`** — Fetches LIVE API endpoints, validates schema, writes `artifacts/market_health_<date>_<time>.json`. Used by GitHub Actions (`.github/workflows/market-health.yml`). Run from `frontend/`: `LIVE_API_BASE_URL=<url> npx tsx scripts/market-health-check.ts`. Optional: `ARTIFACTS_DIR`, `MARKET_PHASE`.
+- **`scripts/market-health-check.ts`** — Fetches LIVE API endpoints, validates schema, writes `artifacts/market_health_<date>_<time>.json`. The GitHub workflow (`.github/workflows/market-health.yml`) is manual dispatch only; it has no cron. Run from `frontend/`: `LIVE_API_BASE_URL=<url> npx tsx scripts/market-health-check.ts`. Optional: `ARTIFACTS_DIR`, `MARKET_PHASE`.
 - **`scripts/daily-health-report.ts`** — Reads health artifacts for a day; produces `reports/daily/<YYYY-MM-DD>.md` and `.json`. Run: `npx tsx scripts/daily-health-report.ts [YYYY-MM-DD]`. Optional: `ARTIFACTS_DIR`, `REPORTS_DAILY_DIR`.
 
 All paths are Windows-safe. No secrets in repo; base URL from env.

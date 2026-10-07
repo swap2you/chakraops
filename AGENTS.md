@@ -1,18 +1,24 @@
 # ChakraOps Agent Contract
 
+Canonical checkout: `C:\Users\swap2\NEEWA-Personal\projects\ChakraOps`.
+Origin: `https://github.com/swap2you/chakraops.git` on `main`.
+Operating contract: `docs/NEEWA.md`. Commands: `docs/OPERATIONS.md`.
+
 ## Authority
 
 - Human operator is the final authority.
 - Agents stop and ask when scope is ambiguous.
 - No agent may override operator instructions.
+- Only one writer edits this checkout at a time. Checkpoint and release any active child before mutating.
 
 ## Tool Roles
 
 - **ChatGPT:** roadmap, product architecture, risk governance, release sequencing.
 - **Claude Code:** architecture planning, repository audit, review.
 - **Claude Cowork:** persistent coordination, documentation review, browser-assisted UAT.
-- **Cursor:** approved implementation only, test execution, STEP reports.
-- **Codex:** independent diff review, test-gap review, second opinion.
+- **Cursor:** implementation, test execution, and STEP reports. Use one model from the live Cursor agent inventory at a supported High or Extra High effort.
+- **Codex:** read-only validation through ChatGPT sign-in (`codex login` / `codex exec`). Do not send this route through `OPENAI_API_KEY` or another paid API fallback.
+- Completion is evidence: command exits, runtime SHA, and mission receipts. A note or registry row is not ownership.
 
 ## Release Workflow
 
@@ -49,7 +55,7 @@ Use only when mainline mode is blocked or the operator explicitly requests it:
 - No silent provider fallback.
 - Stay in cash is a valid outcome.
 - Broker execution and order routing stay disabled.
-- Snapshot and regression code may exist and be tested. Do not register, enable, or run recurring jobs during the 2026-10-07 cleanup.
+- Snapshot and regression code may exist and be tested. Do not register, enable, or run recurring snapshot, regression, or market-health schedules.
 
 ## Artifact Safety
 

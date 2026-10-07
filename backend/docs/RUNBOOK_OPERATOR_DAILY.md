@@ -1,5 +1,7 @@
 # ChakraOps — Operator Daily Runbook (R51)
 
+Current commands and the canonical checkout are in `docs/OPERATIONS.md` (`C:\Users\swap2\NEEWA-Personal\projects\ChakraOps`). Paths below that name `C:\Development\Workspace\ChakraOps-dev` are historical.
+
 **Audience:** Single operator, manual-only Wheel + Shares workflow.  
 **Ports:** Backend **18800**, Frontend **18873**. Do not use 8000/5173 for ChakraOps.  
 **Safety:** No auto trading. No broker order routing. Scheduler stays **off**. Stay in Cash is valid.

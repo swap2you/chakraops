@@ -21,10 +21,12 @@
 . "$PSScriptRoot\chakraops_common.ps1"
 
 Set-Location -LiteralPath $script:ChakraOpsBackendRoot
+$py = Get-ChakraOpsPythonPath
+$script:OwnedListenerRemains = $false
 
 Write-Host "=== ChakraOps Shutdown (R35.2) ===" -ForegroundColor Cyan
 
-$pidPayload = python -c @"
+$pidPayload = & $py -c @"
 from app.core.operations.process_ownership import read_record
 import json
 r = read_record()
@@ -41,6 +43,10 @@ else:
         'created_at': r.get('created_at'),
     }))
 "@
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Ownership read failed." -ForegroundColor Yellow
+    exit $LASTEXITCODE
+}
 
 if (-not $pidPayload) {
     Write-Host "No ownership record found - nothing to stop."
@@ -130,8 +136,16 @@ function Stop-ChakraOpsRole {
         $safeToKill = (($sRecord -or $sPort) -and $sCmd -and $sAge)
 
         if ($safeToKill) {
-            taskkill /PID $procId /T /F 2>&1 | Out-Null
-            Write-Host ("[{0}] stopped PID {1} (record={2} port={3} cmd={4} age_ok={5})." -f $Role, $procId, $sRecord, $sPort, $sCmd, $sAge)
+            & taskkill.exe /PID $procId /T /F 2>&1 | Out-Null
+            Start-Sleep -Milliseconds 400
+            $stillProc = Get-Process -Id $procId -ErrorAction SilentlyContinue
+            $stillPort = Test-PidListensOnPort -ProcessId $procId -Port $Port
+            if ($stillProc -or $stillPort) {
+                $script:OwnedListenerRemains = $true
+                Write-Host ("[{0}] owned PID {1} still present after stop." -f $Role, $procId) -ForegroundColor Yellow
+            } else {
+                Write-Host ("[{0}] stopped PID {1} (record={2} port={3} cmd={4} age_ok={5})." -f $Role, $procId, $sRecord, $sPort, $sCmd, $sAge)
+            }
             $stoppedAny = $true
         } else {
             Write-Host ("[{0}] REFUSING PID {1} - ambiguous ownership (record={2} port={3} cmd={4} age_ok={5})." -f $Role, $procId, $sRecord, $sPort, $sCmd, $sAge) -ForegroundColor Yellow
@@ -151,5 +165,24 @@ $frontendPort = if ($record.frontend_port) { [int]$record.frontend_port } else {
 Stop-ChakraOpsRole -Role "backend"  -RecordPid $backendPid  -Port $backendPort  -CmdRegex 'uvicorn|python'
 Stop-ChakraOpsRole -Role "frontend" -RecordPid $frontendPid -Port $frontendPort -CmdRegex 'vite|npm|node'
 
-python -c "from app.core.operations.process_ownership import clear_record; clear_record()" | Out-Null
+function Test-RepoOwnedListener([int]$Port, [string]$CmdRegex) {
+    foreach ($lp in (Get-ListenerPidsOnPort -Port $Port)) {
+        $wmi = Get-CimInstance Win32_Process -Filter "ProcessId=$lp" -ErrorAction SilentlyContinue
+        $cmd = if ($wmi) { [string]$wmi.CommandLine } else { "" }
+        $repoHit = $cmd -like ('*' + $script:ChakraOpsRepoRoot + '*')
+        if (($cmd -match $CmdRegex) -and $repoHit) { return $true }
+    }
+    return $false
+}
+
+if ($script:OwnedListenerRemains -or (Test-RepoOwnedListener -Port $backendPort -CmdRegex 'uvicorn|python') -or (Test-RepoOwnedListener -Port $frontendPort -CmdRegex 'vite|npm|node')) {
+    Write-Host "Owned listeners are still running. Ownership record kept." -ForegroundColor Yellow
+    exit 1
+}
+
+& $py -c "from app.core.operations.process_ownership import clear_record; clear_record()" | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Ownership record was not cleared." -ForegroundColor Yellow
+    exit $LASTEXITCODE
+}
 Write-Host "Ownership record cleared. Shutdown complete."

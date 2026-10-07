@@ -1,17 +1,8 @@
-# Phase 9: Market-aware health pipeline. Runs on schedule (ET); validates LIVE API; uploads report artifact.
-# Set repository secret LIVE_API_BASE_URL (e.g. https://your-backend.example.com). No trailing slash.
+# Manual market-health check. Recurring cron triggers are disabled.
+# Set repository secret LIVE_API_BASE_URL when an operator runs this by hand. No trailing slash.
 name: Market Health
 
 on:
-  schedule:
-    # Pre-market 08:45 ET (EST) = 13:45 UTC
-    - cron: "45 13 * * 1-5"
-    # Market open 09:35 ET = 14:35 UTC
-    - cron: "35 14 * * 1-5"
-    # Midday 12:30 ET = 17:30 UTC
-    - cron: "30 17 * * 1-5"
-    # Post-market 16:30 ET = 21:30 UTC
-    - cron: "30 21 * * 1-5"
   workflow_dispatch:
 
 env:

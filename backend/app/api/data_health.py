@@ -162,10 +162,12 @@ def _orats_warn_minutes() -> int:
 
 def get_orats_freshness_state() -> Dict[str, Any]:
     """
-    R22.2: ORATS freshness state machine. OK / DELAYED / WARN / ERROR.
-    OK: age <= ORATS_OK_MINUTES (default 15). DELAYED: OK < age <= ORATS_WARN_MINUTES (30). WARN: age > 30. ERROR: API failure.
+    R22.2: ORATS freshness state machine. OK / DELAYED / WARN / ERROR / UNKNOWN.
+    OK: age <= ORATS_OK_MINUTES (default 15). DELAYED: OK < age <= ORATS_WARN_MINUTES (30). WARN: age > 30.
+    ERROR: recorded API failure, or age beyond the hard-stale window.
+    UNKNOWN: no provider timestamp and no recorded API failure. That is not an HTTP failure.
     Returns: state, state_label, age_minutes, delay_minutes (warn threshold), as_of (effective timestamp ISO),
-    threshold_triggered ("ok_minutes"|"warn_minutes"|"error"), reason (when ERROR/WARN).
+    threshold_triggered ("ok_minutes"|"warn_minutes"|"error"|None), reason (when ERROR/WARN/UNKNOWN).
     """
     ok_min = _orats_ok_minutes()
     warn_min = _orats_warn_minutes()
@@ -182,12 +184,12 @@ def get_orats_freshness_state() -> Dict[str, Any]:
         }
     if effective_ts is None:
         return {
-            "state": "ERROR",
-            "state_label": "ERROR",
+            "state": "UNKNOWN",
+            "state_label": "UNKNOWN",
             "age_minutes": None,
             "delay_minutes": warn_min,
             "as_of": None,
-            "threshold_triggered": "error",
+            "threshold_triggered": None,
             "reason": "No ORATS timestamp",
         }
     try:

@@ -65,4 +65,4 @@ powershell -NoProfile -File .\chakra.ps1 status
 
 ## Next work
 
-Keep one mission on this checkout. The next bounded stage is source-grounded validation of data freshness and the highest failing user journey, then a fix that fits the worker timeout. Do not register schedules or enable broker execution.
+A missing ORATS timestamp with no recorded provider failure is UNKNOWN on System Diagnostics. A recorded failure is still an error. Symbol diagnostics does not run a lookup from the query string until the ticker is entered. Do not register schedules or enable broker execution.

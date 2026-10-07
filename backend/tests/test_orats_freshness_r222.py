@@ -42,6 +42,23 @@ def test_get_orats_freshness_state_warn():
     assert state.get("state_label") == "WARN"
 
 
+def test_get_orats_freshness_state_unknown_when_no_timestamp_and_no_error():
+    """Missing provider timestamp with no recorded failure is UNKNOWN, not ERROR.
+
+    System Diagnostics shows this label on the ORATS card. A live strikes HTTP 200
+    is not an API failure, and sticky connectivity for the same inputs is UNKNOWN.
+    """
+    from app.api.data_health import get_orats_freshness_state
+    with patch("app.api.data_health._get_effective_orats_timestamp", return_value=(None, "test", "test")):
+        with patch("app.api.data_health._LAST_ERROR_AT", None):
+            with patch("app.api.data_health._LAST_ERROR_REASON", None):
+                state = get_orats_freshness_state()
+    assert state.get("state") == "UNKNOWN"
+    assert state.get("state_label") == "UNKNOWN"
+    assert state.get("threshold_triggered") is None
+    assert state.get("as_of") is None
+
+
 def test_get_orats_freshness_state_error_when_no_timestamp():
     """When no effective timestamp and last error set, state is ERROR; threshold_triggered is error."""
     from app.api.data_health import get_orats_freshness_state

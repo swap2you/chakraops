@@ -48,7 +48,8 @@ Use only when mainline mode is blocked or the operator explicitly requests it:
 - ORATS is the sole active market-data provider for options.
 - No silent provider fallback.
 - Stay in cash is a valid outcome.
-- Scheduler and recurring jobs remain disabled unless the operator explicitly enables them.
+- Broker execution and order routing stay disabled.
+- The 2026-10-07 owner directive authorizes data-snapshot capture and nightly regression jobs. Those jobs do not place trades.
 
 ## Artifact Safety
 
@@ -73,9 +74,9 @@ Use only when mainline mode is blocked or the operator explicitly requests it:
 - History rewrite
 - Schema migrations that risk data loss without a rollback plan
 - Runtime-file untracking of known debt without scope
-- Folder moves
 - Broker write / order execution
-- Enabling scheduler by default
+- Enabling broker or order execution on a schedule
+- The 2026-10-07 cleanup directive authorizes the shallow layout move, removal of proven duplicate checkouts after fresh-clone proof, and snapshot/nightly regression jobs. It does not authorize broker execution.
 - Deployment changes outside authorized release scope
 
 ## Tool-Specific Files

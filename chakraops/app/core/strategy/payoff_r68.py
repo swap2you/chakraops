@@ -4,7 +4,69 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any, Dict, List, Optional
+
+
+def _finite(value: Any) -> bool:
+    try:
+        return math.isfinite(float(value))
+    except (TypeError, ValueError):
+        return False
+
+
+def _unavailable(strategy: str) -> Dict[str, Any]:
+    return {
+        "strategy": strategy,
+        "ok": False,
+        "data_status": "DATA_UNAVAILABLE",
+        "decision": "WAIT",
+        "manual_only": True,
+        "trade_execution": False,
+    }
+
+
+def calculate_credit_spread_payoff(
+    *,
+    width: float,
+    credit: float,
+    contracts: int = 1,
+    short_strike: Optional[float] = None,
+    expiration_underlying: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Expiry payoff for one defined-risk credit spread.
+
+    ``credit`` and ``width`` are per share. One standard contract covers 100 shares.
+    Maximum gain is the credit. Maximum loss is width minus credit, times the multiplier.
+    """
+    if not _finite(width) or not _finite(credit) or int(contracts) < 1 or float(width) <= 0 or float(credit) < 0:
+        return _unavailable("credit_spread")
+    if float(credit) >= float(width):
+        return _unavailable("credit_spread")
+    n = int(contracts)
+    mult = 100 * n
+    max_profit = float(credit) * mult
+    max_loss = (float(width) - float(credit)) * mult
+    out: Dict[str, Any] = {
+        "strategy": "credit_spread",
+        "width": float(width),
+        "credit": float(credit),
+        "contracts": n,
+        "max_profit": round(max_profit, 2),
+        "max_loss": round(max_loss, 2),
+        "bounded_max_profit": True,
+        "bounded_max_loss": True,
+        "manual_only": True,
+        "trade_execution": False,
+    }
+    if expiration_underlying is not None and short_strike is not None:
+        if not _finite(expiration_underlying) or not _finite(short_strike):
+            return _unavailable("credit_spread")
+        # Bull put spread: short strike above the long strike by ``width``.
+        intrinsic = max(float(short_strike) - float(expiration_underlying), 0.0)
+        spread_intrinsic = min(intrinsic, float(width))
+        out["expiration_pnl"] = round(max_profit - spread_intrinsic * mult, 2)
+    return out
 
 
 def calculate_short_put_payoff(
@@ -19,6 +81,8 @@ def calculate_short_put_payoff(
     Max profit is premium received (bounded). Max loss theoretically to zero
     underlying (bounded by strike * 100 * contracts - premium).
     """
+    if not _finite(strike) or not _finite(premium) or int(contracts) < 1 or float(premium) < 0 or float(strike) <= 0:
+        return _unavailable("short_put")
     k = float(strike)
     p = float(premium)
     n = max(1, int(contracts))

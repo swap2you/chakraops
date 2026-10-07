@@ -1,4 +1,4 @@
-# ChakraOps root command surface. Recurring jobs stay unregistered.
+# ChakraOps root command surface. Broker jobs stay unregistered. Owner brief is a separate scheduled task.
 param(
     [Parameter(Mandatory = $true, Position = 0)]
     [ValidateSet("setup", "start", "stop", "test", "status")]

@@ -49,7 +49,7 @@ Use only when mainline mode is blocked or the operator explicitly requests it:
 - No silent provider fallback.
 - Stay in cash is a valid outcome.
 - Broker execution and order routing stay disabled.
-- The 2026-10-07 owner directive authorizes data-snapshot capture and nightly regression jobs. Those jobs do not place trades.
+- Snapshot and regression code may exist and be tested. Do not register, enable, or run recurring jobs during the 2026-10-07 cleanup.
 
 ## Artifact Safety
 
@@ -62,7 +62,7 @@ Use only when mainline mode is blocked or the operator explicitly requests it:
 
 ## Required Gates
 
-- Backend: `cd chakraops && python -m pytest tests -q --tb=short`
+- Backend: `cd backend && python -m pytest tests -q --tb=short`
 - Frontend tests: `cd frontend && npm run test -- --run`
 - Frontend build: `cd frontend && npm run build`
 - Record evidence locally in `out/verification/<Release>/notes.md`
@@ -76,7 +76,7 @@ Use only when mainline mode is blocked or the operator explicitly requests it:
 - Runtime-file untracking of known debt without scope
 - Broker write / order execution
 - Enabling broker or order execution on a schedule
-- The 2026-10-07 cleanup directive authorizes the shallow layout move, removal of proven duplicate checkouts after fresh-clone proof, and snapshot/nightly regression jobs. It does not authorize broker execution.
+- The 2026-10-07 cleanup directive authorizes the shallow layout and removal of proven duplicate checkouts after central main is verified. It does not authorize broker execution or recurring jobs.
 - Deployment changes outside authorized release scope
 
 ## Tool-Specific Files

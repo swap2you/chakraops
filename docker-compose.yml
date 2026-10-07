@@ -7,14 +7,14 @@ services:
   backend:
     build:
       context: .
-      dockerfile: chakraops/Dockerfile
+      dockerfile: backend/Dockerfile
     restart: unless-stopped
     ports:
       - "18800:8000"
     volumes:
       - ./out:/workspace/out
       # R26.6: persist data/ (journal, checklists, monthly reports)
-      - ./data:/workspace/chakraops/data
+      - ./data:/workspace/backend/data
     env_file:
       - .env
     logging:

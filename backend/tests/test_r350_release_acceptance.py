@@ -40,4 +40,4 @@ def test_validation_docs_exist():
 
 
 def test_scheduler_runbook_exists():
-    assert (REPO / "chakraops" / "docs" / "RUNBOOK_SCHEDULER_OPERATIONS.md").exists()
+    assert (REPO / "backend" / "docs" / "RUNBOOK_SCHEDULER_OPERATIONS.md").exists()

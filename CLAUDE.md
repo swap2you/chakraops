@@ -4,24 +4,18 @@ Read `AGENTS.md` first. This file is a thin Claude-specific supplement.
 
 ## Paths
 
-- Repo root: `C:\Development\Workspace\ChakraOps-dev\chakraops`
-- Backend: `chakraops/`
+- Final checkout: `C:\Users\swap2\NEEWA-Personal\Projects\ChakraOps`
+- Backend: `backend/`
 - Frontend: `frontend/`
-- Master docs: `docs/master/`
-- Release ledger: `chakraops/docs/releases/`
-- Verification evidence: `out/verification/<Release>/notes.md`
+- Strategy config: `backend/config/`
+- Operating commands: `docs/OPERATIONS.md`
 
 ## Commands
 
 ```bash
-# Backend tests
-cd chakraops && python -m pytest tests -q --tb=short
-
-# Frontend tests
-cd frontend && npm run test -- --run
-
-# Frontend build
-cd frontend && npm run build
+# From the repository root
+powershell -NoProfile -File .\chakra.ps1 test
+powershell -NoProfile -File .\chakra.ps1 status
 ```
 
 ## Stop Conditions

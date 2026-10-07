@@ -32,6 +32,11 @@ frontend/dist/
 .DS_Store
 Thumbs.db
 
+# Local runtime, inbox, and review output
+runtime/
+00_inbox/
+deliverables/
+
 # Data / logs (keep structure, ignore large or sensitive)
 *.db
 logs/

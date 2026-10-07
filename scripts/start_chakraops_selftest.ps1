@@ -2,7 +2,7 @@
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$repo = "C:\Development\Workspace\ChakraOps-dev\chakraops"
+$repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 . (Join-Path $repo "scripts\chakraops_startup.ps1")
 
 $pass = 0

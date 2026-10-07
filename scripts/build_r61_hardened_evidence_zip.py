@@ -72,7 +72,7 @@ def main() -> int:
     }
     (quality_dir / "quality_summary.json").write_text(json.dumps(steps, indent=2), encoding="utf-8")
 
-    allowlist = (repo / "chakraops" / "config" / "robinhood_read_allowlist.json").read_text(encoding="utf-8")
+    allowlist = (repo / "backend" / "config" / "robinhood_read_allowlist.json").read_text(encoding="utf-8")
     assert "review_equity_order" not in allowlist
     assert "place_equity_order" in allowlist  # denylist section
 

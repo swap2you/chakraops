@@ -15,7 +15,7 @@
 #   - Idempotent: not-running PID -> "already stopped"; missing record -> "nothing to stop".
 #   - Never targets port 8000 (Docker); only the record's role ports (default 18800/18873).
 #
-# Canonical checkout: C:\Development\Workspace\ChakraOps-dev\chakraops
+# Repo root is the parent of this scripts directory.
 # (repo-root enforcement is inherited from chakraops_common.ps1 / process_ownership).
 
 . "$PSScriptRoot\chakraops_common.ps1"

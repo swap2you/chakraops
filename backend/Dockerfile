@@ -1,14 +1,14 @@
-# R24.8: Backend Docker packaging. Build from repo root: docker build -f chakraops/Dockerfile .
+# Backend image. Build from repo root: docker build -f backend/Dockerfile .
 # Canonical out/ path in container: /workspace/out (mount at run via compose).
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 WORKDIR /workspace
 
-# Copy only chakraops so that Path(__file__).parents[4] = /workspace (repo root in container).
-COPY chakraops /workspace/chakraops
+# Depth is unchanged: parents[4] from backend/app/core/operations is /workspace.
+COPY backend /workspace/backend
 
-WORKDIR /workspace/chakraops
-ENV PYTHONPATH=/workspace/chakraops
+WORKDIR /workspace/backend
+ENV PYTHONPATH=/workspace/backend
 ENV PYTHONUNBUFFERED=1
 
 RUN pip install --no-cache-dir -r requirements.txt

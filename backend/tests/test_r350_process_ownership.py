@@ -44,4 +44,4 @@ def test_stop_script_refuses_stale_paths():
     stop = root / "scripts" / "stop_chakraops.ps1"
     text = stop.read_text(encoding="utf-8")
     assert "repo_root mismatch" in text.lower() or "Refusing" in text
-    assert "ChakraOps-dev" in text
+    assert "ChakraOps-dev" not in text

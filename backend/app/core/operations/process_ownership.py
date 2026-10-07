@@ -11,8 +11,15 @@ from typing import Any, Dict, Optional
 
 from app.core.chakraops_ports import BACKEND_PORT, FRONTEND_PORT
 
-REPO_ROOT_EXPECTED = r"C:\Development\Workspace\ChakraOps-dev\chakraops"
 STALE_CHECKOUT_MARKER = r"C:\Development\Workspace\ChakraOps"
+
+
+def discover_repo_root() -> Path:
+    """Git root: backend/app/core/operations/this file -> parents[4]."""
+    return Path(__file__).resolve().parents[4]
+
+
+REPO_ROOT_EXPECTED = str(discover_repo_root())
 
 
 def ownership_path() -> Path:
@@ -70,7 +77,7 @@ def clear_record() -> None:
 def validate_repo_root(repo_root: str) -> None:
     normalized = str(repo_root).replace("/", "\\").rstrip("\\")
     if STALE_CHECKOUT_MARKER.lower() == normalized.lower():
-        raise ValueError("stale checkout path detected; use ChakraOps-dev")
+        raise ValueError("stale checkout path detected")
     expected = REPO_ROOT_EXPECTED.replace("/", "\\").rstrip("\\")
     if normalized.lower() != expected.lower():
         raise ValueError(f"unexpected repo root: {repo_root}")

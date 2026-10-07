@@ -6,7 +6,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$RepoRoot = "C:\Development\Workspace\ChakraOps-dev\chakraops"
+$RepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 Set-Location -LiteralPath $RepoRoot
 
 $ManifestPath = Join-Path $RepoRoot "docs\ai\validation\R31_R35_ACCEPTANCE_MANIFEST.json"

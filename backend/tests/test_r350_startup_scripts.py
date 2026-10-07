@@ -17,8 +17,8 @@ def test_startup_scripts_exist_and_reference_correct_path():
     start_text = start.read_text(encoding="utf-8")
     stop_text = stop.read_text(encoding="utf-8")
     common_text = (root / "scripts" / "chakraops_common.ps1").read_text(encoding="utf-8")
-    assert "ChakraOps-dev" in common_text
-    assert "ChakraOps\\chakraops" not in common_text.replace("ChakraOps-dev", "")
+    assert "ChakraOps-dev" not in common_text
+    assert 'Join-Path $script:ChakraOpsRepoRoot "backend"' in common_text
     assert "chakraops_common.ps1" in start_text
     assert "chakraops_common.ps1" in stop_text
     assert '-like "$StaleRoot' not in start_text

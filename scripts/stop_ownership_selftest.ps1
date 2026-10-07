@@ -12,8 +12,8 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$repo = 'C:\Development\Workspace\ChakraOps-dev\chakraops'
-$backendRoot = Join-Path $repo 'chakraops'
+$repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+$backendRoot = Join-Path $repo 'backend'
 $stopScript = Join-Path $repo 'scripts\stop_chakraops.ps1'
 
 Push-Location $backendRoot

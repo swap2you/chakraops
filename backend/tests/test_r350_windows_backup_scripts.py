@@ -72,7 +72,7 @@ if ($errs) {{ exit 1 }} else {{ exit 0 }}
 
 
 def test_runbook_references_exist():
-    runbook = (REPO / "chakraops" / "docs" / "RUNBOOK_BACKUP_RESTORE.md").read_text(encoding="utf-8")
+    runbook = (REPO / "backend" / "docs" / "RUNBOOK_BACKUP_RESTORE.md").read_text(encoding="utf-8")
     for script in (
         "backup_chakraops.ps1",
         "list_backups_chakraops.ps1",

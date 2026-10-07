@@ -53,7 +53,7 @@ services:
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-https://chakraops.cloud}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL required}
     volumes:
-      - chakraops_data:/workspace/chakraops/data
+      - chakraops_data:/workspace/backend/data
       - chakraops_out:/workspace/out
       - ${ROBINHOOD_TOKEN_HOST_PATH:-../secrets/robinhood_mcp_token}:/run/secrets/robinhood_mcp_token:ro
     expose:
@@ -131,7 +131,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL required}
       R54_MONITOR_INTERVAL_SEC: ${R54_MONITOR_INTERVAL_SEC:-90}
     volumes:
-      - chakraops_data:/workspace/chakraops/data
+      - chakraops_data:/workspace/backend/data
       - chakraops_out:/workspace/out
       - ${ROBINHOOD_TOKEN_HOST_PATH:-../secrets/robinhood_mcp_token}:/run/secrets/robinhood_mcp_token:ro
     command: ["python", "scripts/run_advisory_monitor.py"]

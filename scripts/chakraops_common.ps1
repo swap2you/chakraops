@@ -4,9 +4,9 @@ $ErrorActionPreference = "Stop"
 
 . "$PSScriptRoot\chakraops_ports.ps1"
 
-$script:ChakraOpsRepoRoot = "C:\Development\Workspace\ChakraOps-dev\chakraops"
+$script:ChakraOpsRepoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $script:ChakraOpsStaleRoot = "C:\Development\Workspace\ChakraOps"
-$script:ChakraOpsBackendRoot = Join-Path $script:ChakraOpsRepoRoot "chakraops"
+$script:ChakraOpsBackendRoot = Join-Path $script:ChakraOpsRepoRoot "backend"
 $script:ChakraOpsFrontendRoot = Join-Path $script:ChakraOpsRepoRoot "frontend"
 $script:ChakraOpsScriptsRoot = Join-Path $script:ChakraOpsRepoRoot "scripts"
 

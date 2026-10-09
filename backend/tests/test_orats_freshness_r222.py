@@ -1,20 +1,12 @@
 # Copyright 2026 ChakraOps
 # SPDX-License-Identifier: MIT
 """R22.2: ORATS freshness state (OK / DELAYED / WARN / ERROR)."""
-import sys
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
-# Repository-root unittest loads this file without the backend cwd on sys.path.
-# The root loader execs this source with its own __file__, so this insert runs
-# only when this module is the backend suite.
-_BACKEND_ROOT = Path(__file__).resolve().parents[1]
-if _BACKEND_ROOT.name == "backend" and str(_BACKEND_ROOT) not in sys.path:
-    sys.path.insert(0, str(_BACKEND_ROOT))
 
 
 def test_get_orats_freshness_state_ok():
@@ -201,80 +193,76 @@ def test_system_health_slack_channels_r222():
 
 # `python -m unittest tests.test_orats_freshness_r222` from backend/ only
 # discovers TestCase classes. Pytest functions above are invisible to it, so
-# that command used to exit 5 with "NO TESTS RAN". This class is the evidence
-# for that invocation. The repository-root loader execs this file; __file__
-# there is the root module, so this class stays on the backend module only.
-if Path(__file__).resolve().parent.parent.name == "backend":
+# that command used to exit 5 with "NO TESTS RAN".
+class OratsFreshnessBackendUnittest(unittest.TestCase):
+    """GET health only; no broker order calls."""
 
-    class OratsFreshnessBackendUnittest(unittest.TestCase):
-        """Backend-module evidence. GET health only; no broker order calls."""
+    def test_unknown_clocks_and_recorded_error(self):
+        from app.api import data_health as dh
 
-        def test_unknown_clocks_and_recorded_error(self):
-            from app.api import data_health as dh
-
-            cases = (
-                ("not-a-timestamp", "malformed"),
-                ("2999-01-01T00:00:00+00:00", "future"),
-                ("2026-06-01T12:00:00", "timezone"),
-            )
-            with (
-                patch.object(dh, "_load_persisted_state", lambda: None),
-                patch.object(dh, "_LAST_ERROR_AT", None),
-                patch.object(dh, "_LAST_ERROR_REASON", None),
-            ):
-                for ts, fragment in cases:
-                    with patch.object(dh, "_LAST_SUCCESS_AT", ts):
-                        fresh = dh.get_orats_freshness_state()
-                        health = dh.get_data_health()
-                        self.assertEqual(fresh.get("state"), "UNKNOWN")
-                        self.assertIsNone(fresh.get("threshold_triggered"))
-                        self.assertIn(fragment, (fresh.get("reason") or "").lower())
-                        self.assertEqual(health.get("provider_connectivity_status"), "UNKNOWN")
-                        self.assertEqual(health.get("status"), "UNKNOWN")
-                        self.assertEqual(dh._compute_sticky_status(ts), "UNKNOWN")
-                with (
-                    patch.object(dh, "_LAST_SUCCESS_AT", None),
-                    patch.object(dh, "_LAST_ERROR_AT", "2026-01-01T12:00:00+00:00"),
-                    patch.object(dh, "_LAST_ERROR_REASON", "recorded provider failure"),
-                ):
-                    failed = dh.get_orats_freshness_state()
-                    self.assertEqual(failed.get("state"), "ERROR")
-                    self.assertEqual(failed.get("threshold_triggered"), "error")
-
-        def test_missing_state_does_not_create_directories(self):
-            import tempfile
-
-            from app.api import data_health as dh
-            from app.core.eval import evaluation_store
-
-            with tempfile.TemporaryDirectory() as tmp:
-                tmp_path = Path(tmp)
-                state_file = tmp_path / "nested" / "data_health_state.json"
-                snapshot = tmp_path / "missing-snapshot"
-                with (
-                    patch.object(dh, "_data_health_state_path", lambda: state_file),
-                    patch.object(evaluation_store, "_get_evaluations_dir", lambda: snapshot / "evaluations"),
-                    patch.object(dh, "_LAST_SUCCESS_AT", None),
-                    patch.object(dh, "_LAST_ERROR_AT", None),
-                ):
-                    dh._load_persisted_state()
+        cases = (
+            ("not-a-timestamp", "malformed"),
+            ("2999-01-01T00:00:00+00:00", "future"),
+            ("2026-06-01T12:00:00", "timezone"),
+        )
+        with (
+            patch.object(dh, "_load_persisted_state", lambda: None),
+            patch.object(dh, "_LAST_ERROR_AT", None),
+            patch.object(dh, "_LAST_ERROR_REASON", None),
+        ):
+            for ts, fragment in cases:
+                with patch.object(dh, "_LAST_SUCCESS_AT", ts):
+                    fresh = dh.get_orats_freshness_state()
                     health = dh.get_data_health()
-                    self.assertFalse(state_file.exists())
-                    self.assertFalse(state_file.parent.exists())
-                    self.assertFalse(snapshot.exists())
-                    self.assertEqual(health.get("status"), "UNKNOWN")
+                    self.assertEqual(fresh.get("state"), "UNKNOWN")
+                    self.assertIsNone(fresh.get("threshold_triggered"))
+                    self.assertIn(fragment, (fresh.get("reason") or "").lower())
                     self.assertEqual(health.get("provider_connectivity_status"), "UNKNOWN")
+                    self.assertEqual(health.get("status"), "UNKNOWN")
+                    self.assertEqual(dh._compute_sticky_status(ts), "UNKNOWN")
+            with (
+                patch.object(dh, "_LAST_SUCCESS_AT", None),
+                patch.object(dh, "_LAST_ERROR_AT", "2026-01-01T12:00:00+00:00"),
+                patch.object(dh, "_LAST_ERROR_REASON", "recorded provider failure"),
+            ):
+                failed = dh.get_orats_freshness_state()
+                self.assertEqual(failed.get("state"), "ERROR")
+                self.assertEqual(failed.get("threshold_triggered"), "error")
 
-        def test_loopback_health_get_only(self):
-            from fastapi.testclient import TestClient
-            from app.api.server import app
+    def test_missing_state_does_not_create_directories(self):
+        import tempfile
 
-            client = TestClient(app)
-            health = client.get("/health")
-            healthz = client.get("/api/healthz")
-            self.assertEqual(health.status_code, 200)
-            self.assertIs(health.json().get("ok"), True)
-            self.assertEqual(health.json().get("status"), "healthy")
-            self.assertEqual(healthz.status_code, 200)
-            self.assertIs(healthz.json().get("ok"), True)
-            self.assertEqual(healthz.json().get("status"), "ok")
+        from app.api import data_health as dh
+        from app.core.eval import evaluation_store
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            state_file = tmp_path / "nested" / "data_health_state.json"
+            snapshot = tmp_path / "missing-snapshot"
+            with (
+                patch.object(dh, "_data_health_state_path", lambda: state_file),
+                patch.object(evaluation_store, "_get_evaluations_dir", lambda: snapshot / "evaluations"),
+                patch.object(dh, "_LAST_SUCCESS_AT", None),
+                patch.object(dh, "_LAST_ERROR_AT", None),
+            ):
+                dh._load_persisted_state()
+                health = dh.get_data_health()
+                self.assertFalse(state_file.exists())
+                self.assertFalse(state_file.parent.exists())
+                self.assertFalse(snapshot.exists())
+                self.assertEqual(health.get("status"), "UNKNOWN")
+                self.assertEqual(health.get("provider_connectivity_status"), "UNKNOWN")
+
+    def test_loopback_health_get_only(self):
+        from fastapi.testclient import TestClient
+        from app.api.server import app
+
+        client = TestClient(app)
+        health = client.get("/health")
+        healthz = client.get("/api/healthz")
+        self.assertEqual(health.status_code, 200)
+        self.assertIs(health.json().get("ok"), True)
+        self.assertEqual(health.json().get("status"), "healthy")
+        self.assertEqual(healthz.status_code, 200)
+        self.assertIs(healthz.json().get("ok"), True)
+        self.assertEqual(healthz.json().get("status"), "ok")

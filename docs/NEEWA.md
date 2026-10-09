@@ -24,6 +24,11 @@ Implementation uses one Cursor agent model from the live inventory. This session
 
 `MISSION-20261007T154400Z-0991E812` reached `OWNER_REVIEW` after a child failure. That state is not success. A child timeout or `OWNER_REVIEW` without an independent pass is incomplete. Same-mission continuation is only the supported `neewa_mission.py step` path, and that path skips terminal states. A terminal mission is closed with a same-state note, then exactly one linked successor is submitted. Do not relabel a failed stage as success.
 
+Preserved outcomes, unchanged by this software stage:
+
+- `MISSION-20261007T185227Z-C29E3404` remains terminal FAILED after 3/3 repair cycles.
+- `MISSION-20261007T204742Z-1FFC322B` remains BLOCKED_INTENT before any child.
+
 ## What the application is
 
 ChakraOps is a local decision-support app for a wheel-style workflow: cash-secured puts, covered calls, and shares. It ranks candidates, shows risk and data freshness, and builds a manual ticket. It does not place orders. A passing payoff calculation is not evidence of profitability. Research that claims an edge has to account for fees, slippage, liquidity, assignment, drawdown, and out-of-sample results.
@@ -65,4 +70,6 @@ powershell -NoProfile -File .\chakra.ps1 status
 
 ## Next work
 
-A missing ORATS timestamp with no recorded provider failure is UNKNOWN on System Diagnostics. A recorded failure is still an error. Symbol diagnostics does not run a lookup from the query string until the ticker is entered. Do not register schedules or enable broker execution.
+A missing, malformed, future, or timezone-less ORATS timestamp is UNKNOWN for freshness and for provider connectivity. A recorded provider failure with no timestamp is still an error. Symbol diagnostics does not run a lookup from the query string until the ticker is entered. Do not register schedules or enable broker execution.
+
+Next stage, not started in this software stage: read-only account reconciliation and live evaluation rejection reporting.

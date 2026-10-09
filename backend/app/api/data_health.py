@@ -35,8 +35,12 @@ _MAX_LATENCY_SAMPLES = 20
 
 # Persistence path (Phase 8B)
 def _data_health_state_path() -> Path:
+    """Sticky-status file. Resolving this path must not create directories.
+
+    Independent review runs pytest against a temporary directory. A read of
+    missing state has to succeed there and still return a test receipt.
+    """
     out = Path(__file__).resolve().parents[2] / "out"
-    out.mkdir(parents=True, exist_ok=True)
     return out / "data_health_state.json"
 
 
@@ -75,6 +79,7 @@ def _persist_state() -> None:
     """Write current state to file."""
     path = _data_health_state_path()
     try:
+        path.parent.mkdir(parents=True, exist_ok=True)
         data = {
             "last_success_at": _LAST_SUCCESS_AT,
             "last_attempt_at": _LAST_ATTEMPT_AT,
@@ -91,10 +96,18 @@ def _persist_state() -> None:
 
 
 def _get_evaluation_completed_at() -> tuple[Optional[str], str]:
-    """Latest completed evaluation clock — advisory usability only, not provider connectivity."""
+    """Latest completed evaluation clock — advisory usability only, not provider connectivity.
+
+    A missing pointer file is not a reason to create directories. Independent
+    review runs pytest with a temporary directory and still needs this receipt.
+    """
     try:
-        from app.core.eval.evaluation_store import load_latest_pointer
-        pointer = load_latest_pointer()
+        from app.core.eval import evaluation_store
+
+        latest = evaluation_store._get_evaluations_dir() / "latest.json"
+        if not latest.exists():
+            return None, "none"
+        pointer = evaluation_store.load_latest_pointer()
         if pointer and getattr(pointer, "completed_at", None):
             return pointer.completed_at, "persisted_run"
     except Exception as e:
@@ -124,24 +137,58 @@ def _orats_error_minutes() -> int:
         return 1440
 
 
+def _inspect_orats_timestamp(
+    ts: str,
+    now: Optional[datetime] = None,
+) -> tuple[Optional[float], Optional[str]]:
+    """Return (age_minutes, problem) for one provider timestamp.
+
+    problem is ``malformed``, ``timezone-less``, or ``future`` when the clock
+    cannot support a healthy connectivity status. age_minutes is set for a
+    parsed aware timestamp, including a future one. Both freshness and
+    provider connectivity use this so they cannot disagree.
+    """
+    if not isinstance(ts, str) or not ts.strip():
+        return None, "malformed"
+    try:
+        parsed = datetime.fromisoformat(ts.strip().replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None, "malformed"
+    if parsed.tzinfo is None or parsed.tzinfo.utcoffset(parsed) is None:
+        return None, "timezone-less"
+    try:
+        aware = parsed.astimezone(timezone.utc)
+        ref = now or datetime.now(timezone.utc)
+        if ref.tzinfo is None:
+            ref = ref.replace(tzinfo=timezone.utc)
+        age_minutes = (ref.astimezone(timezone.utc) - aware).total_seconds() / 60
+    except (ValueError, TypeError, OverflowError, OSError):
+        return None, "malformed"
+    if age_minutes < 0:
+        return age_minutes, "future"
+    return age_minutes, None
+
+
 def _compute_sticky_status(effective_last_success_at: Optional[str] = None) -> str:
-    """Phase 8B / R70-ABCD: UNKNOWN/DOWN when no success; OK/WARN/ERROR from age vs windows."""
+    """Phase 8B / R70-ABCD: UNKNOWN/DOWN when no success; OK/WARN/ERROR from age vs windows.
+
+    A malformed, future, or timezone-less timestamp is UNKNOWN. It must not
+    report OK when freshness for the same input is UNKNOWN.
+    """
     use_ts = effective_last_success_at if effective_last_success_at is not None else _LAST_SUCCESS_AT
     if use_ts is None and _LAST_ERROR_AT is None:
         return "UNKNOWN"
     if use_ts is None:
         return "DOWN"
-    try:
-        success_dt = datetime.fromisoformat(use_ts.replace("Z", "+00:00"))
-        window_min = _evaluation_window_minutes()
-        age_minutes = (datetime.now(timezone.utc) - success_dt).total_seconds() / 60
-        if age_minutes <= window_min:
-            return "OK"
-        if age_minutes > _orats_error_minutes():
-            return "ERROR"
-        return "WARN"
-    except Exception:
-        return "OK" if use_ts else "UNKNOWN"
+    age_minutes, problem = _inspect_orats_timestamp(use_ts)
+    if problem is not None or age_minutes is None:
+        return "UNKNOWN"
+    window_min = _evaluation_window_minutes()
+    if age_minutes <= window_min:
+        return "OK"
+    if age_minutes > _orats_error_minutes():
+        return "ERROR"
+    return "WARN"
 
 
 def _orats_ok_minutes() -> int:
@@ -192,28 +239,21 @@ def get_orats_freshness_state() -> Dict[str, Any]:
             "threshold_triggered": None,
             "reason": "No ORATS timestamp",
         }
-    try:
-        success_dt = datetime.fromisoformat(effective_ts.replace("Z", "+00:00"))
-        age_minutes = (datetime.now(timezone.utc) - success_dt).total_seconds() / 60
-    except (ValueError, TypeError):
-        return {
-            "state": "UNKNOWN",
-            "state_label": "UNKNOWN",
-            "age_minutes": None,
-            "delay_minutes": warn_min,
-            "as_of": effective_ts,
-            "threshold_triggered": None,
-            "reason": "ORATS timestamp is malformed",
+    age_minutes, problem = _inspect_orats_timestamp(effective_ts)
+    if problem is not None or age_minutes is None:
+        reasons = {
+            "malformed": "ORATS timestamp is malformed",
+            "timezone-less": "ORATS timestamp is timezone-less",
+            "future": "ORATS timestamp is in the future",
         }
-    if age_minutes < 0:
         return {
             "state": "UNKNOWN",
             "state_label": "UNKNOWN",
-            "age_minutes": round(age_minutes, 1),
+            "age_minutes": None if age_minutes is None else round(age_minutes, 1),
             "delay_minutes": warn_min,
             "as_of": effective_ts,
             "threshold_triggered": None,
-            "reason": "ORATS timestamp is in the future",
+            "reason": reasons.get(problem, "ORATS timestamp is malformed"),
         }
     if age_minutes <= ok_min:
         return {
@@ -326,11 +366,9 @@ def get_data_health() -> Dict[str, Any]:
     provider_ts = _LAST_SUCCESS_AT
     provider_age = None
     if provider_ts:
-        try:
-            pdt = datetime.fromisoformat(provider_ts.replace("Z", "+00:00"))
-            provider_age = round((datetime.now(timezone.utc) - pdt).total_seconds() / 60, 1)
-        except Exception:
-            provider_age = None
+        age_minutes, problem = _inspect_orats_timestamp(provider_ts)
+        if problem is None and age_minutes is not None:
+            provider_age = round(age_minutes, 1)
     state["provider_last_success_at"] = provider_ts
     state["provider_age_minutes"] = provider_age
     state["provider_connectivity_status"] = _compute_sticky_status(provider_ts)

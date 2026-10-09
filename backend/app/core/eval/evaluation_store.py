@@ -608,8 +608,8 @@ def load_run(run_id: str) -> Optional[EvaluationRunFull]:
 
 
 def load_latest_pointer() -> Optional[LatestPointer]:
-    """Load the latest pointer."""
-    path = _latest_path()
+    """Load the latest pointer. A missing file does not create directories."""
+    path = _get_evaluations_dir() / "latest.json"
     if not path.exists():
         return None
     try:

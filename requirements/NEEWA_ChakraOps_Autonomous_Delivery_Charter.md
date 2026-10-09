@@ -190,3 +190,30 @@ Reverify current documentation and entitlements during implementation. These sou
 ## Intake receipt required from the one-time bootstrap
 
 Return: charter ingested and path; actual coordinator/worker and model/auth probe; existing mission disposition and active mission/child IDs; canonical checkout/access/write-lease owner; first completed work plus next claimed stage; verified recurring-job plan/state; resolved Slack destination/delivery test receipt; next report time; and precise genuine blocker if any. This receipt goes to the owner through the configured channel; future work must not depend on another conversation here.
+
+## 13. Stage trace for provider connectivity and independent review
+
+Sections 1–12 and the intake receipt above remain the owner text. This section records one bounded software stage in the existing repository.
+
+Historical outcomes preserved:
+
+- `MISSION-20261007T185227Z-C29E3404` remains terminal FAILED after 3/3 repair cycles.
+- `MISSION-20261007T204742Z-1FFC322B` remains BLOCKED_INTENT before any child.
+
+ORATS freshness and provider connectivity share one timestamp inspection. A malformed, future, or timezone-less timestamp is UNKNOWN on both paths. A missing timestamp with a recorded provider failure remains an error. Resolving the sticky-state path does not create a missing directory, so independent review can run pytest with a temporary directory and return a test receipt. Execution stays manual. Broker order routing stays disabled.
+
+### Release-candidate requirement trace
+
+Written after repair cycle 3, and only after the repository-root command `backend\.venv\Scripts\python.exe -m pytest tests/test_orats_freshness_r222.py -q --tb=line` exited 0 with 12 passed and empty stderr. `RELEASE_CANDIDATE.md` is not stored in this repository; the controller owns that artifact. This table is the trace for that receipt.
+
+| Requirement | Status | Evidence |
+| --- | --- | --- |
+| REQ-001 | PASS | `backend/app/api/data_health.py` (`_inspect_orats_timestamp`) and `backend/tests/test_orats_freshness_r222.py` (`test_provider_connectivity_matches_unknown_freshness`, `test_persisted_state_read_uses_temp_dir_without_creating_it`) keep malformed, future, and timezone-less clocks UNKNOWN together. `docs/NEEWA.md` preserves `MISSION-20261007T185227Z-C29E3404` as terminal FAILED after 3/3 repair cycles and `MISSION-20261007T204742Z-1FFC322B` as BLOCKED_INTENT before any child. Execution stays manual. Broker order routing stays disabled. |
+| REQ-002 | PASS | Input read: `requirements/NEEWA_ChakraOps_Autonomous_Delivery_Charter.md`. No unrelated directory scan. |
+| REQ-003 | PASS | Provider-connectivity status uses the same timestamp inspection as freshness. The requested output is this trace plus the pytest receipt. The next stage is named below and was not performed. |
+| REQ-004 | PASS | Headings and list items in sections 1–12 and the intake receipt are unchanged. Section 13 is appended. |
+| REQ-005 | PASS | Repair cycle 3 ran from the repository root: `backend\.venv\Scripts\python.exe -m pytest tests/test_orats_freshness_r222.py -q --tb=line`. Result: exit code 0, 12 passed, empty stderr. |
+| REQ-006 | PASS | Work stays in `C:\Users\swap2\NEEWA-Personal\projects\ChakraOps`. |
+| REQ-007 | PASS | This release-candidate requirement trace was written after that pytest receipt. `RELEASE_CANDIDATE.md` is not in this repository; the controller owns that artifact. |
+
+Next stage, not performed in this stage: read-only account reconciliation and live evaluation rejection reporting.

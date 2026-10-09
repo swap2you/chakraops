@@ -98,9 +98,10 @@ def test_no_selected_candidate():
 
 def test_sizing_not_persisted_to_decision_latest(tmp_path, monkeypatch):
     """Ensure options_sizing is not written to out/decision_latest.json (request-time only)."""
-    monkeypatch.setenv("OUT_DIR", str(tmp_path))
-    from app.core.eval.evaluation_store_v2 import get_decision_store_path
-    store_path = get_decision_store_path()
+    from app.core.eval import evaluation_store_v2
+    monkeypatch.setattr(evaluation_store_v2, "_DEFAULT_OUTPUT_DIR", tmp_path)
+    store_path = evaluation_store_v2.get_decision_store_path()
+    assert store_path == tmp_path / "decision_latest.json"
     store_path.parent.mkdir(parents=True, exist_ok=True)
     artifact = {"artifact_version": "v2", "metadata": {}, "symbols": [], "gates_by_symbol": {}, "candidates_by_symbol": {}}
     with open(store_path, "w") as f:

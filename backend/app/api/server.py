@@ -1173,7 +1173,7 @@ def api_ops_routes() -> list:
 
 
 def _get_build_id() -> Optional[str]:
-    """Return full git HEAD commit hash for server/build_id (exact identity proof)."""
+    """Read source revision for this process at startup, never at request time."""
     try:
         repo = Path(__file__).resolve().parent.parent.parent
         r = subprocess.run(
@@ -1190,13 +1190,18 @@ def _get_build_id() -> Optional[str]:
     return os.environ.get("BUILD_ID")
 
 
+_SERVER_BUILD_ID = _get_build_id()
+_SERVER_STARTED_AT = datetime.now(timezone.utc).isoformat()
+
+
 @app.get("/health")
 def health() -> Dict[str, Any]:
     """Phase 7: Railway (and other) health checks. No auth required. Includes build_id for validate_one_symbol."""
     out: Dict[str, Any] = {"ok": True, "status": "healthy"}
-    bid = _get_build_id()
+    bid = _SERVER_BUILD_ID
     if bid:
         out["build_id"] = bid
+    out["started_at"] = _SERVER_STARTED_AT
     return out
 
 
@@ -4363,5 +4368,4 @@ def _clean_encoding(s: Any) -> str:
     text = text.replace(""", '"')    # smart quote
     text = text.replace("…", "...")  # ellipsis
     return text
-
 

@@ -104,9 +104,6 @@ def _get_evaluation_completed_at() -> tuple[Optional[str], str]:
     try:
         from app.core.eval import evaluation_store
 
-        latest = evaluation_store._get_evaluations_dir() / "latest.json"
-        if not latest.exists():
-            return None, "none"
         pointer = evaluation_store.load_latest_pointer()
         if pointer and getattr(pointer, "completed_at", None):
             return pointer.completed_at, "persisted_run"
